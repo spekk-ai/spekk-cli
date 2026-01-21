@@ -3,7 +3,7 @@ id: create-frontmatter-tests
 parent: test-file-organization
 created: 2026-01-21T23:32:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Frontmatter Parsing Tests File
