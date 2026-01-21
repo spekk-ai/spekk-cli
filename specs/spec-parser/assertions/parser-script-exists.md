@@ -3,7 +3,7 @@ id: parser-script-exists
 parent: spec-parser
 created: 2026-01-20T16:05:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # Parser Module Must Exist and Work
