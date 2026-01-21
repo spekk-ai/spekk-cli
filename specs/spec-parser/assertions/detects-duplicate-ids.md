@@ -3,7 +3,7 @@ id: detects-duplicate-ids
 parent: spec-parser
 created: 2026-01-20T16:28:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Parser Must Detect Duplicate IDs
