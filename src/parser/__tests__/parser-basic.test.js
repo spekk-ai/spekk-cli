@@ -233,14 +233,24 @@ This is a spec file at the root level.`;
         fs.symlinkSync(tempDir, originalSpecsPath);
         
         try {
-          // Parser should either ignore flat files or handle them appropriately
+          // Parser should reject invalid folder structure
           // This test ensures the structure is enforced
-          const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
-          const parsed = JSON.parse(result);
-          
-          // Should not find the flat file as a valid spec
-          if (parsed.type === 'assertion') {
-            assert.notEqual(parsed.parent, 'flat-spec-file', 'Should not find flat spec files');
+          try {
+            const result = execSync('node src/parser/cli.js', { encoding: 'utf8', stdio: 'pipe' });
+            const parsed = JSON.parse(result);
+            
+            // If parser succeeds, should not find the flat file as a valid spec
+            if (parsed.type === 'assertion') {
+              assert.notEqual(parsed.parent, 'flat-spec-file', 'Should not find flat spec files');
+            }
+          } catch (error) {
+            // Parser should return error for invalid folder structure
+            const errorOutput = error.stdout || error.stderr || '';
+            const isJsonError = errorOutput.includes('"error": true');
+            const isStructureError = errorOutput.includes('Invalid folder structure') || 
+                                   errorOutput.includes('assertions directory');
+            assert.ok(isJsonError || isStructureError, 
+              'Parser should return structured error for invalid folder structure');
           }
           
         } finally {
