@@ -3,7 +3,7 @@ id: parses-frontmatter
 parent: spec-parser
 created: 2026-01-20T16:25:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # Parser Must Parse YAML Frontmatter
@@ -47,4 +47,4 @@ Parser should handle and report errors for:
 - ✅ Parser reports clear errors for malformed YAML
 - ✅ Parser works with both spec and assertion files
 
-**Tests:** `tests/spec-parser.test.js`
+**Tests:** `src/__tests__/spec-parser.test.js`
