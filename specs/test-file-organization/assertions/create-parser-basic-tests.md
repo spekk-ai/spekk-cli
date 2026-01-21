@@ -3,7 +3,7 @@ id: create-parser-basic-tests
 parent: test-file-organization
 created: 2026-01-21T23:31:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Parser Basic Tests File
