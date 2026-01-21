@@ -3,10 +3,12 @@ id: validates-status-values
 parent: spec-parser
 created: 2026-01-20T16:27:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Parser Must Validate Status Values
+
+**Tests:** src/parser/__tests__/field-validation.test.js
 
 ## What Must Be True
 

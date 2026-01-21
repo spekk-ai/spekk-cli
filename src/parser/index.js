@@ -60,13 +60,13 @@ function validateFields(data, filePath, isAssertion = false) {
     : ['id', 'created', 'priority'];
     
   for (const field of requiredFields) {
-    if (!data[field]) {
+    if (data[field] === undefined || data[field] === null) {
       throw new Error(`Missing required field '${field}' in ${filePath}`);
     }
   }
   
   // Validate ID format (kebab-case)
-  const kebabCasePattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+  const kebabCasePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
   if (!kebabCasePattern.test(data.id)) {
     throw new Error(`Invalid id format '${data.id}' (must be kebab-case: lowercase with hyphens, no spaces/underscores/special chars) in ${filePath}`);
   }

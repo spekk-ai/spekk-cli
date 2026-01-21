@@ -295,7 +295,7 @@ Test spec for valid status values.`;
         
         fs.writeFileSync(path.join(tempDir, 'temp-valid-status.md'), specContent);
         
-        const validStatuses = ['not_started', 'in_progress', 'done'];
+        const validStatuses = ['not_started', 'in_progress', 'done', 'draft'];
         
         for (let i = 0; i < validStatuses.length; i++) {
           const status = validStatuses[i];
@@ -339,6 +339,7 @@ This tests missing status field.`;
           assert.ok(testAssertions.find(a => a.status === 'not_started'), 'Should accept not_started');
           assert.ok(testAssertions.find(a => a.status === 'in_progress'), 'Should accept in_progress');
           assert.ok(testAssertions.find(a => a.status === 'done'), 'Should accept done');
+          assert.ok(testAssertions.find(a => a.status === 'draft'), 'Should accept draft');
           
           // Should default missing status to not_started
           const noStatus = testAssertions.find(a => a.id === 'test-no-status');
@@ -409,7 +410,7 @@ This tests invalid status: ${invalidStatus}`;
           } catch (error) {
             assert.ok(error.message.includes(invalidStatus), 
               `Error should mention invalid status '${invalidStatus}'`);
-            assert.ok(error.message.includes('not_started, in_progress, done'), 
+            assert.ok(error.message.includes('not_started, in_progress, done, draft'), 
               'Error should list valid status values');
           } finally {
             if (fs.existsSync(originalSpecsPath)) {
@@ -419,6 +420,83 @@ This tests invalid status: ${invalidStatus}`;
           
           // Clean up for next iteration
           fs.unlinkSync(path.join(assertionsDir, `test-invalid-${i}.md`));
+        }
+        
+      } finally {
+        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
+      }
+    });
+
+    test('excludes draft status from work queue like done status', () => {
+      const tempDir = path.join(process.cwd(), 'temp-draft-exclusion');
+      const assertionsDir = path.join(tempDir, 'assertions');
+      
+      try {
+        fs.mkdirSync(tempDir, { recursive: true });
+        fs.mkdirSync(assertionsDir, { recursive: true });
+        
+        const specContent = `---
+id: temp-draft-exclusion
+created: 2026-01-20T16:00:00Z
+priority: 1
+---
+
+# Draft Exclusion Test Spec
+
+Test spec for draft status exclusion from work queue.`;
+        
+        fs.writeFileSync(path.join(tempDir, 'temp-draft-exclusion.md'), specContent);
+        
+        // Create assertions with different statuses
+        const assertions = [
+          { id: 'not-started-assertion', status: 'not_started' },
+          { id: 'in-progress-assertion', status: 'in_progress' },
+          { id: 'done-assertion', status: 'done' },
+          { id: 'draft-assertion', status: 'draft' }
+        ];
+        
+        for (let i = 0; i < assertions.length; i++) {
+          const assertion = assertions[i];
+          const assertionContent = `---
+id: ${assertion.id}
+parent: temp-draft-exclusion
+created: 2026-01-20T16:0${i}:00Z
+priority: 1
+status: ${assertion.status}
+---
+
+# ${assertion.id}
+
+Test assertion with ${assertion.status} status.`;
+          
+          fs.writeFileSync(path.join(assertionsDir, `${assertion.id}.md`), assertionContent);
+        }
+        
+        const originalSpecsPath = path.join(process.cwd(), 'specs', 'temp-draft-exclusion');
+        fs.symlinkSync(tempDir, originalSpecsPath);
+        
+        try {
+          const nextAssertion = findNextAssertion(parseAllSpecs().assertions);
+          
+          // Should find not_started assertion (earliest created timestamp)
+          assert.equal(nextAssertion.id, 'not-started-assertion', 'Should find not_started assertion first');
+          
+          // Verify draft and done are not in candidate list
+          const { assertions: allAssertions } = parseAllSpecs();
+          const candidates = allAssertions.filter(a => 
+            a.parent === 'temp-draft-exclusion' && 
+            a.status !== 'done' && 
+            a.status !== 'draft'
+          );
+          
+          assert.equal(candidates.length, 2, 'Should have 2 candidates (not_started and in_progress)');
+          assert.ok(candidates.find(a => a.id === 'not-started-assertion'), 'Should include not_started');
+          assert.ok(candidates.find(a => a.id === 'in-progress-assertion'), 'Should include in_progress');
+          assert.ok(!candidates.find(a => a.id === 'done-assertion'), 'Should exclude done status');
+          assert.ok(!candidates.find(a => a.id === 'draft-assertion'), 'Should exclude draft status');
+          
+        } finally {
+          fs.unlinkSync(originalSpecsPath);
         }
         
       } finally {
