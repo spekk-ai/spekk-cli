@@ -4,6 +4,7 @@ import { run } from '../src/parser/cli.js';
 import { launchCoachAgent } from '../src/coach/cli.js';
 import { launchBuilderAgent } from '../src/builder/cli.js';
 import { runBuilderLoop, runCoachLoop } from '../src/loops/index.js';
+import { showStatus } from '../src/status/cli.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -48,6 +49,10 @@ COMMANDS:
     await launchBuilderAgent();
     break;
   
+  case 'status':
+    await showStatus();
+    break;
+  
   case '--help':
   case '-h':
   case 'help':
@@ -58,6 +63,7 @@ USAGE:
   spekk [COMMAND]
 
 COMMANDS:
+  status    Show comprehensive overview of all specs and assertions
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
   loop      Run orchestration workflows (builder/coach loops)
