@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { execSync } from 'node:child_process';
 import fs from 'fs';
 import path from 'path';
+import { parseFrontmatter } from '../parser/index.js';
 
 describe('Spec Parser', () => {
   test('parser script exists and is executable', () => {
@@ -107,5 +108,179 @@ describe('Spec Parser', () => {
       assert.ok(fs.existsSync(assertionsDir), 
         `Assertions directory ${specDir}/assertions/ should exist`);
     }
+  });
+
+  describe('YAML Frontmatter Parsing', () => {
+    test('parses well-formed YAML frontmatter correctly', () => {
+      const content = `---
+id: test-spec
+created: 2026-01-20T16:00:00Z
+priority: 1
+status: not_started
+---
+
+# Test Spec Title
+
+This is markdown content.`;
+      
+      const result = parseFrontmatter(content);
+      
+      assert.strictEqual(result.data.id, 'test-spec');
+      assert.strictEqual(result.data.created, '2026-01-20T16:00:00Z');
+      assert.strictEqual(result.data.priority, 1);
+      assert.strictEqual(result.data.status, 'not_started');
+      assert.ok(result.content.includes('# Test Spec Title'));
+      assert.ok(result.content.includes('This is markdown content.'));
+    });
+
+    test('separates frontmatter from markdown content correctly', () => {
+      const content = `---
+id: separation-test
+priority: 2
+---
+
+# Markdown Title
+
+Line 1 of content
+Line 2 of content`;
+      
+      const result = parseFrontmatter(content);
+      
+      // Frontmatter should be parsed
+      assert.strictEqual(result.data.id, 'separation-test');
+      assert.strictEqual(result.data.priority, 2);
+      
+      // Content should only contain markdown (no YAML delimiters)
+      assert.ok(!result.content.includes('---'));
+      assert.ok(!result.content.includes('id: separation-test'));
+      assert.ok(result.content.includes('# Markdown Title'));
+      assert.ok(result.content.includes('Line 1 of content'));
+    });
+
+    test('handles different YAML value types', () => {
+      const content = `---
+string_field: example-value
+number_field: 42
+boolean_true: true
+boolean_false: false
+quoted_string: "quoted value"
+---
+
+Content here.`;
+      
+      const result = parseFrontmatter(content);
+      
+      assert.strictEqual(result.data.string_field, 'example-value');
+      assert.strictEqual(result.data.number_field, 42);
+      assert.strictEqual(result.data.boolean_true, true);
+      assert.strictEqual(result.data.boolean_false, false);
+      assert.strictEqual(result.data.quoted_string, 'quoted value');
+    });
+
+    test('throws error for missing opening frontmatter delimiter', () => {
+      const content = `id: test-spec
+priority: 1
+---
+
+# Content`;
+      
+      assert.throws(() => {
+        parseFrontmatter(content);
+      }, /File must start with --- YAML frontmatter delimiter/);
+    });
+
+    test('throws error for missing closing frontmatter delimiter', () => {
+      const content = `---
+id: test-spec
+priority: 1
+
+# Content without closing delimiter`;
+      
+      assert.throws(() => {
+        parseFrontmatter(content);
+      }, /Missing closing --- delimiter for YAML frontmatter/);
+    });
+
+    test('handles empty frontmatter correctly', () => {
+      const content = `---
+---
+
+# Just Content
+
+This has empty frontmatter.`;
+      
+      const result = parseFrontmatter(content);
+      
+      // Should have empty data object
+      assert.deepStrictEqual(result.data, {});
+      assert.ok(result.content.includes('# Just Content'));
+    });
+
+    test('handles multi-line markdown content', () => {
+      const content = `---
+id: multiline-test
+priority: 1
+---
+
+# Title
+
+Paragraph 1 with multiple words.
+
+## Subtitle
+
+- List item 1
+- List item 2
+
+More content here.`;
+      
+      const result = parseFrontmatter(content);
+      
+      assert.strictEqual(result.data.id, 'multiline-test');
+      assert.ok(result.content.includes('Paragraph 1 with multiple words.'));
+      assert.ok(result.content.includes('## Subtitle'));
+      assert.ok(result.content.includes('- List item 1'));
+    });
+
+    test('works with real spec and assertion files', () => {
+      // Test with actual files from the codebase
+      const specsDir = path.join(process.cwd(), 'specs');
+      const specDirs = fs.readdirSync(specsDir).filter(dir => {
+        const dirPath = path.join(specsDir, dir);
+        return fs.statSync(dirPath).isDirectory();
+      });
+
+      let testedFiles = 0;
+      
+      for (const specDir of specDirs) {
+        // Test spec file
+        const specFile = path.join(specsDir, specDir, `${specDir}.md`);
+        if (fs.existsSync(specFile)) {
+          const content = fs.readFileSync(specFile, 'utf8');
+          const result = parseFrontmatter(content);
+          
+          assert.ok(typeof result.data === 'object', `Spec file ${specFile} should have valid frontmatter`);
+          assert.ok(typeof result.content === 'string', `Spec file ${specFile} should have content`);
+          testedFiles++;
+        }
+        
+        // Test assertion files
+        const assertionsDir = path.join(specsDir, specDir, 'assertions');
+        if (fs.existsSync(assertionsDir)) {
+          const assertionFiles = fs.readdirSync(assertionsDir).filter(file => file.endsWith('.md'));
+          
+          for (const assertionFile of assertionFiles) {
+            const assertionPath = path.join(assertionsDir, assertionFile);
+            const content = fs.readFileSync(assertionPath, 'utf8');
+            const result = parseFrontmatter(content);
+            
+            assert.ok(typeof result.data === 'object', `Assertion file ${assertionPath} should have valid frontmatter`);
+            assert.ok(typeof result.content === 'string', `Assertion file ${assertionPath} should have content`);
+            testedFiles++;
+          }
+        }
+      }
+      
+      assert.ok(testedFiles > 0, 'Should have tested at least one file');
+    });
   });
 });

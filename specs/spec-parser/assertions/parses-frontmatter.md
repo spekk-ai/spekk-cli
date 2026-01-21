@@ -3,7 +3,7 @@ id: parses-frontmatter
 parent: spec-parser
 created: 2026-01-20T16:25:00Z
 priority: 1
-status: not_started
+status: in_progress
 ---
 
 # Parser Must Parse YAML Frontmatter
