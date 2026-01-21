@@ -3,7 +3,7 @@ id: status-command-exists
 parent: spekk-cli
 created: 2026-01-21T19:02:00Z
 priority: 2
-status: done
+status: in_progress
 ---
 
 # Status Command Exists
@@ -12,12 +12,13 @@ status: done
 
 ## Requirement
 
-`spekk status` command shows comprehensive overview of all specs and assertions with their completion status.
+Status command shows comprehensive overview of all specs and assertions with their completion status. Available both as `spekk status` and `npm run status`.
 
 ## Success Criteria
 
 ### Command Functionality:
 ✅ `spekk status` runs without errors
+✅ `npm run status` runs without errors
 ✅ Shows all specs found in current directory's specs/ folder
 ✅ Displays assertion count and completion ratio for each spec
 ✅ Lists individual assertions with status icons
