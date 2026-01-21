@@ -3,7 +3,7 @@ id: assertions-have-tests
 parent: spec-parser
 created: 2026-01-20T16:25:00Z
 priority: 2
-status: done
+status: not_started
 ---
 
 # Assertions Must Have Automated Tests When Possible

@@ -92,6 +92,47 @@ function validateFields(data, filePath, isAssertion = false) {
   }
 }
 
+// Validate folder structure requirements
+function validateFolderStructure(specsDir) {
+  // Check for flat .md files at specs/ level (not allowed)
+  const specsDirContents = fs.readdirSync(specsDir);
+  const flatMdFiles = specsDirContents.filter(item => {
+    const itemPath = path.join(specsDir, item);
+    return fs.statSync(itemPath).isFile() && item.endsWith('.md');
+  });
+  
+  if (flatMdFiles.length > 0) {
+    throw new Error(`Invalid folder structure: Found flat .md files in specs/: ${flatMdFiles.join(', ')}. All specs must be in folders following the pattern specs/{spec-id}/{spec-id}.md`);
+  }
+  
+  // Check each spec directory has required structure
+  const specDirs = specsDirContents.filter(item => {
+    const itemPath = path.join(specsDir, item);
+    return fs.statSync(itemPath).isDirectory();
+  });
+  
+  for (const specDir of specDirs) {
+    const specDirPath = path.join(specsDir, specDir);
+    const expectedSpecFile = path.join(specDirPath, `${specDir}.md`);
+    const assertionsDir = path.join(specDirPath, 'assertions');
+    
+    // Check main spec file exists with matching name
+    if (!fs.existsSync(expectedSpecFile)) {
+      throw new Error(`Invalid folder structure: Missing main spec file specs/${specDir}/${specDir}.md`);
+    }
+    
+    // Check assertions directory exists
+    if (!fs.existsSync(assertionsDir)) {
+      throw new Error(`Invalid folder structure: Missing assertions directory specs/${specDir}/assertions/`);
+    }
+    
+    // Verify assertions directory is actually a directory
+    if (!fs.statSync(assertionsDir).isDirectory()) {
+      throw new Error(`Invalid folder structure: specs/${specDir}/assertions must be a directory`);
+    }
+  }
+}
+
 // Read and parse all specs and assertions from current working directory
 function parseAllSpecs() {
   const specsDir = path.join(process.cwd(), 'specs');
@@ -99,6 +140,9 @@ function parseAllSpecs() {
   if (!fs.existsSync(specsDir)) {
     return { specs: [], assertions: [] };
   }
+  
+  // Validate folder structure before parsing
+  validateFolderStructure(specsDir);
   
   const specs = [];
   const assertions = [];
@@ -292,4 +336,4 @@ export function run(options = {}) {
 }
 
 // Export the parser functions for testing
-export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle };
+export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure };

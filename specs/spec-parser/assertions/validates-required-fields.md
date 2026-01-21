@@ -3,7 +3,7 @@ id: validates-required-fields
 parent: spec-parser
 created: 2026-01-20T16:10:00Z
 priority: 2
-status: done
+status: not_started
 ---
 
 # Parser Must Validate Required Fields

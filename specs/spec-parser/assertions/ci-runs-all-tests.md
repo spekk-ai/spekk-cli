@@ -3,7 +3,7 @@ id: ci-runs-all-tests
 parent: spec-parser
 created: 2026-01-20T19:45:00Z
 priority: 2
-status: done
+status: not_started
 ---
 
 # CI Runs All Tests

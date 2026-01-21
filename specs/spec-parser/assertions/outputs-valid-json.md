@@ -3,7 +3,7 @@ id: outputs-valid-json
 parent: spec-parser
 created: 2026-01-20T16:20:00Z
 priority: 2
-status: done
+status: not_started
 ---
 
 # Parser Must Output Valid JSON

@@ -2,7 +2,7 @@
 id: spec-parser
 created: 2026-01-20T15:35:00Z
 priority: 1
-status: done
+status: in_progress
 ---
 
 # Spec Parser

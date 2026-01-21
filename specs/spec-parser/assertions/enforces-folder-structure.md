@@ -3,7 +3,7 @@ id: enforces-folder-structure
 parent: spec-parser
 created: 2026-01-20T16:00:00Z
 priority: 1
-status: done
+status: not_started
 ---
 
 # Parser Must Enforce Folder Structure

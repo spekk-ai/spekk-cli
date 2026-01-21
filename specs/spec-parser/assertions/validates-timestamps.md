@@ -3,7 +3,7 @@ id: validates-timestamps
 parent: spec-parser
 created: 2026-01-20T16:26:00Z
 priority: 2
-status: done
+status: not_started
 ---
 
 # Parser Must Validate Timestamp Formats

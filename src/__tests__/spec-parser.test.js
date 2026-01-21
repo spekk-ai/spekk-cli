@@ -77,7 +77,17 @@ describe('Spec Parser', () => {
     }
   });
 
-  test('enforces folder structure', () => {
+  test('enforces folder structure - no flat spec files', () => {
+    // Check that there are no flat .md files at specs/*.md level
+    const specsDir = path.join(process.cwd(), 'specs');
+    const files = fs.readdirSync(specsDir);
+    
+    const flatMdFiles = files.filter(file => file.endsWith('.md'));
+    assert.strictEqual(flatMdFiles.length, 0, 
+      `Found flat .md files in specs/: ${flatMdFiles.join(', ')}. All specs must be in folders.`);
+  });
+
+  test('enforces folder structure - valid spec directories', () => {
     // Check that specs follow expected structure
     const specsDir = path.join(process.cwd(), 'specs');
     const specDirs = fs.readdirSync(specsDir).filter(dir => {
@@ -90,10 +100,12 @@ describe('Spec Parser', () => {
       const assertionsDir = path.join(specsDir, specDir, 'assertions');
       
       // Should have spec file with matching name
-      if (fs.existsSync(assertionsDir)) {
-        assert.ok(fs.existsSync(specFile), 
-          `Spec file ${specDir}.md should exist for directory with assertions`);
-      }
+      assert.ok(fs.existsSync(specFile), 
+        `Spec file ${specDir}/${specDir}.md should exist`);
+      
+      // Should have assertions directory
+      assert.ok(fs.existsSync(assertionsDir), 
+        `Assertions directory ${specDir}/assertions/ should exist`);
     }
   });
 });

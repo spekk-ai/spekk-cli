@@ -3,7 +3,7 @@ id: sidecar-test-runner
 parent: spec-parser
 created: 2026-01-20T19:35:00Z
 priority: 1
-status: done
+status: not_started
 ---
 
 # Sidecar Test Runner Exists
