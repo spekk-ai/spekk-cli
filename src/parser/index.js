@@ -301,6 +301,7 @@ export function run(options = {}) {
     
     if (!nextAssertion) {
       console.log(JSON.stringify({
+        type: 'complete',
         status: 'complete',
         message: 'All specifications are complete'
       }, null, 2));
