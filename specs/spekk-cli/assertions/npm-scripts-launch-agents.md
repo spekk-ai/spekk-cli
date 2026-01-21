@@ -3,7 +3,7 @@ id: npm-scripts-launch-agents
 parent: spekk-cli
 created: 2026-01-21T19:30:00Z
 priority: 1
-status: not_started
+status: in_progress
 ---
 
 # NPM Scripts Launch Agents
@@ -41,11 +41,39 @@ console.log('You are now the Builder Agent...');
 
 ### Required Behavior
 
-Scripts should:
-1. Launch Claude Code with the appropriate prompt file
-2. Handle the session lifecycle (start, monitor, restart on completion)
-3. Provide the looping behavior that matches coach-loop.sh and builder-loop.sh patterns
-4. Integrate with git for automatic commits
-5. Show status and progress indicators
+Simple bash loops that:
+
+**Coach Script (`npm run coach`):**
+```bash
+#!/bin/bash
+while true; do
+  claude --dangerously-skip-permissions << 'EOF'
+You are the Coach Agent - read the prompt and follow the instructions exactly.
+EOF
+  # Loop continues until user Ctrl+C
+done
+```
+
+**Builder Script (`npm run builder`):**
+```bash
+#!/bin/bash
+while true; do
+  # Get next assertion
+  NEXT=$(npm run next --silent 2>/dev/null)
+  
+  # Check if all done
+  if [[ $NEXT == *'"type":"complete"'* ]]; then
+    echo "🎉 All assertions completed!"
+    break
+  fi
+  
+  # Launch builder agent
+  claude --dangerously-skip-permissions << 'EOF'
+You are the Builder Agent - read the prompt and follow the instructions exactly.
+EOF
+done
+```
+
+Keep it simple - just bash loops around Claude Code with hard-coded prompts, like coach-loop.sh and builder-loop.sh patterns.
 
 **Tests:** app/cli/__tests__/npm-scripts.test.js
