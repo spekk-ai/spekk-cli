@@ -9,6 +9,7 @@
   },
   "scripts": {
     "next": "node src/parser/cli.js",
+    "status": "node bin/spekk.js status",
     "coach": "node src/coach/cli.js",
     "builder": "node src/builder/cli.js",
     "test": "npm run test:impl && npm run test:specs",

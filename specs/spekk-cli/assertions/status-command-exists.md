@@ -3,7 +3,7 @@ id: status-command-exists
 parent: spekk-cli
 created: 2026-01-21T19:02:00Z
 priority: 2
-status: in_progress
+status: done
 ---
 
 # Status Command Exists
