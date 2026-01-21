@@ -76,4 +76,4 @@ done
 
 Keep it simple - just bash loops around Claude Code with hard-coded prompts, like coach-loop.sh and builder-loop.sh patterns.
 
-**Tests:** app/cli/__tests__/npm-scripts.test.js
+**Tests:** src/coach/__tests__/coach-cli.test.js, src/builder/__tests__/builder-cli.test.js

@@ -112,7 +112,7 @@ exit 0  # Silent on success
 **When an assertion is testable:**
 
 1. **Test file must exist:**
-   - Implementation tests: `app/**/__tests__/*.test.js`
+   - Implementation tests: `src/**/__tests__/*.test.js`
    - Sidecar tests: `specs/**/assertions/*.test.sh`
 
 2. **Test file must be linked** in assertion markdown:

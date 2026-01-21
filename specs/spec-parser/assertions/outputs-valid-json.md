@@ -98,4 +98,4 @@ Errors should also be JSON:
 - ✅ Errors are also JSON format
 - ✅ Single JSON object per execution (not streaming/multiple)
 
-**Tests:** `tests/spec-parser.test.js`
+**Tests:** `src/parser/__tests__/spec-parser.test.js`

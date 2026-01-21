@@ -68,7 +68,7 @@ This assertion is "done" when:
 4. Long spec file (>100 lines) → Builder references content from entire file
 5. Assertion referencing parent spec → Builder shows knowledge of parent context
 
-**Tests:** app/builder/__tests__/reads-complete-specs.test.js
+**Tests:** src/builder/__tests__/reads-complete-specs.test.js
 
 ## Implementation Notes
 

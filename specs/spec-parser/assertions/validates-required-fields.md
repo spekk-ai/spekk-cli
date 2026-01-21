@@ -3,7 +3,7 @@ id: validates-required-fields
 parent: spec-parser
 created: 2026-01-20T16:10:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Parser Must Validate Required Fields
@@ -75,4 +75,4 @@ Parser should report clear errors:
 - ✅ Parser validates parent references for assertions
 - ✅ Parser provides clear, actionable error messages
 
-**Tests:** `tests/spec-parser.test.js`
+**Tests:** `src/parser/__tests__/spec-parser.test.js`

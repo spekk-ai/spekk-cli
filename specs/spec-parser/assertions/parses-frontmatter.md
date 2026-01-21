@@ -47,4 +47,4 @@ Parser should handle and report errors for:
 - ✅ Parser reports clear errors for malformed YAML
 - ✅ Parser works with both spec and assertion files
 
-**Tests:** `src/__tests__/spec-parser.test.js`
+**Tests:** `src/parser/__tests__/spec-parser.test.js`

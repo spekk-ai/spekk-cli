@@ -49,4 +49,4 @@ Original builder-loop.sh workflow:
 
 This full orchestration is essential for automated spec-driven development.
 
-**Tests:** src/__tests__/orchestration-loops.test.js
+**Tests:** src/cli/__tests__/orchestration-loops.test.js

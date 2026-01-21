@@ -74,4 +74,4 @@ The parser must identify the single highest-priority incomplete assertion to wor
 - ✅ Parser handles "all done" case gracefully
 - ✅ Parser handles "no specs" case gracefully
 
-**Tests:** `tests/spec-parser.test.js`
+**Tests:** `src/parser/__tests__/spec-parser.test.js`

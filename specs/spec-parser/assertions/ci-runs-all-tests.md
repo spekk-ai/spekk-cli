@@ -86,21 +86,21 @@ CI should:
 {
   "scripts": {
     "test": "npm run test:impl && npm run test:specs",
-    "test:impl": "node app/test-runner.js",
-    "test:specs": "node app/spec-validator/cli.js"
+    "test:impl": "node src/test-runner.js",
+    "test:specs": "node src/spec-validator/cli.js"
   }
 }
 ```
 
-**Implementation:** Use a test runner script (`app/test-runner.js`) that uses the `glob` package to find test files. This works reliably across all platforms, unlike shell glob expansion which behaves differently on macOS, Linux, and Windows.
+**Implementation:** Use a test runner script (`src/test-runner.js`) that uses the `glob` package to find test files. This works reliably across all platforms, unlike shell glob expansion which behaves differently on macOS, Linux, and Windows.
 
 ```javascript
-// app/test-runner.js
+// src/test-runner.js
 import { glob } from 'glob';
 import { spawn } from 'child_process';
 
 async function runTests() {
-  const testFiles = await glob('app/**/__tests__/**/*.test.js');
+  const testFiles = await glob('src/**/__tests__/**/*.test.js');
   const nodeTest = spawn('node', ['--test', ...testFiles], {
     stdio: 'inherit'
   });

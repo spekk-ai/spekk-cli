@@ -126,7 +126,7 @@ exit 0
 - ✅ Works with zero test files (not an error)
 - ✅ Clear error messages show which tests failed
 
-**Tests:** `app/spec-validator/__tests__/run-sidecar-tests.test.js`
+**Tests:** `src/spec-validator/__tests__/run-sidecar-tests.test.js`
 
 Test should validate:
 - Runner discovers test files correctly
