@@ -1,0 +1,34 @@
+{
+  "name": "spekk-cli",
+  "version": "1.0.0",
+  "description": "CLI tool for spec-driven development with coach and builder agents",
+  "main": "src/index.js",
+  "type": "module",
+  "bin": {
+    "spekk": "./bin/spekk.js"
+  },
+  "scripts": {
+    "next": "node src/parser/cli.js",
+    "coach": "node src/coach/cli.js",
+    "builder": "node src/builder/cli.js",
+    "test": "node --test src/__tests__/*.test.js",
+    "start": "node bin/spekk.js"
+  },
+  "keywords": [
+    "spec-driven",
+    "development",
+    "cli",
+    "coach",
+    "builder",
+    "parser",
+    "specifications",
+    "markdown",
+    "yaml"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
