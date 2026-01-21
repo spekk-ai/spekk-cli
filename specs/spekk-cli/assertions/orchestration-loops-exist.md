@@ -3,18 +3,18 @@ id: orchestration-loops-exist
 parent: spekk-cli
 created: 2026-01-21T19:15:00Z
 priority: 1
-status: done
+status: in_progress
 ---
 
 # Orchestration Loops Exist
 
 ## Requirement
 
-`spekk loop coach` and `spekk loop builder` commands provide full orchestration workflows that automate the spec-driven development cycle.
+`spekk coach` and `spekk builder` commands provide full orchestration workflows that automate the spec-driven development cycle.
 
 ## Success Criteria
 
-### Builder Loop (`spekk loop builder`):
+### Builder Loop (`spekk builder`):
 ✅ Gets next priority assertion via `spekk next`
 ✅ Launches builder agent with assertion context
 ✅ Waits for agent completion 
@@ -23,7 +23,7 @@ status: done
 ✅ Handles interrupts gracefully (Ctrl+C)
 ✅ Provides colored output and logging
 
-### Coach Loop (`spekk loop coach`):  
+### Coach Loop (`spekk coach`):  
 ✅ Launches coach agent in interactive mode
 ✅ Waits for user input and spec creation
 ✅ Automatically commits new specs

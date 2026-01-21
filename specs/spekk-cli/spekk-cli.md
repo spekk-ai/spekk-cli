@@ -19,8 +19,8 @@ The spekk-cli command-line interface provides core spec-driven development comma
 - `spekk status` - Show status overview of all specs and assertions
 
 ### Agent Commands  
-- `spekk coach` - Launch coach agent for current directory
-- `spekk builder` - Launch builder agent for current directory
+- `spekk coach` - Launch coach loop (interactive agent sessions) for current directory
+- `spekk builder` - Launch builder loop (automated implementation) for current directory
 
 ### Utility Commands
 - `spekk --version` - Show CLI version
