@@ -3,7 +3,7 @@ id: tests-in-correct-location
 parent: spec-parser
 created: 2026-01-21T19:45:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Tests Must Be In Correct Location

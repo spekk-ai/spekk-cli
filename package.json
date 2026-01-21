@@ -12,7 +12,7 @@
     "coach": "node src/coach/cli.js",
     "builder": "node src/builder/cli.js",
     "test": "npm run test:impl && npm run test:specs",
-    "test:impl": "node --test 'app/**/__tests__/**/*.test.js'",
+    "test:impl": "node --test 'app/**/__tests__/**/*.test.js' 'src/**/__tests__/**/*.test.js'",
     "test:specs": "node app/spec-validator/cli.js",
     "start": "node bin/spekk.js"
   },
