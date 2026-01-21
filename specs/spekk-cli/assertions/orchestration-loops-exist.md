@@ -3,7 +3,7 @@ id: orchestration-loops-exist
 parent: spekk-cli
 created: 2026-01-21T19:15:00Z
 priority: 1
-status: done
+status: in_progress
 ---
 
 # Orchestration Loops Exist
