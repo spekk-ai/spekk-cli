@@ -5,26 +5,25 @@ import { spawn } from 'child_process';
 
 async function runTests() {
   try {
-    // Find all test files using glob for cross-platform compatibility
-    const testFiles = await glob('src/**/__tests__/**/*.test.js');
+    // Find all test files using glob (cross-platform compatible)
+    const testFiles = await glob('{app,src}/**/__tests__/**/*.test.js');
     
     if (testFiles.length === 0) {
       console.log('No test files found');
       process.exit(0);
     }
     
-    console.log(`Found ${testFiles.length} test files:`);
-    testFiles.forEach(file => console.log(`  - ${file}`));
-    console.log();
+    console.log(`Found ${testFiles.length} test files`);
     
-    // Run Node.js test runner with discovered files
+    // Run Node.js test runner with all test files
     const nodeTest = spawn('node', ['--test', ...testFiles], {
-      stdio: 'inherit'
+      stdio: 'inherit',
+      shell: false // Avoid shell-specific behavior for cross-platform compatibility
     });
     
+    // Exit with the same code as the test runner
     nodeTest.on('close', (code) => {
-      console.log(`\nTest runner finished with exit code: ${code}`);
-      process.exit(code);
+      process.exit(code || 0);
     });
     
     nodeTest.on('error', (error) => {
