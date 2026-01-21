@@ -3,10 +3,12 @@ id: status-command-exists
 parent: spekk-cli
 created: 2026-01-21T19:02:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Status Command Exists
+
+**Tests:** src/__tests__/status-command.test.js
 
 ## Requirement
 
