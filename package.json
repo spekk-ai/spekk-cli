@@ -11,7 +11,9 @@
     "next": "node src/parser/cli.js",
     "coach": "node src/coach/cli.js",
     "builder": "node src/builder/cli.js",
-    "test": "node --test src/__tests__/*.test.js",
+    "test": "npm run test:impl && npm run test:specs",
+    "test:impl": "node src/test-runner.js",
+    "test:specs": "npm run next > /dev/null && echo 'Spec validation passed'",
     "start": "node bin/spekk.js"
   },
   "keywords": [
@@ -29,6 +31,8 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "glob": "^10.3.10"
+  },
   "devDependencies": {}
 }

@@ -19,8 +19,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run CLI tests
-        run: npm test
+      - name: Run implementation tests
+        run: npm run test:impl
+
+      - name: Run sidecar validation tests
+        run: npm run test:specs
 
       - name: Validate CLI commands
         run: |
