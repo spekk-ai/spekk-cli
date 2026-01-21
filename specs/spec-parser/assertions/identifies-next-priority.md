@@ -3,7 +3,7 @@ id: identifies-next-priority
 parent: spec-parser
 created: 2026-01-20T16:15:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Parser Must Identify Next Priority Item
