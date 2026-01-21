@@ -3,7 +3,7 @@ id: npm-scripts-launch-agents
 parent: spekk-cli
 created: 2026-01-21T19:30:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # NPM Scripts Launch Agents

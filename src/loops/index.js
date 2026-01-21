@@ -88,21 +88,39 @@ export async function runBuilderLoop() {
       colorLog('magenta', '🤖 Launching Builder Agent...');
       
       try {
-        // Get the builder agent prompt
-        const promptPath = join(__dirname, '../../specs/builder-agent/builder-agent.prompt.md');
-        const promptContent = await readFile(promptPath, 'utf8');
-        
         colorLog('cyan', '   Agent Context: Working on assertion ' + assertion.id);
         
-        // In a real implementation, this would integrate with Claude Code
-        // For now, we simulate the agent process
-        colorLog('yellow', '   ⚠️  Integration with Claude Code agent sessions not yet implemented');
-        colorLog('blue', '   📝 Agent would work on: ' + assertion.file);
+        // Launch Claude Code with the builder agent message
+        const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
+          stdio: ['pipe', 'inherit', 'inherit']
+        });
         
-        // Simulate agent completion time
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Send the agent activation message
+        claudeProcess.stdin.write('You are the Builder Agent - read the prompt and follow the instructions exactly.\n');
+        claudeProcess.stdin.end();
         
-        colorLog('green', '   ✅ Builder agent completed work');
+        // Wait for Claude Code to complete
+        await new Promise((resolve, reject) => {
+          claudeProcess.on('error', (error) => {
+            if (error.code === 'ENOENT') {
+              colorLog('red', '❌ Error: Claude Code CLI not found. Please install Claude Code first.');
+              colorLog('blue', 'Visit: https://claude.ai/code for installation instructions.');
+            } else {
+              colorLog('red', '❌ Error launching Claude Code: ' + error.message);
+            }
+            reject(error);
+          });
+          
+          claudeProcess.on('exit', (code) => {
+            if (code === 0) {
+              colorLog('green', '   ✅ Builder agent completed work');
+              resolve();
+            } else {
+              colorLog('red', `❌ Claude Code exited with code ${code}`);
+              reject(new Error(`Claude Code exited with code ${code}`));
+            }
+          });
+        });
         
       } catch (error) {
         colorLog('red', '❌ Builder agent failed:');
@@ -177,21 +195,39 @@ export async function runCoachLoop() {
       colorLog('magenta', '🤖 Launching Coach Agent...');
       
       try {
-        // Get the coach agent prompt
-        const promptPath = join(__dirname, '../../specs/coach-agent/coach-agent.prompt.md');
-        const promptContent = await readFile(promptPath, 'utf8');
-        
         colorLog('blue', '   Interactive mode starting...');
         
-        // In a real implementation, this would integrate with Claude Code
-        // For now, we simulate the coach process
-        colorLog('yellow', '   ⚠️  Integration with Claude Code agent sessions not yet implemented');
-        colorLog('blue', '   💬 Coach would wait for user input and create specs');
+        // Launch Claude Code with the coach agent message
+        const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
+          stdio: ['pipe', 'inherit', 'inherit']
+        });
         
-        // Simulate coach session
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Send the agent activation message
+        claudeProcess.stdin.write('You are the Coach Agent - read the prompt and follow the instructions exactly.\n');
+        claudeProcess.stdin.end();
         
-        colorLog('green', '   ✅ Coach session completed');
+        // Wait for Claude Code to complete
+        await new Promise((resolve, reject) => {
+          claudeProcess.on('error', (error) => {
+            if (error.code === 'ENOENT') {
+              colorLog('red', '❌ Error: Claude Code CLI not found. Please install Claude Code first.');
+              colorLog('blue', 'Visit: https://claude.ai/code for installation instructions.');
+            } else {
+              colorLog('red', '❌ Error launching Claude Code: ' + error.message);
+            }
+            reject(error);
+          });
+          
+          claudeProcess.on('exit', (code) => {
+            if (code === 0) {
+              colorLog('green', '   ✅ Coach session completed');
+              resolve();
+            } else {
+              colorLog('red', `❌ Claude Code exited with code ${code}`);
+              reject(new Error(`Claude Code exited with code ${code}`));
+            }
+          });
+        });
         
       } catch (error) {
         colorLog('red', '❌ Coach agent failed:');
