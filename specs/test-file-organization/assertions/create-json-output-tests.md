@@ -3,7 +3,7 @@ id: create-json-output-tests
 parent: test-file-organization
 created: 2026-01-21T23:34:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # JSON Output Tests File
