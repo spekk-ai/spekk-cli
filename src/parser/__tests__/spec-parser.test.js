@@ -1077,12 +1077,14 @@ This should be picked first.`;
         fs.symlinkSync(tempDir2, originalSpecsPath2);
         
         try {
+          // Test direct function call with filtered test data
           const { assertions } = parseAllSpecs();
-          const nextAssertion = findNextAssertion(assertions);
+          const testAssertions = assertions.filter(a => a.parent.startsWith('temp-priority-test-'));
+          const nextAssertion = findNextAssertion(testAssertions);
           
-          assert.ok(nextAssertion, 'Should find a next assertion');
-          assert.equal(nextAssertion.id, 'high-priority-assertion', 'Should pick priority 1 assertion over priority 2');
-          assert.equal(nextAssertion.priority, 1, 'Selected assertion should have priority 1');
+          assert.ok(nextAssertion, 'Should find a next test assertion');
+          assert.equal(nextAssertion.id, 'high-priority-assertion', 'Should pick priority 1 test assertion over priority 2');
+          assert.equal(nextAssertion.priority, 1, 'Selected test assertion should have priority 1');
           
         } finally {
           fs.unlinkSync(originalSpecsPath1);

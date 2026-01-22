@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { test } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs';
