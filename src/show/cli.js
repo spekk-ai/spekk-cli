@@ -83,11 +83,11 @@ function getPriorityIcon(priority) {
 
 function generateDetailStatusBadge(status) {
   const icon = getStatusIcon(status);
-  return `<span class="detail-status-badge">${icon}</span>`;
+  return `<span class="detail-status-badge status-${status}">${icon}</span>`;
 }
 
 function generateDetailPriorityBadge(priority) {
-  return `<span class="detail-priority-badge">${priority}</span>`;
+  return `<span class="detail-priority-badge priority-${priority}">${priority}</span>`;
 }
 
 function generateSpecExplorerHTML(specs, assertions) {

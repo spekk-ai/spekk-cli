@@ -3,7 +3,7 @@ id: update-failing-tests
 parent: simplified-display-formatting
 created: 2026-01-22T22:40:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Update Failing Tests for Simplified Format
