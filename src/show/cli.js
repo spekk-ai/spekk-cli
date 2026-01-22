@@ -399,6 +399,11 @@ function generateSpecExplorerHTML(specs, assertions) {
         
         .detail-body {
             prose: true;
+            font-family: Consolas, Monaco, 'Courier New', monospace;
+        }
+        
+        .detail-body pre {
+            font-family: Consolas, Monaco, 'Courier New', monospace;
         }
         
         .empty-state {

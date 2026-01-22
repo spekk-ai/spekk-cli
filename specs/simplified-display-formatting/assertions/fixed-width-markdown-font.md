@@ -3,7 +3,7 @@ id: fixed-width-markdown-font
 parent: simplified-display-formatting
 created: 2026-01-22T22:50:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Fixed-Width Font for Markdown Content
