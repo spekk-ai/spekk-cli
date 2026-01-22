@@ -94,15 +94,20 @@ function validateFields(data, filePath, isAssertion = false) {
 
 // Validate folder structure requirements
 function validateFolderStructure(specsDir) {
-  // Check for flat .md files at specs/ level (not allowed)
+  // Check for flat .md files at specs/ level (not allowed unless they have no frontmatter)
   const specsDirContents = fs.readdirSync(specsDir);
   const flatMdFiles = specsDirContents.filter(item => {
     const itemPath = path.join(specsDir, item);
-    return fs.statSync(itemPath).isFile() && item.endsWith('.md');
+    if (fs.statSync(itemPath).isFile() && item.endsWith('.md')) {
+      // Check if file has frontmatter - if not, it should be ignored
+      const content = fs.readFileSync(itemPath, 'utf8');
+      return content.trimStart().startsWith('---');
+    }
+    return false;
   });
   
   if (flatMdFiles.length > 0) {
-    throw new Error(`Invalid folder structure: Found flat .md files in specs/: ${flatMdFiles.join(', ')}. All specs must be in folders following the pattern specs/{spec-id}/{spec-id}.md`);
+    throw new Error(`Invalid folder structure: Found flat .md files with frontmatter in specs/: ${flatMdFiles.join(', ')}. All specs must be in folders following the pattern specs/{spec-id}/{spec-id}.md`);
   }
   
   // Check each spec directory has required structure
@@ -116,19 +121,52 @@ function validateFolderStructure(specsDir) {
     const expectedSpecFile = path.join(specDirPath, `${specDir}.md`);
     const assertionsDir = path.join(specDirPath, 'assertions');
     
-    // Check main spec file exists with matching name
-    if (!fs.existsSync(expectedSpecFile)) {
-      throw new Error(`Invalid folder structure: Missing main spec file specs/${specDir}/${specDir}.md`);
+    // Check if this directory has any files with frontmatter (actual specs/assertions)
+    let hasSpecFiles = false;
+    
+    // Check main spec file
+    if (fs.existsSync(expectedSpecFile)) {
+      const content = fs.readFileSync(expectedSpecFile, 'utf8');
+      if (content.trimStart().startsWith('---')) {
+        hasSpecFiles = true;
+      }
     }
     
-    // Check assertions directory exists
-    if (!fs.existsSync(assertionsDir)) {
-      throw new Error(`Invalid folder structure: Missing assertions directory specs/${specDir}/assertions/`);
+    // Check for assertion files with frontmatter
+    if (fs.existsSync(assertionsDir) && fs.statSync(assertionsDir).isDirectory()) {
+      const assertionFiles = fs.readdirSync(assertionsDir).filter(file => file.endsWith('.md'));
+      for (const assertionFile of assertionFiles) {
+        const assertionPath = path.join(assertionsDir, assertionFile);
+        const content = fs.readFileSync(assertionPath, 'utf8');
+        if (content.trimStart().startsWith('---')) {
+          hasSpecFiles = true;
+          break;
+        }
+      }
     }
     
-    // Verify assertions directory is actually a directory
-    if (!fs.statSync(assertionsDir).isDirectory()) {
-      throw new Error(`Invalid folder structure: specs/${specDir}/assertions must be a directory`);
+    // Only validate structure if directory contains actual spec files
+    if (hasSpecFiles) {
+      // Check main spec file exists with matching name
+      if (!fs.existsSync(expectedSpecFile)) {
+        throw new Error(`Invalid folder structure: Missing main spec file specs/${specDir}/${specDir}.md`);
+      }
+      
+      // Verify main spec file has frontmatter
+      const content = fs.readFileSync(expectedSpecFile, 'utf8');
+      if (!content.trimStart().startsWith('---')) {
+        throw new Error(`Invalid folder structure: Main spec file specs/${specDir}/${specDir}.md must have YAML frontmatter`);
+      }
+      
+      // Check assertions directory exists
+      if (!fs.existsSync(assertionsDir)) {
+        throw new Error(`Invalid folder structure: Missing assertions directory specs/${specDir}/assertions/`);
+      }
+      
+      // Verify assertions directory is actually a directory
+      if (!fs.statSync(assertionsDir).isDirectory()) {
+        throw new Error(`Invalid folder structure: specs/${specDir}/assertions must be a directory`);
+      }
     }
   }
 }
