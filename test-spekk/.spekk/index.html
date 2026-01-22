@@ -1,120 +1,4 @@
-import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { spawn } from 'node:child_process';
-import { platform } from 'node:os';
-import { parseAllSpecs } from '../parser/index.js';
-
-export async function showSpekk() {
-  // Create .spekk directory if it doesn't exist
-  const spekkDir = join(process.cwd(), '.spekk');
-  
-  if (!existsSync(spekkDir)) {
-    mkdirSync(spekkDir, { recursive: true });
-    console.log('Created .spekk directory');
-  }
-  
-  // Parse all specs and assertions
-  const { specs, assertions } = parseAllSpecs();
-  
-  // Generate HTML content
-  const htmlContent = generateSpecExplorerHTML(specs, assertions);
-  
-  // Write HTML file (overwrite if exists)
-  const htmlFilePath = join(spekkDir, 'index.html');
-  writeFileSync(htmlFilePath, htmlContent, 'utf8');
-  
-  console.log('Generated spec explorer at .spekk/index.html');
-  
-  // Open the HTML file in the default browser
-  openInBrowser(htmlFilePath);
-}
-
-function openInBrowser(htmlFilePath) {
-  // Convert to file:// URL for proper browser handling
-  const fileUrl = `file://${htmlFilePath}`;
-  
-  // Determine the correct command based on the operating system
-  let command;
-  let args = [fileUrl];
-  
-  switch (platform()) {
-    case 'darwin': // macOS
-      command = 'open';
-      break;
-    case 'win32': // Windows
-      command = 'start';
-      args = ['', fileUrl]; // start command requires empty string as first arg
-      break;
-    default: // Linux and other Unix-like systems
-      command = 'xdg-open';
-      break;
-  }
-  
-  // Spawn the browser command
-  // Use detached: true to prevent hanging and stdio: 'ignore' to prevent output
-  const child = spawn(command, args, {
-    detached: true,
-    stdio: 'ignore'
-  });
-  
-  // Handle errors gracefully - don't let browser opening failure crash the command
-  child.on('error', (error) => {
-    // Silently ignore browser opening errors - command should still succeed
-    // Could log this in debug mode if needed in the future
-  });
-  
-  // Unref the child process so it doesn't keep the parent process alive
-  child.unref();
-}
-
-function getStatusIcon(status) {
-  switch (status) {
-    case 'not_started': return '⏸️';
-    case 'in_progress': return '🔄';
-    case 'done': return '✅';
-    default: return '';
-  }
-}
-
-function getPriorityIcon(priority) {
-  return '';
-}
-
-function generateDetailStatusBadge(status) {
-  const icon = getStatusIcon(status);
-  return `<span class="detail-status-badge">${icon}</span>`;
-}
-
-function generateDetailPriorityBadge(priority) {
-  return `<span class="detail-priority-badge">${priority}</span>`;
-}
-
-function generateSpecExplorerHTML(specs, assertions) {
-  // Group assertions by parent spec
-  const specHierarchy = specs.map(spec => {
-    const specAssertions = assertions
-      .filter(assertion => assertion.parent === spec.id)
-      .sort((a, b) => {
-        // Sort by priority first, then by creation date
-        if (a.priority !== b.priority) {
-          return a.priority - b.priority;
-        }
-        return a.created.localeCompare(b.created);
-      });
-    
-    return {
-      ...spec,
-      assertions: specAssertions
-    };
-  }).sort((a, b) => {
-    // Sort specs by priority first, then by creation date
-    if (a.priority !== b.priority) {
-      return a.priority - b.priority;
-    }
-    return a.created.localeCompare(b.created);
-  });
-
-  return `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -437,32 +321,32 @@ function generateSpecExplorerHTML(specs, assertions) {
         <div class="tree-panel">
             <div class="header">
                 <h1>Spec Tree</h1>
-                <p>${specs.length} specs, ${assertions.length} assertions</p>
+                <p>1 specs, 1 assertions</p>
             </div>
             
             <ul class="spec-tree">
-                ${specHierarchy.map(spec => `
+                
                     <li class="spec-item">
-                        <div class="spec-header" onclick="toggleSpec('${spec.id}')">
-                            <span class="toggle-icon" id="toggle-${spec.id}">▶</span>
-                            <span class="priority-badge priority-${spec.priority}">${spec.priority}</span>
-                            <span class="status-badge status-${spec.status}"></span>
-                            <span class="spec-title">${spec.title}</span>
+                        <div class="spec-header" onclick="toggleSpec('test-spec')">
+                            <span class="toggle-icon" id="toggle-test-spec">▶</span>
+                            <span class="priority-badge priority-1">1</span>
+                            <span class="status-badge status-done"></span>
+                            <span class="spec-title">Test Spec</span>
                         </div>
                         
-                        <ul class="assertions-list" id="assertions-${spec.id}">
-                            ${spec.assertions.map(assertion => `
-                                <li class="assertion-item" onclick="showDetail('${assertion.id}', 'assertion', event)">
+                        <ul class="assertions-list" id="assertions-test-spec">
+                            
+                                <li class="assertion-item" onclick="showDetail('test-assertion', 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
-                                        <span class="priority-badge priority-${assertion.priority}">${assertion.priority}</span>
-                                        <span class="status-badge status-${assertion.status}"></span>
-                                        <span>${assertion.title}</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span class="status-badge status-done"></span>
+                                        <span>Test Assertion</span>
                                     </div>
                                 </li>
-                            `).join('')}
+                            
                         </ul>
                     </li>
-                `).join('')}
+                
             </ul>
         </div>
         
@@ -472,38 +356,57 @@ function generateSpecExplorerHTML(specs, assertions) {
                 <p>Click on any spec or assertion to view details</p>
             </div>
             
-            ${specHierarchy.map(spec => `
-                <div class="detail-content" id="detail-spec-${spec.id}">
-                    <div class="detail-header">
-                        <div class="detail-title">${spec.title}</div>
-                        <div class="detail-meta">
-                            <span class="meta-item">Status: ${generateDetailStatusBadge(spec.status)}</span>
-                            <span class="meta-item">Priority: ${generateDetailPriorityBadge(spec.priority)}</span>
-                            <span class="meta-item">File: <strong>${spec.file}</strong></span>
-                        </div>
-                    </div>
-                    <div class="detail-body">
-                        <pre style="white-space: pre-wrap; font-family: inherit;">${spec.content}</pre>
-                    </div>
-                </div>
-            `).join('')}
             
-            ${assertions.map(assertion => `
-                <div class="detail-content" id="detail-assertion-${assertion.id}">
+                <div class="detail-content" id="detail-spec-test-spec">
                     <div class="detail-header">
-                        <div class="detail-title">${assertion.title}</div>
+                        <div class="detail-title">Test Spec</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: ${generateDetailStatusBadge(assertion.status)}</span>
-                            <span class="meta-item">Priority: ${generateDetailPriorityBadge(assertion.priority)}</span>
-                            <span class="meta-item">Parent: <strong>${assertion.parent}</strong></span>
-                            <span class="meta-item">File: <strong>${assertion.file}</strong></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">File: <strong>specs/test-spec/test-spec.md</strong></span>
                         </div>
                     </div>
                     <div class="detail-body">
-                        <pre style="white-space: pre-wrap; font-family: inherit;">${assertion.content}</pre>
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: in_progress
+---
+
+# Test Spec
+
+This is a test specification for testing badges.</pre>
                     </div>
                 </div>
-            `).join('')}
+            
+            
+            
+                <div class="detail-content" id="detail-assertion-test-assertion">
+                    <div class="detail-header">
+                        <div class="detail-title">Test Assertion</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Parent: <strong>test-spec</strong></span>
+                            <span class="meta-item">File: <strong>specs/test-spec/assertions/test-assertion.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: test-assertion
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 2
+status: done
+---
+
+# Test Assertion
+
+This is a test assertion for testing badges.</pre>
+                    </div>
+                </div>
+            
         </div>
     </div>
     
@@ -567,5 +470,4 @@ function generateSpecExplorerHTML(specs, assertions) {
         }
     </script>
 </body>
-</html>`;
-}
+</html>
