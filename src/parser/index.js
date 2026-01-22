@@ -160,6 +160,12 @@ function parseAllSpecs() {
     // Parse spec file
     if (fs.existsSync(specFilePath)) {
       const content = fs.readFileSync(specFilePath, 'utf8');
+      
+      // Skip files that don't start with YAML frontmatter
+      if (!content.trimStart().startsWith('---')) {
+        continue;
+      }
+      
       const { data, content: markdownContent } = parseFrontmatter(content);
       
       validateFields(data, `specs/${specDir}/${specDir}.md`, false);
@@ -190,6 +196,12 @@ function parseAllSpecs() {
       for (const assertionFile of assertionFiles) {
         const assertionPath = path.join(assertionsDir, assertionFile);
         const content = fs.readFileSync(assertionPath, 'utf8');
+        
+        // Skip files that don't start with YAML frontmatter
+        if (!content.trimStart().startsWith('---')) {
+          continue;
+        }
+        
         const { data, content: markdownContent } = parseFrontmatter(content);
         
         validateFields(data, `specs/${specDir}/assertions/${assertionFile}`, true);

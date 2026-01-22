@@ -3,7 +3,7 @@ id: ignore-readme-files
 parent: simplified-display-formatting
 created: 2026-01-22T22:45:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Ignore Markdown Files Without Frontmatter
@@ -40,3 +40,5 @@ Parser silently skips any .md file that doesn't start with YAML frontmatter.
 - ✅ `spekk builder` works in `/Users/william/thinknimble/spekk/` without crashes
 - ✅ No error thrown for files without YAML frontmatter
 - ✅ README.md and other docs are silently ignored
+
+**Tests:** src/parser/__tests__/ignore-readme-files.test.js
