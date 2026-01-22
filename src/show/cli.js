@@ -83,11 +83,11 @@ function getPriorityIcon(priority) {
 
 function generateDetailStatusBadge(status) {
   const icon = getStatusIcon(status);
-  return `<span class="detail-status-badge status-${status}">${icon}</span>`;
+  return `<span class="detail-status-badge">${icon}</span>`;
 }
 
 function generateDetailPriorityBadge(priority) {
-  return `<span class="detail-priority-badge priority-${priority}">${priority}</span>`;
+  return `<span class="detail-priority-badge">${priority}</span>`;
 }
 
 function escapeForJS(str) {
@@ -446,7 +446,7 @@ function generateSpecExplorerHTML(specs, assertions) {
             <ul class="spec-tree">
                 ${specHierarchy.map(spec => `
                     <li class="spec-item">
-                        <div class="spec-header" onclick='toggleSpec(${escapeForJS(spec.id)})'>
+                        <div class="spec-header" onclick="toggleSpec(${escapeForJS(spec.id)}, event)">
                             <span class="toggle-icon" id="toggle-${spec.id}">▶</span>
                             <span class="priority-badge priority-${spec.priority}">${spec.priority}</span>
                             <span class="status-badge status-${spec.status}"></span>
@@ -455,7 +455,7 @@ function generateSpecExplorerHTML(specs, assertions) {
                         
                         <ul class="assertions-list" id="assertions-${spec.id}">
                             ${spec.assertions.map(assertion => `
-                                <li class="assertion-item" onclick='showDetail(${escapeForJS(assertion.id)}, "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail(${escapeForJS(assertion.id)}, 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-${assertion.priority}">${assertion.priority}</span>
                                         <span class="status-badge status-${assertion.status}"></span>
@@ -511,7 +511,7 @@ function generateSpecExplorerHTML(specs, assertions) {
     </div>
     
     <script>
-        function toggleSpec(specId) {
+        function toggleSpec(specId, event) {
             const toggle = document.getElementById('toggle-' + specId);
             const assertions = document.getElementById('assertions-' + specId);
             const header = toggle.parentElement;

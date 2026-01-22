@@ -306,13 +306,13 @@
         <div class="tree-panel">
             <div class="header">
                 <h1>Spec Tree - spekk-cli</h1>
-                <p>8 specs, 51 assertions</p>
+                <p>7 specs, 51 assertions</p>
             </div>
             
             <ul class="spec-tree">
                 
                     <li class="spec-item">
-                        <div class="spec-header" onclick='toggleSpec("spec-parser")'>
+                        <div class="spec-header" onclick="toggleSpec("spec-parser", event)">
                             <span class="toggle-icon" id="toggle-spec-parser">▶</span>
                             <span class="priority-badge priority-1">1</span>
                             <span class="status-badge status-done"></span>
@@ -321,7 +321,7 @@
                         
                         <ul class="assertions-list" id="assertions-spec-parser">
                             
-                                <li class="assertion-item" onclick='showDetail("enforces-folder-structure", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("enforces-folder-structure", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -329,7 +329,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("parser-script-exists", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("parser-script-exists", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -337,7 +337,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("parses-frontmatter", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("parses-frontmatter", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -345,7 +345,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("no-implementation-outside-app", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("no-implementation-outside-app", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -353,7 +353,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("sidecar-test-runner", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("sidecar-test-runner", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -361,7 +361,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("target-directory-structure", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("target-directory-structure", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -369,7 +369,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("tests-in-correct-location", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("tests-in-correct-location", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -377,7 +377,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("parent-status-synchronization", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("parent-status-synchronization", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -385,7 +385,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("validates-required-fields", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("validates-required-fields", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -393,7 +393,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("identifies-next-priority", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("identifies-next-priority", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -401,7 +401,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("outputs-valid-json", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("outputs-valid-json", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -409,7 +409,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("assertions-have-tests", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("assertions-have-tests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -417,7 +417,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("validates-timestamps", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("validates-timestamps", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -425,7 +425,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("validates-status-values", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("validates-status-values", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -433,7 +433,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("detects-duplicate-ids", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("detects-duplicate-ids", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -441,7 +441,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("ci-runs-all-tests", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("ci-runs-all-tests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -453,7 +453,7 @@
                     </li>
                 
                     <li class="spec-item">
-                        <div class="spec-header" onclick='toggleSpec("builder-agent")'>
+                        <div class="spec-header" onclick="toggleSpec("builder-agent", event)">
                             <span class="toggle-icon" id="toggle-builder-agent">▶</span>
                             <span class="priority-badge priority-1">1</span>
                             <span class="status-badge status-done"></span>
@@ -462,7 +462,7 @@
                         
                         <ul class="assertions-list" id="assertions-builder-agent">
                             
-                                <li class="assertion-item" onclick='showDetail("prompt-exists", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("prompt-exists", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -470,7 +470,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("builder-runner-exists", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("builder-runner-exists", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -478,7 +478,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("reads-complete-specs", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("reads-complete-specs", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -490,7 +490,7 @@
                     </li>
                 
                     <li class="spec-item">
-                        <div class="spec-header" onclick='toggleSpec("test-file-organization")'>
+                        <div class="spec-header" onclick="toggleSpec("test-file-organization", event)">
                             <span class="toggle-icon" id="toggle-test-file-organization">▶</span>
                             <span class="priority-badge priority-1">1</span>
                             <span class="status-badge status-done"></span>
@@ -499,7 +499,7 @@
                         
                         <ul class="assertions-list" id="assertions-test-file-organization">
                             
-                                <li class="assertion-item" onclick='showDetail("create-parser-basic-tests", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("create-parser-basic-tests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -507,7 +507,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("create-frontmatter-tests", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("create-frontmatter-tests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -515,7 +515,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("create-field-validation-tests", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("create-field-validation-tests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -523,7 +523,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("create-json-output-tests", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("create-json-output-tests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -531,7 +531,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("create-priority-algorithm-tests", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("create-priority-algorithm-tests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -539,7 +539,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("remove-old-test-files", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("remove-old-test-files", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -551,28 +551,7 @@
                     </li>
                 
                     <li class="spec-item">
-                        <div class="spec-header" onclick='toggleSpec("test-spec")'>
-                            <span class="toggle-icon" id="toggle-test-spec">▶</span>
-                            <span class="priority-badge priority-1">1</span>
-                            <span class="status-badge status-in_progress"></span>
-                            <span class="spec-title">User&#39;s Dashboard Test</span>
-                        </div>
-                        
-                        <ul class="assertions-list" id="assertions-test-spec">
-                            
-                                <li class="assertion-item" onclick='showDetail("test-assertion", "assertion", event)'>
-                                    <div style="display: flex; align-items: center;">
-                                        <span class="priority-badge priority-1">1</span>
-                                        <span class="status-badge status-not_started"></span>
-                                        <span>Test &quot;Quoted&quot; Assertion</span>
-                                    </div>
-                                </li>
-                            
-                        </ul>
-                    </li>
-                
-                    <li class="spec-item">
-                        <div class="spec-header" onclick='toggleSpec("spekk-cli")'>
+                        <div class="spec-header" onclick="toggleSpec("spekk-cli", event)">
                             <span class="toggle-icon" id="toggle-spekk-cli">▶</span>
                             <span class="priority-badge priority-2">2</span>
                             <span class="status-badge status-done"></span>
@@ -581,7 +560,7 @@
                         
                         <ul class="assertions-list" id="assertions-spekk-cli">
                             
-                                <li class="assertion-item" onclick='showDetail("orchestration-loops-exist", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("orchestration-loops-exist", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -589,7 +568,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("npm-scripts-launch-agents", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("npm-scripts-launch-agents", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -597,7 +576,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("status-command-exists", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("status-command-exists", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -609,7 +588,7 @@
                     </li>
                 
                     <li class="spec-item">
-                        <div class="spec-header" onclick='toggleSpec("spec-explorer-web-interface")'>
+                        <div class="spec-header" onclick="toggleSpec("spec-explorer-web-interface", event)">
                             <span class="toggle-icon" id="toggle-spec-explorer-web-interface">▶</span>
                             <span class="priority-badge priority-2">2</span>
                             <span class="status-badge status-done"></span>
@@ -618,7 +597,7 @@
                         
                         <ul class="assertions-list" id="assertions-spec-explorer-web-interface">
                             
-                                <li class="assertion-item" onclick='showDetail("creates-spekk-directory-automatically", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("creates-spekk-directory-automatically", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -626,7 +605,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("generates-index-html-file", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("generates-index-html-file", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -634,7 +613,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("spekk-show-command-exists", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("spekk-show-command-exists", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -642,7 +621,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("assertions-appear-as-subitems", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("assertions-appear-as-subitems", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -650,7 +629,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("clicking-shows-details-panel", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("clicking-shows-details-panel", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -658,7 +637,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("displays-spec-tree-with-dropdowns", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("displays-spec-tree-with-dropdowns", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -666,7 +645,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("emphasizes-status-and-priority-visually", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("emphasizes-status-and-priority-visually", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -674,7 +653,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("opens-html-in-default-browser", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("opens-html-in-default-browser", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -686,7 +665,7 @@
                     </li>
                 
                     <li class="spec-item">
-                        <div class="spec-header" onclick='toggleSpec("simplified-display-formatting")'>
+                        <div class="spec-header" onclick="toggleSpec("simplified-display-formatting", event)">
                             <span class="toggle-icon" id="toggle-simplified-display-formatting">▶</span>
                             <span class="priority-badge priority-2">2</span>
                             <span class="status-badge status-in_progress"></span>
@@ -695,7 +674,7 @@
                         
                         <ul class="assertions-list" id="assertions-simplified-display-formatting">
                             
-                                <li class="assertion-item" onclick='showDetail("update-failing-tests", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("update-failing-tests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -703,7 +682,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("ignore-readme-files", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("ignore-readme-files", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -711,23 +690,23 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("fix-javascript-template-errors", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("fix-all-failing-tests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
-                                        <span class="status-badge status-done"></span>
-                                        <span>Fix JavaScript Template Generation Errors</span>
-                                    </div>
-                                </li>
-                            
-                                <li class="assertion-item" onclick='showDetail("fix-all-failing-tests", "assertion", event)'>
-                                    <div style="display: flex; align-items: center;">
-                                        <span class="priority-badge priority-1">1</span>
-                                        <span class="status-badge status-not_started"></span>
+                                        <span class="status-badge status-in_progress"></span>
                                         <span>Fix All Failing Tests for Simplified Format</span>
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("console-status-format", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("skip-assertions-in-draft-specs", 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span class="status-badge status-not_started"></span>
+                                        <span>Skip Assertions in Draft Specs</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail("console-status-format", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -735,7 +714,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("web-tree-display-format", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("web-tree-display-format", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -743,7 +722,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("web-detail-badges-format", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("web-detail-badges-format", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -751,7 +730,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("remove-priority-colors", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("remove-priority-colors", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -759,7 +738,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("highlight-active-states", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("highlight-active-states", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -767,7 +746,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("fixed-width-markdown-font", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("fixed-width-markdown-font", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -775,7 +754,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("project-name-in-title", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("project-name-in-title", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -783,11 +762,19 @@
                                     </div>
                                 </li>
                             
+                                <li class="assertion-item" onclick="showDetail("fix-javascript-template-errors", 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span class="status-badge status-in_progress"></span>
+                                        <span>Fix JavaScript Template Generation Errors</span>
+                                    </div>
+                                </li>
+                            
                         </ul>
                     </li>
                 
                     <li class="spec-item">
-                        <div class="spec-header" onclick='toggleSpec("coach-agent")'>
+                        <div class="spec-header" onclick="toggleSpec("coach-agent", event)">
                             <span class="toggle-icon" id="toggle-coach-agent">▶</span>
                             <span class="priority-badge priority-3">3</span>
                             <span class="status-badge status-done"></span>
@@ -796,7 +783,7 @@
                         
                         <ul class="assertions-list" id="assertions-coach-agent">
                             
-                                <li class="assertion-item" onclick='showDetail("receives-user-requests", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("receives-user-requests", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -804,7 +791,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("asks-clarifying-questions", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("asks-clarifying-questions", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -812,7 +799,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" onclick='showDetail("creates-spec-files", "assertion", event)'>
+                                <li class="assertion-item" onclick="showDetail("creates-spec-files", 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -1161,29 +1148,6 @@ src/parser/__tests__/
 - ✅ Each test file has clear, descriptive naming
 
 **Tests:** Manual validation (run &#96;npm test&#96; to verify all pass)</pre>
-                    </div>
-                </div>
-            
-                <div class="detail-content" id="detail-spec-test-spec">
-                    <div class="detail-header">
-                        <div class="detail-title">User&#39;s Dashboard Test</div>
-                        <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge status-in_progress">🔄</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
-                            <span class="meta-item">File: <strong>specs/test-spec/test-spec.md</strong></span>
-                        </div>
-                    </div>
-                    <div class="detail-body">
-                        <pre style="white-space: pre-wrap; font-family: inherit;">---
-id: test-spec
-created: 2026-01-22T21:00:00Z
-priority: 1
-status: not_started
----
-
-# User&#39;s Dashboard Test
-
-This spec has a single quote in the title and content with &quot;quotes&quot; and &#96;backticks&#96; and {curly: braces}.</pre>
                     </div>
                 </div>
             
@@ -2204,7 +2168,7 @@ Console output shows status and priority in the format: &#96;{priority} {status_
                     <div class="detail-header">
                         <div class="detail-title">Fix All Failing Tests for Simplified Format</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge status-not_started">⏸️</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-in_progress">🔄</span></span>
                             <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/fix-all-failing-tests.md</strong></span>
@@ -2216,7 +2180,7 @@ id: fix-all-failing-tests
 parent: simplified-display-formatting
 created: 2026-01-22T23:05:00Z
 priority: 1
-status: not_started
+status: in_progress
 ---
 
 # Fix All Failing Tests for Simplified Format
@@ -2270,8 +2234,8 @@ Tests should use assertion status values that align with current spec state:
                     <div class="detail-header">
                         <div class="detail-title">Fix JavaScript Template Generation Errors</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-in_progress">🔄</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/fix-javascript-template-errors.md</strong></span>
                         </div>
@@ -2281,8 +2245,8 @@ Tests should use assertion status values that align with current spec state:
 id: fix-javascript-template-errors
 parent: simplified-display-formatting
 created: 2026-01-22T22:58:00Z
-priority: 1
-status: done
+priority: 2
+status: in_progress
 ---
 
 # Fix JavaScript Template Generation Errors
@@ -2614,6 +2578,79 @@ Priority badges display as plain numbers without visual emphasis through colors.
 - ✅ All priority badges (1, 2, 3) have same neutral appearance  
 - ✅ No colored backgrounds, gradients, or animations
 - ✅ Priority display is minimal and clean</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-skip-assertions-in-draft-specs">
+                    <div class="detail-header">
+                        <div class="detail-title">Skip Assertions in Draft Specs</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <span class="detail-status-badge status-not_started">⏸️</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
+                            <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
+                            <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/skip-assertions-in-draft-specs.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: skip-assertions-in-draft-specs
+parent: simplified-display-formatting
+created: 2026-01-22T23:10:00Z
+priority: 1
+status: not_started
+---
+
+# Skip Assertions in Draft Specs
+
+The parser currently processes assertions from specs marked as &#96;status: draft&#96;, but should skip them entirely.
+
+## What Must Be True
+
+Parser excludes all assertions from any spec with &#96;status: draft&#96; from work consideration.
+
+### Current Problem
+
+1. &#96;parseAllSpecs()&#96; reads ALL assertions regardless of parent spec status
+2. &#96;findNextAssertion()&#96; only filters individual assertions with &#96;status: draft&#96; 
+3. Assertions from draft specs can still be picked up for work
+
+### Required Changes
+
+**In &#96;findNextAssertion()&#96; function:**
+- Before filtering assertions, also exclude assertions whose parent spec has &#96;status: draft&#96;
+- Check parent spec status in addition to assertion status
+- Filter logic: &#96;![&#39;done&#39;, &#39;draft&#39;].includes(a.status) &amp;&amp; parentSpec.status !== &#39;draft&#39;&#96;
+
+### Logic Update
+
+&#96;&#96;&#96;javascript
+function findNextAssertion(assertions, specs) {
+  // Filter to incomplete items, excluding:
+  // - Assertions with status &#39;done&#39; or &#39;draft&#39;  
+  // - Assertions whose parent spec has status &#39;draft&#39;
+  const incomplete = assertions.filter(a =&gt; {
+    if ([&#39;done&#39;, &#39;draft&#39;].includes(a.status)) return false;
+    
+    const parentSpec = specs.find(s =&gt; s.id === a.parent);
+    if (parentSpec?.status === &#39;draft&#39;) return false;
+    
+    return true;
+  });
+  // ... rest of function
+}
+&#96;&#96;&#96;
+
+### Function Signature Update
+
+- Update &#96;findNextAssertion()&#96; to accept both &#96;assertions&#96; and &#96;specs&#96; parameters
+- Update calls to pass both parameters: &#96;findNextAssertion(assertions, specs)&#96;
+
+## Success Criteria
+
+- ✅ Assertions from draft specs are never returned by &#96;findNextAssertion()&#96;
+- ✅ &#96;spekk builder&#96; ignores assertions in draft specs  
+- ✅ Draft specs serve as true &quot;planning/placeholder&quot; status
+- ✅ Function signature updated to accept specs parameter</pre>
                     </div>
                 </div>
             
@@ -5369,36 +5406,11 @@ This should be the final step after all other test organization assertions are c
                     </div>
                 </div>
             
-                <div class="detail-content" id="detail-assertion-test-assertion">
-                    <div class="detail-header">
-                        <div class="detail-title">Test &quot;Quoted&quot; Assertion</div>
-                        <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge status-not_started">⏸️</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
-                            <span class="meta-item">Parent: <strong>test-spec</strong></span>
-                            <span class="meta-item">File: <strong>specs/test-spec/assertions/test-assertion.md</strong></span>
-                        </div>
-                    </div>
-                    <div class="detail-body">
-                        <pre style="white-space: pre-wrap; font-family: inherit;">---
-id: test-assertion
-parent: test-spec
-created: 2026-01-22T21:00:00Z
-priority: 1
-status: not_started
----
-
-# Test &quot;Quoted&quot; Assertion
-
-This assertion has double quotes and &#39;single quotes&#39; and &#96;backticks&#96; in title and content.</pre>
-                    </div>
-                </div>
-            
         </div>
     </div>
     
     <script>
-        function toggleSpec(specId) {
+        function toggleSpec(specId, event) {
             const toggle = document.getElementById('toggle-' + specId);
             const assertions = document.getElementById('assertions-' + specId);
             const header = toggle.parentElement;

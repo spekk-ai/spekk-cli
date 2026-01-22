@@ -2,7 +2,7 @@
 id: fix-javascript-template-errors
 parent: simplified-display-formatting
 created: 2026-01-22T22:58:00Z
-priority: 1
+priority: 2
 status: done
 ---
 
