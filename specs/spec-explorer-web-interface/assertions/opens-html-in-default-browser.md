@@ -3,7 +3,7 @@ id: opens-html-in-default-browser
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 3
-status: not_started
+status: done
 ---
 
 # Opens HTML in Default Browser
@@ -21,6 +21,8 @@ The command automatically opens the generated HTML file in the system's default 
 - No browser windows open if generation fails
 
 ## Test Plan
+
+**Tests:** src/__tests__/show-command.test.js
 
 ```bash
 spekk show

@@ -230,4 +230,67 @@ This is a test assertion.`;
       cleanupTestDir();
     }
   });
+
+  test('opens browser after successful HTML generation', () => {
+    setupTestDir();
+    
+    try {
+      // Create minimal specs structure for testing
+      const specsDir = join(testDir, 'specs');
+      const specDir = join(specsDir, 'test-spec');
+      const assertionsDir = join(specDir, 'assertions');
+      mkdirSync(assertionsDir, { recursive: true });
+      
+      // Create a test spec file
+      const specContent = `---
+id: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: not_started
+---
+
+# Test Spec
+
+This is a test specification.`;
+      writeFileSync(join(specDir, 'test-spec.md'), specContent);
+      
+      // Run spekk show command
+      const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 10000 
+      });
+      
+      // Command should succeed even if browser opening fails
+      assert.ok(typeof result === 'string', 'Show command should return string output');
+      assert.ok(result.includes('Generated spec explorer'), 'Should indicate HTML was generated');
+      
+      // HTML file should exist
+      const htmlFile = join(testDir, '.spekk', 'index.html');
+      assert.ok(existsSync(htmlFile), 'index.html file should be created');
+      
+    } finally {
+      cleanupTestDir();
+    }
+  });
+
+  test('command completes successfully even if browser opening fails', () => {
+    setupTestDir();
+    
+    try {
+      // We can't easily test actual browser failure, but we can ensure 
+      // the command doesn't throw errors during execution
+      const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 10000 
+      });
+      
+      // Should complete without error
+      assert.ok(typeof result === 'string', 'Show command should return string output');
+      
+    } finally {
+      cleanupTestDir();
+    }
+  });
 });

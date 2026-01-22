@@ -3,7 +3,7 @@ id: emphasizes-status-and-priority-visually
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Emphasizes Status and Priority Visually

@@ -1,5 +1,7 @@
 import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+import { platform } from 'node:os';
 import { parseAllSpecs } from '../parser/index.js';
 
 export async function showSpekk() {
@@ -22,6 +24,76 @@ export async function showSpekk() {
   writeFileSync(htmlFilePath, htmlContent, 'utf8');
   
   console.log('Generated spec explorer at .spekk/index.html');
+  
+  // Open the HTML file in the default browser
+  openInBrowser(htmlFilePath);
+}
+
+function openInBrowser(htmlFilePath) {
+  // Convert to file:// URL for proper browser handling
+  const fileUrl = `file://${htmlFilePath}`;
+  
+  // Determine the correct command based on the operating system
+  let command;
+  let args = [fileUrl];
+  
+  switch (platform()) {
+    case 'darwin': // macOS
+      command = 'open';
+      break;
+    case 'win32': // Windows
+      command = 'start';
+      args = ['', fileUrl]; // start command requires empty string as first arg
+      break;
+    default: // Linux and other Unix-like systems
+      command = 'xdg-open';
+      break;
+  }
+  
+  // Spawn the browser command
+  // Use detached: true to prevent hanging and stdio: 'ignore' to prevent output
+  const child = spawn(command, args, {
+    detached: true,
+    stdio: 'ignore'
+  });
+  
+  // Handle errors gracefully - don't let browser opening failure crash the command
+  child.on('error', (error) => {
+    // Silently ignore browser opening errors - command should still succeed
+    // Could log this in debug mode if needed in the future
+  });
+  
+  // Unref the child process so it doesn't keep the parent process alive
+  child.unref();
+}
+
+function getStatusIcon(status) {
+  switch (status) {
+    case 'not_started': return '⏸️';
+    case 'in_progress': return '🔄';
+    case 'done': return '✅';
+    default: return '';
+  }
+}
+
+function getPriorityIcon(priority) {
+  switch (priority) {
+    case 1: return '🔥';
+    case 2: return '⚠️';
+    case 3: return '💡';
+    default: return '';
+  }
+}
+
+function generateDetailStatusBadge(status) {
+  const icon = getStatusIcon(status);
+  const label = status.replace('_', ' ');
+  return `<span class="detail-status-badge status-${status}">${icon} ${label}</span>`;
+}
+
+function generateDetailPriorityBadge(priority) {
+  const icon = getPriorityIcon(priority);
+  return `<span class="detail-priority-badge priority-${priority}">${icon} ${priority}</span>`;
 }
 
 function generateSpecExplorerHTML(specs, assertions) {
@@ -151,48 +223,119 @@ function generateSpecExplorerHTML(specs, assertions) {
         }
         
         .status-badge {
-            padding: 2px 6px;
-            border-radius: 4px;
+            padding: 3px 8px;
+            border-radius: 6px;
             font-size: 11px;
-            font-weight: 500;
+            font-weight: 600;
             text-transform: uppercase;
             margin-right: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
         
         .status-not_started {
             background: #fef3c7;
             color: #92400e;
+            border: 1px solid #fbbf24;
+        }
+        .status-not_started::before {
+            content: "⏸️";
+            font-size: 10px;
         }
         
         .status-in_progress {
             background: #dbeafe;
             color: #1e40af;
+            border: 1px solid #3b82f6;
+            animation: pulse-blue 2s infinite;
+        }
+        .status-in_progress::before {
+            content: "🔄";
+            font-size: 10px;
         }
         
         .status-done {
             background: #d1fae5;
             color: #065f46;
+            border: 1px solid #10b981;
+        }
+        .status-done::before {
+            content: "✅";
+            font-size: 10px;
+        }
+        
+        @keyframes pulse-blue {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            50% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0); }
         }
         
         .priority-badge {
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
             color: white;
             margin-right: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         }
         
         .priority-1 {
-            background: #ef4444;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            border: 1px solid #b91c1c;
+            animation: urgent-glow 3s infinite;
+        }
+        .priority-1::before {
+            content: "🔥";
+            font-size: 9px;
         }
         
         .priority-2 {
-            background: #f59e0b;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border: 1px solid #b45309;
+        }
+        .priority-2::before {
+            content: "⚠️";
+            font-size: 9px;
         }
         
         .priority-3 {
-            background: #10b981;
+            background: linear-gradient(135deg, #10b981, #059669);
+            border: 1px solid #047857;
+        }
+        .priority-3::before {
+            content: "💡";
+            font-size: 9px;
+        }
+        
+        @keyframes urgent-glow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+            50% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0); }
+        }
+        
+        /* Enhanced visual hierarchy for high priority items */
+        .assertion-item:has(.priority-1) {
+            border-left: 4px solid #ef4444;
+            background: linear-gradient(90deg, #fef2f2 0%, white 15%);
+        }
+        
+        .assertion-item:has(.status-in_progress) {
+            border-left: 4px solid #3b82f6;
+            background: linear-gradient(90deg, #eff6ff 0%, white 15%);
+        }
+        
+        .spec-header:has(.priority-1) {
+            border-left: 4px solid #ef4444;
+            background: linear-gradient(90deg, #fef2f2 0%, #f1f5f9 20%);
+        }
+        
+        .spec-header:has(.status-in_progress) {
+            border-left: 4px solid #3b82f6;
+            background: linear-gradient(90deg, #eff6ff 0%, #f1f5f9 20%);
         }
         
         .spec-title {
@@ -249,13 +392,47 @@ function generateSpecExplorerHTML(specs, assertions) {
         
         .detail-meta {
             display: flex;
-            gap: 12px;
-            margin-bottom: 16px;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
         }
         
         .meta-item {
+            font-size: 13px;
+            color: #475569;
+            font-weight: 500;
+        }
+        
+        .meta-item strong {
+            font-weight: 600;
+            color: #1e293b;
+        }
+        
+        .detail-status-badge {
+            padding: 4px 10px;
+            border-radius: 6px;
             font-size: 12px;
-            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+        
+        .detail-priority-badge {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         }
         
         .detail-body {
@@ -319,8 +496,8 @@ function generateSpecExplorerHTML(specs, assertions) {
                     <div class="detail-header">
                         <div class="detail-title">${spec.title}</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <strong>${spec.status}</strong></span>
-                            <span class="meta-item">Priority: <strong>${spec.priority}</strong></span>
+                            <span class="meta-item">Status: ${generateDetailStatusBadge(spec.status)}</span>
+                            <span class="meta-item">Priority: ${generateDetailPriorityBadge(spec.priority)}</span>
                             <span class="meta-item">File: <strong>${spec.file}</strong></span>
                         </div>
                     </div>
@@ -335,8 +512,8 @@ function generateSpecExplorerHTML(specs, assertions) {
                     <div class="detail-header">
                         <div class="detail-title">${assertion.title}</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <strong>${assertion.status}</strong></span>
-                            <span class="meta-item">Priority: <strong>${assertion.priority}</strong></span>
+                            <span class="meta-item">Status: ${generateDetailStatusBadge(assertion.status)}</span>
+                            <span class="meta-item">Priority: ${generateDetailPriorityBadge(assertion.priority)}</span>
                             <span class="meta-item">Parent: <strong>${assertion.parent}</strong></span>
                             <span class="meta-item">File: <strong>${assertion.file}</strong></span>
                         </div>
