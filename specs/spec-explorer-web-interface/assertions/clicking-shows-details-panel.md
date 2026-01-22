@@ -20,6 +20,8 @@ Clicking on any spec or assertion displays its details in a right-side panel.
 - Panel includes metadata like creation date, priority, status
 - Selected item is visually highlighted in the tree
 
+**Tests:** src/__tests__/clicking-shows-details-panel.test.js
+
 ## Test Plan
 
 - Click various specs and assertions in the tree

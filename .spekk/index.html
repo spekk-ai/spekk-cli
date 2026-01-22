@@ -1,0 +1,4421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spec Explorer - Spekk</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.5;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .tree-panel {
+            width: 400px;
+            padding: 20px;
+            border-right: 1px solid #e2e8f0;
+            overflow-y: auto;
+        }
+        
+        .detail-panel {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .header {
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            color: #1e293b;
+            margin-bottom: 4px;
+        }
+        
+        .header p {
+            color: #64748b;
+            font-size: 14px;
+        }
+        
+        .spec-tree {
+            list-style: none;
+        }
+        
+        .spec-item {
+            margin-bottom: 12px;
+        }
+        
+        .spec-header {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .spec-header:hover {
+            background: #e2e8f0;
+        }
+        
+        .spec-header.expanded {
+            background: #dbeafe;
+        }
+        
+        .toggle-icon {
+            margin-right: 8px;
+            font-size: 12px;
+            color: #64748b;
+            transition: transform 0.2s;
+        }
+        
+        .toggle-icon.expanded {
+            transform: rotate(90deg);
+        }
+        
+        .status-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            margin-right: 8px;
+        }
+        
+        .status-not_started {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-in_progress {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .status-done {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .priority-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            color: white;
+            margin-right: 8px;
+        }
+        
+        .priority-1 {
+            background: #ef4444;
+        }
+        
+        .priority-2 {
+            background: #f59e0b;
+        }
+        
+        .priority-3 {
+            background: #10b981;
+        }
+        
+        .spec-title {
+            font-weight: 600;
+            flex: 1;
+        }
+        
+        .assertions-list {
+            margin-top: 8px;
+            margin-left: 20px;
+            display: none;
+        }
+        
+        .assertions-list.expanded {
+            display: block;
+        }
+        
+        .assertion-item {
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            background: white;
+            border-radius: 6px;
+            border-left: 3px solid #e2e8f0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .assertion-item:hover {
+            background: #f8fafc;
+            border-left-color: #3b82f6;
+        }
+        
+        .assertion-item.selected {
+            background: #eff6ff;
+            border-left-color: #3b82f6;
+        }
+        
+        .spec-header.selected {
+            background: #eff6ff;
+            border-left: 3px solid #3b82f6;
+        }
+        
+        .detail-content {
+            display: none;
+        }
+        
+        .detail-content.active {
+            display: block;
+        }
+        
+        .detail-header {
+            margin-bottom: 20px;
+        }
+        
+        .detail-title {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+        
+        .detail-meta {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .meta-item {
+            font-size: 12px;
+            color: #64748b;
+        }
+        
+        .detail-body {
+            prose: true;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #64748b;
+            margin-top: 100px;
+        }
+        
+        .empty-state h3 {
+            margin-bottom: 8px;
+            color: #374151;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="tree-panel">
+            <div class="header">
+                <h1>Spec Tree</h1>
+                <p>6 specs, 38 assertions</p>
+            </div>
+            
+            <ul class="spec-tree">
+                
+                    <li class="spec-item">
+                        <div class="spec-header" onclick="toggleSpec('spec-parser')">
+                            <span class="toggle-icon" id="toggle-spec-parser">▶</span>
+                            <span class="status-badge status-in_progress">in progress</span>
+                            <span class="priority-badge priority-1">1</span>
+                            <span class="spec-title">Spec Parser</span>
+                        </div>
+                        
+                        <ul class="assertions-list" id="assertions-spec-parser">
+                            
+                                <li class="assertion-item" onclick="showDetail('enforces-folder-structure', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Parser Must Enforce Folder Structure</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('parser-script-exists', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Parser Module Must Exist and Work</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('parses-frontmatter', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Parser Must Parse YAML Frontmatter</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('no-implementation-outside-app', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>All Code Lives in src/</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('sidecar-test-runner', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Sidecar Test Runner Exists</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('target-directory-structure', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>CLI Directory Structure</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('tests-in-correct-location', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Tests Must Be In Correct Location</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('validates-required-fields', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Parser Must Validate Required Fields</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('identifies-next-priority', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Parser Must Identify Next Priority Item</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('outputs-valid-json', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Parser Must Output Valid JSON</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('assertions-have-tests', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Assertions Must Have Automated Tests When Possible</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('validates-timestamps', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Parser Must Validate Timestamp Formats</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('validates-status-values', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Parser Must Validate Status Values</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('detects-duplicate-ids', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Parser Must Detect Duplicate IDs</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('ci-runs-all-tests', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>CI Runs All Tests</span>
+                                    </div>
+                                </li>
+                            
+                        </ul>
+                    </li>
+                
+                    <li class="spec-item">
+                        <div class="spec-header" onclick="toggleSpec('builder-agent')">
+                            <span class="toggle-icon" id="toggle-builder-agent">▶</span>
+                            <span class="status-badge status-done">done</span>
+                            <span class="priority-badge priority-1">1</span>
+                            <span class="spec-title">Builder Agent</span>
+                        </div>
+                        
+                        <ul class="assertions-list" id="assertions-builder-agent">
+                            
+                                <li class="assertion-item" onclick="showDetail('prompt-exists', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Builder Agent Prompt Must Exist</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('builder-runner-exists', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Builder Runner Script Exists</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('reads-complete-specs', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Builder Must Read Complete Specification Files</span>
+                                    </div>
+                                </li>
+                            
+                        </ul>
+                    </li>
+                
+                    <li class="spec-item">
+                        <div class="spec-header" onclick="toggleSpec('test-file-organization')">
+                            <span class="toggle-icon" id="toggle-test-file-organization">▶</span>
+                            <span class="status-badge status-not_started">not started</span>
+                            <span class="priority-badge priority-1">1</span>
+                            <span class="spec-title">Parser Test File Organization</span>
+                        </div>
+                        
+                        <ul class="assertions-list" id="assertions-test-file-organization">
+                            
+                                <li class="assertion-item" onclick="showDetail('create-parser-basic-tests', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Parser Basic Tests File</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('create-frontmatter-tests', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Frontmatter Parsing Tests File</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('create-field-validation-tests', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Field Validation Tests File</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('create-json-output-tests', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>JSON Output Tests File</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('create-priority-algorithm-tests', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Priority Algorithm Tests File</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('remove-old-test-files', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Remove Old Test Files</span>
+                                    </div>
+                                </li>
+                            
+                        </ul>
+                    </li>
+                
+                    <li class="spec-item">
+                        <div class="spec-header" onclick="toggleSpec('spekk-cli')">
+                            <span class="toggle-icon" id="toggle-spekk-cli">▶</span>
+                            <span class="status-badge status-not_started">not started</span>
+                            <span class="priority-badge priority-2">2</span>
+                            <span class="spec-title">Spekk CLI</span>
+                        </div>
+                        
+                        <ul class="assertions-list" id="assertions-spekk-cli">
+                            
+                                <li class="assertion-item" onclick="showDetail('orchestration-loops-exist', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Orchestration Loops Exist</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('npm-scripts-launch-agents', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>NPM Scripts Launch Agents</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('status-command-exists', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Status Command Exists</span>
+                                    </div>
+                                </li>
+                            
+                        </ul>
+                    </li>
+                
+                    <li class="spec-item">
+                        <div class="spec-header" onclick="toggleSpec('spec-explorer-web-interface')">
+                            <span class="toggle-icon" id="toggle-spec-explorer-web-interface">▶</span>
+                            <span class="status-badge status-not_started">not started</span>
+                            <span class="priority-badge priority-2">2</span>
+                            <span class="spec-title">Spec Explorer Web Interface</span>
+                        </div>
+                        
+                        <ul class="assertions-list" id="assertions-spec-explorer-web-interface">
+                            
+                                <li class="assertion-item" onclick="showDetail('creates-spekk-directory-automatically', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Creates .spekk Directory Automatically</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('generates-index-html-file', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Generates index.html File</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('spekk-show-command-exists', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span>Spekk Show Command Exists</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('assertions-appear-as-subitems', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-not_started">not started</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Assertions Appear as Sub-items</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('clicking-shows-details-panel', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-not_started">not started</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Clicking Shows Details Panel</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('displays-spec-tree-with-dropdowns', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-not_started">not started</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Displays Spec Tree with Expandable Dropdowns</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('emphasizes-status-and-priority-visually', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-not_started">not started</span>
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span>Emphasizes Status and Priority Visually</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('opens-html-in-default-browser', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-not_started">not started</span>
+                                        <span class="priority-badge priority-3">3</span>
+                                        <span>Opens HTML in Default Browser</span>
+                                    </div>
+                                </li>
+                            
+                        </ul>
+                    </li>
+                
+                    <li class="spec-item">
+                        <div class="spec-header" onclick="toggleSpec('coach-agent')">
+                            <span class="toggle-icon" id="toggle-coach-agent">▶</span>
+                            <span class="status-badge status-done">done</span>
+                            <span class="priority-badge priority-3">3</span>
+                            <span class="spec-title">Coach Agent</span>
+                        </div>
+                        
+                        <ul class="assertions-list" id="assertions-coach-agent">
+                            
+                                <li class="assertion-item" onclick="showDetail('receives-user-requests', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-3">3</span>
+                                        <span>Coach Must Receive and Parse User Requests</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('asks-clarifying-questions', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-3">3</span>
+                                        <span>Coach Must Ask Clarifying Questions</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('creates-spec-files', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="status-badge status-done">done</span>
+                                        <span class="priority-badge priority-3">3</span>
+                                        <span>Coach Must Create Well-Formed Spec Files</span>
+                                    </div>
+                                </li>
+                            
+                        </ul>
+                    </li>
+                
+            </ul>
+        </div>
+        
+        <div class="detail-panel">
+            <div class="empty-state" id="empty-state">
+                <h3>Spec Explorer</h3>
+                <p>Click on any spec or assertion to view details</p>
+            </div>
+            
+            
+                <div class="detail-content" id="detail-spec-spec-parser">
+                    <div class="detail-header">
+                        <div class="detail-title">Spec Parser</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>in_progress</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/spec-parser.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: spec-parser
+created: 2026-01-20T15:35:00Z
+priority: 1
+status: in_progress
+---
+
+# Spec Parser
+
+## Overview
+
+The spec parser is the foundation of the Spekk system - it reads specification files and identifies what to work on next. This is the "factory builder" that enables spec-driven development.
+
+## Spec File Structure
+
+### Folder Organization
+Each spec is a folder containing:
+- Main spec file: `{spec-id}/{spec-id}.md`
+- Assertions subfolder: `{spec-id}/assertions/`
+- Assertion files: `{spec-id}/assertions/{assertion-id}.md`
+
+Example:
+```
+specs/
+├── spec-parser/
+│   ├── spec-parser.md
+│   └── assertions/
+│       ├── parses-frontmatter.md
+│       ├── validates-required-fields.md
+│       └── ...
+```
+
+### File Format
+Both specs and assertions are Markdown files with YAML frontmatter.
+
+**Spec file frontmatter:**
+```yaml
+---
+id: spec-parser              # Unique identifier (kebab-case)
+created: 2026-01-20T15:35:00Z  # ISO 8601 timestamp (immutable)
+priority: 1                   # 1 (highest) | 2 (medium) | 3 (lowest)
+status: not_started          # not_started | in_progress | done
+---
+```
+
+**Assertion file frontmatter:**
+```yaml
+---
+id: parses-frontmatter       # Unique within parent spec
+parent: spec-parser          # Parent spec id
+created: 2026-01-20T16:00:00Z
+priority: 1                   # 1 (highest) | 2 (medium) | 3 (lowest)
+status: not_started
+---
+```
+
+### Priority Levels
+
+Only three priority levels are allowed:
+- **1** - Highest priority (critical, blocking)
+- **2** - Medium priority (important, but not blocking)
+- **3** - Lowest priority (nice to have, future work)
+
+This constraint keeps prioritization simple and forces clear decisions about importance.
+
+## What the Parser Does
+
+### 1. Read and Parse
+- Recursively scans `specs/` directory for spec folders
+- Reads all `.md` files (specs and assertions)
+- Extracts and validates YAML frontmatter
+- Builds hierarchical structure: specs → assertions
+
+### 2. Validate Format
+- Ensures required fields exist (`id`, `created`, `priority`)
+- Validates field types and formats
+- Checks for duplicate IDs
+- Validates folder structure matches declared format
+- Reports errors for malformed specs
+
+### 3. Identify Next Work Item
+- Filters to incomplete items (status != "done")
+- Sorts by priority (1 is highest, then 2, then 3)
+- **Tie-breaking**: When multiple items have same priority, select oldest by `created` timestamp
+- Returns the single highest-priority incomplete assertion
+- If all assertions done for a spec, returns next spec
+
+### 4. Output Format
+Machine-readable JSON output:
+```json
+{
+  "type": "assertion",
+  "id": "parses-frontmatter",
+  "parent": "spec-parser",
+  "file": "specs/spec-parser/assertions/parses-frontmatter.md",
+  "priority": 0,
+  "status": "not_started",
+  "title": "Parser Must Extract YAML Frontmatter"
+}
+```
+
+## Status Aggregation
+
+Specs derive their status from assertions:
+- Spec is `done` only when ALL assertions are `done`
+- If ANY assertion is `in_progress`, spec shows as `in_progress`
+- If ANY assertion is `not_started`, spec shows as `not_started`
+
+Status values:
+- `not_started` - Not yet implemented (default)
+- `in_progress` - Currently being worked on
+- `done` - Implemented and validated
+- `draft` - Placeholder/planning stage (excluded from work queue)
+
+## Implementation
+
+The parser is a **Node.js module** in `src/parser/`.
+
+**Key Design Principles:**
+- **Standalone**: Can be run independently as CLI tool
+- **Language agnostic**: Outputs JSON that any language can consume
+- **Fast**: Executes in < 100ms even with many specs
+- **Self-contained**: Minimal dependencies, no database required
+
+**Current Implementation:**
+- Language: Node.js + ES modules
+- Location: `src/parser/`
+- Dependencies: Built-in YAML frontmatter parsing (no external deps needed)
+- Interface: CLI that outputs JSON to stdout
+
+**Usage:**
+```bash
+# From project root
+npm run next
+
+# Or directly
+node src/parser/cli.js
+
+# Returns JSON to stdout
+```
+
+## Why This Exists
+
+The parser enables spec-driven development. Without it:
+- Agents/developers manually scan files to find next priority
+- No validation that specs follow the declared format
+- No automation of the "what's next?" workflow
+
+With the parser:
+- Ralph loop can automate work: `parser → read assertion → work → mark done → commit`
+- CI can verify specs are well-formed
+- Dashboards can show status and priorities
+- The system becomes self-hosting
+
+This is infrastructure for the infrastructure.
+
+## Assertions
+
+See `assertions/` subfolder for detailed validation criteria and behaviors that must be true for this spec to be considered complete.
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-spec-builder-agent">
+                    <div class="detail-header">
+                        <div class="detail-title">Builder Agent</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">File: <strong>specs/builder-agent/builder-agent.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: builder-agent
+created: 2026-01-20T18:15:00Z
+priority: 1
+status: done
+---
+
+# Builder Agent
+
+## Overview
+
+The builder agent is the execution engine of the spec-driven system. It takes assertions and makes them true through implementation and testing.
+
+This is the core "work loop" that turns declarative specs into working code.
+
+## What It Does
+
+### 1. Get Next Task
+Runs parser to identify highest-priority incomplete assertion:
+```bash
+node scripts/next-spec.js
+```
+
+### 2. Read Assertion
+Understands what must be true:
+- Success criteria
+- Testability (can this be automated?)
+- Context from parent spec
+
+### 3. Determine Testability
+- **Code/scripts** → YES (write unit tests)
+- **UI/UX** → MAYBE (integration tests)
+- **Manual process** → NO (prose validation)
+
+### 4. Write Tests First (if testable)
+- Create test file in `tests/`
+- Link test in assertion: `**Tests:** tests/file.test.js`
+- Write tests that validate success criteria
+
+### 5. Implement
+Make tests pass or satisfy success criteria
+
+### 6. Validate
+- Run tests (`npm test`)
+- Verify no regressions
+- Check success criteria met
+
+### 7. Update Status
+Edit assertion frontmatter:
+```yaml
+status: done
+```
+
+### 8. Commit
+Create git commit with changes
+
+## Integration with System
+
+**Triggered by:** Ralph loop after parser identifies next work
+
+**Reads from:**
+- Parser JSON output
+- Assertion markdown files
+- Parent spec files (for context)
+
+**Writes to:**
+- Implementation files (code, scripts, etc.)
+- Test files (if testable)
+- Assertion status updates
+
+**Output:** Working implementation with passing tests
+
+## Why Builder Is Priority 1
+
+The builder IS the system in bootstrap phase:
+1. Without builder, nothing gets implemented
+2. Builder implements parser (which drives everything)
+3. Builder implements itself (self-hosting)
+4. Other agents come later
+
+The builder must work before we can be truly spec-driven.
+
+## Prompt
+
+See `builder-agent.prompt.md` for detailed agent instructions.
+
+## Assertions
+
+See `assertions/` for what must be true about builder behavior.
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-spec-test-file-organization">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Test File Organization</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>not_started</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">File: <strong>specs/test-file-organization/test-file-organization.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: test-file-organization
+created: 2026-01-21T23:30:00Z
+priority: 1
+status: not_started
+---
+
+# Parser Test File Organization
+
+## What Must Be True
+
+Parser tests must be properly organized in separate, focused test files at the correct location to avoid token limits and improve maintainability.
+
+## Current Problem
+
+- Tests are in wrong locations: `tests/spec-parser.test.js` and `src/__tests__/spec-parser.test.js`
+- Combined file size exceeds builder agent token limits (~1700 lines)
+- Tests cover different concerns but are mixed together
+
+## Target Structure
+
+```
+src/parser/__tests__/
+├── parser-basic.test.js         # Basic parsing and CLI functionality
+├── frontmatter-parsing.test.js  # YAML frontmatter parsing tests  
+├── field-validation.test.js     # Required fields, format validation
+├── json-output.test.js          # JSON output format validation
+├── priority-algorithm.test.js   # Next priority identification logic
+└── folder-structure.test.js     # Directory structure validation
+```
+
+## Success Criteria
+
+- ✅ All test files are in `src/parser/__tests__/` directory
+- ✅ Tests are split into focused, single-responsibility files
+- ✅ No individual test file exceeds 500 lines
+- ✅ All existing test coverage is preserved
+- ✅ Tests run successfully with `npm test`
+- ✅ Old test files in `tests/` and `src/__tests__/` are removed
+- ✅ Each test file has clear, descriptive naming
+
+**Tests:** Manual validation (run `npm test` to verify all pass)</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-spec-spekk-cli">
+                    <div class="detail-header">
+                        <div class="detail-title">Spekk CLI</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>not_started</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">File: <strong>specs/spekk-cli/spekk-cli.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: spekk-cli
+created: 2026-01-21T19:00:00Z
+priority: 2
+status: not_started
+---
+
+# Spekk CLI
+
+## Overview
+
+The spekk-cli command-line interface provides core spec-driven development commands for parsing specs, launching agents, and managing workflows across any spec-driven project.
+
+## Core Commands
+
+### Parser Commands
+- `spekk` (default) - Parse specs in current directory and return next priority item
+- `spekk next` - Alias for default parser behavior
+- `spekk status` - Show status overview of all specs and assertions
+
+### Agent Commands  
+- `spekk coach` - Launch coach loop (interactive agent sessions) for current directory
+- `spekk builder` - Launch builder loop (automated implementation) for current directory
+
+### Utility Commands
+- `spekk --version` - Show CLI version
+- `spekk --help` - Show command help
+
+## Status Overview Command
+
+The `spekk status` command provides a comprehensive view of spec progress:
+
+```bash
+$ spekk status
+
+📋 Spec Status Overview
+
+✅ semantic-versioning (3/3 assertions complete)
+🚧 spekk-cli-extraction (1/7 assertions complete)
+   ✅ project-structure-exists
+   📋 specs-moved-to-cli  
+   📋 cli-parses-external-specs
+   📋 agent-loops-work-externally
+   📋 local-parser-removed
+   📋 cli-project-is-spec-driven
+   📋 current-project-uses-spekk-cli
+⏸️  other-spec (0/2 assertions complete)
+
+Next Priority: specs-moved-to-cli (spekk-cli-extraction)
+```
+
+## Design Principles
+
+**Context Awareness:** CLI operates on current working directory's specs/ folder
+**Global Installation:** Available as `spekk` command anywhere on system  
+**Self-Contained:** No dependencies on local project structure
+**Fast Execution:** All operations complete in < 100ms
+**Cross-Platform:** Works on macOS, Linux, Windows</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-spec-spec-explorer-web-interface">
+                    <div class="detail-header">
+                        <div class="detail-title">Spec Explorer Web Interface</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>not_started</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/spec-explorer-web-interface.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: spec-explorer-web-interface
+created: 2026-01-22T21:00:00Z
+priority: 2
+status: not_started
+---
+
+# Spec Explorer Web Interface
+
+## Overview
+
+The `spekk show` command generates a web-based interface for exploring specs as an interactive tree with detailed views. This provides a visual alternative to the text-based `spekk status` command.
+
+## Core Functionality
+
+The command creates a temporary web page that displays the spec hierarchy as an expandable tree interface, similar to a file explorer. Users can navigate the spec structure and view detailed information about each spec and assertion.
+
+## Interface Design
+
+**Tree Navigation:**
+- Specs appear as top-level items in an expandable dropdown tree
+- Assertions appear as sub-items under their parent specs
+- Visual indicators show status and priority for each item
+
+**Detail Panel:**
+- Right-side panel shows details when clicking any spec or assertion
+- Emphasizes status (not_started, in_progress, done) and priority (1, 2, 3)
+- Displays spec/assertion content and metadata
+
+## File Generation
+
+**Location:** Generated HTML file is placed at `.spekk/index.html`
+**Directory Creation:** `.spekk/` directory is created automatically if it doesn't exist
+**Browser Launch:** Generated file opens in the system's default browser
+
+## Success Criteria
+
+Users can run `spekk show` in any spec-driven project directory and immediately see a visual representation of their spec hierarchy with detailed status information.</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-spec-coach-agent">
+                    <div class="detail-header">
+                        <div class="detail-title">Coach Agent</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>3</strong></span>
+                            <span class="meta-item">File: <strong>specs/coach-agent/coach-agent.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: coach-agent
+created: 2026-01-20T17:00:00Z
+priority: 3
+status: done
+---
+
+# Coach Agent
+
+## Overview
+
+The coach agent translates messy, imperative user requests into clean, testable declarative specs. This is the "front door" of the spec-driven system - where requirements emerge through conversation and refinement.
+
+## Critical Constraint: Code is Read-Only
+
+**The coach NEVER writes or edits implementation code.**
+
+- ⛔ Coach does NOT use Edit or Write tools on `.js`, `.ts`, `.jsx`, `.tsx` files
+- ⛔ Coach does NOT modify files in `app/` directory
+- ✅ Coach CAN read code to understand context for writing better specs
+- ✅ Coach ONLY writes spec files (`.md` files in `specs/` directory)
+
+**Role separation:**
+- **Coach:** Writes specs describing WHAT must be true
+- **Builder:** Writes code to MAKE it true
+
+If a user asks the coach to fix code directly, coach responds: "I'm the coach - I write specs. The builder agent implements them."
+
+## The Problem It Solves
+
+Users don't naturally think in terms of testable assertions. They say:
+- "We should fix the copy on the login page"
+- "Add dark mode"
+- "Make the dashboard faster"
+
+The coach helps refine these into well-formed specs with clear, testable assertions.
+
+## What It Does
+
+### 1. Receive User Request
+Accept natural language input about what the user wants to build or change.
+
+### 2. Check Existing Specs
+- **Receive full spec JSON hierarchy** (output from parser `--all` flag)
+- Scan existing specs to see if this is an update or new spec
+- If updating existing spec, load it for context
+- Identify potential conflicts with existing specs
+
+**Context requirement:**
+Coach must receive the complete spec hierarchy on every invocation:
+```json
+{
+  "type": "hierarchy",
+  "specs": [
+    {
+      "id": "spec-parser",
+      "title": "Spec Parser",
+      "priority": 1,
+      "status": "in_progress",
+      "assertions": [...]
+    },
+    ...
+  ]
+}
+```
+
+This provides full context of:
+- All existing specs and their assertions
+- Current status of each item
+- Priority levels
+- What's been built, what's in progress, what's not started
+
+Without this context, coach can't make informed decisions about where new specs fit or if they conflict with existing work.
+
+### 3. Ask Clarifying Questions
+Guide the user through refinement:
+- What exactly should happen?
+- How will we know it's working?
+- What's the priority? (1=critical, 2=important, 3=nice-to-have)
+- Are there edge cases to consider?
+- Should this be broken into multiple assertions?
+
+### 4. Draft Spec Structure
+Propose a spec with:
+- Clear spec ID (kebab-case)
+- Main spec file describing the feature
+- Specific, testable assertions
+- Appropriate priority levels
+- Success criteria for each assertion
+
+### 5. Get User Approval
+Show the proposed spec structure and ask if it captures their intent.
+
+### 6. Create or Update Spec Files
+Write the spec and assertion files to `specs/` directory with proper:
+- Folder structure (`specs/{spec-id}/`)
+- YAML frontmatter (id, created, priority, status)
+- Clear markdown content
+- Testability indicators (can this be automated?)
+
+**Preserve design artifacts:**
+When users provide mockups, prototypes, or design references:
+- Save mockup images as `specs/{spec-id}/mockup.png` (or appropriate extension)
+- Save prototype HTML/CSS files alongside the spec
+- Reference artifacts using relative paths in the spec
+- This keeps requirements and their references together for future reference
+
+**Status management when updating specs:**
+- If creating new spec/assertion: `status: not_started`
+- If updating existing assertion with `status: done`:
+  - Change to `status: in_progress`
+  - This signals builder to re-implement
+  - Ensures updated requirements get picked up
+- If updating assertion already `in_progress` or `not_started`: keep as-is
+
+### 7. Commit Spec Changes
+Immediately commit spec changes to git with clear, descriptive messages. This creates an audit trail of spec evolution and helps track when requirements changed.
+
+Commit message should describe what the spec defines or what changed.
+
+## Example Interaction
+
+```
+User: "We need to add dark mode to the dashboard"
+
+Coach: I can help spec that out. Let me ask a few questions:
+
+1. Should dark mode be:
+   - User preference (toggle in settings)
+   - System preference (auto-detect OS setting)
+   - Both?
+
+2. Which components need dark mode support?
+   - Just the dashboard?
+   - Entire application?
+
+3. What's the priority?
+   - 1 (critical - blocks other work)
+   - 2 (important - should do soon)
+   - 3 (nice to have - when there's time)
+
+User: User preference, entire application, priority 2
+
+Coach: Perfect. Here's what I'm proposing:
+
+Spec: dark-mode-support
+Priority: 2
+
+Assertions:
+1. User can toggle dark mode in settings (priority 1)
+2. All components render correctly in dark mode (priority 1)
+3. Dark mode preference persists across sessions (priority 2)
+4. Smooth transition animation between modes (priority 3)
+
+Does this capture what you want?
+
+User: Yes
+
+Coach: ✅ Created spec at specs/dark-mode-support/
+Next: Builder agents will implement these assertions in priority order.
+```
+
+## Output Format
+
+The coach creates files in the specs directory:
+
+```
+specs/
+└── dark-mode-support/
+    ├── dark-mode-support.md       # Main spec
+    └── assertions/
+        ├── user-can-toggle.md
+        ├── components-render.md
+        ├── preference-persists.md
+        └── smooth-transition.md
+```
+
+## Integration with Builder Workflow
+
+**Creating new specs:**
+1. Coach creates spec with assertions (`status: not_started`)
+2. Parser identifies next assertion to work on
+3. Builder agent implements it
+4. Tests validate it
+5. Builder marks `status: done`
+6. Repeat
+
+**Updating existing specs:**
+1. Coach updates assertion content
+2. Coach changes `status: done` → `status: in_progress`
+3. Parser identifies assertion needs work
+4. Builder re-implements with new requirements
+5. Tests validate updated behavior
+6. Builder marks `status: done` again
+
+This status workflow ensures changes to specs trigger re-implementation.
+
+## Why This Matters
+
+**Without coach:**
+- Users write specs incorrectly
+- Specs are too vague or too specific
+- Assertions aren't testable
+- Priority is unclear
+
+**With coach:**
+- Consistent spec format
+- Clear, testable assertions
+- Appropriate granularity
+- Proper prioritization
+- Users guided through best practices
+
+This is the **imperative → declarative** bridge that makes the system usable.
+
+## Declarative vs Imperative
+
+**Critical distinction:** Assertions must be DECLARATIVE, not imperative.
+
+**Imperative (wrong):**
+- "Migrate code to app/"
+- "Move parser to app/parser/"
+- "Refactor the dashboard"
+- Instructions about WHAT TO DO
+
+**Declarative (correct):**
+- "No implementation code exists outside app/"
+- "Parser implementation lives in app/parser/"
+- "Dashboard displays spec hierarchy"
+- Statements about WHAT MUST BE TRUE
+
+**Why this matters:**
+- User says: "We should move the parser code" (imperative)
+- Coach translates to: "Parser implementation lives in app/parser/" (declarative)
+- Builder reads assertion and figures out HOW to make it true
+- Assertion describes target state, not the steps
+
+**Coach's job:** Help users express their imperative requests as declarative assertions about desired state.
+
+## Repository Hygiene Principle
+
+The coach ensures specs maintain good repository hygiene. Generated files and dependencies should never be committed.
+
+**What should be git-ignored:**
+- Dependencies (`node_modules/`) - reproducible from package manifests
+- Build artifacts (`dist/`, `build/`, `out/`) - reproducible from source
+- Secrets (`.env`) - never commit credentials
+- Generated files - derived from source, not source of truth
+
+**Coaching approach:**
+- `.gitignore` is itself a form of specification - respect and trust it
+- When creating specs, express intent ("build artifacts are not committed") without duplicating .gitignore patterns
+- Guide users to think about source vs. derived files
+- Specs should declare what files/artifacts exist, not specify .gitignore rules
+
+This principle keeps the repository clean and focused on source of truth.
+
+## Assertions
+
+See `assertions/` subfolder for what must be true for the coach agent to work correctly.
+</pre>
+                    </div>
+                </div>
+            
+            
+            
+                <div class="detail-content" id="detail-assertion-builder-runner-exists">
+                    <div class="detail-header">
+                        <div class="detail-title">Builder Runner Script Exists</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>builder-agent</strong></span>
+                            <span class="meta-item">File: <strong>specs/builder-agent/assertions/builder-runner-exists.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: builder-runner-exists
+parent: builder-agent
+created: 2026-01-20T19:40:00Z
+priority: 1
+status: done
+---
+
+# Builder Runner Script Exists
+
+## What Must Be True
+
+A builder runner script must exist at the project root that orchestrates the builder agent workflow: get next task → work on it → commit → repeat.
+
+## File Location
+
+```
+builder-loop.sh      # Project root
+```
+
+## Expected Behavior
+
+The script automates the builder agent workflow:
+
+1. **Get next task** - Run `npm run next` to identify next assertion
+2. **Work on task** - Invoke builder agent to implement the assertion
+3. **Commit changes** - Create git commit when task completes
+4. **Repeat** - Loop back to step 1
+
+**Stop conditions:**
+- No more incomplete assertions
+- User interrupts (Ctrl+C)
+- Builder encounters an error
+
+## Script Responsibilities
+
+**Task identification:**
+- Call parser to get next highest-priority assertion
+- Exit cleanly if no tasks remain
+
+**Builder invocation:**
+- Launch builder agent with appropriate context
+- Pass assertion details to builder
+- Capture builder output
+
+**Commit automation:**
+- Create meaningful commit messages
+- Include assertion ID and title in commit
+- Handle git operations safely
+
+**Error handling:**
+- Graceful failure if parser fails
+- Stop loop if builder fails
+- Clear error messages for user
+
+## Usage
+
+```bash
+# Run the builder loop
+./builder-loop.sh
+
+# The script handles:
+# - Finding next task
+# - Running builder agent
+# - Committing changes
+# - Looping to next task
+```
+
+## Success Criteria
+
+- ✅ `builder-loop.sh` exists at project root
+- ✅ Script is executable (`chmod +x builder-loop.sh`)
+- ✅ Script calls `npm run next` to get tasks
+- ✅ Script invokes builder agent with task context
+- ✅ Script creates git commits for completed work
+- ✅ Script loops until no tasks remain
+- ✅ Script handles Ctrl+C gracefully
+- ✅ Script stops on errors (doesn't infinite loop)
+- ✅ Clear output showing progress
+
+**Tests:** Manual validation (integration script)
+
+## Notes
+
+This script is the automation layer that runs the builder agent repeatedly. It's expected to evolve as the builder workflow matures, hence it lives in the project root (not in app/) where it can be easily modified.
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-prompt-exists">
+                    <div class="detail-header">
+                        <div class="detail-title">Builder Agent Prompt Must Exist</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>builder-agent</strong></span>
+                            <span class="meta-item">File: <strong>specs/builder-agent/assertions/prompt-exists.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: prompt-exists
+parent: builder-agent
+created: 2026-01-20T19:30:00Z
+priority: 1
+status: done
+---
+
+# Builder Agent Prompt Must Exist
+
+## What Must Be True
+
+A clear, complete prompt file must exist at `specs/builder-agent/builder-agent.prompt.md` that defines how the builder agent operates.
+
+## File Location
+
+```
+specs/
+└── builder-agent/
+    └── builder-agent.prompt.md
+```
+
+## Required Content
+
+The prompt must include:
+
+1. **Role definition** - What the builder agent does
+2. **Workflow steps** - How to get tasks, implement, test, commit
+3. **Stop instruction** - Work on ONE assertion at a time, then STOP
+4. **Test requirements** - When and how to write tests
+5. **Status management** - How to update assertion status
+6. **File paths** - Updated references to `app/` directory structure (not `scripts/` or `tests/`)
+
+## Key Requirements
+
+**Directory references must be current:**
+- ✅ References `app/parser/` for implementation
+- ✅ References `app/**/__tests__/` for tests
+- ✅ Uses `npm run next` command (not `node scripts/next-spec.js`)
+- ❌ No references to `scripts/` directory
+- ❌ No references to `tests/` directory
+
+**Behavioral requirements:**
+- Must explicitly state: "Work on ONE assertion at a time, then STOP"
+- Must include step 7: "Stop" instruction
+- Must not encourage looping or automatic continuation
+
+## Success Criteria
+
+- ✅ File exists at `specs/builder-agent/builder-agent.prompt.md`
+- ✅ Contains role definition for builder agent
+- ✅ Includes complete workflow (get task, read, implement, test, validate, update status, commit, stop)
+- ✅ Explicitly instructs builder to work on ONE task and STOP
+- ✅ References correct directory structure (`app/` not `scripts/` or `tests/`)
+- ✅ Uses current commands (`npm run next`, `npm test`)
+- ✅ Explains status values (not_started, in_progress, done)
+- ✅ Describes priority levels (1, 2, 3)
+
+**Tests:** `specs/builder-agent/assertions/prompt-exists.test.sh`
+
+Sidecar test should validate:
+- File exists at correct path
+- Contains key sections (role, workflow, stop instruction)
+- References `app/` directory structure
+- Uses `npm run next` command
+- Does not reference deprecated `scripts/` or `tests/` directories
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-reads-complete-specs">
+                    <div class="detail-header">
+                        <div class="detail-title">Builder Must Read Complete Specification Files</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>builder-agent</strong></span>
+                            <span class="meta-item">File: <strong>specs/builder-agent/assertions/reads-complete-specs.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: reads-complete-specs
+parent: builder-agent
+created: 2026-01-21T18:45:00Z
+priority: 1
+status: done
+---
+
+# Builder Must Read Complete Specification Files
+
+## What Must Be True
+
+**Builder agents must read complete specification files** - never partial content that could miss critical requirements.
+
+When implementing an assertion, the builder must:
+
+1. **Read the FULL assertion file** - every line, no truncation
+2. **Read the FULL parent spec file** - complete context and requirements  
+3. **Read related assertion files** - understand interconnected requirements
+4. **Never rely on partial reads** - no line limits, no truncation
+
+## Why This Matters
+
+**Partial reads cause implementation errors:**
+- Missing language/technology requirements (Node.js vs Python)
+- Missing architectural constraints (standalone vs Django-integrated) 
+- Missing explicit prohibitions ("Must NOT exist")
+- Incomplete understanding of success criteria
+
+**Recent example:**
+- Spec required standalone Node.js parser in `app/parser/`
+- Builder created Django management command instead
+- Likely caused by reading only ~90 lines, missing Node.js requirement
+
+## Implementation Requirements
+
+**File reading behavior:**
+- Use Read tool without line limits
+- Read complete files: `Read(file_path, limit=None, offset=None)`
+- For long files, read in chunks but process complete content
+- Never truncate frontmatter or success criteria sections
+
+**Required reading sequence:**
+1. Read assigned assertion file (complete)
+2. Read parent spec file (complete) 
+3. Read related assertions if referenced
+4. Validate understanding against ALL requirements
+
+## Success Criteria
+
+This assertion is "done" when:
+
+- ✅ Builder reads complete assertion files (no line limits)
+- ✅ Builder reads complete parent spec files  
+- ✅ Builder demonstrates understanding of full requirements
+- ✅ Builder catches technology/language requirements (Node.js vs Python)
+- ✅ Builder respects architectural constraints (standalone vs integrated)
+- ✅ Builder follows all explicit prohibitions ("Must NOT exist")
+- ✅ No more implementation errors from partial reading
+- ✅ Builder can explain WHY it chose specific implementation approach
+
+## Test Cases
+
+**Testable scenarios:**
+1. Spec with Node.js requirement → Builder uses Node.js (not Python)
+2. Spec with standalone requirement → Builder avoids framework integration  
+3. Spec with "Must NOT exist" section → Builder removes/avoids prohibited items
+4. Long spec file (>100 lines) → Builder references content from entire file
+5. Assertion referencing parent spec → Builder shows knowledge of parent context
+
+**Tests:** src/builder/__tests__/reads-complete-specs.test.js
+
+## Implementation Notes
+
+This is a **meta-requirement** about how builders operate, not what they build. It ensures quality execution of the spec-driven system itself.
+
+**Critical for system reliability** - partial understanding leads to off-spec implementations that require rework.</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-asks-clarifying-questions">
+                    <div class="detail-header">
+                        <div class="detail-title">Coach Must Ask Clarifying Questions</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>3</strong></span>
+                            <span class="meta-item">Parent: <strong>coach-agent</strong></span>
+                            <span class="meta-item">File: <strong>specs/coach-agent/assertions/asks-clarifying-questions.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: asks-clarifying-questions
+parent: coach-agent
+created: 2026-01-20T17:10:00Z
+priority: 3
+status: done
+---
+
+# Coach Must Ask Clarifying Questions
+
+## What Must Be True
+
+When user requests are vague or incomplete, the coach must guide them through refinement by asking targeted questions.
+
+## Question Categories
+
+### 1. Scope Questions
+- What exactly should happen?
+- Which parts of the system are affected?
+- Are there related features this depends on?
+
+### 2. Testability Questions
+- How will we know this is working?
+- What does success look like?
+- What are the edge cases?
+
+### 3. Priority Questions
+- How important is this? (1=critical, 2=important, 3=nice-to-have)
+- Does this block other work?
+- When does this need to be done?
+
+### 4. Granularity Questions
+- Should this be broken into smaller pieces?
+- Are there multiple independent assertions here?
+- Can parts be implemented separately?
+
+## Example
+
+**Vague request:** "Make the app faster"
+
+**Coach questions:**
+1. Which part feels slow? (page load, interactions, data fetching)
+2. What's the current behavior? What should it be?
+3. How will we measure improvement? (load time, response time)
+4. What's the acceptable threshold? (< 2 seconds, < 500ms)
+
+**Result:** Specific, measurable assertions about performance
+
+## Success Criteria
+
+- ✅ Coach identifies when requests are too vague
+- ✅ Coach asks targeted questions to refine requirements
+- ✅ Coach guides users toward testable assertions
+- ✅ Coach helps determine appropriate priority
+- ✅ Questions lead to well-formed specs
+
+**Tests:** app/coach/__tests__/asks-clarifying-questions.test.js
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-creates-spec-files">
+                    <div class="detail-header">
+                        <div class="detail-title">Coach Must Create Well-Formed Spec Files</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>3</strong></span>
+                            <span class="meta-item">Parent: <strong>coach-agent</strong></span>
+                            <span class="meta-item">File: <strong>specs/coach-agent/assertions/creates-spec-files.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: creates-spec-files
+parent: coach-agent
+created: 2026-01-20T17:15:00Z
+priority: 3
+status: done
+---
+
+# Coach Must Create Well-Formed Spec Files
+
+**Tests:** app/coach/__tests__/creates-spec-files.test.js
+
+## What Must Be True
+
+After refinement dialogue, coach must create properly formatted spec files that follow the declared structure.
+
+## File Structure It Creates
+
+```
+specs/
+└── {spec-id}/
+    ├── {spec-id}.md              # Main spec file
+    └── assertions/
+        ├── {assertion-1}.md
+        ├── {assertion-2}.md
+        └── ...
+```
+
+## Spec File Format
+
+Main spec file must have:
+```yaml
+---
+id: spec-id
+created: 2026-01-20T17:15:00Z
+priority: 2
+status: not_started
+---
+
+# Spec Title
+
+## Overview
+What this spec defines...
+
+## What It Does
+Detailed description...
+```
+
+## Assertion File Format
+
+Each assertion must have:
+```yaml
+---
+id: assertion-id
+parent: spec-id
+created: 2026-01-20T17:16:00Z
+priority: 1
+status: not_started
+---
+
+# Assertion Title
+
+## What Must Be True
+Clear, testable requirement...
+
+## Success Criteria
+- ✅ Criterion 1
+- ✅ Criterion 2
+```
+
+## Validation
+
+Coach must ensure:
+- **Valid YAML frontmatter** (parseable, correct fields)
+- **Unique IDs** (no duplicates)
+- **Valid priorities** (1, 2, or 3)
+- **ISO 8601 timestamps** (YYYY-MM-DDTHH:MM:SSZ)
+- **Kebab-case IDs** (lowercase-with-hyphens)
+- **Clear success criteria** (how to validate assertion)
+- **Testability noted** (can this be automated?)
+
+## Success Criteria
+
+- ✅ Coach creates folder structure correctly
+- ✅ Coach writes valid YAML frontmatter
+- ✅ Coach generates unique, valid IDs
+- ✅ Coach includes clear success criteria
+- ✅ Coach sets appropriate priorities
+- ✅ Coach creates testable assertions
+- ✅ Generated specs pass parser validation
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-receives-user-requests">
+                    <div class="detail-header">
+                        <div class="detail-title">Coach Must Receive and Parse User Requests</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>3</strong></span>
+                            <span class="meta-item">Parent: <strong>coach-agent</strong></span>
+                            <span class="meta-item">File: <strong>specs/coach-agent/assertions/receives-user-requests.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: receives-user-requests
+parent: coach-agent
+created: 2026-01-20T17:05:00Z
+priority: 3
+status: done
+---
+
+# Coach Must Receive and Parse User Requests
+
+**Implementation:** app/coach/index.js, app/coach/cli.js
+
+## What Must Be True
+
+The coach agent must accept natural language input from users describing what they want to build or change.
+
+## Input Formats
+
+The coach should handle various input styles:
+- **Direct requests**: "Add dark mode"
+- **Problem statements**: "Users can't see the dashboard in bright sunlight"
+- **Feature descriptions**: "We need a way for users to export their data"
+- **Change requests**: "Fix the copy on the login page - it should say 'Sign in' not 'Login'"
+- **Vague ideas**: "Make the app faster"
+
+## What It Does
+
+1. **Accept input** via command line or conversational interface
+2. **Parse intent** - understand what the user wants
+3. **Identify type**:
+   - New feature (create new spec)
+   - Update existing feature (modify spec)
+   - Bug fix (may update existing assertion)
+   - Refactor (may update multiple specs)
+
+## Success Criteria
+
+- ✅ Coach accepts text input
+- ✅ Coach handles various input formats
+- ✅ Coach identifies if request is new spec or update
+- ✅ Coach can handle vague requests (will ask clarifying questions)
+- ✅ Coach responds appropriately to user's intent
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-assertions-appear-as-subitems">
+                    <div class="detail-header">
+                        <div class="detail-title">Assertions Appear as Sub-items</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>not_started</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/assertions-appear-as-subitems.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: assertions-appear-as-subitems
+parent: spec-explorer-web-interface
+created: 2026-01-22T21:00:00Z
+priority: 2
+status: not_started
+---
+
+# Assertions Appear as Sub-items
+
+## Assertion
+
+Assertions are displayed as sub-items under their parent specs in the tree structure.
+
+## Success Criteria
+
+- When a spec is expanded, its assertions appear as child nodes
+- Assertions are visually distinguished from specs (indentation, styling, icons)
+- Assertions are organized under the correct parent spec
+- Empty specs (with no assertions) can still be expanded but show appropriate messaging
+
+## Test Plan
+
+- Expand a spec in the tree interface
+- Verify assertions appear as indented sub-items
+- Check that assertion names match those in the specs/[spec]/assertions/ directory
+- Confirm visual hierarchy is clear and intuitive</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-clicking-shows-details-panel">
+                    <div class="detail-header">
+                        <div class="detail-title">Clicking Shows Details Panel</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>not_started</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/clicking-shows-details-panel.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: clicking-shows-details-panel
+parent: spec-explorer-web-interface
+created: 2026-01-22T21:00:00Z
+priority: 2
+status: not_started
+---
+
+# Clicking Shows Details Panel
+
+## Assertion
+
+Clicking on any spec or assertion displays its details in a right-side panel.
+
+## Success Criteria
+
+- Interface has a dedicated right panel for displaying details
+- Clicking any tree item (spec or assertion) updates the detail panel
+- Detail panel shows the full content of the clicked item
+- Panel includes metadata like creation date, priority, status
+- Selected item is visually highlighted in the tree
+
+## Test Plan
+
+- Click various specs and assertions in the tree
+- Verify detail panel updates with correct content
+- Check that metadata is displayed properly
+- Confirm visual selection feedback in tree</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-creates-spekk-directory-automatically">
+                    <div class="detail-header">
+                        <div class="detail-title">Creates .spekk Directory Automatically</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/creates-spekk-directory-automatically.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: creates-spekk-directory-automatically
+parent: spec-explorer-web-interface
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: done
+---
+
+# Creates .spekk Directory Automatically
+
+## Assertion
+
+The command creates the `.spekk/` directory automatically if it doesn't exist.
+
+## Success Criteria
+
+- Running `spekk show` in a directory without `.spekk/` creates the directory
+- No error occurs when `.spekk/` directory already exists
+- Directory is created with appropriate permissions
+
+## Test Plan
+
+```bash
+# Test creation
+rm -rf .spekk
+spekk show
+test -d .spekk
+
+# Test existing directory
+spekk show  # Should not error
+```
+
+**Tests:** src/__tests__/show-command.test.js</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-displays-spec-tree-with-dropdowns">
+                    <div class="detail-header">
+                        <div class="detail-title">Displays Spec Tree with Expandable Dropdowns</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>not_started</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/displays-spec-tree-with-dropdowns.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: displays-spec-tree-with-dropdowns
+parent: spec-explorer-web-interface
+created: 2026-01-22T21:00:00Z
+priority: 2
+status: not_started
+---
+
+# Displays Spec Tree with Expandable Dropdowns
+
+## Assertion
+
+The generated HTML displays all specs as an expandable tree structure with dropdown functionality.
+
+## Success Criteria
+
+- Each spec appears as a top-level tree item
+- Tree items can be expanded/collapsed to show/hide children
+- Visual indicators show expanded/collapsed state (arrows, icons, etc.)
+- Tree structure reflects the actual spec hierarchy from the specs/ directory
+
+## Test Plan
+
+- Open generated HTML in browser
+- Verify all specs from specs/ directory appear in tree
+- Click to expand/collapse tree items
+- Confirm visual feedback for interaction states</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-emphasizes-status-and-priority-visually">
+                    <div class="detail-header">
+                        <div class="detail-title">Emphasizes Status and Priority Visually</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>not_started</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/emphasizes-status-and-priority-visually.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: emphasizes-status-and-priority-visually
+parent: spec-explorer-web-interface
+created: 2026-01-22T21:00:00Z
+priority: 2
+status: not_started
+---
+
+# Emphasizes Status and Priority Visually
+
+## Assertion
+
+The interface uses visual indicators to clearly show the status and priority of each spec and assertion.
+
+## Success Criteria
+
+- Different status values (not_started, in_progress, done) have distinct visual indicators (colors, icons, badges)
+- Priority levels (1, 2, 3) are visually differentiated 
+- Visual indicators are consistent throughout the interface
+- Status and priority are visible both in tree view and detail panel
+- High priority or in-progress items are easily identifiable at a glance
+
+## Test Plan
+
+- Verify color coding or icons for different statuses
+- Check that priority levels have visual distinction
+- Confirm indicators appear in both tree and detail views
+- Test with specs/assertions having different status/priority combinations</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-generates-index-html-file">
+                    <div class="detail-header">
+                        <div class="detail-title">Generates index.html File</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/generates-index-html-file.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: generates-index-html-file
+parent: spec-explorer-web-interface
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: done
+---
+
+# Generates index.html File
+
+## Assertion
+
+The command generates a valid HTML file at `.spekk/index.html` containing the spec explorer interface.
+
+## Success Criteria
+
+- File `.spekk/index.html` exists after running `spekk show`
+- Generated HTML is valid and well-formed
+- HTML includes necessary CSS and JavaScript for interactive functionality
+- File is overwritten on subsequent runs (not appended to)
+
+## Test Plan
+
+**Tests:** src/__tests__/show-command.test.js
+
+```bash
+spekk show
+test -f .spekk/index.html
+# Validate HTML structure
+grep -q "<html" .spekk/index.html
+grep -q "spec.*tree" .spekk/index.html
+```</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-opens-html-in-default-browser">
+                    <div class="detail-header">
+                        <div class="detail-title">Opens HTML in Default Browser</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>not_started</strong></span>
+                            <span class="meta-item">Priority: <strong>3</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/opens-html-in-default-browser.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: opens-html-in-default-browser
+parent: spec-explorer-web-interface
+created: 2026-01-22T21:00:00Z
+priority: 3
+status: not_started
+---
+
+# Opens HTML in Default Browser
+
+## Assertion
+
+The command automatically opens the generated HTML file in the system's default browser after generation.
+
+## Success Criteria
+
+- After running `spekk show`, the default browser launches automatically
+- Browser opens to the correct local file path (`.spekk/index.html`)
+- Works across different operating systems (macOS, Linux, Windows)
+- Command completes successfully even if browser fails to open
+- No browser windows open if generation fails
+
+## Test Plan
+
+```bash
+spekk show
+# Verify browser opens with correct file
+# Test on different platforms if possible
+```</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-spekk-show-command-exists">
+                    <div class="detail-header">
+                        <div class="detail-title">Spekk Show Command Exists</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/spekk-show-command-exists.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: spekk-show-command-exists
+parent: spec-explorer-web-interface
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: done
+---
+
+# Spekk Show Command Exists
+
+## Assertion
+
+The `spekk show` command is recognized and executable from the CLI.
+
+## Success Criteria
+
+- Running `spekk show` does not produce "command not found" or similar errors
+- Command appears in `spekk --help` output
+- Command has appropriate help text describing its functionality
+
+**Tests:** src/__tests__/show-command.test.js
+
+## Test Plan
+
+```bash
+spekk show --help
+spekk --help | grep "show"
+```</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-assertions-have-tests">
+                    <div class="detail-header">
+                        <div class="detail-title">Assertions Must Have Automated Tests When Possible</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/assertions-have-tests.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: assertions-have-tests
+parent: spec-parser
+created: 2026-01-20T16:25:00Z
+priority: 2
+status: done
+---
+
+# Assertions Must Have Automated Tests When Possible
+
+## What Must Be True
+
+When an assertion describes behavior that can be automatically validated, it must have associated test files that prove the assertion is true.
+
+## Two Types of Tests
+
+### Type 1: Implementation Tests (JavaScript)
+For testing **code behavior** - located in `app/**/__tests__/`
+
+**Use for:**
+- Code behavior (functions, scripts, APIs)
+- Data validation (parsers, validators)
+- Algorithm correctness
+- Output format validation
+- Any behavior that requires running application code
+
+**Example:** Testing that parser extracts YAML frontmatter correctly
+
+### Type 2: Sidecar Validation Tests (Bash)
+For testing **spec system integrity** - located alongside assertions as `*.test.sh`
+
+**Use for:**
+- File/directory existence
+- Spec structure validation
+- Prompt completeness checks
+- Any validation that doesn't require running app code
+
+**Example:** Testing that builder-agent prompt file exists
+
+## Testability Categories
+
+### Always Testable (Automated Tests)
+- Code behavior → Implementation tests (JS)
+- File existence → Sidecar tests (bash)
+- Spec structure → Sidecar tests (bash)
+
+### Sometimes Testable (May require tooling)
+- UI behavior (with tools like Playwright, Cypress)
+- Visual design (screenshot testing)
+- Performance requirements (benchmarks)
+
+### Not Automatically Testable (Manual validation)
+- Subjective quality ("looks good", "feels responsive")
+- Business judgment calls
+- Manual processes
+
+## Implementation Test Structure
+
+**Location:** `app/**/__tests__/`
+
+```
+app/
+├── parser/
+│   ├── index.js
+│   └── __tests__/
+│       ├── parser.test.js
+│       └── ...
+├── dashboard/
+│   └── __tests__/
+│       └── dashboard.test.js
+└── ...
+```
+
+**Framework:** Node.js built-in test runner, Jest, or Vitest
+
+## Sidecar Test Structure
+
+**Location:** Co-located with assertions as `*.test.sh`
+
+```
+specs/
+├── builder-agent/
+│   └── assertions/
+│       ├── prompt-exists.md
+│       └── prompt-exists.test.sh      # Sidecar test
+├── spec-parser/
+│   └── assertions/
+│       ├── app-directory-structure.md
+│       └── app-directory-structure.test.sh
+└── ...
+```
+
+**Format:** Bash script that exits 0 on success, non-zero on failure
+
+**Example:**
+```bash
+#!/usr/bin/env bash
+# specs/builder-agent/assertions/prompt-exists.test.sh
+
+PROMPT_FILE="specs/builder-agent/builder-agent.prompt.md"
+
+[ -f "$PROMPT_FILE" ] || {
+  echo "❌ Builder prompt missing at $PROMPT_FILE"
+  exit 1
+}
+
+exit 0  # Silent on success
+```
+
+## Test Requirements
+
+**When an assertion is testable:**
+
+1. **Test file must exist:**
+   - Implementation tests: `src/**/__tests__/*.test.js`
+   - Sidecar tests: `specs/**/assertions/*.test.sh`
+
+2. **Test file must be linked** in assertion markdown:
+   ```markdown
+   **Tests:** `src/parser/__tests__/parser.test.js`
+   **Tests:** `specs/builder-agent/assertions/prompt-exists.test.sh`
+   ```
+
+3. **Tests must validate success criteria** from assertion
+4. **Tests must pass** for assertion to be marked `done`
+5. **Tests run on every change** to catch regressions
+
+## Example: Linking Tests to Assertion
+
+In assertion markdown file:
+
+```markdown
+## Success Criteria
+
+This assertion is "done" when:
+- ✅ Parser extracts YAML frontmatter
+- ✅ Parser handles malformed YAML gracefully
+- ✅ Parser returns correct data structure
+
+**Tests:** `src/parser/__tests__/parser.test.js`
+```
+
+In test file:
+
+```javascript
+// src/parser/__tests__/parser.test.js
+import { test } from 'node:test';
+import { parseSpec } from '../index.js';
+
+test('parses valid YAML frontmatter', () => {
+  // Test implementation
+});
+
+test('handles malformed YAML', () => {
+  // Test implementation
+});
+```
+
+## Benefits
+
+1. **Automated validation**: No manual checking required
+2. **Regression detection**: Tests catch when changes break old assertions
+3. **Living documentation**: Tests show exactly what the assertion means
+4. **Confidence**: Can mark `done` with certainty
+5. **Continuous validation**: Tests run in CI/CD
+
+## Validation Protocol
+
+Before marking an assertion `done`:
+1. Check if assertion is testable
+2. If yes, ensure test file exists and is linked
+3. Run tests: `npm test`
+4. All tests must pass
+5. Only then update status to `done`
+
+## Success Criteria
+
+This assertion is "done" when:
+- ✅ All testable assertions have appropriate test files
+- ✅ Implementation tests live in `app/**/__tests__/` directories
+- ✅ Sidecar validation tests live as `*.test.sh` alongside assertions
+- ✅ Both test types are documented with examples
+- ✅ Test frameworks are set up and working (JS + bash)
+- ✅ Tests validate assertion success criteria
+- ✅ Tests pass consistently
+- ✅ Agent workflow includes test validation step
+- ✅ Sidecar test runner exists (see sidecar-test-runner assertion)
+
+**Tests:** `src/parser/__tests__/assertions-have-tests.test.js`
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-ci-runs-all-tests">
+                    <div class="detail-header">
+                        <div class="detail-title">CI Runs All Tests</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/ci-runs-all-tests.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: ci-runs-all-tests
+parent: spec-parser
+created: 2026-01-20T19:45:00Z
+priority: 2
+status: done
+---
+
+# CI Runs All Tests
+
+## What Must Be True
+
+A CI configuration must exist that automatically runs all tests (implementation and sidecar) on every push and pull request.
+
+Test commands must work cross-platform on macOS, Linux, and Windows.
+
+## CI Configuration Location
+
+```
+.github/
+└── workflows/
+    └── test.yml      # GitHub Actions workflow
+```
+
+## Expected Behavior
+
+When code is pushed or a PR is opened:
+
+1. **Setup environment** - Install Node.js and dependencies
+2. **Run implementation tests** - Execute `npm run test:impl`
+3. **Run sidecar tests** - Execute `npm run test:specs`
+4. **Report results** - Show pass/fail status
+5. **Fail CI if any tests fail** - Block PRs if tests don't pass
+
+## Workflow Triggers
+
+Run tests on:
+- Push to any branch
+- Pull request opened or updated
+- Manual workflow dispatch (optional)
+
+## Required Steps
+
+**1. Checkout code**
+```yaml
+- uses: actions/checkout@v4
+```
+
+**2. Setup Node.js**
+```yaml
+- uses: actions/setup-node@v4
+  with:
+    node-version: '20'
+```
+
+**3. Install dependencies**
+```yaml
+- run: npm ci
+```
+
+**4. Run implementation tests**
+```yaml
+- name: Run implementation tests
+  run: npm run test:impl
+```
+
+**5. Run sidecar tests**
+```yaml
+- name: Run sidecar validation tests
+  run: npm run test:specs
+```
+
+## Success Reporting
+
+CI should:
+- ✅ Show green checkmark if all tests pass
+- ❌ Show red X if any tests fail
+- Display test output in CI logs
+- Block PR merges if tests fail (branch protection)
+
+## package.json Test Scripts
+
+**Critical:** Test scripts must work cross-platform (macOS, Linux, Windows).
+
+```json
+{
+  "scripts": {
+    "test": "npm run test:impl && npm run test:specs",
+    "test:impl": "node src/test-runner.js",
+    "test:specs": "node src/spec-validator/cli.js"
+  }
+}
+```
+
+**Implementation:** Use a test runner script (`src/test-runner.js`) that uses the `glob` package to find test files. This works reliably across all platforms, unlike shell glob expansion which behaves differently on macOS, Linux, and Windows.
+
+```javascript
+// src/test-runner.js
+import { glob } from 'glob';
+import { spawn } from 'child_process';
+
+async function runTests() {
+  const testFiles = await glob('src/**/__tests__/**/*.test.js');
+  const nodeTest = spawn('node', ['--test', ...testFiles], {
+    stdio: 'inherit'
+  });
+  nodeTest.on('close', (code) => process.exit(code));
+}
+runTests();
+```
+
+This approach:
+- ✅ Works consistently on macOS, Linux, and Windows
+- ✅ Doesn't rely on shell glob expansion
+- ✅ Explicitly lists all test files to Node.js test runner
+- ✅ Uses the `glob` package (already in dependencies)
+
+## Success Criteria
+
+- ✅ `.github/workflows/test.yml` exists
+- ✅ Workflow triggers on push and pull_request
+- ✅ Workflow sets up Node.js environment
+- ✅ Workflow installs npm dependencies
+- ✅ Workflow runs `npm run test:impl` (implementation tests)
+- ✅ Workflow runs `npm run test:specs` (sidecar tests)
+- ✅ **app/test-runner.js exists and uses glob package**
+- ✅ **Tests pass on Linux (GitHub Actions Ubuntu runner)**
+- ✅ **Tests pass on macOS and Windows**
+- ✅ Workflow fails if either test suite fails
+- ✅ CI status visible on PRs and commits
+- ✅ Test output visible in workflow logs
+- ✅ Works on macOS, Linux, and Windows
+
+**Tests:** Manual validation (trigger workflow and verify it runs)
+
+## Example Workflow
+
+```yaml
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run implementation tests
+        run: npm run test:impl
+
+      - name: Run sidecar validation tests
+        run: npm run test:specs
+```
+
+## Notes
+
+This ensures code quality by automatically validating:
+- Implementation behavior (JS tests)
+- Spec system integrity (sidecar tests)
+
+Before any code is merged, both test suites must pass.
+
+**Cross-platform compatibility:** The test runner script approach works reliably on all platforms without depending on shell-specific glob expansion behavior
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-detects-duplicate-ids">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Must Detect Duplicate IDs</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/detects-duplicate-ids.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: detects-duplicate-ids
+parent: spec-parser
+created: 2026-01-20T16:28:00Z
+priority: 2
+status: done
+---
+
+# Parser Must Detect Duplicate IDs
+
+**Tests:** src/parser/__tests__/spec-parser.test.js
+
+## What Must Be True
+
+The parser must detect and report duplicate `id` values across specs and within spec assertions.
+
+## ID Uniqueness Rules
+
+### Spec-Level IDs
+- Each spec `id` must be unique across all specs
+- No two spec files can have the same `id`
+- Example: Only one spec can have `id: "spec-parser"`
+
+### Assertion-Level IDs  
+- Each assertion `id` must be unique within its parent spec
+- Assertions in different specs CAN have the same `id`
+- Example: Multiple specs can each have an assertion with `id: "validates-input"`
+
+## Validation Scope
+
+### Global Check (Specs)
+```
+specs/
+├── spec-parser/spec-parser.md        (id: spec-parser)
+└── living-dashboard/living-dashboard.md (id: spec-parser) ❌ DUPLICATE
+```
+
+### Local Check (Assertions within Spec)
+```
+specs/spec-parser/assertions/
+├── validates-fields.md     (id: validates-fields)  
+└── other-assertion.md      (id: validates-fields) ❌ DUPLICATE
+```
+
+## Error Messages
+
+Parser should report clear duplicate ID errors:
+- "Duplicate spec id 'spec-parser' found in files: specs/spec-parser/spec-parser.md, specs/other-spec/other-spec.md"
+- "Duplicate assertion id 'validates-fields' in spec 'spec-parser' found in files: validates-fields.md, other-file.md"
+
+## Success Criteria
+
+- ✅ Parser detects duplicate spec IDs across all specs
+- ✅ Parser detects duplicate assertion IDs within each spec
+- ✅ Parser allows same assertion IDs in different specs
+- ✅ Parser provides clear error messages showing conflicting files
+- ✅ Parser reports ALL duplicates found (not just first one)</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-enforces-folder-structure">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Must Enforce Folder Structure</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/enforces-folder-structure.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: enforces-folder-structure
+parent: spec-parser
+created: 2026-01-20T16:00:00Z
+priority: 1
+status: done
+---
+
+# Parser Must Enforce Folder Structure
+
+## What Must Be True
+
+All specs in `specs/` must follow the declared folder structure:
+
+```
+specs/
+├── {spec-id}/
+│   ├── {spec-id}.md              # Main spec file
+│   └── assertions/               # Assertions subfolder
+│       ├── {assertion-id}.md
+│       └── ...
+```
+
+## Validation Rules
+
+The parser must validate that:
+
+1. **Each spec is a folder** - No flat `.md` files at `specs/*.md` level
+2. **Main spec file exists** - `specs/{spec-id}/{spec-id}.md` must exist
+3. **Assertions folder exists** - `specs/{spec-id}/assertions/` must exist (can be empty)
+4. **Assertion files in correct location** - All assertion `.md` files must be inside `assertions/` subfolder
+5. **Consistent naming** - Folder name should match the spec file name (both use same `id`)
+
+## Current State
+
+Existing specs are currently flat files:
+- `specs/spec-format.md` ❌
+- `specs/living-spec-dashboard.md` ❌
+- `specs/spec-builder-prototype.md` ❌
+
+These must be migrated to:
+- `specs/living-spec-dashboard/`
+  - `living-spec-dashboard.md`
+  - `assertions/`
+- `specs/spec-builder-prototype/`
+  - `spec-builder-prototype.md`
+  - `assertions/`
+
+## Migration Requirements
+
+When this assertion is worked on:
+
+1. Create folder for each existing flat spec
+2. Move spec file into its folder
+3. Create `assertions/` subfolder
+4. Extract any inline assertions from spec files into separate assertion files
+5. Update any cross-references or links
+
+## Special Case: spec-format.md
+
+The content of `spec-format.md` should become assertions under `spec-parser/assertions/` because the format rules ARE validation criteria for the parser:
+- `parses-frontmatter.md`
+- `validates-required-fields.md`
+- `validates-timestamps.md`
+- `validates-status-values.md`
+- `detects-duplicate-ids.md`
+
+## Success Criteria
+
+This assertion is "done" when:
+- ✅ All specs in `specs/` follow folder structure
+- ✅ No flat `.md` files at `specs/*.md` level (except index if we add one later)
+- ✅ Parser validates structure and rejects malformed specs
+- ✅ All existing spec content preserved and functional
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-identifies-next-priority">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Must Identify Next Priority Item</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/identifies-next-priority.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: identifies-next-priority
+parent: spec-parser
+created: 2026-01-20T16:15:00Z
+priority: 2
+status: done
+---
+
+# Parser Must Identify Next Priority Item
+
+## What Must Be True
+
+The parser must identify the single highest-priority incomplete assertion to work on next.
+
+## Priority Algorithm
+
+1. **Read all specs and assertions** from `specs/` directory
+2. **Filter to incomplete items:**
+   - Include items where `status != "done"`
+   - This includes `not_started` and `in_progress`
+3. **Work at assertion level:**
+   - Return next incomplete assertion, not spec
+   - Assertions are the atomic unit of work
+4. **Sort by priority:**
+   - Priority 1 items come first (highest)
+   - Then priority 2 items
+   - Then priority 3 items (lowest)
+5. **Break ties (deterministic):**
+   - If multiple items have same priority, select oldest by `created` timestamp
+   - Older items worked on first (encourages finishing old work before adding new)
+6. **Return single item:**
+   - Output the one highest-priority incomplete assertion
+
+## Special Cases
+
+**All assertions done for a spec:**
+- If a spec has all assertions `done`, mark the spec as `done` (status aggregation)
+- Move to next spec's assertions
+
+**All work complete:**
+- If all assertions in all specs are `done`, output indicating no work remaining
+- Exit with success status
+
+**No specs exist:**
+- If `specs/` directory is empty, output indicating no specs found
+- Exit with success status
+
+## Output Format
+
+```json
+{
+  "type": "assertion",
+  "id": "validates-required-fields",
+  "parent": "spec-parser",
+  "file": "specs/spec-parser/assertions/validates-required-fields.md",
+  "priority": 1,
+  "status": "not_started",
+  "title": "Parser Must Validate Required Fields",
+  "content": "... full markdown content ...",
+  "spec": {
+    "id": "spec-parser",
+    "file": "specs/spec-parser/spec-parser.md",
+    "title": "Spec Parser"
+  }
+}
+```
+
+## Success Criteria
+
+- ✅ Parser returns highest priority incomplete assertion
+- ✅ Parser never returns completed items
+- ✅ Parser works at assertion level (not spec level)
+- ✅ Parser handles ties correctly (by created date, then id)
+- ✅ Parser handles "all done" case gracefully
+- ✅ Parser handles "no specs" case gracefully
+
+**Tests:** `src/parser/__tests__/spec-parser.test.js`
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-no-implementation-outside-app">
+                    <div class="detail-header">
+                        <div class="detail-title">All Code Lives in src/</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/no-implementation-outside-app.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: no-implementation-outside-app
+parent: spec-parser
+created: 2026-01-20T18:50:00Z
+priority: 1
+status: done
+---
+
+# All Code Lives in src/
+
+## What Must Be True
+
+**All implementation code lives under the `src/` directory.**
+
+The project uses standard CLI structure with `src/` for implementation and `bin/` for CLI entry points.
+
+## Directory Structure Required
+
+```
+src/
+├── parser/          # Parser implementation
+│   ├── index.js     # Core logic
+│   ├── cli.js       # CLI interface
+│   └── __tests__/   # Tests (optional)
+├── coach/           # Coach implementation
+│   ├── index.js
+│   └── cli.js
+└── builder/         # Builder implementation
+    ├── index.js
+    └── cli.js
+
+bin/
+└── spekk.js        # Main CLI entry point
+```
+
+## CLI Entry Points
+
+**Package.json scripts:**
+```json
+{
+  "scripts": {
+    "next": "node src/parser/cli.js",
+    "coach": "node src/coach/cli.js",
+    "builder": "node src/builder/cli.js"
+  },
+  "bin": {
+    "spekk": "./bin/spekk.js"
+  }
+}
+```
+
+**Direct invocation:**
+```bash
+node src/parser/cli.js
+# or
+./bin/spekk.js next
+```
+
+## Tests Location
+
+Tests should live co-located with code using `__tests__/` convention:
+- `src/parser/__tests__/parser.test.js`
+- `src/**/__tests__/*.test.js`
+
+## Success Criteria
+
+- ✅ All implementation code lives in `src/`
+- ✅ CLI entry point exists in `bin/spekk.js`
+- ✅ Module CLIs exist as `src/*/cli.js` files
+- ✅ Parser works via `npm run next`
+- ✅ Main CLI works via `spekk` command
+- ✅ No code scattered in random locations
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-outputs-valid-json">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Must Output Valid JSON</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/outputs-valid-json.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: outputs-valid-json
+parent: spec-parser
+created: 2026-01-20T16:20:00Z
+priority: 2
+status: done
+---
+
+# Parser Must Output Valid JSON
+
+## What Must Be True
+
+The parser must output well-formed, machine-readable JSON to stdout.
+
+## Output Format
+
+### Success Case (work item found)
+```json
+{
+  "type": "assertion",
+  "id": "validates-required-fields",
+  "parent": "spec-parser",
+  "file": "specs/spec-parser/assertions/validates-required-fields.md",
+  "priority": 1,
+  "status": "not_started",
+  "title": "Parser Must Validate Required Fields",
+  "content": "... full markdown content including frontmatter ...",
+  "spec": {
+    "id": "spec-parser",
+    "file": "specs/spec-parser/spec-parser.md",
+    "title": "Spec Parser"
+  }
+}
+```
+
+### All Complete Case
+```json
+{
+  "status": "complete",
+  "message": "All specifications are complete"
+}
+```
+
+### No Specs Found Case
+```json
+{
+  "status": "empty",
+  "message": "No specifications found in specs/ directory"
+}
+```
+
+### Error Case
+```json
+{
+  "error": true,
+  "message": "Missing required field 'id' in specs/foo/bar.md",
+  "file": "specs/foo/bar.md"
+}
+```
+
+## Field Requirements
+
+**Required fields (success case):**
+- `type` - Always "assertion" for next work item
+- `id` - The assertion's id
+- `parent` - The parent spec's id
+- `file` - Relative path to assertion file
+- `priority` - The assertion's priority
+- `status` - Current status
+- `title` - Extracted from markdown H1 heading
+- `content` - Full file content (for context)
+- `spec` - Object with parent spec metadata
+
+## JSON Validation
+
+Output must:
+- Be valid JSON (parseable by `JSON.parse()`)
+- Be a single JSON object (not an array, not multiple objects)
+- Use consistent field names
+- Include all required fields
+- Use correct types (strings for text, numbers for priority)
+- Be written to stdout (not stderr)
+
+## Error Handling
+
+Errors should also be JSON:
+- Include `error: true` field
+- Include `message` with clear description
+- Include `file` if error relates to specific file
+- Write to stdout (not stderr) so ralph-loop can parse it
+
+## Success Criteria
+
+- ✅ Parser outputs valid, parseable JSON
+- ✅ JSON includes all required fields
+- ✅ JSON uses correct types
+- ✅ Output goes to stdout
+- ✅ Errors are also JSON format
+- ✅ Single JSON object per execution (not streaming/multiple)
+
+**Tests:** `src/parser/__tests__/spec-parser.test.js`
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-parser-script-exists">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Module Must Exist and Work</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/parser-script-exists.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: parser-script-exists
+parent: spec-parser
+created: 2026-01-20T16:05:00Z
+priority: 1
+status: done
+---
+
+# Parser Module Must Exist and Work
+
+## What Must Be True
+
+A working **Node.js parser module** must exist in `src/parser/` that:
+1. Reads spec folders from `specs/` directory
+2. Parses frontmatter from spec and assertion files
+3. Validates the format according to declared rules
+4. Identifies the next highest-priority incomplete assertion
+5. Outputs valid JSON to stdout
+
+## File Location
+
+```
+src/
+└── parser/
+    ├── index.js     # Core implementation
+    ├── cli.js       # CLI entry point
+    └── __tests__/   # Tests (optional)
+```
+
+## Expected Behavior
+
+When executed via npm script:
+```bash
+npm run next
+```
+
+Or directly:
+```bash
+node src/parser/cli.js
+```
+
+Should output JSON:
+```json
+{
+  "type": "assertion",
+  "id": "enforces-folder-structure",
+  "parent": "spec-parser",
+  "file": "specs/spec-parser/assertions/enforces-folder-structure.md",
+  "priority": 0,
+  "status": "not_started",
+  "title": "Parser Must Enforce Folder Structure",
+  "content": "... full markdown content ..."
+}
+```
+
+## Required Dependencies
+
+- Node.js runtime with ES modules support
+- Built-in YAML frontmatter parsing (no external dependencies required)
+- Should work with minimal dependencies
+
+## Success Criteria
+
+This assertion is "done" when:
+- ✅ `src/parser/index.js` exists with core implementation
+- ✅ `src/parser/cli.js` exists with CLI entry point
+- ✅ Parser is executable via `npm run next`
+- ✅ Parser reads folder structure from `specs/`
+- ✅ Parser parses YAML frontmatter correctly
+- ✅ Parser identifies next priority assertion
+- ✅ Parser outputs valid JSON
+- ✅ Parser handles errors gracefully (malformed files, missing fields, etc.)
+- ✅ Parser runs in < 100ms for typical spec count
+
+## Test Cases
+
+The parser should handle:
+1. Empty `specs/` directory → output indicating no work to do
+2. All specs `done` → output indicating all complete
+3. Multiple specs with different priorities → return highest priority
+4. Malformed YAML → clear error message
+5. Missing required fields → validation error
+6. Duplicate IDs → detection and error
+
+## Implementation Notes
+
+This is the bootstrap: we need this module to exist before we can be truly spec-driven. Once it works, the ralph-loop can use it to drive all subsequent work.
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-parses-frontmatter">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Must Parse YAML Frontmatter</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/parses-frontmatter.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: parses-frontmatter
+parent: spec-parser
+created: 2026-01-20T16:25:00Z
+priority: 1
+status: done
+---
+
+# Parser Must Parse YAML Frontmatter
+
+## What Must Be True
+
+The parser must correctly parse YAML frontmatter from spec and assertion files.
+
+## Requirements
+
+### YAML Structure
+- Files MUST start with YAML frontmatter between `---` delimiters
+- YAML must be well-formed and parseable
+- Content after frontmatter is markdown
+
+### Expected Format
+```markdown
+---
+id: example-spec
+created: 2026-01-20T15:40:00Z
+priority: 1
+---
+
+# Spec Title
+
+Markdown content here...
+```
+
+### Error Handling
+Parser should handle and report errors for:
+- Missing frontmatter delimiters
+- Malformed YAML syntax
+- Invalid YAML structure
+- Files that don't start with frontmatter
+
+### Success Criteria
+
+- ✅ Parser extracts YAML frontmatter correctly
+- ✅ Parser separates frontmatter from markdown content  
+- ✅ Parser handles well-formed YAML
+- ✅ Parser reports clear errors for malformed YAML
+- ✅ Parser works with both spec and assertion files
+
+**Tests:** `src/parser/__tests__/spec-parser.test.js`</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-sidecar-test-runner">
+                    <div class="detail-header">
+                        <div class="detail-title">Sidecar Test Runner Exists</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/sidecar-test-runner.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: sidecar-test-runner
+parent: spec-parser
+created: 2026-01-20T19:35:00Z
+priority: 1
+status: done
+---
+
+# Sidecar Test Runner Exists
+
+## What Must Be True
+
+A test runner must exist that discovers and runs all sidecar bash tests (`*.test.sh`) located alongside assertions in the spec tree.
+
+## Test Runner Location
+
+```
+app/
+└── spec-validator/
+    ├── run-sidecar-tests.js    # Test runner implementation
+    └── cli.js                   # CLI entry point
+```
+
+## Expected Behavior
+
+When running:
+```bash
+npm run test:specs
+```
+
+The runner must:
+1. Find all `specs/**/assertions/*.test.sh` files
+2. Execute each bash script
+3. Collect results (exit code 0 = pass, non-zero = fail)
+4. Report only failures (silent on success)
+5. Exit with code 0 if all pass, non-zero if any fail
+
+## Output Format
+
+**All tests pass:**
+```
+✅ All spec validation tests passed (12 tests)
+```
+
+**Some tests fail:**
+```
+❌ Failed: specs/builder-agent/assertions/prompt-exists.test.sh
+   Builder prompt missing at specs/builder-agent/builder-agent.prompt.md
+
+❌ Failed: specs/spec-parser/assertions/app-directory-structure.test.sh
+   scripts/ directory still exists
+
+Failed: 2 of 12 tests
+```
+
+## Implementation Requirements
+
+**Discovery:**
+- Use glob pattern: `specs/**/assertions/*.test.sh`
+- Skip if no test files found (not an error)
+
+**Execution:**
+- Run each test with `bash <test-file>`
+- Capture stdout/stderr
+- Check exit code
+
+**Reporting:**
+- Only show output for failed tests
+- Show test file path
+- Show error message from test
+- Count total and failed tests
+
+**Exit behavior:**
+- Exit 0: All tests passed
+- Exit 1: One or more tests failed
+- Exit 0: No tests found (not an error)
+
+## package.json Script
+
+```json
+{
+  "scripts": {
+    "test": "npm run test:impl && npm run test:specs",
+    "test:impl": "node --test 'app/**/__tests__/**/*.test.js'",
+    "test:specs": "node app/spec-validator/cli.js"
+  }
+}
+```
+
+This separates:
+- `npm run test:impl` - Implementation tests (JS)
+- `npm run test:specs` - Sidecar validation tests (bash)
+- `npm test` - Runs both
+
+## Example Sidecar Test
+
+```bash
+#!/usr/bin/env bash
+# specs/builder-agent/assertions/prompt-exists.test.sh
+
+PROMPT_FILE="specs/builder-agent/builder-agent.prompt.md"
+
+[ -f "$PROMPT_FILE" ] || {
+  echo "❌ Builder prompt missing at $PROMPT_FILE"
+  exit 1
+}
+
+grep -q "Work on ONE assertion" "$PROMPT_FILE" || {
+  echo "❌ Builder prompt missing 'Work on ONE assertion' instruction"
+  exit 1
+}
+
+# Silent on success
+exit 0
+```
+
+## Success Criteria
+
+- ✅ `app/spec-validator/` directory exists
+- ✅ Test runner discovers all `*.test.sh` files in specs tree
+- ✅ Runner executes bash scripts and captures exit codes
+- ✅ Runner only reports failures (silent on success)
+- ✅ Runner exits 0 if all pass, non-zero if any fail
+- ✅ `npm run test:specs` command exists
+- ✅ `npm test` runs both implementation and sidecar tests
+- ✅ Works with zero test files (not an error)
+- ✅ Clear error messages show which tests failed
+
+**Tests:** `src/spec-validator/__tests__/run-sidecar-tests.test.js`
+
+Test should validate:
+- Runner discovers test files correctly
+- Runner executes bash scripts
+- Runner captures and reports failures
+- Runner exits with correct code
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-target-directory-structure">
+                    <div class="detail-header">
+                        <div class="detail-title">CLI Directory Structure</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/target-directory-structure.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: target-directory-structure
+parent: spec-parser
+created: 2026-01-21T19:15:00Z
+priority: 1
+status: done
+---
+
+# CLI Directory Structure
+
+## What Must Be True
+
+**The project must follow standard Node.js CLI structure:**
+
+```
+spekk-cli/
+├── src/                  # All implementation code
+│   ├── parser/          # Spec parser
+│   │   ├── index.js     # Core logic
+│   │   ├── cli.js       # CLI interface
+│   │   └── __tests__/   # Tests (optional)
+│   ├── coach/           # Coach agent
+│   │   ├── index.js
+│   │   └── cli.js
+│   └── builder/         # Builder agent
+│       ├── index.js
+│       └── cli.js
+├── bin/                 # CLI entry points
+│   └── spekk.js        # Main executable
+├── specs/               # Specifications
+├── package.json         # Package config with "bin" field
+└── ...
+```
+
+## Directory Responsibilities
+
+**src/** - All implementation code lives here
+- Organized by module (parser, coach, builder)
+- Each module has index.js (logic) and cli.js (interface)
+- Tests co-located with code in __tests__/
+
+**bin/** - CLI executables
+- Main entry point for the `spekk` command
+- Thin wrapper that imports from src/
+
+**specs/** - Specifications only
+- No code, only markdown spec files
+- Follows spec-parser folder structure rules
+
+## npm Package Configuration
+
+**package.json must include:**
+```json
+{
+  "type": "module",
+  "bin": {
+    "spekk": "./bin/spekk.js"
+  },
+  "scripts": {
+    "next": "node src/parser/cli.js",
+    "coach": "node src/coach/cli.js",
+    "builder": "node src/builder/cli.js"
+  }
+}
+```
+
+## What Must NOT Exist
+
+- ❌ `app/` directory (wrong - that's for spekk-app, not spekk-cli)
+- ❌ `spec-parser/` as standalone at root (parser is part of CLI, lives in src/)
+- ❌ Code scattered outside src/ directory
+- ❌ Django or Python code (this is a Node.js CLI)
+
+## Success Criteria
+
+This assertion is "done" when:
+
+- ✅ `src/` directory exists with all implementation code
+- ✅ `src/parser/`, `src/coach/`, `src/builder/` exist
+- ✅ `bin/spekk.js` exists as main CLI entry point
+- ✅ `npm run next` executes parser correctly
+- ✅ `node src/parser/cli.js` works directly
+- ✅ Parser outputs valid JSON with correct format
+- ✅ No `app/` directory exists
+- ✅ No standalone `spec-parser/` at root
+- ✅ Clean separation: src/ for code, bin/ for CLI, specs/ for specs
+
+## Rationale
+
+This is standard Node.js CLI structure:
+- **src/** is convention for source code
+- **bin/** is convention for executables
+- Keeps the CLI portable and publishable to npm
+- Clear separation of concerns
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-tests-in-correct-location">
+                    <div class="detail-header">
+                        <div class="detail-title">Tests Must Be In Correct Location</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/tests-in-correct-location.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: tests-in-correct-location
+parent: spec-parser
+created: 2026-01-21T19:45:00Z
+priority: 1
+status: done
+---
+
+# Tests Must Be In Correct Location
+
+## Requirement
+
+Spec parser tests must follow the target directory structure with tests co-located with code in `__tests__/` subdirectories.
+
+## Success Criteria
+
+### Correct Test Location
+- ✅ Tests exist at: `src/parser/__tests__/spec-parser.test.js`
+- ✅ No tests exist at: `tests/spec-parser.test.js` (wrong location)
+- ✅ No tests exist at: `src/__tests__/spec-parser.test.js` (wrong location)
+
+### Directory Structure Compliance
+- ✅ Follows Node.js convention: code and tests co-located
+- ✅ Parser tests live with parser code in `src/parser/__tests__/`
+- ✅ Matches target directory structure spec
+
+### Test Content
+- ✅ Tests cover all parser functionality
+- ✅ Tests validate JSON output format
+- ✅ Tests check field validation
+- ✅ Tests verify priority sorting
+- ✅ Tests run with `npm run test:impl`
+
+## Cleanup Required
+
+**Files to remove:**
+- `tests/spec-parser.test.js` (duplicate in wrong location)
+- `src/__tests__/spec-parser.test.js` (duplicate in wrong location)
+
+**Files to keep/create:**
+- `src/parser/__tests__/spec-parser.test.js` (correct location)
+
+## Rationale
+
+The target directory structure spec clearly states tests should be co-located with code in `__tests__/` subdirectories within each module. This prevents confusion and follows Node.js conventions.
+
+**Tests:** `src/parser/__tests__/spec-parser.test.js`</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-validates-required-fields">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Must Validate Required Fields</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/validates-required-fields.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: validates-required-fields
+parent: spec-parser
+created: 2026-01-20T16:10:00Z
+priority: 2
+status: done
+---
+
+# Parser Must Validate Required Fields
+
+## What Must Be True
+
+The parser must validate that all spec and assertion files have required frontmatter fields:
+
+### Required for Specs
+- `id` (string, kebab-case, unique)
+- `created` (string, ISO 8601 timestamp)
+- `priority` (integer, 0 or greater)
+
+### Required for Assertions
+- `id` (string, kebab-case, unique within parent)
+- `parent` (string, must match existing spec id)
+- `created` (string, ISO 8601 timestamp)
+- `priority` (integer, 0 or greater)
+
+### Optional Fields
+- `status` (string: not_started | in_progress | done) - defaults to `not_started`
+- `updated` (string, ISO 8601 timestamp)
+
+## Validation Rules
+
+**For `id` field:**
+- Must be kebab-case (lowercase with hyphens)
+- No spaces, underscores, or special characters
+- Must be unique across all specs (for spec files)
+- Must be unique within parent spec (for assertion files)
+- Examples: `spec-parser`, `validates-required-fields`
+
+**For `created` and `updated` fields:**
+- Must be valid ISO 8601 format
+- Must be UTC timezone (ending in Z)
+- Format: `YYYY-MM-DDTHH:MM:SSZ`
+- Example: `2026-01-20T16:10:00Z`
+
+**For `priority` field:**
+- Must be integer: 1, 2, or 3
+- 1 = highest priority (critical, blocking)
+- 2 = medium priority (important, not blocking)
+- 3 = lowest priority (nice to have, future)
+- No other values allowed
+
+**For `status` field:**
+- If present, must be one of: `not_started`, `in_progress`, `done`
+- If missing, defaults to `not_started`
+
+**For `parent` field (assertions only):**
+- Must reference an existing spec `id`
+- Assertion must be located in `specs/{parent}/assertions/`
+
+## Error Handling
+
+Parser should report clear errors:
+- "Missing required field 'id' in specs/foo/bar.md"
+- "Invalid ISO 8601 timestamp in 'created' field: '2026-01-20'"
+- "Duplicate spec id 'spec-parser' found in multiple files"
+- "Invalid status value 'completed' (must be: not_started, in_progress, done)"
+- "Invalid priority value '0' (must be: 1, 2, or 3)"
+- "Parent spec 'unknown-spec' not found for assertion 'validates-required-fields'"
+
+## Success Criteria
+
+- ✅ Parser rejects files missing required fields
+- ✅ Parser validates field formats
+- ✅ Parser detects duplicate IDs
+- ✅ Parser validates parent references for assertions
+- ✅ Parser provides clear, actionable error messages
+
+**Tests:** `src/parser/__tests__/spec-parser.test.js`
+</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-validates-status-values">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Must Validate Status Values</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/validates-status-values.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: validates-status-values
+parent: spec-parser
+created: 2026-01-20T16:27:00Z
+priority: 2
+status: done
+---
+
+# Parser Must Validate Status Values
+
+**Tests:** src/parser/__tests__/field-validation.test.js
+
+## What Must Be True
+
+The parser must validate that `status` field (when present) contains only valid values.
+
+## Valid Status Values
+
+Only these four values are allowed:
+- `not_started` (default if omitted)
+- `in_progress`
+- `done`
+- `draft` (placeholder/planning, excluded from work queue)
+
+## Validation Rules
+
+### Default Behavior
+- If `status` field is missing, treat as `not_started`
+- Parser should not require explicit `status` field
+
+### When Status is Present
+- Must be exactly one of the four valid values
+- Case-sensitive (must be lowercase with underscores)
+- No other values allowed
+
+## Invalid Examples
+
+Parser should reject:
+- `completed` (use `done` instead)
+- `Not Started` (wrong case/format)
+- `in-progress` (wrong separator, should be underscore)
+- `todo` (not a valid status)
+- `pending` (not a valid status)
+- `finished` (use `done` instead)
+
+## Error Messages
+
+Parser should provide clear errors:
+- "Invalid status value 'completed' (must be: not_started, in_progress, done, draft)"
+- "Invalid status format 'Not Started' (must be lowercase with underscores)"
+
+## Success Criteria
+
+- ✅ Parser accepts all four valid status values (not_started, in_progress, done, draft)
+- ✅ Parser treats missing status as `not_started`
+- ✅ Parser rejects invalid status values
+- ✅ Parser provides clear error messages for invalid status values
+- ✅ Parser is case-sensitive for status validation
+- ✅ Parser excludes 'draft' status from work queue (like 'done')</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-validates-timestamps">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Must Validate Timestamp Formats</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spec-parser</strong></span>
+                            <span class="meta-item">File: <strong>specs/spec-parser/assertions/validates-timestamps.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: validates-timestamps
+parent: spec-parser
+created: 2026-01-20T16:26:00Z
+priority: 2
+status: done
+---
+
+# Parser Must Validate Timestamp Formats
+
+**Tests:** src/parser/__tests__/timestamp-validation.test.js
+
+## What Must Be True
+
+The parser must validate that `created` and `updated` fields use valid ISO 8601 format.
+
+## Required Format
+
+- **Format**: `YYYY-MM-DDTHH:MM:SSZ`
+- **Timezone**: Must be UTC (ending in Z)
+- **Example**: `2026-01-20T16:26:00Z`
+
+## Validation Rules
+
+### For `created` field:
+- Required in all specs and assertions
+- Must be valid ISO 8601 format
+- Must be UTC timezone
+- Immutable - never changes after creation
+
+### For `updated` field:
+- Optional field
+- If present, must be valid ISO 8601 format
+- Must be UTC timezone
+- Should only be used for significant changes
+
+## Invalid Examples
+
+The parser should reject:
+- `2026-01-20` (missing time)
+- `2026-01-20T16:26:00` (missing timezone)
+- `2026-01-20T16:26:00+00:00` (wrong timezone format)
+- `Jan 20, 2026` (wrong format entirely)
+- `invalid-date` (not a date)
+
+## Error Messages
+
+Parser should provide clear errors:
+- "Invalid ISO 8601 timestamp in 'created' field: '2026-01-20'"
+- "Missing timezone in timestamp: '2026-01-20T16:26:00'"
+- "Invalid timestamp format in 'updated' field"
+
+## Success Criteria
+
+- ✅ Parser accepts valid ISO 8601 UTC timestamps
+- ✅ Parser rejects invalid timestamp formats
+- ✅ Parser provides clear error messages for invalid timestamps
+- ✅ Parser validates both `created` and `updated` fields</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-npm-scripts-launch-agents">
+                    <div class="detail-header">
+                        <div class="detail-title">NPM Scripts Launch Agents</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spekk-cli</strong></span>
+                            <span class="meta-item">File: <strong>specs/spekk-cli/assertions/npm-scripts-launch-agents.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: npm-scripts-launch-agents
+parent: spekk-cli
+created: 2026-01-21T19:30:00Z
+priority: 1
+status: done
+---
+
+# NPM Scripts Launch Agents
+
+## Requirement
+
+`npm run coach` and `npm run builder` commands launch actual Claude Code agent sessions with the appropriate prompts, providing the looping behavior described in the orchestration specs.
+
+## Success Criteria
+
+### Coach Script (`npm run coach`):
+- Launches Claude Code with coach agent prompt from `specs/coach-agent/coach-agent.prompt.md`
+- Provides interactive session for spec creation
+- Loops back to coach after each spec is created and committed
+- Continues until user exits (Ctrl+C)
+- Operates on current working directory's specs
+
+### Builder Script (`npm run builder`):
+- Launches Claude Code with builder agent prompt from `specs/builder-agent/builder-agent.prompt.md`
+- Gets next priority assertion via spec parser
+- Launches builder agent with assertion context
+- Automatically commits changes after completion
+- Loops to next assertion until none remain
+- Handles interrupts gracefully
+
+### Current Issue
+
+Both scripts currently only display their prompts instead of launching Claude Code sessions:
+
+```javascript
+// Current behavior: just prints prompt
+console.log(promptContent);
+console.log('You are now the Builder Agent...');
+```
+
+### Required Behavior
+
+Simple bash loops that:
+
+**Coach Script (`npm run coach`):**
+```bash
+#!/bin/bash
+while true; do
+  claude --dangerously-skip-permissions << 'EOF'
+You are the Coach Agent - read the prompt and follow the instructions exactly.
+EOF
+  # Loop continues until user Ctrl+C
+done
+```
+
+**Builder Script (`npm run builder`):**
+```bash
+#!/bin/bash
+while true; do
+  # Get next assertion
+  NEXT=$(npm run next --silent 2>/dev/null)
+  
+  # Check if all done
+  if [[ $NEXT == *'"type":"complete"'* ]]; then
+    echo "🎉 All assertions completed!"
+    break
+  fi
+  
+  # Launch builder agent
+  claude --dangerously-skip-permissions << 'EOF'
+You are the Builder Agent - read the prompt and follow the instructions exactly.
+EOF
+done
+```
+
+Keep it simple - just bash loops around Claude Code with hard-coded prompts, like coach-loop.sh and builder-loop.sh patterns.
+
+**Tests:** src/coach/__tests__/coach-cli.test.js, src/builder/__tests__/builder-cli.test.js</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-orchestration-loops-exist">
+                    <div class="detail-header">
+                        <div class="detail-title">Orchestration Loops Exist</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>spekk-cli</strong></span>
+                            <span class="meta-item">File: <strong>specs/spekk-cli/assertions/orchestration-loops-exist.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: orchestration-loops-exist
+parent: spekk-cli
+created: 2026-01-21T19:15:00Z
+priority: 1
+status: done
+---
+
+# Orchestration Loops Exist
+
+## Requirement
+
+`spekk coach` and `spekk builder` commands provide full orchestration workflows that automate the spec-driven development cycle.
+
+## Success Criteria
+
+### Builder Loop (`spekk builder`):
+✅ Gets next priority assertion via `spekk next`
+✅ Launches builder agent with assertion context
+✅ Waits for agent completion 
+✅ Automatically commits changes with proper commit message
+✅ Repeats cycle until no more assertions
+✅ Handles interrupts gracefully (Ctrl+C)
+✅ Provides colored output and logging
+
+### Coach Loop (`spekk coach`):  
+✅ Launches coach agent in interactive mode
+✅ Waits for user input and spec creation
+✅ Automatically commits new specs
+✅ Returns to coach for next interaction
+✅ Continues until user exits
+✅ Handles interrupts gracefully
+
+### Workflow Integration:
+✅ Builder loop integrates with Claude Code agent sessions
+✅ Coach loop integrates with Claude Code agent sessions  
+✅ Proper error handling when agents fail
+✅ Git integration for automatic commits
+✅ Status logging and progress indicators
+
+## Historical Context
+
+Original builder-loop.sh workflow:
+- Parse next task from JSON
+- Extract task ID, title, file path
+- Invoke builder agent on specific assertion
+- Git commit with formatted message
+- Loop until complete
+
+This full orchestration is essential for automated spec-driven development.
+
+**Tests:** src/cli/__tests__/orchestration-loops.test.js</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-status-command-exists">
+                    <div class="detail-header">
+                        <div class="detail-title">Status Command Exists</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>spekk-cli</strong></span>
+                            <span class="meta-item">File: <strong>specs/spekk-cli/assertions/status-command-exists.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: status-command-exists
+parent: spekk-cli
+created: 2026-01-21T19:02:00Z
+priority: 2
+status: done
+---
+
+# Status Command Exists
+
+**Tests:** src/__tests__/status-command.test.js
+
+## Requirement
+
+Status command shows comprehensive overview of all specs and assertions with their completion status. Available both as `spekk status` and `npm run status`.
+
+## Success Criteria
+
+### Command Functionality:
+✅ `spekk status` runs without errors
+✅ `npm run status` runs without errors
+✅ Shows all specs found in current directory's specs/ folder
+✅ Displays assertion count and completion ratio for each spec
+✅ Lists individual assertions with status icons
+✅ Shows next priority item at bottom
+
+### Output Format:
+✅ Uses clear status icons (✅ done, 🚧 in progress, 📋 not started, ⏸️ blocked)
+✅ Groups assertions under parent specs with indentation
+✅ Shows completion ratios (e.g., "2/5 assertions complete")
+✅ Highlights next priority item clearly
+✅ Handles empty specs/ directory gracefully
+
+### Performance:
+✅ Executes in < 100ms even with many specs
+✅ Parses all specs and assertions correctly
+✅ Uses same validation logic as main parser</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-create-field-validation-tests">
+                    <div class="detail-header">
+                        <div class="detail-title">Field Validation Tests File</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
+                            <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-field-validation-tests.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: create-field-validation-tests
+parent: test-file-organization
+created: 2026-01-21T23:33:00Z
+priority: 1
+status: done
+---
+
+# Field Validation Tests File
+
+## What Must Be True
+
+A focused test file exists at `src/parser/__tests__/field-validation.test.js` containing all spec and assertion field validation tests.
+
+## Test Coverage Required
+
+**From `tests/spec-parser.test.js`:**
+- Required fields validation for specs and assertions
+- Field format validation (kebab-case IDs, ISO timestamps, priority values)
+- Status field validation (valid/invalid values)
+- Duplicate ID detection (specs and assertions)
+- Parent reference validation
+- Error message quality
+
+**Key test sections to migrate:**
+- `Spec Parser Field Validation` describe block
+  - `Required Fields Validation` tests
+  - `Field Format Validation` tests
+  - `Status Field Validation` tests
+  - `Duplicate ID Detection` tests
+  - `Parent Reference Validation` tests
+  - `Error Message Quality` tests
+
+## File Location
+
+```
+src/parser/__tests__/field-validation.test.js
+```
+
+## Success Criteria
+
+- ✅ File exists at correct location
+- ✅ Contains comprehensive field validation test suite
+- ✅ Tests all required fields for specs and assertions
+- ✅ Validates format requirements (kebab-case, ISO dates, priorities)
+- ✅ Tests duplicate detection logic
+- ✅ Validates parent reference integrity
+- ✅ Tests error message quality
+- ✅ File is under 600 lines
+- ✅ All tests pass when run
+
+**Tests:** `npm test` runs this file and all tests pass</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-create-frontmatter-tests">
+                    <div class="detail-header">
+                        <div class="detail-title">Frontmatter Parsing Tests File</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
+                            <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-frontmatter-tests.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: create-frontmatter-tests
+parent: test-file-organization
+created: 2026-01-21T23:32:00Z
+priority: 1
+status: done
+---
+
+# Frontmatter Parsing Tests File
+
+## What Must Be True
+
+A focused test file exists at `src/parser/__tests__/frontmatter-parsing.test.js` containing all YAML frontmatter parsing functionality.
+
+## Test Coverage Required
+
+**From `src/__tests__/spec-parser.test.js`:**
+- Well-formed YAML frontmatter parsing
+- Frontmatter/content separation
+- Different YAML value types handling
+- Error cases (missing delimiters)
+- Empty frontmatter handling
+- Multi-line content handling
+- Real file validation
+
+**Key tests to migrate:**
+- `YAML Frontmatter Parsing` describe block (all tests)
+- `parses well-formed YAML frontmatter correctly`
+- `separates frontmatter from markdown content correctly`
+- `handles different YAML value types`
+- `throws error for missing opening/closing frontmatter delimiter`
+- `handles empty frontmatter correctly`
+- `handles multi-line markdown content`
+- `works with real spec and assertion files`
+
+## File Location
+
+```
+src/parser/__tests__/frontmatter-parsing.test.js
+```
+
+## Success Criteria
+
+- ✅ File exists at correct location
+- ✅ Contains complete YAML frontmatter test suite
+- ✅ Tests all parsing edge cases
+- ✅ Validates real file compatibility
+- ✅ File is under 400 lines
+- ✅ All tests pass when run
+
+**Tests:** `npm test` runs this file and all tests pass</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-create-json-output-tests">
+                    <div class="detail-header">
+                        <div class="detail-title">JSON Output Tests File</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
+                            <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-json-output-tests.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: create-json-output-tests
+parent: test-file-organization
+created: 2026-01-21T23:34:00Z
+priority: 1
+status: done
+---
+
+# JSON Output Tests File
+
+## What Must Be True
+
+A focused test file exists at `src/parser/__tests__/json-output.test.js` containing all JSON output format validation tests.
+
+## Test Coverage Required
+
+**From `tests/spec-parser.test.js`:**
+- Valid JSON structure validation
+- Success case field requirements
+- Complete case format
+- Empty case format
+- Error case JSON format
+- Single JSON object output (no streaming)
+- Field value types and formats
+- Output consistency across runs
+- JSON formatting (pretty-printed)
+
+**Key test sections to migrate:**
+- `JSON Output Validation` describe block
+  - `Valid JSON Structure` tests
+  - `Output Consistency` tests
+- Tests for parseable JSON to stdout
+- Required fields validation for JSON output
+- Status-specific format validation (complete, empty, error)
+
+## File Location
+
+```
+src/parser/__tests__/json-output.test.js
+```
+
+## Success Criteria
+
+- ✅ File exists at correct location
+- ✅ Contains complete JSON output validation suite
+- ✅ Tests all output formats (assertion, complete, empty, error)
+- ✅ Validates JSON structure and field requirements
+- ✅ Tests output consistency and formatting
+- ✅ File is under 500 lines
+- ✅ All tests pass when run
+
+**Tests:** `npm test` runs this file and all tests pass</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-create-parser-basic-tests">
+                    <div class="detail-header">
+                        <div class="detail-title">Parser Basic Tests File</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
+                            <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-parser-basic-tests.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: create-parser-basic-tests
+parent: test-file-organization
+created: 2026-01-21T23:31:00Z
+priority: 1
+status: done
+---
+
+# Parser Basic Tests File
+
+## What Must Be True
+
+A focused test file exists at `src/parser/__tests__/parser-basic.test.js` containing basic parser functionality and CLI tests.
+
+## Test Coverage Required
+
+**From `src/__tests__/spec-parser.test.js`:**
+- Parser script existence and executability
+- JSON output format validation (basic structure)
+- Next priority assertion identification
+- Folder structure enforcement (no flat .md files)
+- Valid spec directory structure validation
+
+**Key tests to migrate:**
+- `parser script exists and is executable`
+- `outputs valid JSON format`
+- `identifies next priority assertion correctly`
+- `enforces folder structure - no flat spec files`
+- `enforces folder structure - valid spec directories`
+
+## File Location
+
+```
+src/parser/__tests__/parser-basic.test.js
+```
+
+## Success Criteria
+
+- ✅ File exists at correct location
+- ✅ Contains all basic parser functionality tests
+- ✅ Tests CLI integration properly
+- ✅ Validates folder structure requirements
+- ✅ File is under 300 lines
+- ✅ All tests pass when run
+
+**Tests:** `npm test` runs this file and all tests pass</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-create-priority-algorithm-tests">
+                    <div class="detail-header">
+                        <div class="detail-title">Priority Algorithm Tests File</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>1</strong></span>
+                            <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
+                            <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-priority-algorithm-tests.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: create-priority-algorithm-tests
+parent: test-file-organization
+created: 2026-01-21T23:35:00Z
+priority: 1
+status: done
+---
+
+# Priority Algorithm Tests File
+
+## What Must Be True
+
+A focused test file exists at `src/parser/__tests__/priority-algorithm.test.js` containing all next priority identification and algorithm tests.
+
+## Test Coverage Required
+
+**From `tests/spec-parser.test.js`:**
+- Highest priority incomplete assertion identification
+- Timestamp-based tie breaking
+- Done assertion filtering
+- In-progress assertion inclusion
+- All-done case handling
+- CLI integration with priority algorithm
+
+**Key test sections to migrate:**
+- `Next Priority Identification` describe block
+  - `Priority Algorithm` tests
+  - `CLI Integration` tests
+- Tests for priority-based selection
+- Timestamp tie-breaking logic
+- Status filtering (not_started, in_progress vs done)
+- Null return when all complete
+
+## File Location
+
+```
+src/parser/__tests__/priority-algorithm.test.js
+```
+
+## Success Criteria
+
+- ✅ File exists at correct location
+- ✅ Contains complete priority selection test suite
+- ✅ Tests priority ordering (1 > 2 > 3)
+- ✅ Tests timestamp tie-breaking (older first)
+- ✅ Tests status filtering logic
+- ✅ Tests CLI integration with algorithm
+- ✅ File is under 400 lines
+- ✅ All tests pass when run
+
+**Tests:** `npm test` runs this file and all tests pass</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-remove-old-test-files">
+                    <div class="detail-header">
+                        <div class="detail-title">Remove Old Test Files</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <strong>done</strong></span>
+                            <span class="meta-item">Priority: <strong>2</strong></span>
+                            <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
+                            <span class="meta-item">File: <strong>specs/test-file-organization/assertions/remove-old-test-files.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: remove-old-test-files
+parent: test-file-organization
+created: 2026-01-21T23:36:00Z
+priority: 2
+status: done
+---
+
+# Remove Old Test Files
+
+## What Must Be True
+
+Old test files in incorrect locations are removed after the new organized test structure is complete and verified.
+
+## Files to Remove
+
+- `tests/spec-parser.test.js` (wrong location)
+- `src/__tests__/spec-parser.test.js` (wrong location)
+- `src/__tests__/orchestration-loops.test.js` (if no longer needed)
+- `tests/` directory (if empty after cleanup)
+
+## Prerequisites
+
+This assertion can only be completed after:
+- All new test files are created and passing
+- New test structure is verified working
+- No functionality is lost in migration
+
+## Success Criteria
+
+- ✅ `tests/spec-parser.test.js` is deleted
+- ✅ `src/__tests__/spec-parser.test.js` is deleted
+- ✅ `tests/` directory removed if empty
+- ✅ All tests still pass after cleanup
+- ✅ No test coverage is lost
+- ✅ Only `src/parser/__tests__/` contains parser tests
+
+**Tests:** `npm test` still passes with same or better coverage
+
+## Notes
+
+This should be the final step after all other test organization assertions are complete.</pre>
+                    </div>
+                </div>
+            
+        </div>
+    </div>
+    
+    <script>
+        function toggleSpec(specId) {
+            const toggle = document.getElementById('toggle-' + specId);
+            const assertions = document.getElementById('assertions-' + specId);
+            const header = toggle.parentElement;
+            
+            if (assertions.classList.contains('expanded')) {
+                assertions.classList.remove('expanded');
+                toggle.classList.remove('expanded');
+                header.classList.remove('expanded');
+                toggle.textContent = '▶';
+            } else {
+                assertions.classList.add('expanded');
+                toggle.classList.add('expanded');
+                header.classList.add('expanded');
+                toggle.textContent = '▼';
+                showDetail(specId, 'spec');
+            }
+        }
+        
+        function showDetail(id, type, event = null) {
+            // Hide all detail content
+            document.querySelectorAll('.detail-content').forEach(el => {
+                el.classList.remove('active');
+            });
+            document.getElementById('empty-state').style.display = 'none';
+            
+            // Remove selection from all items
+            document.querySelectorAll('.assertion-item, .spec-header').forEach(el => {
+                el.classList.remove('selected');
+            });
+            
+            // Show selected content
+            const detailElement = document.getElementById('detail-' + type + '-' + id);
+            if (detailElement) {
+                detailElement.classList.add('active');
+            }
+            
+            // Mark clicked item as selected
+            if (event && event.target) {
+                event.target.classList.add('selected');
+            } else {
+                // Fallback: find the element by ID pattern
+                const clickedElement = document.querySelector(`[onclick*="${id}"]`);
+                if (clickedElement) {
+                    clickedElement.classList.add('selected');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
