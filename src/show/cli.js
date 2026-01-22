@@ -90,6 +90,20 @@ function generateDetailPriorityBadge(priority) {
   return `<span class="detail-priority-badge priority-${priority}">${priority}</span>`;
 }
 
+function escapeForJS(str) {
+  return JSON.stringify(str);
+}
+
+function escapeHTML(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/`/g, '&#96;');
+}
+
 function generateSpecExplorerHTML(specs, assertions) {
   // Get project name from current working directory
   const projectName = basename(process.cwd());
@@ -432,20 +446,20 @@ function generateSpecExplorerHTML(specs, assertions) {
             <ul class="spec-tree">
                 ${specHierarchy.map(spec => `
                     <li class="spec-item">
-                        <div class="spec-header" onclick="toggleSpec('${spec.id}')">
+                        <div class="spec-header" onclick='toggleSpec(${escapeForJS(spec.id)})'>
                             <span class="toggle-icon" id="toggle-${spec.id}">▶</span>
                             <span class="priority-badge priority-${spec.priority}">${spec.priority}</span>
                             <span class="status-badge status-${spec.status}"></span>
-                            <span class="spec-title">${spec.title}</span>
+                            <span class="spec-title">${escapeHTML(spec.title)}</span>
                         </div>
                         
                         <ul class="assertions-list" id="assertions-${spec.id}">
                             ${spec.assertions.map(assertion => `
-                                <li class="assertion-item" onclick="showDetail('${assertion.id}', 'assertion', event)">
+                                <li class="assertion-item" onclick='showDetail(${escapeForJS(assertion.id)}, "assertion", event)'>
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-${assertion.priority}">${assertion.priority}</span>
                                         <span class="status-badge status-${assertion.status}"></span>
-                                        <span>${assertion.title}</span>
+                                        <span>${escapeHTML(assertion.title)}</span>
                                     </div>
                                 </li>
                             `).join('')}
@@ -464,7 +478,7 @@ function generateSpecExplorerHTML(specs, assertions) {
             ${specHierarchy.map(spec => `
                 <div class="detail-content" id="detail-spec-${spec.id}">
                     <div class="detail-header">
-                        <div class="detail-title">${spec.title}</div>
+                        <div class="detail-title">${escapeHTML(spec.title)}</div>
                         <div class="detail-meta">
                             <span class="meta-item">Status: ${generateDetailStatusBadge(spec.status)}</span>
                             <span class="meta-item">Priority: ${generateDetailPriorityBadge(spec.priority)}</span>
@@ -472,7 +486,7 @@ function generateSpecExplorerHTML(specs, assertions) {
                         </div>
                     </div>
                     <div class="detail-body">
-                        <pre style="white-space: pre-wrap; font-family: inherit;">${spec.content}</pre>
+                        <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHTML(spec.content)}</pre>
                     </div>
                 </div>
             `).join('')}
@@ -480,7 +494,7 @@ function generateSpecExplorerHTML(specs, assertions) {
             ${assertions.map(assertion => `
                 <div class="detail-content" id="detail-assertion-${assertion.id}">
                     <div class="detail-header">
-                        <div class="detail-title">${assertion.title}</div>
+                        <div class="detail-title">${escapeHTML(assertion.title)}</div>
                         <div class="detail-meta">
                             <span class="meta-item">Status: ${generateDetailStatusBadge(assertion.status)}</span>
                             <span class="meta-item">Priority: ${generateDetailPriorityBadge(assertion.priority)}</span>
@@ -489,7 +503,7 @@ function generateSpecExplorerHTML(specs, assertions) {
                         </div>
                     </div>
                     <div class="detail-body">
-                        <pre style="white-space: pre-wrap; font-family: inherit;">${assertion.content}</pre>
+                        <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHTML(assertion.content)}</pre>
                     </div>
                 </div>
             `).join('')}

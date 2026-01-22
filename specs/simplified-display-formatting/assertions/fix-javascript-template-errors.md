@@ -3,7 +3,7 @@ id: fix-javascript-template-errors
 parent: simplified-display-formatting
 created: 2026-01-22T22:58:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Fix JavaScript Template Generation Errors
@@ -40,6 +40,8 @@ Generated HTML should work correctly when specs contain:
 - Double quotes in content: `"quoted text"`
 - Backticks in code: `` `code example` ``
 - Curly braces: `{example: value}`
+
+**Tests:** src/__tests__/fix-javascript-template-errors.test.js
 
 ## Success Criteria
 
