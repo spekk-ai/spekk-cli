@@ -134,6 +134,11 @@ function generateSpecExplorerHTML(specs, assertions) {
             background: #dbeafe;
         }
         
+        .spec-header.selected {
+            background: #eff6ff;
+            border-left: 3px solid #3b82f6;
+        }
+        
         .toggle-icon {
             margin-right: 8px;
             font-size: 12px;
@@ -289,7 +294,7 @@ function generateSpecExplorerHTML(specs, assertions) {
                         
                         <ul class="assertions-list" id="assertions-${spec.id}">
                             ${spec.assertions.map(assertion => `
-                                <li class="assertion-item" onclick="showDetail('${assertion.id}', 'assertion')">
+                                <li class="assertion-item" onclick="showDetail('${assertion.id}', 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="status-badge status-${assertion.status}">${assertion.status.replace('_', ' ')}</span>
                                         <span class="priority-badge priority-${assertion.priority}">${assertion.priority}</span>
@@ -360,11 +365,11 @@ function generateSpecExplorerHTML(specs, assertions) {
                 toggle.classList.add('expanded');
                 header.classList.add('expanded');
                 toggle.textContent = '▼';
-                showDetail(specId, 'spec');
+                showDetail(specId, 'spec', event);
             }
         }
         
-        function showDetail(id, type) {
+        function showDetail(id, type, event) {
             // Hide all detail content
             document.querySelectorAll('.detail-content').forEach(el => {
                 el.classList.remove('active');
@@ -383,8 +388,23 @@ function generateSpecExplorerHTML(specs, assertions) {
             }
             
             // Mark assertion as selected
-            if (type === 'assertion') {
+            if (type === 'assertion' && event) {
                 event.currentTarget.classList.add('selected');
+            }
+            
+            // Mark spec header as selected
+            if (type === 'spec' && event) {
+                // Remove selection from all spec headers
+                document.querySelectorAll('.spec-header').forEach(el => {
+                    el.classList.remove('selected');
+                });
+                
+                // Find and select the spec header
+                const toggleElement = document.getElementById('toggle-' + id);
+                if (toggleElement) {
+                    const specHeader = toggleElement.parentElement;
+                    specHeader.classList.add('selected');
+                }
             }
         }
     </script>
