@@ -91,8 +91,8 @@ function generateDetailPriorityBadge(priority) {
 }
 
 function escapeForJS(str) {
-  // Use JSON.stringify for proper JavaScript string escaping, then escape for HTML attribute context
-  return JSON.stringify(str).replace(/"/g, '&quot;');
+  // Use JSON.stringify for proper JavaScript string escaping
+  return JSON.stringify(str);
 }
 
 function escapeHTML(str) {
@@ -447,7 +447,7 @@ function generateSpecExplorerHTML(specs, assertions) {
             <ul class="spec-tree">
                 ${specHierarchy.map(spec => `
                     <li class="spec-item">
-                        <div class="spec-header" onclick="toggleSpec(${escapeForJS(spec.id)}, event)">
+                        <div class="spec-header" data-action="toggle-spec" data-spec-id="${escapeHTML(spec.id)}" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-${spec.id}">▶</span>
                             <span class="priority-badge priority-${spec.priority}">${spec.priority}</span>
                             <span class="status-badge status-${spec.status}"></span>
@@ -456,7 +456,7 @@ function generateSpecExplorerHTML(specs, assertions) {
                         
                         <ul class="assertions-list" id="assertions-${spec.id}">
                             ${spec.assertions.map(assertion => `
-                                <li class="assertion-item" onclick="showDetail(${escapeForJS(assertion.id)}, &quot;assertion&quot;, event)">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="${escapeHTML(assertion.id)}" data-type="assertion">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-${assertion.priority}">${assertion.priority}</span>
                                         <span class="status-badge status-${assertion.status}"></span>
@@ -512,6 +512,33 @@ function generateSpecExplorerHTML(specs, assertions) {
     </div>
     
     <script>
+        // Event delegation for all clicks
+        document.addEventListener('click', function(event) {
+            const action = event.target.closest('[data-action]')?.dataset.action;
+            
+            if (action === 'toggle-spec') {
+                const element = event.target.closest('[data-spec-id]');
+                if (element) {
+                    const specId = element.dataset.specId;
+                    toggleSpec(specId, event);
+                    
+                    // Also show detail if this is a spec header with show-detail attribute
+                    if (element.dataset.showDetail === 'true') {
+                        showDetail(specId, 'spec', event);
+                    }
+                }
+            } else if (action === 'show-detail') {
+                const element = event.target.closest('[data-assertion-id]');
+                if (element) {
+                    const assertionId = element.dataset.assertionId;
+                    const type = element.dataset.type;
+                    if (assertionId && type) {
+                        showDetail(assertionId, type, event);
+                    }
+                }
+            }
+        });
+        
         function toggleSpec(specId, event) {
             const toggle = document.getElementById('toggle-' + specId);
             const assertions = document.getElementById('assertions-' + specId);
@@ -527,7 +554,6 @@ function generateSpecExplorerHTML(specs, assertions) {
                 toggle.classList.add('expanded');
                 header.classList.add('expanded');
                 toggle.textContent = '▼';
-                showDetail(specId, &quot;spec&quot;, event);
             }
         }
         
@@ -551,7 +577,10 @@ function generateSpecExplorerHTML(specs, assertions) {
             
             // Mark assertion as selected
             if (type === 'assertion' && event) {
-                event.currentTarget.classList.add('selected');
+                const target = event.target.closest('.assertion-item');
+                if (target) {
+                    target.classList.add('selected');
+                }
             }
             
             // Mark spec header as selected

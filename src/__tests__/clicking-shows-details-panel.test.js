@@ -58,7 +58,7 @@ This is a test assertion for testing.`;
     writeFileSync(join(assertionsDir, 'test-assertion.md'), assertionContent);
   }
 
-  test('HTML contains showDetail JavaScript function', () => {
+  test('HTML uses event delegation with document listener', () => {
     setupTestDir();
     
     try {
@@ -73,18 +73,17 @@ This is a test assertion for testing.`;
       const htmlFile = join(testDir, '.spekk', 'index.html');
       const htmlContent = readFileSync(htmlFile, 'utf8');
       
-      // Verify showDetail function exists
-      assert.ok(htmlContent.includes('function showDetail('), 'HTML should contain showDetail function');
-      
-      // Verify function accepts event parameter
-      assert.ok(htmlContent.includes('function showDetail(id, type, event'), 'showDetail should accept event parameter');
+      // Verify event delegation is implemented
+      assert.ok(htmlContent.includes('document.addEventListener('), 'Should use document event listener');
+      assert.ok(htmlContent.includes("'click'"), 'Should listen for click events');
+      assert.ok(htmlContent.includes('data-action'), 'Should check data-action attribute');
       
     } finally {
       cleanupTestDir();
     }
   });
 
-  test('onclick handlers include event parameter for assertions', () => {
+  test('assertion items have data attributes for event delegation', () => {
     setupTestDir();
     
     try {
@@ -99,8 +98,9 @@ This is a test assertion for testing.`;
       const htmlFile = join(testDir, '.spekk', 'index.html');
       const htmlContent = readFileSync(htmlFile, 'utf8');
       
-      // Verify onclick handlers pass event parameter
-      assert.ok(htmlContent.includes("'assertion', event)"), 'onclick handlers should pass event parameter');
+      // Verify assertion items have data attributes
+      assert.ok(htmlContent.includes('data-action="show-detail"'), 'assertion items should have data-action attribute');
+      assert.ok(htmlContent.includes('data-assertion-id='), 'assertion items should have data-assertion-id attribute');
       
     } finally {
       cleanupTestDir();
@@ -162,7 +162,7 @@ This is a test assertion for testing.`;
     }
   });
 
-  test('onclick handlers are attached to assertion items', () => {
+  test('no inline onclick handlers are used for detail panel functionality', () => {
     setupTestDir();
     
     try {
@@ -177,8 +177,32 @@ This is a test assertion for testing.`;
       const htmlFile = join(testDir, '.spekk', 'index.html');
       const htmlContent = readFileSync(htmlFile, 'utf8');
       
-      // Verify assertion items have onclick handlers
-      assert.ok(htmlContent.includes('class="assertion-item" onclick='), 'Assertion items should have onclick handlers');
+      // Verify assertion items do NOT have inline onclick handlers for detail functionality
+      assert.ok(!htmlContent.includes('onclick="showDetail'), 'Should not use inline onclick handlers for showDetail function');
+      
+    } finally {
+      cleanupTestDir();
+    }
+  });
+
+  test('event delegation is set up with document listener', () => {
+    setupTestDir();
+    
+    try {
+      createTestSpec();
+      
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 5000 
+      });
+      
+      const htmlFile = join(testDir, '.spekk', 'index.html');
+      const htmlContent = readFileSync(htmlFile, 'utf8');
+      
+      // Verify document-level event listener is set up for delegation
+      assert.ok(htmlContent.includes('document.addEventListener'), 'Should have document-level event listener for delegation');
+      assert.ok(htmlContent.includes('click'), 'Event listener should handle click events');
       
     } finally {
       cleanupTestDir();

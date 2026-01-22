@@ -3,7 +3,7 @@ id: clicking-shows-details-panel
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 2
-status: in_progress
+status: done
 ---
 
 # Clicking Shows Details Panel
