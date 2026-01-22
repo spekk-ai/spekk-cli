@@ -3,7 +3,7 @@ id: highlight-active-states
 parent: simplified-display-formatting
 created: 2026-01-22T22:37:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Highlight Active Status States

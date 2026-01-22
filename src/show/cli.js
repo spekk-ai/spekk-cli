@@ -72,6 +72,7 @@ function getStatusIcon(status) {
     case 'not_started': return '⏸️';
     case 'in_progress': return '🔄';
     case 'done': return '✅';
+    case 'failed': return '❌';
     default: return '';
   }
 }
@@ -229,9 +230,9 @@ function generateSpecExplorerHTML(specs, assertions) {
         }
         
         .status-not_started {
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fbbf24;
+            background: #f8fafc;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
         }
         .status-not_started::before {
             content: "⏸️";
@@ -239,13 +240,24 @@ function generateSpecExplorerHTML(specs, assertions) {
         }
         
         .status-in_progress {
-            background: #dbeafe;
-            color: #1e40af;
-            border: 1px solid #3b82f6;
-            animation: pulse-blue 2s infinite;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+            animation: pulse-yellow 2s infinite;
         }
         .status-in_progress::before {
             content: "🔄";
+            font-size: 10px;
+        }
+        
+        .status-failed {
+            background: #fecaca;
+            color: #dc2626;
+            border: 1px solid #ef4444;
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+        }
+        .status-failed::before {
+            content: "❌";
             font-size: 10px;
         }
         
@@ -253,15 +265,16 @@ function generateSpecExplorerHTML(specs, assertions) {
             background: #d1fae5;
             color: #065f46;
             border: 1px solid #10b981;
+            opacity: 0.8;
         }
         .status-done::before {
             content: "✅";
             font-size: 10px;
         }
         
-        @keyframes pulse-blue {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-            50% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0); }
+        @keyframes pulse-yellow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); }
         }
         
         .priority-badge {

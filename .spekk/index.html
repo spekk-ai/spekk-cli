@@ -113,9 +113,9 @@
         }
         
         .status-not_started {
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fbbf24;
+            background: #f8fafc;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
         }
         .status-not_started::before {
             content: "⏸️";
@@ -123,13 +123,24 @@
         }
         
         .status-in_progress {
-            background: #dbeafe;
-            color: #1e40af;
-            border: 1px solid #3b82f6;
-            animation: pulse-blue 2s infinite;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+            animation: pulse-yellow 2s infinite;
         }
         .status-in_progress::before {
             content: "🔄";
+            font-size: 10px;
+        }
+        
+        .status-failed {
+            background: #fecaca;
+            color: #dc2626;
+            border: 1px solid #ef4444;
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+        }
+        .status-failed::before {
+            content: "❌";
             font-size: 10px;
         }
         
@@ -137,15 +148,16 @@
             background: #d1fae5;
             color: #065f46;
             border: 1px solid #10b981;
+            opacity: 0.8;
         }
         .status-done::before {
             content: "✅";
             font-size: 10px;
         }
         
-        @keyframes pulse-blue {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-            50% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0); }
+        @keyframes pulse-yellow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); }
         }
         
         .priority-badge {
@@ -161,47 +173,13 @@
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         }
         
-        .priority-1 {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            border: 1px solid #b91c1c;
-            animation: urgent-glow 3s infinite;
+        .priority-1, .priority-2, .priority-3 {
+            background: #e2e8f0;
+            color: #1e293b;
+            border: 1px solid #cbd5e1;
         }
         
-        .priority-2 {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            border: 1px solid #b45309;
-        }
-        
-        .priority-3 {
-            background: linear-gradient(135deg, #10b981, #059669);
-            border: 1px solid #047857;
-        }
-        
-        @keyframes urgent-glow {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
-            50% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0); }
-        }
-        
-        /* Enhanced visual hierarchy for high priority items */
-        .assertion-item:has(.priority-1) {
-            border-left: 4px solid #ef4444;
-            background: linear-gradient(90deg, #fef2f2 0%, white 15%);
-        }
-        
-        .assertion-item:has(.status-in_progress) {
-            border-left: 4px solid #3b82f6;
-            background: linear-gradient(90deg, #eff6ff 0%, white 15%);
-        }
-        
-        .spec-header:has(.priority-1) {
-            border-left: 4px solid #ef4444;
-            background: linear-gradient(90deg, #fef2f2 0%, #f1f5f9 20%);
-        }
-        
-        .spec-header:has(.status-in_progress) {
-            border-left: 4px solid #3b82f6;
-            background: linear-gradient(90deg, #eff6ff 0%, #f1f5f9 20%);
-        }
+        /* Neutral styling for all items */
         
         .spec-title {
             font-weight: 600;
@@ -293,11 +271,13 @@
             border-radius: 6px;
             font-size: 12px;
             font-weight: 700;
-            color: white;
+            color: #1e293b;
+            background: #e2e8f0;
+            border: 1px solid #cbd5e1;
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
         
         .detail-body {
@@ -321,7 +301,7 @@
         <div class="tree-panel">
             <div class="header">
                 <h1>Spec Tree</h1>
-                <p>7 specs, 42 assertions</p>
+                <p>7 specs, 44 assertions</p>
             </div>
             
             <ul class="spec-tree">
@@ -708,8 +688,24 @@
                                 <li class="assertion-item" onclick="showDetail('web-detail-badges-format', 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
-                                        <span class="status-badge status-in_progress"></span>
+                                        <span class="status-badge status-done"></span>
                                         <span>Web Interface Detail Badges Format</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('remove-priority-colors', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span class="status-badge status-done"></span>
+                                        <span>Remove Priority Number Color Coding</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('highlight-active-states', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span class="status-badge status-in_progress"></span>
+                                        <span>Highlight Active Status States</span>
                                     </div>
                                 </li>
                             
@@ -2107,11 +2103,116 @@ Console output shows status and priority in the format: `{priority} {status_icon
                     </div>
                 </div>
             
+                <div class="detail-content" id="detail-assertion-highlight-active-states">
+                    <div class="detail-header">
+                        <div class="detail-title">Highlight Active Status States</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
+                            <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/highlight-active-states.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: highlight-active-states
+parent: simplified-display-formatting
+created: 2026-01-22T22:37:00Z
+priority: 2
+status: in_progress
+---
+
+# Highlight Active Status States
+
+Failed and in-progress specs should be the most visually prominent to draw attention to active work.
+
+## What Must Be True
+
+Status styling emphasizes items that need attention while keeping completed items subtle.
+
+### In-Progress Status Styling
+- `.status-in_progress` uses soft yellow color scheme
+- Background: soft yellow (#fef3c7 or similar warm tone)
+- Text/border: darker yellow for contrast
+- Keeps pulsing animation to indicate active work
+- Animation: `pulse-yellow` with warm yellow glow effect
+
+### Failed Status Styling  
+- `.status-failed` (if applicable) uses attention-grabbing red
+- Should be most prominent of all status states
+- Clear visual indicator that requires immediate action
+
+### Completed Status Styling
+- `.status-done` remains subtle green
+- Less visually prominent than active states
+- Indicates completion without demanding attention
+
+### Not Started Status Styling
+- `.status-not_started` remains neutral
+- Minimal visual weight until work begins
+
+## Success Criteria
+
+- ✅ In-progress items use soft yellow with pulsing animation
+- ✅ Failed items (if any) are most visually prominent  
+- ✅ Completed items are subtle and don't compete for attention
+- ✅ Active states clearly stand out in the interface</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-remove-priority-colors">
+                    <div class="detail-header">
+                        <div class="detail-title">Remove Priority Number Color Coding</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
+                            <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/remove-priority-colors.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: remove-priority-colors
+parent: simplified-display-formatting
+created: 2026-01-22T22:35:00Z
+priority: 2
+status: done
+---
+
+# Remove Priority Number Color Coding
+
+Priority numbers should be plain text without color-coded backgrounds or styling.
+
+## What Must Be True
+
+Priority badges display as plain numbers without visual emphasis through colors.
+
+### CSS Priority Styles
+- `.priority-1`, `.priority-2`, `.priority-3` classes have no colored backgrounds
+- No gradients, borders, or animations on priority badges
+- Priority numbers appear as neutral, unstyled text
+- Remove `urgent-glow` animation and colored styling
+
+### Plain Number Display
+- Priority badges show: `1`, `2`, `3` as plain text
+- No red/orange/green color coding
+- Consistent neutral styling across all priority levels
+- Focus on content, not visual hierarchy through color
+
+## Success Criteria
+
+- ✅ Run `spekk show` and verify priority numbers are not color-coded
+- ✅ All priority badges (1, 2, 3) have same neutral appearance  
+- ✅ No colored backgrounds, gradients, or animations
+- ✅ Priority display is minimal and clean</pre>
+                    </div>
+                </div>
+            
                 <div class="detail-content" id="detail-assertion-web-detail-badges-format">
                     <div class="detail-header">
                         <div class="detail-title">Web Interface Detail Badges Format</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
                             <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
                             <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/web-detail-badges-format.md</strong></span>
@@ -2123,7 +2224,7 @@ id: web-detail-badges-format
 parent: simplified-display-formatting
 created: 2026-01-22T22:33:00Z
 priority: 2
-status: in_progress
+status: done
 ---
 
 # Web Interface Detail Badges Format
