@@ -313,9 +313,18 @@ function computeParentStatus(parentId, assertions) {
 }
 
 // Find next priority assertion
-function findNextAssertion(assertions) {
-  // Filter to incomplete items (exclude done and draft, but include failed for retry)
-  const incomplete = assertions.filter(a => !['done', 'draft'].includes(a.status));
+function findNextAssertion(assertions, specs = []) {
+  // Filter to incomplete items, excluding:
+  // - Assertions with status 'done' or 'draft'  
+  // - Assertions whose parent spec has status 'draft'
+  const incomplete = assertions.filter(a => {
+    if (['done', 'draft'].includes(a.status)) return false;
+    
+    const parentSpec = specs.find(s => s.id === a.parent);
+    if (parentSpec?.status === 'draft') return false;
+    
+    return true;
+  });
   
   if (incomplete.length === 0) {
     return null;
@@ -387,7 +396,7 @@ export function run(options = {}) {
       return;
     }
     
-    const nextAssertion = findNextAssertion(assertions);
+    const nextAssertion = findNextAssertion(assertions, specs);
     
     if (!nextAssertion) {
       console.log(JSON.stringify({
