@@ -118,6 +118,16 @@
             border: 1px solid #e2e8f0;
         }
         .status-not_started::before {
+            content: "○";
+            font-size: 10px;
+        }
+        
+        .status-draft {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+        }
+        .status-draft::before {
             content: "⏸️";
             font-size: 10px;
         }
@@ -633,7 +643,7 @@
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="spec-explorer-web-interface" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-spec-explorer-web-interface">▶</span>
                             <span class="priority-badge priority-2">2</span>
-                            <span class="status-badge status-in_progress"></span>
+                            <span class="status-badge status-done"></span>
                             <span class="spec-title">Spec Explorer Web Interface</span>
                         </div>
                         
@@ -682,7 +692,7 @@
                                 <li class="assertion-item" data-action="show-detail" data-assertion-id="displays-spec-tree-with-dropdowns" data-type="assertion">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
-                                        <span class="status-badge status-in_progress"></span>
+                                        <span class="status-badge status-done"></span>
                                         <span>Displays Spec Tree with Expandable Dropdowns</span>
                                     </div>
                                 </li>
@@ -710,7 +720,7 @@
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="simplified-display-formatting" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-simplified-display-formatting">▶</span>
                             <span class="priority-badge priority-2">2</span>
-                            <span class="status-badge status-in_progress"></span>
+                            <span class="status-badge status-done"></span>
                             <span class="spec-title">Simplified Display Formatting</span>
                         </div>
                         
@@ -807,7 +817,7 @@
                                 <li class="assertion-item" data-action="show-detail" data-assertion-id="fix-javascript-template-errors" data-type="assertion">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
-                                        <span class="status-badge status-in_progress"></span>
+                                        <span class="status-badge status-done"></span>
                                         <span>Fix JavaScript Template Generation Errors</span>
                                     </div>
                                 </li>
@@ -1436,7 +1446,7 @@ Next Priority: specs-moved-to-cli (spekk-cli-extraction)
                     <div class="detail-header">
                         <div class="detail-title">Spec Explorer Web Interface</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
                             <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/spec-explorer-web-interface.md</strong></span>
                         </div>
@@ -1487,7 +1497,7 @@ Users can run &#96;spekk show&#96; in any spec-driven project directory and imme
                     <div class="detail-header">
                         <div class="detail-title">Simplified Display Formatting</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
                             <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/simplified-display-formatting.md</strong></span>
                         </div>
@@ -2661,7 +2671,7 @@ Tests should use assertion status values that align with current spec state:
                     <div class="detail-header">
                         <div class="detail-title">Fix JavaScript Template Generation Errors</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
                             <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
                             <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/fix-javascript-template-errors.md</strong></span>
@@ -2673,7 +2683,7 @@ id: fix-javascript-template-errors
 parent: simplified-display-formatting
 created: 2026-01-22T22:58:00Z
 priority: 2
-status: in_progress
+status: done
 ---
 
 # Fix JavaScript Template Generation Errors
@@ -3387,7 +3397,7 @@ spekk show  # Should not error
                     <div class="detail-header">
                         <div class="detail-title">Displays Spec Tree with Expandable Dropdowns</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
                             <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/displays-spec-tree-with-dropdowns.md</strong></span>
@@ -3399,7 +3409,7 @@ id: displays-spec-tree-with-dropdowns
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 2
-status: in_progress
+status: done
 ---
 
 # Displays Spec Tree with Expandable Dropdowns
