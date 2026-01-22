@@ -21,7 +21,7 @@ describe('Detail Badges Format', () => {
       
       function generateDetailStatusBadge(status) {
         const icon = getStatusIcon(status);
-        return \`<span class="detail-status-badge status-\${status}">\${icon}</span>\`;
+        return '<span class=\\"detail-status-badge status-' + status + '\\">' + icon + '</span>';
       }
       
       const result = generateDetailStatusBadge('done');
@@ -35,14 +35,14 @@ describe('Detail Badges Format', () => {
     assert.ok(result.includes('<span class="detail-status-badge'), 'Should contain detail-status-badge class');
     assert.ok(result.includes('status-done'), 'Should include status-done class');
     assert.ok(result.includes('✅'), 'Done status should show checkmark icon');
-    assert.ok(!result.includes('done'), 'Should not contain "done" text');
+    assert.ok(!result.includes('>done<') && !result.includes(' done '), 'Should not contain "done" as text content');
     assert.ok(result.endsWith('</span>'), 'Should end with closing span tag');
   });
 
   test('generateDetailPriorityBadge returns correct HTML format', () => {
     const script = `
       function generateDetailPriorityBadge(priority) {
-        return \`<span class="detail-priority-badge priority-\${priority}">\${priority}</span>\`;
+        return '<span class=\\"detail-priority-badge priority-' + priority + '\\">' + priority + '</span>';
       }
       
       const result = generateDetailPriorityBadge(2);
@@ -74,7 +74,7 @@ describe('Detail Badges Format', () => {
       
       function generateDetailStatusBadge(status) {
         const icon = getStatusIcon(status);
-        return \`<span class="detail-status-badge status-\${status}">\${icon}</span>\`;
+        return '<span class=\\"detail-status-badge status-' + status + '\\">' + icon + '</span>';
       }
       
       console.log('NOT_STARTED:', generateDetailStatusBadge('not_started'));
@@ -95,7 +95,7 @@ describe('Detail Badges Format', () => {
   test('priority badges contain only numbers, no emoji decorations', () => {
     const script = `
       function generateDetailPriorityBadge(priority) {
-        return \`<span class="detail-priority-badge priority-\${priority}">\${priority}</span>\`;
+        return '<span class=\\"detail-priority-badge priority-' + priority + '\\">' + priority + '</span>';
       }
       
       console.log('PRIORITY_1:', generateDetailPriorityBadge(1));
