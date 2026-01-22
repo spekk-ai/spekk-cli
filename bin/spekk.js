@@ -5,6 +5,7 @@ import { launchCoachAgent } from '../src/coach/cli.js';
 import { launchBuilderAgent } from '../src/builder/cli.js';
 import { runBuilderLoop, runCoachLoop } from '../src/loops/index.js';
 import { showStatus } from '../src/status/cli.js';
+import { showSpekk } from '../src/show/cli.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -53,6 +54,10 @@ COMMANDS:
     await showStatus();
     break;
   
+  case 'show':
+    await showSpekk();
+    break;
+  
   case '--help':
   case '-h':
   case 'help':
@@ -63,6 +68,7 @@ USAGE:
   spekk [COMMAND]
 
 COMMANDS:
+  show      Generate and display spec explorer web interface
   status    Show comprehensive overview of all specs and assertions
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs

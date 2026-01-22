@@ -30,7 +30,7 @@ function formatSpec(spec, assertions) {
   let output = [];
   
   // Spec header with completion ratio
-  output.push(`${specIcon} ${spec.title} (${done}/${total} assertions complete)`);
+  output.push(`${spec.priority} ${specIcon} ${spec.title} (${done}/${total} assertions complete)`);
   
   // Sort assertions by priority, then by creation date
   const sortedAssertions = specAssertions.sort((a, b) => {
@@ -46,7 +46,7 @@ function formatSpec(spec, assertions) {
   // Add assertions with indentation
   for (const assertion of sortedAssertions) {
     const icon = getStatusIcon(assertion.status);
-    output.push(`  ${icon} ${assertion.title}`);
+    output.push(`  ${assertion.priority} ${icon} ${assertion.title}`);
   }
   
   return output;
@@ -118,7 +118,7 @@ export async function showStatus() {
       console.log(`→ ${nextAssertion.title}`);
       console.log(`  Spec: ${parentSpec?.title || nextAssertion.parent}`);
       console.log(`  Priority: ${nextAssertion.priority}`);
-      console.log(`  Status: ${getStatusIcon(nextAssertion.status)} ${nextAssertion.status}`);
+      console.log(`Status: ${getStatusIcon(nextAssertion.status)}`);
       console.log(`  File: ${nextAssertion.file}`);
     } else {
       console.log('🎉 All specifications complete!');

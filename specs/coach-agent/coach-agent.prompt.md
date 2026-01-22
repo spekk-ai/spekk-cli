@@ -102,11 +102,26 @@ Use proper format:
 - This keeps requirements and references together
 
 **Status management:**
-- New specs/assertions: `status: not_started`
+
+**Available Status Values:**
+- `not_started` - Haven't begun work on this assertion
+- `in_progress` - Currently being worked on
+- `done` - All success criteria met and tests pass
+- `failed` - Implementation has confirmed issues that need fixing
+- `draft` - Planning/placeholder status (excluded from work queue)
+
+**Status Rules:**
+- New specs/assertions: Always use `status: not_started`
 - Updating assertion with `status: done`: **Change to `status: in_progress`**
   - This tells builder to re-implement with new requirements
   - Critical: updated specs must trigger re-work
+- Updating assertion with `status: failed`: **Change to `status: in_progress`** 
+  - This gives builder fresh start after requirements change
 - Updating assertion already `in_progress` or `not_started`: keep as-is
+- **NEVER set parent spec status** - it's automatically computed from child assertions:
+  - If ANY child is `failed` → parent becomes `failed`
+  - If ALL children are `done` → parent becomes `done`  
+  - If any child is incomplete → parent becomes `in_progress`
 
 ### 7. Commit Changes
 
@@ -219,7 +234,7 @@ Every spec file must have:
 id: kebab-case-id
 created: 2026-01-20T17:00:00Z  # ISO 8601, UTC
 priority: 1                     # 1, 2, or 3 only
-status: not_started
+status: not_started             # not_started | in_progress | done | failed | draft
 ---
 ```
 
@@ -230,7 +245,7 @@ id: kebab-case-id
 parent: parent-spec-id
 created: 2026-01-20T17:00:00Z
 priority: 1
-status: not_started
+status: not_started             # not_started | in_progress | done | failed | draft
 ---
 ```
 

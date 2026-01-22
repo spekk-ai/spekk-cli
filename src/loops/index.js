@@ -47,7 +47,8 @@ export async function runBuilderLoop() {
       colorLog('blue', '📋 Getting next priority assertion...');
       let nextResult;
       try {
-        nextResult = execSync('node src/parser/cli.js', { 
+        const parserPath = join(__dirname, '../parser/cli.js');
+        nextResult = execSync(`node "${parserPath}"`, { 
           encoding: 'utf8',
           stdio: ['pipe', 'pipe', 'pipe']
         });
@@ -68,8 +69,10 @@ export async function runBuilderLoop() {
       
       // Check if we have any assertions to work on
       if (parsedResult.type === 'complete') {
-        colorLog('green', '🎉 All assertions completed! No more work to do.');
-        break;
+        colorLog('green', '✨ All assertions completed. Waiting for new work...');
+        // Wait a bit before checking again
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        continue;
       }
       
       if (parsedResult.type !== 'assertion') {

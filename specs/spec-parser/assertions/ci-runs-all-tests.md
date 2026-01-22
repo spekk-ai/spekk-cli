@@ -10,7 +10,7 @@ status: done
 
 ## What Must Be True
 
-A CI configuration must exist that automatically runs all tests (implementation and sidecar) on every push and pull request.
+A CI configuration must exist that automatically runs all tests (implementation and sidecar) on every push to prevent duplicate test runs in pull requests.
 
 Test commands must work cross-platform on macOS, Linux, and Windows.
 
@@ -24,19 +24,18 @@ Test commands must work cross-platform on macOS, Linux, and Windows.
 
 ## Expected Behavior
 
-When code is pushed or a PR is opened:
+When code is pushed to any branch:
 
 1. **Setup environment** - Install Node.js and dependencies
 2. **Run implementation tests** - Execute `npm run test:impl`
 3. **Run sidecar tests** - Execute `npm run test:specs`
 4. **Report results** - Show pass/fail status
-5. **Fail CI if any tests fail** - Block PRs if tests don't pass
+5. **Fail CI if any tests fail** - Prevent bad code from being merged
 
 ## Workflow Triggers
 
 Run tests on:
-- Push to any branch
-- Pull request opened or updated
+- Push to any branch only (not on pull request events to avoid duplicate runs)
 - Manual workflow dispatch (optional)
 
 ## Required Steps
@@ -118,7 +117,7 @@ This approach:
 ## Success Criteria
 
 - ✅ `.github/workflows/test.yml` exists
-- ✅ Workflow triggers on push and pull_request
+- ✅ Workflow triggers on push only (not pull_request to avoid duplicate runs)
 - ✅ Workflow sets up Node.js environment
 - ✅ Workflow installs npm dependencies
 - ✅ Workflow runs `npm run test:impl` (implementation tests)
@@ -140,8 +139,6 @@ name: Tests
 
 on:
   push:
-    branches: ['**']
-  pull_request:
     branches: ['**']
 
 jobs:

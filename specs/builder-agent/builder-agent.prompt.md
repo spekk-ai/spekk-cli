@@ -67,6 +67,14 @@ The parser returns JSON with the assertion file to work on. Read it to understan
 - Ensure no regressions in other tests
 - Update status to `done` when all tests pass
 
+**If status is `failed`:**
+- This indicates a confirmed implementation issue that needs fixing
+- Review the assertion requirements carefully
+- Identify what went wrong with the previous implementation
+- Fix the broken implementation and any related issues
+- Run all tests to ensure the fix works
+- Update status to `done` when all tests pass
+
 ### 4. Validate
 
 **If assertion has tests:**
@@ -87,6 +95,19 @@ Edit the assertion file's frontmatter to update status:
 ```yaml
 status: done
 ```
+
+**Available Status Values:**
+- `not_started` - Haven't begun work on this assertion
+- `in_progress` - Currently working on this assertion 
+- `done` - All success criteria met and tests pass
+- `failed` - Implementation has confirmed issues that need fixing
+- `draft` - Planning/placeholder status (excluded from work queue)
+
+**Important:** Parent spec status is automatically computed from child assertions:
+- If ANY child is `failed` → parent becomes `failed`
+- If ALL children are `done` → parent becomes `done`  
+- If any child is incomplete → parent becomes `in_progress`
+- Never manually set parent spec status - it's computed automatically
 
 ### 6. Validate System Health
 
@@ -141,7 +162,7 @@ id: assertion-name
 parent: spec-name
 created: 2026-01-20T16:00:00Z
 priority: 1                    # 1 (highest) | 2 (medium) | 3 (lowest)
-status: not_started           # not_started | in_progress | done
+status: not_started           # not_started | in_progress | done | failed | draft
 ---
 
 # Assertion Title
