@@ -128,4 +128,82 @@ describe('Status Command', () => {
     assert.ok(countPattern.test(result), 
       'Status output should display numeric assertion counts');
   });
+
+  // Simplified Display Formatting Tests
+  test('spec lines use format: {priority} {status_icon} {title} (x/y assertions complete)', () => {
+    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const lines = result.split('\n');
+    
+    // Find spec lines (lines that end with "assertions complete)" and don't start with spaces)
+    const specLines = lines.filter(line => 
+      /\d+\/\d+\s+assertions?\s+complete\)$/.test(line) && !line.startsWith(' ')
+    );
+    
+    assert.ok(specLines.length > 0, 'Should have at least one spec line');
+    
+    // Each spec line should match: number + status_icon + title + (x/y assertions complete)
+    for (const line of specLines) {
+      const specFormatPattern = /^(\d+)\s+(.)\s+(.+?)\s+\(\d+\/\d+\s+assertions?\s+complete\)$/u;
+      assert.ok(specFormatPattern.test(line), 
+        `Spec line should match format "{priority} {status_icon} {title} (x/y assertions complete)": ${line}`);
+      
+      // Should not contain priority emojis (🔥, ⚠️, 💡)
+      assert.ok(!line.includes('🔥') && !line.includes('⚠️') && !line.includes('💡'),
+        `Spec line should not contain priority emojis: ${line}`);
+      
+      // Should not contain status text labels like "Done", "In Progress"  
+      assert.ok(!line.toLowerCase().includes('done') && !line.toLowerCase().includes('in progress'),
+        `Spec line should not contain status text labels: ${line}`);
+    }
+  });
+
+  test('assertion lines use format: "  {priority} {status_icon} {title}" with 2-space indentation', () => {
+    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const lines = result.split('\n');
+    
+    // Find assertion lines (lines starting with exactly 2 spaces, followed by number and status icon)
+    const assertionLines = lines.filter(line => 
+      /^  \d+\s+.\s+/u.test(line)
+    );
+    
+    assert.ok(assertionLines.length > 0, 'Should have at least one assertion line');
+    
+    for (const line of assertionLines) {
+      // Should match: exactly 2 spaces + number + status_icon + title
+      const assertionFormatPattern = /^  (\d+)\s+(.)\s+(.+)$/u;
+      assert.ok(assertionFormatPattern.test(line),
+        `Assertion line should match format "  {priority} {status_icon} {title}": ${line}`);
+      
+      // Should not contain priority emojis  
+      assert.ok(!line.includes('🔥') && !line.includes('⚠️') && !line.includes('💡'),
+        `Assertion line should not contain priority emojis: ${line}`);
+      
+      // Should not contain status text labels
+      assert.ok(!line.toLowerCase().includes('done') && !line.toLowerCase().includes('in progress'),
+        `Assertion line should not contain status text labels: ${line}`);
+    }
+  });
+
+  test('next priority item status shows "Status: {status_icon}" without text labels', () => {
+    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const lines = result.split('\n');
+    
+    // Find the status line in the next priority section
+    const statusLineIndex = lines.findIndex(line => line.trim().startsWith('Status:'));
+    
+    if (statusLineIndex !== -1) {
+      const statusLine = lines[statusLineIndex].trim();
+      
+      // Should match: "Status: {status_icon}" with no additional text
+      const statusFormatPattern = /^Status:\s+.$/u;
+      assert.ok(statusFormatPattern.test(statusLine),
+        `Status line should match format "Status: {status_icon}" without text labels: ${statusLine}`);
+      
+      // Should not contain status text like "done", "in progress", etc.
+      const statusWords = ['done', 'complete', 'completed', 'in progress', 'in_progress', 'not started', 'not_started', 'blocked'];
+      const hasStatusText = statusWords.some(word => statusLine.toLowerCase().includes(word));
+      assert.ok(!hasStatusText,
+        `Status line should not contain status text labels: ${statusLine}`);
+    }
+  });
 });
