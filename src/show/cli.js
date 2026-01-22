@@ -1,5 +1,5 @@
 import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
 import { parseAllSpecs } from '../parser/index.js';
@@ -91,6 +91,9 @@ function generateDetailPriorityBadge(priority) {
 }
 
 function generateSpecExplorerHTML(specs, assertions) {
+  // Get project name from current working directory
+  const projectName = basename(process.cwd());
+  
   // Group assertions by parent spec
   const specHierarchy = specs.map(spec => {
     const specAssertions = assertions
@@ -120,7 +123,7 @@ function generateSpecExplorerHTML(specs, assertions) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spec Explorer - Spekk</title>
+    <title>Spec Explorer - ${projectName}</title>
     <style>
         * {
             margin: 0;
@@ -422,7 +425,7 @@ function generateSpecExplorerHTML(specs, assertions) {
     <div class="container">
         <div class="tree-panel">
             <div class="header">
-                <h1>Spec Tree</h1>
+                <h1>Spec Tree - ${projectName}</h1>
                 <p>${specs.length} specs, ${assertions.length} assertions</p>
             </div>
             

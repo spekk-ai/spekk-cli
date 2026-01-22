@@ -3,7 +3,7 @@ id: project-name-in-title
 parent: simplified-display-formatting
 created: 2026-01-22T22:55:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Include Project Name in Page Title

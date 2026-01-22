@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spec Explorer - Spekk</title>
+    <title>Spec Explorer - spekk-cli</title>
     <style>
         * {
             margin: 0;
@@ -282,6 +282,11 @@
         
         .detail-body {
             prose: true;
+            font-family: Consolas, Monaco, 'Courier New', monospace;
+        }
+        
+        .detail-body pre {
+            font-family: Consolas, Monaco, 'Courier New', monospace;
         }
         
         .empty-state {
@@ -300,8 +305,8 @@
     <div class="container">
         <div class="tree-panel">
             <div class="header">
-                <h1>Spec Tree</h1>
-                <p>7 specs, 44 assertions</p>
+                <h1>Spec Tree - spekk-cli</h1>
+                <p>7 specs, 48 assertions</p>
             </div>
             
             <ul class="spec-tree">
@@ -669,6 +674,22 @@
                         
                         <ul class="assertions-list" id="assertions-simplified-display-formatting">
                             
+                                <li class="assertion-item" onclick="showDetail('update-failing-tests', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span class="status-badge status-done"></span>
+                                        <span>Update Failing Tests for Simplified Format</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('ignore-readme-files', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="priority-badge priority-1">1</span>
+                                        <span class="status-badge status-done"></span>
+                                        <span>Ignore Markdown Files Without Frontmatter</span>
+                                    </div>
+                                </li>
+                            
                                 <li class="assertion-item" onclick="showDetail('console-status-format', 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
@@ -704,8 +725,24 @@
                                 <li class="assertion-item" onclick="showDetail('highlight-active-states', 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
-                                        <span class="status-badge status-in_progress"></span>
+                                        <span class="status-badge status-done"></span>
                                         <span>Highlight Active Status States</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('fixed-width-markdown-font', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span class="status-badge status-done"></span>
+                                        <span>Fixed-Width Font for Markdown Content</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" onclick="showDetail('project-name-in-title', 'assertion', event)">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span class="status-badge status-in_progress"></span>
+                                        <span>Include Project Name in Page Title</span>
                                     </div>
                                 </li>
                             
@@ -763,8 +800,8 @@
                     <div class="detail-header">
                         <div class="detail-title">Spec Parser</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/spec-parser.md</strong></span>
                         </div>
                     </div>
@@ -936,8 +973,8 @@ See `assertions/` subfolder for detailed validation criteria and behaviors that 
                     <div class="detail-header">
                         <div class="detail-title">Builder Agent</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">File: <strong>specs/builder-agent/builder-agent.md</strong></span>
                         </div>
                     </div>
@@ -1039,8 +1076,8 @@ See `assertions/` for what must be true about builder behavior.
                     <div class="detail-header">
                         <div class="detail-title">Parser Test File Organization</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">File: <strong>specs/test-file-organization/test-file-organization.md</strong></span>
                         </div>
                     </div>
@@ -1094,8 +1131,8 @@ src/parser/__tests__/
                     <div class="detail-header">
                         <div class="detail-title">Spekk CLI</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">File: <strong>specs/spekk-cli/spekk-cli.md</strong></span>
                         </div>
                     </div>
@@ -1165,8 +1202,8 @@ Next Priority: specs-moved-to-cli (spekk-cli-extraction)
                     <div class="detail-header">
                         <div class="detail-title">Spec Explorer Web Interface</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/spec-explorer-web-interface.md</strong></span>
                         </div>
                     </div>
@@ -1216,8 +1253,8 @@ Users can run `spekk show` in any spec-driven project directory and immediately 
                     <div class="detail-header">
                         <div class="detail-title">Simplified Display Formatting</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-in_progress">🔄</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/simplified-display-formatting.md</strong></span>
                         </div>
                     </div>
@@ -1275,8 +1312,8 @@ This applies to:
                     <div class="detail-header">
                         <div class="detail-title">Coach Agent</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">3</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-3">3</span></span>
                             <span class="meta-item">File: <strong>specs/coach-agent/coach-agent.md</strong></span>
                         </div>
                     </div>
@@ -1550,8 +1587,8 @@ See `assertions/` subfolder for what must be true for the coach agent to work co
                     <div class="detail-header">
                         <div class="detail-title">Builder Runner Script Exists</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>builder-agent</strong></span>
                             <span class="meta-item">File: <strong>specs/builder-agent/assertions/builder-runner-exists.md</strong></span>
                         </div>
@@ -1650,8 +1687,8 @@ This script is the automation layer that runs the builder agent repeatedly. It's
                     <div class="detail-header">
                         <div class="detail-title">Builder Agent Prompt Must Exist</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>builder-agent</strong></span>
                             <span class="meta-item">File: <strong>specs/builder-agent/assertions/prompt-exists.md</strong></span>
                         </div>
@@ -1731,8 +1768,8 @@ Sidecar test should validate:
                     <div class="detail-header">
                         <div class="detail-title">Builder Must Read Complete Specification Files</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>builder-agent</strong></span>
                             <span class="meta-item">File: <strong>specs/builder-agent/assertions/reads-complete-specs.md</strong></span>
                         </div>
@@ -1822,8 +1859,8 @@ This is a **meta-requirement** about how builders operate, not what they build. 
                     <div class="detail-header">
                         <div class="detail-title">Coach Must Ask Clarifying Questions</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">3</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-3">3</span></span>
                             <span class="meta-item">Parent: <strong>coach-agent</strong></span>
                             <span class="meta-item">File: <strong>specs/coach-agent/assertions/asks-clarifying-questions.md</strong></span>
                         </div>
@@ -1894,8 +1931,8 @@ When user requests are vague or incomplete, the coach must guide them through re
                     <div class="detail-header">
                         <div class="detail-title">Coach Must Create Well-Formed Spec Files</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">3</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-3">3</span></span>
                             <span class="meta-item">Parent: <strong>coach-agent</strong></span>
                             <span class="meta-item">File: <strong>specs/coach-agent/assertions/creates-spec-files.md</strong></span>
                         </div>
@@ -1999,8 +2036,8 @@ Coach must ensure:
                     <div class="detail-header">
                         <div class="detail-title">Coach Must Receive and Parse User Requests</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">3</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-3">3</span></span>
                             <span class="meta-item">Parent: <strong>coach-agent</strong></span>
                             <span class="meta-item">File: <strong>specs/coach-agent/assertions/receives-user-requests.md</strong></span>
                         </div>
@@ -2056,8 +2093,8 @@ The coach should handle various input styles:
                     <div class="detail-header">
                         <div class="detail-title">Console Status Display Format</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/console-status-format.md</strong></span>
                         </div>
@@ -2103,12 +2140,69 @@ Console output shows status and priority in the format: `{priority} {status_icon
                     </div>
                 </div>
             
+                <div class="detail-content" id="detail-assertion-fixed-width-markdown-font">
+                    <div class="detail-header">
+                        <div class="detail-title">Fixed-Width Font for Markdown Content</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
+                            <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
+                            <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/fixed-width-markdown-font.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: fixed-width-markdown-font
+parent: simplified-display-formatting
+created: 2026-01-22T22:50:00Z
+priority: 2
+status: done
+---
+
+# Fixed-Width Font for Markdown Content
+
+Spec and assertion markdown content should use a fixed-width font for better readability and code-like formatting.
+
+## What Must Be True
+
+Detail panel markdown content uses monospace font family for consistent character spacing.
+
+### Font Family Requirements
+
+- **Primary font:** Consolas (Windows/Office)
+- **Fallback fonts:** Monaco, 'Courier New', monospace
+- Apply to all markdown content in detail view
+- Maintain readability while providing fixed-width spacing
+
+### CSS Target
+
+`.detail-body` and `.detail-body pre` elements should use:
+```css
+font-family: Consolas, Monaco, 'Courier New', monospace;
+```
+
+### Content Areas Affected
+
+- Spec descriptions and content
+- Assertion descriptions and success criteria  
+- All markdown text in the detail panel
+- Preserve existing `<pre>` tag styling but with better font
+
+## Success Criteria
+
+- ✅ Run `spekk show` and click on any spec/assertion
+- ✅ Markdown content displays in fixed-width font (Consolas/Monaco)
+- ✅ Text remains readable with proper line spacing
+- ✅ Code blocks and regular text both use monospace font</pre>
+                    </div>
+                </div>
+            
                 <div class="detail-content" id="detail-assertion-highlight-active-states">
                     <div class="detail-header">
                         <div class="detail-title">Highlight Active Status States</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/highlight-active-states.md</strong></span>
                         </div>
@@ -2119,7 +2213,7 @@ id: highlight-active-states
 parent: simplified-display-formatting
 created: 2026-01-22T22:37:00Z
 priority: 2
-status: in_progress
+status: done
 ---
 
 # Highlight Active Status States
@@ -2160,12 +2254,135 @@ Status styling emphasizes items that need attention while keeping completed item
                     </div>
                 </div>
             
+                <div class="detail-content" id="detail-assertion-ignore-readme-files">
+                    <div class="detail-header">
+                        <div class="detail-title">Ignore Markdown Files Without Frontmatter</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
+                            <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
+                            <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/ignore-readme-files.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: ignore-readme-files
+parent: simplified-display-formatting
+created: 2026-01-22T22:45:00Z
+priority: 1
+status: done
+---
+
+# Ignore Markdown Files Without Frontmatter
+
+The parser crashes on any .md file without YAML frontmatter. Files without frontmatter are NOT specs and should be silently ignored.
+
+## What Must Be True
+
+Parser silently skips any .md file that doesn't start with YAML frontmatter.
+
+### Simple Rule
+
+**If a .md file doesn't start with `---`, skip it entirely.**
+
+- No error thrown for missing frontmatter
+- File is completely ignored during parsing
+- Only files with proper `---` YAML frontmatter are parsed as specs/assertions
+
+### Examples to Ignore
+
+- README.md, docs.md, notes.md (no frontmatter)
+- Any .md file without `---` at the start
+- Documentation files mixed in specs directories
+
+### Error Prevention
+
+- `spekk builder` should work even with README files present
+- Parser should not require YAML frontmatter on documentation files
+- Builder loops should not crash on mixed content in specs directories
+
+## Success Criteria
+
+- ✅ Parser skips any .md file not starting with `---`  
+- ✅ `spekk builder` works in `/Users/william/thinknimble/spekk/` without crashes
+- ✅ No error thrown for files without YAML frontmatter
+- ✅ README.md and other docs are silently ignored
+
+**Tests:** src/parser/__tests__/ignore-readme-files.test.js</pre>
+                    </div>
+                </div>
+            
+                <div class="detail-content" id="detail-assertion-project-name-in-title">
+                    <div class="detail-header">
+                        <div class="detail-title">Include Project Name in Page Title</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <span class="detail-status-badge status-in_progress">🔄</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
+                            <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
+                            <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/project-name-in-title.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: project-name-in-title
+parent: simplified-display-formatting
+created: 2026-01-22T22:55:00Z
+priority: 2
+status: in_progress
+---
+
+# Include Project Name in Page Title
+
+Browser tab title should show which project the spekk explorer is for when multiple projects are open.
+
+## What Must Be True
+
+Page title includes the current project's directory name to distinguish between different spekk explorers.
+
+### Title Format
+
+- **Current:** "Spec Explorer - Spekk"
+- **New:** "Spec Explorer - {project-name}"
+
+### Examples
+
+- `~/thinknimble/spekk-cli/` → "Spec Explorer - spekk-cli"
+- `~/thinknimble/spekk/` → "Spec Explorer - spekk"
+- `~/my-project/` → "Spec Explorer - my-project"
+
+### Implementation
+
+- Derive project name from `process.cwd()` - use the last directory segment
+- Update both `<title>` tag and page header `<h1>` to include project name
+- Maintain "Spec Explorer" prefix for consistency
+
+### HTML Changes
+
+```html
+<!-- Before -->
+<title>Spec Explorer - Spekk</title>
+<h1>Spec Tree</h1>
+
+<!-- After -->  
+<title>Spec Explorer - spekk-cli</title>
+<h1>Spec Tree - spekk-cli</h1>
+```
+
+## Success Criteria
+
+- ✅ Run `spekk show` in different project directories
+- ✅ Browser tab shows unique title for each project
+- ✅ Page header includes project name
+- ✅ Can easily distinguish between multiple spekk explorer tabs</pre>
+                    </div>
+                </div>
+            
                 <div class="detail-content" id="detail-assertion-remove-priority-colors">
                     <div class="detail-header">
                         <div class="detail-title">Remove Priority Number Color Coding</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/remove-priority-colors.md</strong></span>
                         </div>
@@ -2208,12 +2425,64 @@ Priority badges display as plain numbers without visual emphasis through colors.
                     </div>
                 </div>
             
+                <div class="detail-content" id="detail-assertion-update-failing-tests">
+                    <div class="detail-header">
+                        <div class="detail-title">Update Failing Tests for Simplified Format</div>
+                        <div class="detail-meta">
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
+                            <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
+                            <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/update-failing-tests.md</strong></span>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: update-failing-tests
+parent: simplified-display-formatting
+created: 2026-01-22T22:40:00Z
+priority: 1
+status: done
+---
+
+# Update Failing Tests for Simplified Format
+
+The Detail Badges Format test suite is failing because it expects the old HTML format with text labels and emojis.
+
+## What Must Be True
+
+Tests validate the new simplified badge format instead of the old verbose format.
+
+### Test Updates Required
+
+File: `src/__tests__/detail-badges-format.test.js`
+
+- **generateDetailStatusBadge tests** should expect: `<span class="detail-status-badge status-${status}">${icon}</span>`
+- **generateDetailPriorityBadge tests** should expect: `<span class="detail-priority-badge priority-${priority}">${priority}</span>`
+- **Status badge tests** should verify icon-only content (no text labels)
+- **Priority badge tests** should verify number-only content (no emojis)
+
+### Expected Test Behavior
+
+- Status badges contain only status icons (✅, 🚧, 📋, etc.)
+- Priority badges contain only numbers (1, 2, 3)
+- HTML structure matches our simplified format specification
+- All 4 failing test cases should pass
+
+## Success Criteria
+
+- ✅ Run `npm test` and all Detail Badges Format tests pass
+- ✅ Tests validate simplified format: priority number, status icon, title
+- ✅ No text labels or emoji decorations in test expectations  
+- ✅ CI pipeline passes completely</pre>
+                    </div>
+                </div>
+            
                 <div class="detail-content" id="detail-assertion-web-detail-badges-format">
                     <div class="detail-header">
                         <div class="detail-title">Web Interface Detail Badges Format</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/web-detail-badges-format.md</strong></span>
                         </div>
@@ -2265,8 +2534,8 @@ Detail view meta badges display simplified format without text labels or emoji d
                     <div class="detail-header">
                         <div class="detail-title">Web Interface Tree Display Format</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>simplified-display-formatting</strong></span>
                             <span class="meta-item">File: <strong>specs/simplified-display-formatting/assertions/web-tree-display-format.md</strong></span>
                         </div>
@@ -2314,8 +2583,8 @@ Tree view displays specs and assertions in the format: `{priority} {status_icon}
                     <div class="detail-header">
                         <div class="detail-title">Assertions Appear as Sub-items</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/assertions-appear-as-subitems.md</strong></span>
                         </div>
@@ -2357,8 +2626,8 @@ Assertions are displayed as sub-items under their parent specs in the tree struc
                     <div class="detail-header">
                         <div class="detail-title">Clicking Shows Details Panel</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/clicking-shows-details-panel.md</strong></span>
                         </div>
@@ -2401,8 +2670,8 @@ Clicking on any spec or assertion displays its details in a right-side panel.
                     <div class="detail-header">
                         <div class="detail-title">Creates .spekk Directory Automatically</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/creates-spekk-directory-automatically.md</strong></span>
                         </div>
@@ -2448,8 +2717,8 @@ spekk show  # Should not error
                     <div class="detail-header">
                         <div class="detail-title">Displays Spec Tree with Expandable Dropdowns</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/displays-spec-tree-with-dropdowns.md</strong></span>
                         </div>
@@ -2489,8 +2758,8 @@ The generated HTML displays all specs as an expandable tree structure with dropd
                     <div class="detail-header">
                         <div class="detail-title">Emphasizes Status and Priority Visually</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/emphasizes-status-and-priority-visually.md</strong></span>
                         </div>
@@ -2531,8 +2800,8 @@ The interface uses visual indicators to clearly show the status and priority of 
                     <div class="detail-header">
                         <div class="detail-title">Generates index.html File</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/generates-index-html-file.md</strong></span>
                         </div>
@@ -2577,8 +2846,8 @@ grep -q "spec.*tree" .spekk/index.html
                     <div class="detail-header">
                         <div class="detail-title">Opens HTML in Default Browser</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">3</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-3">3</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/opens-html-in-default-browser.md</strong></span>
                         </div>
@@ -2622,8 +2891,8 @@ spekk show
                     <div class="detail-header">
                         <div class="detail-title">Spekk Show Command Exists</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/spekk-show-command-exists.md</strong></span>
                         </div>
@@ -2664,8 +2933,8 @@ spekk --help | grep "show"
                     <div class="detail-header">
                         <div class="detail-title">Assertions Must Have Automated Tests When Possible</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/assertions-have-tests.md</strong></span>
                         </div>
@@ -2868,8 +3137,8 @@ This assertion is "done" when:
                     <div class="detail-header">
                         <div class="detail-title">CI Runs All Tests</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/ci-runs-all-tests.md</strong></span>
                         </div>
@@ -3058,8 +3327,8 @@ Before any code is merged, both test suites must pass.
                     <div class="detail-header">
                         <div class="detail-title">Parser Must Detect Duplicate IDs</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/detects-duplicate-ids.md</strong></span>
                         </div>
@@ -3129,8 +3398,8 @@ Parser should report clear duplicate ID errors:
                     <div class="detail-header">
                         <div class="detail-title">Parser Must Enforce Folder Structure</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/enforces-folder-structure.md</strong></span>
                         </div>
@@ -3218,8 +3487,8 @@ This assertion is "done" when:
                     <div class="detail-header">
                         <div class="detail-title">Parser Must Identify Next Priority Item</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/identifies-next-priority.md</strong></span>
                         </div>
@@ -3310,8 +3579,8 @@ The parser must identify the single highest-priority incomplete assertion to wor
                     <div class="detail-header">
                         <div class="detail-title">All Code Lives in src/</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/no-implementation-outside-app.md</strong></span>
                         </div>
@@ -3397,8 +3666,8 @@ Tests should live co-located with code using `__tests__/` convention:
                     <div class="detail-header">
                         <div class="detail-title">Parser Must Output Valid JSON</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/outputs-valid-json.md</strong></span>
                         </div>
@@ -3513,8 +3782,8 @@ Errors should also be JSON:
                     <div class="detail-header">
                         <div class="detail-title">Parser Must Synchronize Parent Spec Status with Child Assertions</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/parent-status-synchronization.md</strong></span>
                         </div>
@@ -3598,8 +3867,8 @@ The parser must:
                     <div class="detail-header">
                         <div class="detail-title">Parser Module Must Exist and Work</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/parser-script-exists.md</strong></span>
                         </div>
@@ -3700,8 +3969,8 @@ This is the bootstrap: we need this module to exist before we can be truly spec-
                     <div class="detail-header">
                         <div class="detail-title">Parser Must Parse YAML Frontmatter</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/parses-frontmatter.md</strong></span>
                         </div>
@@ -3764,8 +4033,8 @@ Parser should handle and report errors for:
                     <div class="detail-header">
                         <div class="detail-title">Sidecar Test Runner Exists</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/sidecar-test-runner.md</strong></span>
                         </div>
@@ -3914,8 +4183,8 @@ Test should validate:
                     <div class="detail-header">
                         <div class="detail-title">CLI Directory Structure</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/target-directory-structure.md</strong></span>
                         </div>
@@ -4023,8 +4292,8 @@ This is standard Node.js CLI structure:
                     <div class="detail-header">
                         <div class="detail-title">Tests Must Be In Correct Location</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/tests-in-correct-location.md</strong></span>
                         </div>
@@ -4084,8 +4353,8 @@ The target directory structure spec clearly states tests should be co-located wi
                     <div class="detail-header">
                         <div class="detail-title">Parser Must Validate Required Fields</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/validates-required-fields.md</strong></span>
                         </div>
@@ -4177,8 +4446,8 @@ Parser should report clear errors:
                     <div class="detail-header">
                         <div class="detail-title">Parser Must Validate Status Values</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/validates-status-values.md</strong></span>
                         </div>
@@ -4252,8 +4521,8 @@ Parser should provide clear errors:
                     <div class="detail-header">
                         <div class="detail-title">Parser Must Validate Timestamp Formats</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spec-parser</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-parser/assertions/validates-timestamps.md</strong></span>
                         </div>
@@ -4324,8 +4593,8 @@ Parser should provide clear errors:
                     <div class="detail-header">
                         <div class="detail-title">NPM Scripts Launch Agents</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spekk-cli</strong></span>
                             <span class="meta-item">File: <strong>specs/spekk-cli/assertions/npm-scripts-launch-agents.md</strong></span>
                         </div>
@@ -4417,8 +4686,8 @@ Keep it simple - just bash loops around Claude Code with hard-coded prompts, lik
                     <div class="detail-header">
                         <div class="detail-title">Orchestration Loops Exist</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>spekk-cli</strong></span>
                             <span class="meta-item">File: <strong>specs/spekk-cli/assertions/orchestration-loops-exist.md</strong></span>
                         </div>
@@ -4483,8 +4752,8 @@ This full orchestration is essential for automated spec-driven development.
                     <div class="detail-header">
                         <div class="detail-title">Status Command Exists</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>spekk-cli</strong></span>
                             <span class="meta-item">File: <strong>specs/spekk-cli/assertions/status-command-exists.md</strong></span>
                         </div>
@@ -4534,8 +4803,8 @@ Status command shows comprehensive overview of all specs and assertions with the
                     <div class="detail-header">
                         <div class="detail-title">Field Validation Tests File</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
                             <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-field-validation-tests.md</strong></span>
                         </div>
@@ -4600,8 +4869,8 @@ src/parser/__tests__/field-validation.test.js
                     <div class="detail-header">
                         <div class="detail-title">Frontmatter Parsing Tests File</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
                             <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-frontmatter-tests.md</strong></span>
                         </div>
@@ -4665,8 +4934,8 @@ src/parser/__tests__/frontmatter-parsing.test.js
                     <div class="detail-header">
                         <div class="detail-title">JSON Output Tests File</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
                             <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-json-output-tests.md</strong></span>
                         </div>
@@ -4731,8 +5000,8 @@ src/parser/__tests__/json-output.test.js
                     <div class="detail-header">
                         <div class="detail-title">Parser Basic Tests File</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
                             <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-parser-basic-tests.md</strong></span>
                         </div>
@@ -4791,8 +5060,8 @@ src/parser/__tests__/parser-basic.test.js
                     <div class="detail-header">
                         <div class="detail-title">Priority Algorithm Tests File</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-1">1</span></span>
                             <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
                             <span class="meta-item">File: <strong>specs/test-file-organization/assertions/create-priority-algorithm-tests.md</strong></span>
                         </div>
@@ -4856,8 +5125,8 @@ src/parser/__tests__/priority-algorithm.test.js
                     <div class="detail-header">
                         <div class="detail-title">Remove Old Test Files</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
-                            <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅</span></span>
+                            <span class="meta-item">Priority: <span class="detail-priority-badge priority-2">2</span></span>
                             <span class="meta-item">Parent: <strong>test-file-organization</strong></span>
                             <span class="meta-item">File: <strong>specs/test-file-organization/assertions/remove-old-test-files.md</strong></span>
                         </div>
