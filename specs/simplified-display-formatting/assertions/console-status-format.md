@@ -3,7 +3,7 @@ id: console-status-format
 parent: simplified-display-formatting
 created: 2026-01-22T22:31:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Console Status Display Format
