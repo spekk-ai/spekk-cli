@@ -3,7 +3,7 @@ id: cli-command-launches-observer-loop
 parent: observer-agent
 created: 2026-01-22T17:00:00Z
 priority: 2
-status: in_progress
+status: done
 ---
 
 # CLI Command Launches Observer in Continuous Loop
