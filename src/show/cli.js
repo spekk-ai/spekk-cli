@@ -69,10 +69,11 @@ function openInBrowser(htmlFilePath) {
 
 function getStatusIcon(status) {
   switch (status) {
-    case 'not_started': return '⏸️';
+    case 'not_started': return '○';
     case 'in_progress': return '🔄';
     case 'done': return '✅';
     case 'failed': return '❌';
+    case 'draft': return '⏸️';
     default: return '';
   }
 }
@@ -253,7 +254,7 @@ function generateSpecExplorerHTML(specs, assertions) {
             border: 1px solid #e2e8f0;
         }
         .status-not_started::before {
-            content: "⏸️";
+            content: "○";
             font-size: 10px;
         }
         
@@ -287,6 +288,16 @@ function generateSpecExplorerHTML(specs, assertions) {
         }
         .status-done::before {
             content: "✅";
+            font-size: 10px;
+        }
+        
+        .status-draft {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+        }
+        .status-draft::before {
+            content: "⏸️";
             font-size: 10px;
         }
         

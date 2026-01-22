@@ -3,7 +3,7 @@ id: status-icons-display-correctly
 parent: spec-explorer-web-interface
 created: 2026-01-22T22:20:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Status Icons Display Correctly
