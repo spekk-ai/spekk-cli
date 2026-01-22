@@ -3,7 +3,7 @@ id: remove-priority-colors
 parent: simplified-display-formatting
 created: 2026-01-22T22:35:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Remove Priority Number Color Coding

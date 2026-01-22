@@ -277,47 +277,13 @@ function generateSpecExplorerHTML(specs, assertions) {
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         }
         
-        .priority-1 {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            border: 1px solid #b91c1c;
-            animation: urgent-glow 3s infinite;
+        .priority-1, .priority-2, .priority-3 {
+            background: #e2e8f0;
+            color: #1e293b;
+            border: 1px solid #cbd5e1;
         }
         
-        .priority-2 {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            border: 1px solid #b45309;
-        }
-        
-        .priority-3 {
-            background: linear-gradient(135deg, #10b981, #059669);
-            border: 1px solid #047857;
-        }
-        
-        @keyframes urgent-glow {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
-            50% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0); }
-        }
-        
-        /* Enhanced visual hierarchy for high priority items */
-        .assertion-item:has(.priority-1) {
-            border-left: 4px solid #ef4444;
-            background: linear-gradient(90deg, #fef2f2 0%, white 15%);
-        }
-        
-        .assertion-item:has(.status-in_progress) {
-            border-left: 4px solid #3b82f6;
-            background: linear-gradient(90deg, #eff6ff 0%, white 15%);
-        }
-        
-        .spec-header:has(.priority-1) {
-            border-left: 4px solid #ef4444;
-            background: linear-gradient(90deg, #fef2f2 0%, #f1f5f9 20%);
-        }
-        
-        .spec-header:has(.status-in_progress) {
-            border-left: 4px solid #3b82f6;
-            background: linear-gradient(90deg, #eff6ff 0%, #f1f5f9 20%);
-        }
+        /* Neutral styling for all items */
         
         .spec-title {
             font-weight: 600;
@@ -409,11 +375,13 @@ function generateSpecExplorerHTML(specs, assertions) {
             border-radius: 6px;
             font-size: 12px;
             font-weight: 700;
-            color: white;
+            color: #1e293b;
+            background: #e2e8f0;
+            border: 1px solid #cbd5e1;
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
         
         .detail-body {
