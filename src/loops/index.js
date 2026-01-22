@@ -47,7 +47,8 @@ export async function runBuilderLoop() {
       colorLog('blue', '📋 Getting next priority assertion...');
       let nextResult;
       try {
-        nextResult = execSync('node src/parser/cli.js', { 
+        const parserPath = join(__dirname, '../parser/cli.js');
+        nextResult = execSync(`node "${parserPath}"`, { 
           encoding: 'utf8',
           stdio: ['pipe', 'pipe', 'pipe']
         });

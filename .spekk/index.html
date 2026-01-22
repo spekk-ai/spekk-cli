@@ -674,7 +674,7 @@
                             
                                 <li class="assertion-item" onclick="showDetail('opens-html-in-default-browser', 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
-                                        <span class="status-badge status-not_started">not started</span>
+                                        <span class="status-badge status-done">done</span>
                                         <span class="priority-badge priority-3">3</span>
                                         <span>Opens HTML in Default Browser</span>
                                     </div>
@@ -2231,7 +2231,7 @@ grep -q "spec.*tree" .spekk/index.html
                     <div class="detail-header">
                         <div class="detail-title">Opens HTML in Default Browser</div>
                         <div class="detail-meta">
-                            <span class="meta-item">Status: <span class="detail-status-badge status-not_started">⏸️ not started</span></span>
+                            <span class="meta-item">Status: <span class="detail-status-badge status-done">✅ done</span></span>
                             <span class="meta-item">Priority: <span class="detail-priority-badge priority-3">💡 3</span></span>
                             <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                             <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/opens-html-in-default-browser.md</strong></span>
@@ -2243,7 +2243,7 @@ id: opens-html-in-default-browser
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 3
-status: not_started
+status: done
 ---
 
 # Opens HTML in Default Browser
@@ -2261,6 +2261,8 @@ The command automatically opens the generated HTML file in the system's default 
 - No browser windows open if generation fails
 
 ## Test Plan
+
+**Tests:** src/__tests__/show-command.test.js
 
 ```bash
 spekk show

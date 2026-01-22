@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 
 import { spawn, execSync } from 'node:child_process';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Colors for console output
 const colors = {
@@ -43,7 +48,8 @@ async function launchBuilderAgent() {
       colorLog('blue', '📋 Getting next priority assertion...');
       let nextResult;
       try {
-        nextResult = execSync('node src/parser/cli.js', { 
+        const parserPath = join(__dirname, '../parser/cli.js');
+        nextResult = execSync(`node "${parserPath}"`, { 
           encoding: 'utf8',
           stdio: ['pipe', 'pipe', 'pipe']
         });
