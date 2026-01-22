@@ -2,12 +2,15 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { execSync } from 'node:child_process';
 import { existsSync, rmSync, mkdirSync, lstatSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 describe('Show Command', () => {
   
   const testDir = join(tmpdir(), `spekk-test-${Date.now()}`);
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const projectRoot = join(__dirname, '../..');
   
   // Setup and cleanup test directory
   function setupTestDir() {
@@ -28,7 +31,7 @@ describe('Show Command', () => {
     setupTestDir();
     
     try {
-      const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      const result = execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -50,7 +53,7 @@ describe('Show Command', () => {
       assert.ok(!existsSync(spekkDir), '.spekk directory should not exist initially');
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -73,7 +76,7 @@ describe('Show Command', () => {
       assert.ok(existsSync(spekkDir), '.spekk directory should exist initially');
       
       // Run spekk show command - should not throw error
-      const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      const result = execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -92,7 +95,7 @@ describe('Show Command', () => {
     
     try {
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -147,7 +150,7 @@ This is a test assertion.`;
       writeFileSync(join(assertionsDir, 'test-assertion.md'), assertionContent);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -185,7 +188,7 @@ This is a test assertion.`;
       writeFileSync(htmlFile, 'old content');
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -202,7 +205,7 @@ This is a test assertion.`;
   });
 
   test('command appears in spekk --help output', () => {
-    const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js --help', { 
+    const result = execSync(`node "${join(projectRoot, 'bin/spekk.js')}" --help`, { 
       encoding: 'utf8',
       timeout: 5000 
     });
@@ -217,7 +220,7 @@ This is a test assertion.`;
     
     try {
       // spekk show --help should execute the show command (current behavior)
-      const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show --help', { 
+      const result = execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show --help`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -255,7 +258,7 @@ This is a test specification.`;
       writeFileSync(join(specDir, 'test-spec.md'), specContent);
       
       // Run spekk show command
-      const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      const result = execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 10000 
@@ -280,7 +283,7 @@ This is a test specification.`;
     try {
       // We can't easily test actual browser failure, but we can ensure 
       // the command doesn't throw errors during execution
-      const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      const result = execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 10000 

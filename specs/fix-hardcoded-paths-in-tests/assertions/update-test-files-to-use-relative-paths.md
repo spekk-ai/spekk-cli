@@ -3,7 +3,7 @@ id: update-test-files-to-use-relative-paths
 parent: fix-hardcoded-paths-in-tests
 created: 2026-01-22T20:45:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Update Test Files to Use Relative Paths
