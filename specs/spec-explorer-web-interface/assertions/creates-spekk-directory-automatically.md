@@ -3,7 +3,7 @@ id: creates-spekk-directory-automatically
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Creates .spekk Directory Automatically
@@ -29,3 +29,5 @@ test -d .spekk
 # Test existing directory
 spekk show  # Should not error
 ```
+
+**Tests:** src/__tests__/show-command.test.js
