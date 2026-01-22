@@ -3,7 +3,7 @@ id: web-tree-display-format
 parent: simplified-display-formatting
 created: 2026-01-22T22:32:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Web Interface Tree Display Format

@@ -77,23 +77,16 @@ function getStatusIcon(status) {
 }
 
 function getPriorityIcon(priority) {
-  switch (priority) {
-    case 1: return '🔥';
-    case 2: return '⚠️';
-    case 3: return '💡';
-    default: return '';
-  }
+  return '';
 }
 
 function generateDetailStatusBadge(status) {
   const icon = getStatusIcon(status);
-  const label = status.replace('_', ' ');
-  return `<span class="detail-status-badge status-${status}">${icon} ${label}</span>`;
+  return `<span class="detail-status-badge status-${status}">${icon}</span>`;
 }
 
 function generateDetailPriorityBadge(priority) {
-  const icon = getPriorityIcon(priority);
-  return `<span class="detail-priority-badge priority-${priority}">${icon} ${priority}</span>`;
+  return `<span class="detail-priority-badge priority-${priority}">${priority}</span>`;
 }
 
 function generateSpecExplorerHTML(specs, assertions) {
@@ -289,27 +282,15 @@ function generateSpecExplorerHTML(specs, assertions) {
             border: 1px solid #b91c1c;
             animation: urgent-glow 3s infinite;
         }
-        .priority-1::before {
-            content: "🔥";
-            font-size: 9px;
-        }
         
         .priority-2 {
             background: linear-gradient(135deg, #f59e0b, #d97706);
             border: 1px solid #b45309;
         }
-        .priority-2::before {
-            content: "⚠️";
-            font-size: 9px;
-        }
         
         .priority-3 {
             background: linear-gradient(135deg, #10b981, #059669);
             border: 1px solid #047857;
-        }
-        .priority-3::before {
-            content: "💡";
-            font-size: 9px;
         }
         
         @keyframes urgent-glow {
@@ -464,8 +445,8 @@ function generateSpecExplorerHTML(specs, assertions) {
                     <li class="spec-item">
                         <div class="spec-header" onclick="toggleSpec('${spec.id}')">
                             <span class="toggle-icon" id="toggle-${spec.id}">▶</span>
-                            <span class="status-badge status-${spec.status}">${spec.status.replace('_', ' ')}</span>
                             <span class="priority-badge priority-${spec.priority}">${spec.priority}</span>
+                            <span class="status-badge status-${spec.status}"></span>
                             <span class="spec-title">${spec.title}</span>
                         </div>
                         
@@ -473,8 +454,8 @@ function generateSpecExplorerHTML(specs, assertions) {
                             ${spec.assertions.map(assertion => `
                                 <li class="assertion-item" onclick="showDetail('${assertion.id}', 'assertion', event)">
                                     <div style="display: flex; align-items: center;">
-                                        <span class="status-badge status-${assertion.status}">${assertion.status.replace('_', ' ')}</span>
                                         <span class="priority-badge priority-${assertion.priority}">${assertion.priority}</span>
+                                        <span class="status-badge status-${assertion.status}"></span>
                                         <span>${assertion.title}</span>
                                     </div>
                                 </li>
