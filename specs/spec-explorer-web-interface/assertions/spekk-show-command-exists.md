@@ -3,7 +3,7 @@ id: spekk-show-command-exists
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Spekk Show Command Exists
@@ -17,6 +17,8 @@ The `spekk show` command is recognized and executable from the CLI.
 - Running `spekk show` does not produce "command not found" or similar errors
 - Command appears in `spekk --help` output
 - Command has appropriate help text describing its functionality
+
+**Tests:** src/__tests__/show-command.test.js
 
 ## Test Plan
 

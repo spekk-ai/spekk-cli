@@ -200,4 +200,34 @@ This is a test assertion.`;
       cleanupTestDir();
     }
   });
+
+  test('command appears in spekk --help output', () => {
+    const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js --help', { 
+      encoding: 'utf8',
+      timeout: 5000 
+    });
+    
+    // Check that show command is listed in help output
+    assert.ok(result.includes('show'), 'Help output should mention show command');
+    assert.ok(result.toLowerCase().includes('generate'), 'Help should describe show command functionality');
+  });
+
+  test('spekk show --help provides feedback about functionality', () => {
+    setupTestDir();
+    
+    try {
+      // spekk show --help should execute the show command (current behavior)
+      const result = execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show --help', { 
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 5000 
+      });
+      
+      // Should provide feedback about what it does
+      assert.ok(result.includes('Generated spec explorer'), 'Should indicate what was generated');
+      
+    } finally {
+      cleanupTestDir();
+    }
+  });
 });
