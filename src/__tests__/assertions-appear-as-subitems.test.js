@@ -2,12 +2,15 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { execSync } from 'node:child_process';
 import { existsSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 describe('Assertions Appear as Sub-items', () => {
   
   const testDir = join(tmpdir(), `spekk-test-assertions-${Date.now()}`);
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const projectRoot = join(__dirname, '../..');
   
   function setupTestDir() {
     if (existsSync(testDir)) {
@@ -103,7 +106,8 @@ This is the third test assertion.`;
       writeFileSync(join(assertions2Dir, 'test-assertion-3.md'), assertion3Content);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      const spekkBin = join(projectRoot, 'bin/spekk.js');
+      execSync(`node "${spekkBin}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -177,7 +181,8 @@ status: not_started
       writeFileSync(join(assertionsDir, 'visual-assertion.md'), assertionContent);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      const spekkBin = join(projectRoot, 'bin/spekk.js');
+      execSync(`node "${spekkBin}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -225,7 +230,8 @@ This spec has no assertions yet.`;
       writeFileSync(join(specDir, 'empty-spec.md'), specContent);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      const spekkBin = join(projectRoot, 'bin/spekk.js');
+      execSync(`node "${spekkBin}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -317,7 +323,8 @@ status: not_started
 # Assertion B1`);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      const spekkBin = join(projectRoot, 'bin/spekk.js');
+      execSync(`node "${spekkBin}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 

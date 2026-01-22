@@ -2,12 +2,15 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { execSync } from 'node:child_process';
 import { existsSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 describe('Clicking Shows Details Panel', () => {
   
   const testDir = join(tmpdir(), `spekk-test-${Date.now()}`);
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const projectRoot = join(__dirname, '../..');
   
   function setupTestDir() {
     if (existsSync(testDir)) {
@@ -61,7 +64,7 @@ This is a test assertion for testing.`;
     try {
       createTestSpec();
       
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -87,7 +90,7 @@ This is a test assertion for testing.`;
     try {
       createTestSpec();
       
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -110,7 +113,7 @@ This is a test assertion for testing.`;
     try {
       createTestSpec();
       
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -136,7 +139,7 @@ This is a test assertion for testing.`;
     try {
       createTestSpec();
       
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -165,7 +168,7 @@ This is a test assertion for testing.`;
     try {
       createTestSpec();
       
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 

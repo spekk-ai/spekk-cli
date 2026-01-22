@@ -2,12 +2,15 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { execSync } from 'node:child_process';
 import { existsSync, rmSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 describe('Fix JavaScript Template Generation Errors', () => {
   
   const testDir = join(tmpdir(), `spekk-javascript-test-${Date.now()}`);
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const projectRoot = join(__dirname, '../..');
   
   // Setup and cleanup test directory
   function setupTestDir() {
@@ -62,7 +65,7 @@ This assertion has double quotes in the title.`;
       writeFileSync(join(assertionsDir, 'test-assertion.md'), assertionContent);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -111,7 +114,7 @@ This spec contains backticks: \`console.log("hello")\` and template literals.`;
       writeFileSync(join(specDir, 'code-spec.md'), specContent);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -152,7 +155,7 @@ This spec contains curly braces: {example: "value"} that could break template li
       writeFileSync(join(specDir, 'object-spec.md'), specContent);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -203,7 +206,7 @@ status: not_started
       writeFileSync(join(assertionsDir, 'special-assertion.md'), assertionContent);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
@@ -271,7 +274,7 @@ All special chars: '"'"\`{}.`;
       writeFileSync(join(assertionsDir, 'comprehensive-assertion.md'), assertionContent);
       
       // Run spekk show command
-      execSync('node /Users/william/thinknimble/spekk-cli/bin/spekk.js show', { 
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, { 
         encoding: 'utf8',
         cwd: testDir,
         timeout: 5000 
