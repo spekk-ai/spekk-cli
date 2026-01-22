@@ -3,7 +3,7 @@ id: displays-spec-tree-with-dropdowns
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 2
-status: in_progress
+status: done
 ---
 
 # Displays Spec Tree with Expandable Dropdowns

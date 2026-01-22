@@ -91,7 +91,8 @@ function generateDetailPriorityBadge(priority) {
 }
 
 function escapeForJS(str) {
-  return JSON.stringify(str);
+  // Use JSON.stringify for proper JavaScript string escaping, then escape for HTML attribute context
+  return JSON.stringify(str).replace(/"/g, '&quot;');
 }
 
 function escapeHTML(str) {
@@ -455,7 +456,7 @@ function generateSpecExplorerHTML(specs, assertions) {
                         
                         <ul class="assertions-list" id="assertions-${spec.id}">
                             ${spec.assertions.map(assertion => `
-                                <li class="assertion-item" onclick="showDetail(${escapeForJS(assertion.id)}, 'assertion', event)">
+                                <li class="assertion-item" onclick="showDetail(${escapeForJS(assertion.id)}, &quot;assertion&quot;, event)">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-${assertion.priority}">${assertion.priority}</span>
                                         <span class="status-badge status-${assertion.status}"></span>
@@ -526,7 +527,7 @@ function generateSpecExplorerHTML(specs, assertions) {
                 toggle.classList.add('expanded');
                 header.classList.add('expanded');
                 toggle.textContent = '▼';
-                showDetail(specId, 'spec', event);
+                showDetail(specId, &quot;spec&quot;, event);
             }
         }
         
