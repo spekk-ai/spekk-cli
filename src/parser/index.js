@@ -77,8 +77,8 @@ function validateFields(data, filePath, isAssertion = false) {
   }
   
   // Validate status if present
-  if (data.status && !['not_started', 'in_progress', 'done', 'draft'].includes(data.status)) {
-    throw new Error(`Invalid status value '${data.status}' (must be: not_started, in_progress, done, draft) in ${filePath}`);
+  if (data.status && !['not_started', 'in_progress', 'done', 'draft', 'failed'].includes(data.status)) {
+    throw new Error(`Invalid status value '${data.status}' (must be: not_started, in_progress, done, draft, failed) in ${filePath}`);
   }
   
   // Validate timestamp format
@@ -219,13 +219,53 @@ function parseAllSpecs() {
     }
   }
   
+  // Update parent spec statuses based on child assertions
+  for (const spec of specs) {
+    const computedStatus = computeParentStatus(spec.id, assertions);
+    spec.status = computedStatus;
+  }
+  
   return { specs, assertions };
+}
+
+// Compute parent spec status based on child assertions
+function computeParentStatus(parentId, assertions) {
+  const childAssertions = assertions.filter(a => a.parent === parentId);
+  
+  if (childAssertions.length === 0) {
+    return 'not_started';
+  }
+  
+  // Filter out draft children for status computation
+  const activeChildren = childAssertions.filter(a => a.status !== 'draft');
+  
+  if (activeChildren.length === 0) {
+    return 'not_started';
+  }
+  
+  // If any children are failed, parent is failed
+  if (activeChildren.some(a => a.status === 'failed')) {
+    return 'failed';
+  }
+  
+  // If all active children are done, parent is done
+  if (activeChildren.every(a => a.status === 'done')) {
+    return 'done';
+  }
+  
+  // If any children are in_progress or not_started, parent is in_progress
+  if (activeChildren.some(a => ['in_progress', 'not_started'].includes(a.status))) {
+    return 'in_progress';
+  }
+  
+  // Default to not_started
+  return 'not_started';
 }
 
 // Find next priority assertion
 function findNextAssertion(assertions) {
-  // Filter to incomplete items (exclude done and draft)
-  const incomplete = assertions.filter(a => a.status !== 'done' && a.status !== 'draft');
+  // Filter to incomplete items (exclude done and draft, but include failed for retry)
+  const incomplete = assertions.filter(a => !['done', 'draft'].includes(a.status));
   
   if (incomplete.length === 0) {
     return null;
@@ -337,4 +377,4 @@ export function run(options = {}) {
 }
 
 // Export the parser functions for testing
-export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure };
+export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus };
