@@ -3,7 +3,7 @@ id: skip-assertions-in-draft-specs
 parent: simplified-display-formatting
 created: 2026-01-22T23:10:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Skip Assertions in Draft Specs
