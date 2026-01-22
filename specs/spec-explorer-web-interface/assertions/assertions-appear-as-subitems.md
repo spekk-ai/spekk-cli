@@ -3,7 +3,7 @@ id: assertions-appear-as-subitems
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Assertions Appear as Sub-items
