@@ -3,7 +3,7 @@ id: generates-index-html-file
 parent: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Generates index.html File
@@ -20,6 +20,8 @@ The command generates a valid HTML file at `.spekk/index.html` containing the sp
 - File is overwritten on subsequent runs (not appended to)
 
 ## Test Plan
+
+**Tests:** src/__tests__/show-command.test.js
 
 ```bash
 spekk show
