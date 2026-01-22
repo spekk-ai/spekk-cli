@@ -3,7 +3,7 @@ id: cli-command-launches-observer-loop
 parent: observer-agent
 created: 2026-01-22T17:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # CLI Command Launches Observer in Continuous Loop
@@ -19,3 +19,5 @@ A CLI command starts the observer agent in continuous monitoring mode.
 - [ ] Observer outputs progress/status messages to console
 - [ ] Command accepts optional parameters (scan interval, quiet mode)
 - [ ] Observer gracefully handles interruption signals
+
+**Tests:** src/observer/__tests__/observer.test.js, src/observer/__tests__/cli.test.js
