@@ -6,28 +6,27 @@ priority: 1
 status: not_started
 ---
 
-# Parser Should Ignore README Files
+# Ignore Markdown Files Without Frontmatter
 
-The parser fails when it encounters README.md files in specs directories that don't have YAML frontmatter.
+The parser crashes on any .md file without YAML frontmatter. Files without frontmatter are NOT specs and should be silently ignored.
 
 ## What Must Be True
 
-Parser ignores documentation files that aren't specs or assertions.
+Parser silently skips any .md file that doesn't start with YAML frontmatter.
 
-### Files to Ignore
+### Simple Rule
 
-- **README.md** files in any specs directory
-- **readme.md** files (case insensitive)
-- Files in subdirectories that aren't `/assertions/`
-- Non-spec documentation files
+**If a .md file doesn't start with `---`, skip it entirely.**
 
-### Parser Behavior
+- No error thrown for missing frontmatter
+- File is completely ignored during parsing
+- Only files with proper `---` YAML frontmatter are parsed as specs/assertions
 
-- Only parse `.md` files that are either:
-  - Spec files: `specs/{spec-id}/{spec-id}.md`  
-  - Assertion files: `specs/{spec-id}/assertions/{assertion-id}.md`
-- Skip all other `.md` files (README, docs, mockups, etc.)
-- Don't error on files without YAML frontmatter if they're in ignored categories
+### Examples to Ignore
+
+- README.md, docs.md, notes.md (no frontmatter)
+- Any .md file without `---` at the start
+- Documentation files mixed in specs directories
 
 ### Error Prevention
 
@@ -37,7 +36,7 @@ Parser ignores documentation files that aren't specs or assertions.
 
 ## Success Criteria
 
-- ✅ Parser ignores README.md files in specs directories
-- ✅ `spekk builder` works in directories with README files  
-- ✅ Only actual spec/assertion .md files are parsed for frontmatter
-- ✅ No frontmatter errors for documentation files
+- ✅ Parser skips any .md file not starting with `---`  
+- ✅ `spekk builder` works in `/Users/william/thinknimble/spekk/` without crashes
+- ✅ No error thrown for files without YAML frontmatter
+- ✅ README.md and other docs are silently ignored
