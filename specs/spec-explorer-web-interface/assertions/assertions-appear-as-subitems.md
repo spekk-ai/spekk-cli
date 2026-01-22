@@ -19,6 +19,8 @@ Assertions are displayed as sub-items under their parent specs in the tree struc
 - Assertions are organized under the correct parent spec
 - Empty specs (with no assertions) can still be expanded but show appropriate messaging
 
+**Tests:** src/__tests__/assertions-appear-as-subitems.test.js
+
 ## Test Plan
 
 - Expand a spec in the tree interface
