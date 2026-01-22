@@ -271,8 +271,11 @@ function parseAllSpecs() {
   
   // Update parent spec statuses based on child assertions
   for (const spec of specs) {
-    const computedStatus = computeParentStatus(spec.id, assertions);
-    spec.status = computedStatus;
+    // Only compute status if not manually set to draft
+    if (spec.status !== 'draft') {
+      const computedStatus = computeParentStatus(spec.id, assertions);
+      spec.status = computedStatus;
+    }
   }
   
   return { specs, assertions };

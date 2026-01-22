@@ -1078,9 +1078,10 @@ This should be picked first.`;
         
         try {
           // Test direct function call with filtered test data
-          const { assertions } = parseAllSpecs();
+          const { assertions, specs } = parseAllSpecs();
           const testAssertions = assertions.filter(a => a.parent.startsWith('temp-priority-test-'));
-          const nextAssertion = findNextAssertion(testAssertions);
+          const testSpecs = specs.filter(s => s.id.startsWith('temp-priority-test-'));
+          const nextAssertion = findNextAssertion(testAssertions, testSpecs);
           
           assert.ok(nextAssertion, 'Should find a next test assertion');
           assert.equal(nextAssertion.id, 'high-priority-assertion', 'Should pick priority 1 test assertion over priority 2');
@@ -1149,8 +1150,8 @@ This was created earlier and should be picked.`;
         fs.symlinkSync(tempDir, originalSpecsPath);
         
         try {
-          const { assertions } = parseAllSpecs();
-          const nextAssertion = findNextAssertion(assertions);
+          const { assertions, specs } = parseAllSpecs();
+          const nextAssertion = findNextAssertion(assertions, specs);
           
           assert.ok(nextAssertion, 'Should find a next assertion');
           assert.equal(nextAssertion.id, 'older-assertion', 'Should pick older assertion when priorities are equal');
@@ -1218,8 +1219,11 @@ This should be picked even though it has lower priority.`;
         fs.symlinkSync(tempDir, originalSpecsPath);
         
         try {
-          const { assertions } = parseAllSpecs();
-          const nextAssertion = findNextAssertion(assertions);
+          const { assertions, specs } = parseAllSpecs();
+          // Filter to only test assertions to avoid interference from real specs
+          const testAssertions = assertions.filter(a => a.parent === 'temp-done-filter-test');
+          const testSpecs = specs.filter(s => s.id === 'temp-done-filter-test');
+          const nextAssertion = findNextAssertion(testAssertions, testSpecs);
           
           assert.ok(nextAssertion, 'Should find a next assertion');
           assert.equal(nextAssertion.id, 'not-started-assertion', 'Should pick incomplete assertion over done ones');
@@ -1273,8 +1277,11 @@ This is in progress and should be picked up.`;
         fs.symlinkSync(tempDir, originalSpecsPath);
         
         try {
-          const { assertions } = parseAllSpecs();
-          const nextAssertion = findNextAssertion(assertions);
+          const { assertions, specs } = parseAllSpecs();
+          // Filter to only test assertions to avoid interference from real specs
+          const testAssertions = assertions.filter(a => a.parent === 'temp-in-progress-test');
+          const testSpecs = specs.filter(s => s.id === 'temp-in-progress-test');
+          const nextAssertion = findNextAssertion(testAssertions, testSpecs);
           
           assert.ok(nextAssertion, 'Should find a next assertion');
           assert.equal(nextAssertion.id, 'in-progress-assertion', 'Should pick in_progress assertion');
@@ -1308,8 +1315,85 @@ This is in progress and should be picked up.`;
         }
       ];
       
-      const nextAssertion = findNextAssertion(testAssertions);
+      const testSpecs = [
+        {
+          id: 'test-spec',
+          status: 'done'
+        }
+      ];
+      
+      const nextAssertion = findNextAssertion(testAssertions, testSpecs);
       assert.equal(nextAssertion, null, 'Should return null when all assertions are done');
+    });
+
+    test('skips assertions from draft specs', () => {
+      // Create test data with assertions from both draft and non-draft specs
+      const testAssertions = [
+        {
+          id: 'draft-spec-assertion',
+          parent: 'draft-spec',
+          priority: 1,
+          status: 'not_started',
+          created: '2026-01-20T15:59:00Z'
+        },
+        {
+          id: 'normal-spec-assertion',
+          parent: 'normal-spec',
+          priority: 2,
+          status: 'not_started',
+          created: '2026-01-20T16:01:00Z'
+        }
+      ];
+      
+      const testSpecs = [
+        {
+          id: 'draft-spec',
+          status: 'draft'
+        },
+        {
+          id: 'normal-spec',
+          status: 'not_started'
+        }
+      ];
+      
+      const nextAssertion = findNextAssertion(testAssertions, testSpecs);
+      
+      assert.ok(nextAssertion, 'Should find a next assertion');
+      assert.equal(nextAssertion.id, 'normal-spec-assertion', 'Should skip assertion from draft spec and pick from normal spec');
+      assert.equal(nextAssertion.parent, 'normal-spec', 'Selected assertion should be from non-draft spec');
+    });
+
+    test('skips all assertions when all parent specs are draft', () => {
+      const testAssertions = [
+        {
+          id: 'draft-spec-assertion-1',
+          parent: 'draft-spec-1',
+          priority: 1,
+          status: 'not_started',
+          created: '2026-01-20T15:59:00Z'
+        },
+        {
+          id: 'draft-spec-assertion-2',
+          parent: 'draft-spec-2',
+          priority: 1,
+          status: 'not_started',
+          created: '2026-01-20T16:01:00Z'
+        }
+      ];
+      
+      const testSpecs = [
+        {
+          id: 'draft-spec-1',
+          status: 'draft'
+        },
+        {
+          id: 'draft-spec-2',
+          status: 'draft'
+        }
+      ];
+      
+      const nextAssertion = findNextAssertion(testAssertions, testSpecs);
+      assert.equal(nextAssertion, null, 'Should return null when all parent specs are draft');
     });
   });
 
@@ -1401,8 +1485,8 @@ status: not_started
         
         try {
           // Test direct function call
-          const { assertions } = parseAllSpecs();
-          const nextAssertion = findNextAssertion(assertions);
+          const { assertions, specs } = parseAllSpecs();
+          const nextAssertion = findNextAssertion(assertions, specs);
           
           // Test CLI output
           const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
