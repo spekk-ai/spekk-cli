@@ -174,7 +174,7 @@ This spec contains curly braces: {example: "value"} that could break template li
     }
   });
 
-  test('onclick handlers use proper escaping for JavaScript context', () => {
+  test('event delegation uses data attributes instead of inline onclick handlers', () => {
     setupTestDir();
     
     try {
@@ -216,19 +216,19 @@ status: not_started
       const htmlFile = join(testDir, '.spekk', 'index.html');
       const htmlContent = readFileSync(htmlFile, 'utf8');
       
-      // Check that onclick handlers use proper JavaScript encoding
-      // Should use JSON.stringify or similar approach for data safety
-      assert.ok(htmlContent.includes('onclick='), 'HTML should contain onclick handlers');
+      // Check that NO onclick handlers exist (replaced by event delegation)
+      assert.ok(!htmlContent.includes('onclick='), 'HTML should NOT contain onclick handlers');
       
-      // Should not have raw string interpolation in onclick
-      const onclickPattern = /onclick="[^"]*'/g;
-      const matches = htmlContent.match(onclickPattern);
-      if (matches) {
-        // If there are onclick handlers with single quotes, they should be properly escaped
-        matches.forEach(match => {
-          assert.ok(!match.includes("'"), `Onclick handler should not contain unescaped single quotes: ${match}`);
-        });
-      }
+      // Check that event delegation data attributes exist instead
+      assert.ok(htmlContent.includes('data-action="toggle-spec"'), 'HTML should contain data-action for toggle-spec');
+      assert.ok(htmlContent.includes('data-spec-id="special-chars-spec"'), 'HTML should contain data-spec-id');
+      
+      // Check that event delegation listener exists
+      assert.ok(htmlContent.includes('document.addEventListener(\'click\''), 'HTML should contain document click event listener for delegation');
+      
+      // Verify functions still exist but are called via event delegation
+      assert.ok(htmlContent.includes('function toggleSpec'), 'HTML should contain toggleSpec function');
+      assert.ok(htmlContent.includes('function showDetail'), 'HTML should contain showDetail function');
       
     } finally {
       cleanupTestDir();
