@@ -383,6 +383,170 @@ ${issue.description}
   }
 }
 
+// Test: Observer compares assertion success criteria against actual code
+export async function testObserverComparesAssertionSuccessCriteria() {
+  const testDir = 'test-assertion-criteria';
+  
+  try {
+    await createTestDir(testDir);
+    await createTestDir(path.join(testDir, 'specs', 'test-spec', 'assertions'));
+    
+    // Create assertion with specific success criteria
+    const assertionContent = `---
+id: test-assertion
+parent: test-spec
+created: 2026-01-01T10:00:00Z
+priority: 1
+status: not_started
+---
+
+# Test Assertion
+
+## Success Criteria
+
+- [ ] Function \`calculateTotal\` exists in src/utils/math.js
+- [ ] Function accepts two parameters (a, b)
+- [ ] Function returns the sum of a + b
+- [ ] Function has proper error handling for non-numeric inputs
+`;
+
+    // Create main spec file (required by parser)
+    const specContent = `---
+id: test-spec
+created: 2026-01-01T10:00:00Z
+priority: 1
+status: not_started
+---
+
+# Test Spec
+
+Main spec file.
+`;
+
+    await createTestFile(path.join(testDir, 'specs', 'test-spec', 'test-spec.md'), specContent);
+    await createTestFile(path.join(testDir, 'specs', 'test-spec', 'assertions', 'test-assertion.md'), assertionContent);
+    
+    // Create incomplete implementation
+    const incompleteCode = `// Incomplete implementation
+export function calculateTotal(a) {
+  return a; // Missing second parameter and logic
+}`;
+    
+    await createTestFile(path.join(testDir, 'src', 'utils', 'math.js'), incompleteCode);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    // Parse the test specs
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkAssertionSuccessCriteria(specs, assertions, issues);
+    
+    const misalignmentIssues = issues.filter(i => i.type === 'code_spec_misalignment');
+    
+    if (misalignmentIssues.length === 0) {
+      throw new Error('Expected to find assertion success criteria misalignment');
+    }
+    
+    const issue = misalignmentIssues[0];
+    if (!issue.description.includes('calculateTotal')) {
+      throw new Error('Issue should reference the specific function mentioned in criteria');
+    }
+    
+    console.log('✅ Observer compares assertion success criteria test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
+// Test: Observer detects when functions exist but don't meet spec requirements  
+export async function testObserverDetectsFunctionRequirementMismatch() {
+  const testDir = 'test-function-requirements';
+  
+  try {
+    await createTestDir(testDir);
+    await createTestDir(path.join(testDir, 'specs', 'api-spec', 'assertions'));
+    
+    // Create assertion with API endpoint requirements
+    const assertionContent = `---
+id: api-endpoints
+parent: api-spec
+created: 2026-01-01T10:00:00Z
+priority: 1
+status: not_started
+---
+
+# API Endpoints
+
+## Success Criteria
+
+- [ ] GET /users endpoint returns user list with pagination
+- [ ] POST /users endpoint creates new user with validation
+- [ ] Each user object includes id, name, email fields
+- [ ] API responds with proper HTTP status codes
+`;
+
+    // Create main spec file (required by parser)
+    const specContent = `---
+id: api-spec
+created: 2026-01-01T10:00:00Z
+priority: 1
+status: not_started
+---
+
+# API Spec
+
+Main API spec file.
+`;
+
+    await createTestFile(path.join(testDir, 'specs', 'api-spec', 'api-spec.md'), specContent);
+    await createTestFile(path.join(testDir, 'specs', 'api-spec', 'assertions', 'api-endpoints.md'), assertionContent);
+    
+    // Create implementation that exists but doesn't fully meet requirements
+    const incompleteApiCode = `// API implementation exists but incomplete
+app.get('/users', (req, res) => {
+  // Missing pagination
+  res.json(users);
+});
+
+// Missing POST endpoint entirely
+// Missing proper error handling
+`;
+    
+    await createTestFile(path.join(testDir, 'src', 'routes', 'users.js'), incompleteApiCode);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    // Parse the test specs
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkFunctionRequirements(specs, assertions, issues);
+    
+    const misalignmentIssues = issues.filter(i => i.type === 'code_spec_misalignment');
+    
+    if (misalignmentIssues.length === 0) {
+      throw new Error('Expected to find function requirement misalignment');
+    }
+    
+    console.log('✅ Observer detects function requirement mismatch test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
 // Run all tests
 export async function runAllTests() {
   console.log('🧪 Running Observer Agent tests...\n');
@@ -396,6 +560,8 @@ export async function runAllTests() {
     await testObserverDetectsFileStructureConflicts();
     await testObserverDetectsPriorityConflicts();
     await testObserverCreatesObservationFiles();
+    await testObserverComparesAssertionSuccessCriteria();
+    await testObserverDetectsFunctionRequirementMismatch();
     
     console.log('\n🎉 All Observer Agent tests passed!');
   } catch (error) {

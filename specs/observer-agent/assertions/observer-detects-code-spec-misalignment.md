@@ -3,12 +3,14 @@ id: observer-detects-code-spec-misalignment
 parent: observer-agent
 created: 2026-01-22T17:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Observer Detects Code-Spec Misalignment
 
 The observer identifies places where implementation doesn't match what specifications declare.
+
+**Tests:** src/observer/__tests__/observer.test.js
 
 ## Success Criteria
 

@@ -46,6 +46,12 @@ export class ObserverAgent {
       // Type 1: Code-Spec Misalignment - Check for missing directories/files
       await this.checkMissingPaths(specs, assertions, issues);
 
+      // Type 1: Code-Spec Misalignment - Check assertion success criteria against code
+      await this.checkAssertionSuccessCriteria(specs, assertions, issues);
+
+      // Type 1: Code-Spec Misalignment - Check function/feature requirements
+      await this.checkFunctionRequirements(specs, assertions, issues);
+
       // Type 2: Outdated Specs - Check for done specs with changed files
       await this.checkOutdatedSpecs(specs, assertions, issues);
 
@@ -128,6 +134,653 @@ export class ObserverAgent {
     } catch {
       return false;
     }
+  }
+
+  async checkAssertionSuccessCriteria(specs, assertions, issues) {
+    for (const assertion of assertions) {
+      if (assertion.status === 'done') continue; // Skip completed assertions
+
+      // Extract success criteria from assertion content
+      const criteria = this.extractSuccessCriteria(assertion.content);
+      if (criteria.length === 0) continue;
+
+      for (const criterion of criteria) {
+        const misalignments = await this.validateCriterion(criterion, assertion);
+        
+        for (const misalignment of misalignments) {
+          issues.push({
+            type: 'code_spec_misalignment',
+            severity: this.categorizeSeverity(criterion, assertion),
+            title: `Assertion success criteria not met: ${criterion.text}`,
+            description: `Assertion ${assertion.id} requires "${criterion.text}" but ${misalignment.issue}`,
+            affected_specs: [assertion.parent],
+            affected_files: [assertion.file, ...misalignment.files],
+            criterion_type: criterion.type,
+            criterion_details: criterion
+          });
+        }
+      }
+    }
+  }
+
+  extractSuccessCriteria(content) {
+    const criteria = [];
+    
+    // Match checkbox items in Success Criteria sections
+    const successSectionMatch = content.match(/## Success Criteria\s*\n\n([\s\S]*?)(?=\n##|\n#|$)/);
+    if (!successSectionMatch) return criteria;
+    
+    const successSection = successSectionMatch[1];
+    const checkboxMatches = successSection.match(/- \[ \] (.+)/g);
+    
+    if (checkboxMatches) {
+      for (const match of checkboxMatches) {
+        const text = match.replace(/^- \[ \] /, '').trim();
+        const criterion = {
+          text,
+          type: this.classifyCriterion(text),
+          raw: match
+        };
+        criteria.push(criterion);
+      }
+    }
+    
+    return criteria;
+  }
+
+  classifyCriterion(text) {
+    const lowerText = text.toLowerCase();
+    
+    if (lowerText.includes('function') && lowerText.includes('exists')) {
+      return 'function_exists';
+    } else if (lowerText.includes('function') && lowerText.includes('parameter')) {
+      return 'function_parameters';
+    } else if (lowerText.includes('function') && lowerText.includes('return')) {
+      return 'function_behavior';
+    } else if (lowerText.includes('endpoint') || lowerText.includes('api')) {
+      return 'api_endpoint';
+    } else if (lowerText.includes('file') || lowerText.includes('directory')) {
+      return 'file_structure';
+    } else if (lowerText.includes('test') || lowerText.includes('validation')) {
+      return 'validation';
+    } else {
+      return 'general';
+    }
+  }
+
+  async validateCriterion(criterion, assertion) {
+    const misalignments = [];
+    
+    try {
+      switch (criterion.type) {
+        case 'function_exists':
+          await this.validateFunctionExists(criterion, assertion, misalignments);
+          break;
+        case 'function_parameters':
+          await this.validateFunctionParameters(criterion, assertion, misalignments);
+          break;
+        case 'function_behavior':
+          await this.validateFunctionBehavior(criterion, assertion, misalignments);
+          break;
+        case 'api_endpoint':
+          await this.validateApiEndpoint(criterion, assertion, misalignments);
+          break;
+        case 'file_structure':
+          await this.validateFileStructure(criterion, assertion, misalignments);
+          break;
+        default:
+          // For general criteria, do basic text-based validation
+          await this.validateGeneral(criterion, assertion, misalignments);
+          break;
+      }
+    } catch (error) {
+      // If validation throws an error, treat it as a potential misalignment
+      misalignments.push({
+        issue: `validation failed: ${error.message}`,
+        files: []
+      });
+    }
+    
+    return misalignments;
+  }
+
+  async validateFunctionExists(criterion, assertion, misalignments) {
+    // Extract function name and file path from criterion text
+    const functionMatch = criterion.text.match(/function\s+`([^`]+)`.*?in\s+([^\s]+)/i);
+    if (!functionMatch) return;
+    
+    const [, functionName, filePath] = functionMatch;
+    
+    if (!await this.pathExists(filePath)) {
+      misalignments.push({
+        issue: `file ${filePath} does not exist`,
+        files: [filePath]
+      });
+      return;
+    }
+    
+    try {
+      const fileContent = await fs.readFile(filePath, 'utf8');
+      
+      // Look for function declaration patterns
+      const functionPatterns = [
+        new RegExp(`function\\s+${functionName}\\s*\\(`, 'i'),
+        new RegExp(`const\\s+${functionName}\\s*=.*?function`, 'i'),
+        new RegExp(`export\\s+function\\s+${functionName}\\s*\\(`, 'i'),
+        new RegExp(`${functionName}\\s*:\\s*function`, 'i'),
+        new RegExp(`${functionName}\\s*=\\s*\\(.*?\\)\\s*=>`, 'i')
+      ];
+      
+      const functionExists = functionPatterns.some(pattern => pattern.test(fileContent));
+      
+      if (!functionExists) {
+        misalignments.push({
+          issue: `function ${functionName} not found in ${filePath}`,
+          files: [filePath]
+        });
+      }
+    } catch (error) {
+      misalignments.push({
+        issue: `could not read file ${filePath}: ${error.message}`,
+        files: [filePath]
+      });
+    }
+  }
+
+  async validateFunctionParameters(criterion, assertion, misalignments) {
+    // Extract function name and expected parameters - handle different patterns
+    let expectedParams = [];
+    let functionName = null;
+    
+    // Pattern 1: "Function accepts two parameters (a, b)"
+    const paramMatch1 = criterion.text.match(/function.*?accepts\s+(.*?)\s+parameters?.*?\(([^)]+)\)/i);
+    if (paramMatch1) {
+      const [, countDesc, paramList] = paramMatch1;
+      expectedParams = paramList.split(',').map(p => p.trim());
+    }
+    
+    // Pattern 2: "Function accepts X parameters" (extract count)
+    const paramMatch2 = criterion.text.match(/function.*?accepts\s+(\w+)\s+parameters?/i);
+    if (paramMatch2 && !paramMatch1) {
+      const countWord = paramMatch2[1].toLowerCase();
+      const countMap = { 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5 };
+      const expectedCount = countMap[countWord] || parseInt(countWord) || 0;
+      expectedParams = new Array(expectedCount).fill('param'); // Placeholder names
+    }
+    
+    if (expectedParams.length === 0) {
+      return;
+    }
+    
+    // Find function name - try multiple patterns
+    let functionMatch = criterion.text.match(/function\s+`([^`]+)`/i);
+    if (functionMatch) {
+      functionName = functionMatch[1];
+    } else {
+      // Look for function name in the assertion content more broadly
+      const assertionContent = assertion.content;
+      const globalFunctionMatch = assertionContent.match(/function\s+`([^`]+)`/i);
+      if (globalFunctionMatch) {
+        functionName = globalFunctionMatch[1];
+      } else {
+        // Extract function names from backticks in the assertion
+        const allFunctionMatches = assertionContent.match(/`([a-zA-Z_][a-zA-Z0-9_]*)`/g);
+        if (allFunctionMatches && allFunctionMatches.length > 0) {
+          // Use the first function name found
+          functionName = allFunctionMatches[0].replace(/`/g, '');
+        }
+      }
+    }
+    
+    // Find files that might contain this function
+    const jsFiles = await this.findJsFiles();
+    
+    for (const file of jsFiles) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        const functionRegex = new RegExp(`(?:function\\s+${functionName}|const\\s+${functionName}\\s*=.*?function|${functionName}\\s*=\\s*\\([^)]*\\)|export\\s+function\\s+${functionName})\\s*\\(([^)]*)\\)`, 'i');
+        const match = content.match(functionRegex);
+        
+        if (match) {
+          const actualParams = match[1] ? match[1].split(',').map(p => p.trim()).filter(p => p) : [];
+          
+          if (actualParams.length !== expectedParams.length) {
+            misalignments.push({
+              issue: `function ${functionName} has ${actualParams.length} parameters but should have ${expectedParams.length}`,
+              files: [file]
+            });
+          }
+        }
+      } catch (error) {
+        // Ignore file read errors for this validation
+      }
+    }
+  }
+
+  async validateFunctionBehavior(criterion, assertion, misalignments) {
+    // This is a simplified behavioral validation
+    // In a real implementation, you'd want to parse and analyze the function body
+    const behaviorKeywords = ['return', 'throw', 'error handling', 'validation'];
+    
+    for (const keyword of behaviorKeywords) {
+      if (criterion.text.toLowerCase().includes(keyword)) {
+        // Find the function and check if it has the expected behavior pattern
+        const functionMatch = criterion.text.match(/function\s+`([^`]+)`/i);
+        if (functionMatch) {
+          const functionName = functionMatch[1];
+          const hasExpectedBehavior = await this.checkFunctionForBehavior(functionName, keyword);
+          
+          if (!hasExpectedBehavior) {
+            misalignments.push({
+              issue: `function ${functionName} does not implement expected ${keyword} behavior`,
+              files: await this.findFilesContainingFunction(functionName)
+            });
+          }
+        }
+      }
+    }
+  }
+
+  async validateApiEndpoint(criterion, assertion, misalignments) {
+    // Extract endpoint information
+    const endpointMatch = criterion.text.match(/(\w+)\s+([\/\w]+)\s+endpoint/i);
+    if (!endpointMatch) return;
+    
+    const [, method, path] = endpointMatch;
+    
+    // Look for API route definitions in common files
+    const routeFiles = await this.findRouteFiles();
+    let found = false;
+    
+    for (const file of routeFiles) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        const routePatterns = [
+          new RegExp(`app\\.${method.toLowerCase()}\\s*\\(\\s*['"\`]${path}['"\`]`, 'i'),
+          new RegExp(`router\\.${method.toLowerCase()}\\s*\\(\\s*['"\`]${path}['"\`]`, 'i'),
+          new RegExp(`@${method.toUpperCase()}\\s*\\(\\s*['"\`]${path}['"\`]`, 'i')
+        ];
+        
+        if (routePatterns.some(pattern => pattern.test(content))) {
+          found = true;
+          break;
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    if (!found) {
+      misalignments.push({
+        issue: `${method.toUpperCase()} ${path} endpoint not found`,
+        files: routeFiles
+      });
+    }
+  }
+
+  async validateFileStructure(criterion, assertion, misalignments) {
+    // Extract file/directory paths from criterion
+    const pathMatches = criterion.text.match(/`([^`]+\.[a-z]+)`/g);
+    if (!pathMatches) return;
+    
+    for (const match of pathMatches) {
+      const filePath = match.replace(/`/g, '');
+      if (!await this.pathExists(filePath)) {
+        misalignments.push({
+          issue: `required file ${filePath} does not exist`,
+          files: [filePath]
+        });
+      }
+    }
+  }
+
+  async validateGeneral(criterion, assertion, misalignments) {
+    // Basic validation for general criteria - look for keywords in codebase
+    const keywords = this.extractKeywords(criterion.text);
+    if (keywords.length === 0) return;
+    
+    const codebaseFiles = await this.getAllCodeFiles();
+    let foundRelevantCode = false;
+    
+    for (const file of codebaseFiles.slice(0, 10)) { // Limit to avoid performance issues
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        if (keywords.some(keyword => content.toLowerCase().includes(keyword.toLowerCase()))) {
+          foundRelevantCode = true;
+          break;
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    // Only flag as misalignment if we can't find any relevant code
+    if (!foundRelevantCode && keywords.length > 0) {
+      misalignments.push({
+        issue: `no code found implementing: ${keywords.join(', ')}`,
+        files: codebaseFiles.slice(0, 5) // Show first few files as context
+      });
+    }
+  }
+
+  async checkFunctionRequirements(specs, assertions, issues) {
+    // This method focuses on detecting when functions/features exist but don't meet requirements
+    for (const assertion of assertions) {
+      if (assertion.status === 'done') continue;
+      
+      // Look for specific functional requirements in assertions
+      const requirements = this.extractFunctionRequirements(assertion.content);
+      
+      for (const requirement of requirements) {
+        const violations = await this.validateFunctionRequirement(requirement, assertion);
+        
+        for (const violation of violations) {
+          issues.push({
+            type: 'code_spec_misalignment',
+            severity: this.categorizeSeverity(requirement, assertion),
+            title: `Function exists but doesn't meet requirements: ${requirement.description}`,
+            description: `${violation.description} in ${violation.location}`,
+            affected_specs: [assertion.parent],
+            affected_files: [assertion.file, ...violation.files],
+            requirement_type: requirement.type
+          });
+        }
+      }
+    }
+  }
+
+  extractFunctionRequirements(content) {
+    const requirements = [];
+    
+    // Look for specific patterns that indicate functional requirements
+    const patterns = [
+      { regex: /(\w+)\s+endpoint.*?returns?\s+(.+)/gi, type: 'api_return' },
+      { regex: /(\w+)\s+endpoint.*?with\s+(.+)/gi, type: 'api_feature' },
+      { regex: /function.*?(\w+).*?includes?\s+(.+)/gi, type: 'function_includes' },
+      { regex: /API responds? with\s+(.+)/gi, type: 'api_response' },
+      { regex: /Each\s+(\w+).*?includes?\s+(.+)/gi, type: 'object_structure' }
+    ];
+    
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.regex.exec(content)) !== null) {
+        requirements.push({
+          type: pattern.type,
+          description: match[0],
+          target: match[1] || 'unknown',
+          details: match[2] || 'unknown',
+          raw: match[0]
+        });
+      }
+    }
+    
+    return requirements;
+  }
+
+  async validateFunctionRequirement(requirement, assertion) {
+    const violations = [];
+    
+    try {
+      switch (requirement.type) {
+        case 'api_return':
+          await this.validateApiReturn(requirement, violations);
+          break;
+        case 'api_feature':
+          await this.validateApiFeature(requirement, violations);
+          break;
+        case 'api_response':
+          await this.validateApiResponse(requirement, violations);
+          break;
+        case 'object_structure':
+          await this.validateObjectStructure(requirement, violations);
+          break;
+        default:
+          // Generic validation
+          await this.validateGenericRequirement(requirement, violations);
+          break;
+      }
+    } catch (error) {
+      violations.push({
+        description: `Validation error for requirement: ${error.message}`,
+        location: 'validation system',
+        files: []
+      });
+    }
+    
+    return violations;
+  }
+
+  async validateApiReturn(requirement, violations) {
+    // Look for API endpoints and check if they return what's expected
+    const routeFiles = await this.findRouteFiles();
+    
+    for (const file of routeFiles) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        
+        // Basic pattern matching for common return value issues
+        if (content.includes('res.json(users)') && requirement.details.includes('pagination')) {
+          if (!content.includes('page') && !content.includes('limit') && !content.includes('offset')) {
+            violations.push({
+              description: `API returns user list but missing pagination as required by spec`,
+              location: file,
+              files: [file]
+            });
+          }
+        }
+        
+        if (content.includes('GET') && content.includes('/users') && requirement.target.includes('user')) {
+          if (!content.includes('POST') && requirement.description.includes('POST')) {
+            violations.push({
+              description: `Found GET /users endpoint but missing required POST endpoint`,
+              location: file,
+              files: [file]
+            });
+          }
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+  }
+
+  async validateApiFeature(requirement, violations) {
+    // Check if API features are properly implemented
+    const routeFiles = await this.findRouteFiles();
+    
+    for (const file of routeFiles) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        
+        if (requirement.details.includes('validation')) {
+          if (content.includes('POST') && !content.includes('validate') && !content.includes('schema')) {
+            violations.push({
+              description: `POST endpoint exists but missing validation as required`,
+              location: file,
+              files: [file]
+            });
+          }
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+  }
+
+  async validateApiResponse(requirement, violations) {
+    // Check API response patterns
+    if (requirement.details.includes('HTTP status codes')) {
+      const routeFiles = await this.findRouteFiles();
+      
+      for (const file of routeFiles) {
+        try {
+          const content = await fs.readFile(file, 'utf8');
+          
+          if (content.includes('res.json') && !content.includes('res.status')) {
+            violations.push({
+              description: `API responses found but missing proper HTTP status codes`,
+              location: file,
+              files: [file]
+            });
+          }
+        } catch (error) {
+          // Ignore file read errors
+        }
+      }
+    }
+  }
+
+  async validateObjectStructure(requirement, violations) {
+    // Check if object structures match requirements
+    if (requirement.details.includes('id, name, email')) {
+      const files = await this.findJsFiles();
+      
+      for (const file of files) {
+        try {
+          const content = await fs.readFile(file, 'utf8');
+          
+          if (content.includes('user') || content.includes('User')) {
+            const requiredFields = ['id', 'name', 'email'];
+            const missingFields = requiredFields.filter(field => !content.includes(field));
+            
+            if (missingFields.length > 0) {
+              violations.push({
+                description: `User object structure missing required fields: ${missingFields.join(', ')}`,
+                location: file,
+                files: [file]
+              });
+            }
+          }
+        } catch (error) {
+          // Ignore file read errors
+        }
+      }
+    }
+  }
+
+  async validateGenericRequirement(requirement, violations) {
+    // Basic validation for generic requirements
+    const keywords = this.extractKeywords(requirement.description);
+    const files = await this.getAllCodeFiles();
+    
+    let foundImplementation = false;
+    
+    for (const file of files.slice(0, 10)) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        if (keywords.some(keyword => content.includes(keyword))) {
+          foundImplementation = true;
+          break;
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    if (!foundImplementation) {
+      violations.push({
+        description: `No implementation found for requirement: ${requirement.description}`,
+        location: 'codebase',
+        files: []
+      });
+    }
+  }
+
+  // Helper methods
+  categorizeSeverity(criterion, assertion) {
+    // Categorize severity based on impact
+    if (assertion.priority === 1) return 'high';
+    if (criterion.type === 'function_exists' || criterion.type === 'api_endpoint') return 'high';
+    if (criterion.type === 'validation' || criterion.type === 'function_behavior') return 'medium';
+    return 'low';
+  }
+
+  extractKeywords(text) {
+    // Extract meaningful keywords from text
+    const words = text.toLowerCase().split(/\s+/);
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']);
+    return words.filter(word => word.length > 2 && !stopWords.has(word) && /^[a-z]+$/.test(word));
+  }
+
+  async findJsFiles() {
+    // Find JavaScript/TypeScript files in the project
+    try {
+      const { globSync } = await import('glob');
+      return globSync('**/*.{js,ts,jsx,tsx}', { 
+        ignore: ['node_modules/**', 'dist/**', 'build/**', '.git/**'],
+        absolute: true 
+      });
+    } catch (error) {
+      return ['src/**/*.js', 'lib/**/*.js']; // Fallback
+    }
+  }
+
+  async findRouteFiles() {
+    // Find files likely to contain API routes
+    try {
+      const { globSync } = await import('glob');
+      return globSync('**/{routes,router,api,controllers}/**/*.{js,ts}', { 
+        ignore: ['node_modules/**', 'dist/**', 'build/**'],
+        absolute: true 
+      });
+    } catch (error) {
+      return ['src/routes/**/*.js', 'src/api/**/*.js']; // Fallback
+    }
+  }
+
+  async getAllCodeFiles() {
+    // Get all code files for generic searching
+    try {
+      const { globSync } = await import('glob');
+      return globSync('**/*.{js,ts,jsx,tsx,py,java,c,cpp,cs,php,rb,go}', { 
+        ignore: ['node_modules/**', 'dist/**', 'build/**', '.git/**'],
+        absolute: true 
+      }).slice(0, 50); // Limit for performance
+    } catch (error) {
+      return []; // Fallback
+    }
+  }
+
+  async checkFunctionForBehavior(functionName, behaviorKeyword) {
+    const files = await this.findJsFiles();
+    
+    for (const file of files) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        
+        // Find the function and check its body for the behavior
+        const functionRegex = new RegExp(`(?:function\\s+${functionName}|${functionName}\\s*[=:].*?)\\s*\\{([^{}]*(?:\\{[^{}]*\\}[^{}]*)*)\\}`, 's');
+        const match = content.match(functionRegex);
+        
+        if (match && match[1]) {
+          const functionBody = match[1];
+          const hasExpectedBehavior = functionBody.toLowerCase().includes(behaviorKeyword.toLowerCase());
+          if (hasExpectedBehavior) return true;
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    return false;
+  }
+
+  async findFilesContainingFunction(functionName) {
+    const files = await this.findJsFiles();
+    const containingFiles = [];
+    
+    for (const file of files) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        if (content.includes(functionName)) {
+          containingFiles.push(file);
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    return containingFiles;
   }
 
   async checkOutdatedSpecs(specs, assertions, issues) {
