@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { ObserverAgent } from '../index.js';
+import { parseAllSpecs } from '../../parser/index.js';
 
 // Test utilities
 async function createTestDir(dirname) {
@@ -132,6 +133,182 @@ export async function testObserverDetectsMissingCliCommands() {
   }
 }
 
+// Test: Observer detects spec conflicts - mutually exclusive requirements
+export async function testObserverDetectsExclusiveRequirements() {
+  const testDir = 'test-spec-conflicts';
+  
+  try {
+    await createTestDir(testDir);
+    
+    // Create conflicting specs
+    await createTestDir(path.join(testDir, 'specs', 'spec-a', 'assertions'));
+    await createTestDir(path.join(testDir, 'specs', 'spec-b', 'assertions'));
+    
+    const specA = `---
+id: spec-a
+created: 2026-01-01T10:00:00Z
+priority: 1
+status: not_started
+---
+
+# Spec A
+This spec requires the system to use SQLite database.`;
+
+    const specB = `---
+id: spec-b
+created: 2026-01-01T11:00:00Z
+priority: 1
+status: not_started
+---
+
+# Spec B
+This spec requires the system to use PostgreSQL database.`;
+
+    await createTestFile(path.join(testDir, 'specs', 'spec-a', 'spec-a.md'), specA);
+    await createTestFile(path.join(testDir, 'specs', 'spec-b', 'spec-b.md'), specB);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    // Parse the test specs
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkSpecConflicts(specs, assertions, issues);
+    
+    const conflictIssues = issues.filter(i => i.type === 'spec_conflicts');
+    
+    if (conflictIssues.length === 0) {
+      throw new Error('Expected to find database requirement conflicts');
+    }
+    
+    console.log('✅ Observer detects exclusive requirements test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
+// Test: Observer detects conflicting file structure requirements
+export async function testObserverDetectsFileStructureConflicts() {
+  const testDir = 'test-file-conflicts';
+  
+  try {
+    await createTestDir(testDir);
+    await createTestDir(path.join(testDir, 'specs', 'spec-c', 'assertions'));
+    await createTestDir(path.join(testDir, 'specs', 'spec-d', 'assertions'));
+    
+    const specC = `---
+id: spec-c
+created: 2026-01-01T10:00:00Z
+priority: 1
+status: not_started
+---
+
+# Spec C
+Create src/config/database.js for database configuration.`;
+
+    const specD = `---
+id: spec-d
+created: 2026-01-01T11:00:00Z
+priority: 1
+status: not_started
+---
+
+# Spec D
+Create src/config/database.ts for database configuration using TypeScript.`;
+
+    await createTestFile(path.join(testDir, 'specs', 'spec-c', 'spec-c.md'), specC);
+    await createTestFile(path.join(testDir, 'specs', 'spec-d', 'spec-d.md'), specD);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    // Parse the test specs
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkSpecConflicts(specs, assertions, issues);
+    
+    const conflictIssues = issues.filter(i => i.type === 'spec_conflicts');
+    
+    if (conflictIssues.length === 0) {
+      throw new Error('Expected to find file structure conflicts');
+    }
+    
+    console.log('✅ Observer detects file structure conflicts test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
+// Test: Observer detects priority conflicts
+export async function testObserverDetectsPriorityConflicts() {
+  const testDir = 'test-priority-conflicts';
+  
+  try {
+    await createTestDir(testDir);
+    await createTestDir(path.join(testDir, 'specs', 'spec-e', 'assertions'));
+    await createTestDir(path.join(testDir, 'specs', 'spec-f', 'assertions'));
+    
+    const specE = `---
+id: spec-e
+created: 2026-01-01T10:00:00Z
+priority: 1
+status: not_started
+---
+
+# Spec E
+Must be completed before any database work. Removes all database functionality.`;
+
+    const specF = `---
+id: spec-f
+created: 2026-01-01T11:00:00Z
+priority: 1
+status: not_started
+---
+
+# Spec F
+High priority database implementation. Requires database setup.`;
+
+    await createTestFile(path.join(testDir, 'specs', 'spec-e', 'spec-e.md'), specE);
+    await createTestFile(path.join(testDir, 'specs', 'spec-f', 'spec-f.md'), specF);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    // Parse the test specs
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkSpecConflicts(specs, assertions, issues);
+    
+    const conflictIssues = issues.filter(i => i.type === 'spec_conflicts');
+    
+    if (conflictIssues.length === 0) {
+      throw new Error('Expected to find priority conflicts');
+    }
+    
+    console.log('✅ Observer detects priority conflicts test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
 // Test: Observer creates observation files
 export async function testObserverCreatesObservationFiles() {
   const testDir = 'test-observations-output';
@@ -215,6 +392,9 @@ export async function runAllTests() {
     await testObserverCustomOptions();
     await testObserverCreatesObservationsDir();
     await testObserverDetectsMissingCliCommands();
+    await testObserverDetectsExclusiveRequirements();
+    await testObserverDetectsFileStructureConflicts();
+    await testObserverDetectsPriorityConflicts();
     await testObserverCreatesObservationFiles();
     
     console.log('\n🎉 All Observer Agent tests passed!');
