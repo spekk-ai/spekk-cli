@@ -3,7 +3,7 @@ id: creates-detailed-pr-descriptions
 parent: builder-agent
 created: 2026-01-22T17:20:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Builder Creates Detailed PR Descriptions
