@@ -704,6 +704,402 @@ app.get('/users', (req, res) => {
   }
 }
 
+// Test: Observer detects specs marked done but with significantly changed code
+export async function testObserverDetectsOutdatedDoneSpecs() {
+  const testDir = 'test-outdated-done-specs';
+  
+  try {
+    await createTestDir(testDir);
+    await createTestDir(path.join(testDir, 'specs', 'user-api', 'assertions'));
+    
+    // Create spec marked as done but code has changed significantly
+    const specContent = `---
+id: user-api
+created: 2025-01-01T10:00:00Z
+priority: 1
+status: done
+---
+
+# User API
+
+User management API endpoints.`;
+
+    const assertionContent = `---
+id: user-endpoints
+parent: user-api
+created: 2025-01-01T10:30:00Z
+priority: 1
+status: done
+---
+
+# User Endpoints
+
+## Success Criteria
+
+- [ ] GET /api/users returns user list
+- [ ] POST /api/users creates new user
+- [ ] User objects include id, name, email fields
+`;
+
+    // Create old implementation that the spec was based on
+    const oldApiCode = `// Original simple implementation
+app.get('/api/users', (req, res) => {
+  res.json(users);
+});
+
+app.post('/api/users', (req, res) => {
+  const user = { id: users.length + 1, name: req.body.name, email: req.body.email };
+  users.push(user);
+  res.json(user);
+});`;
+
+    // Create significantly changed implementation
+    const newApiCode = `// Completely rewritten with different structure
+import { UserService } from './services/UserService.js';
+import { validateUserInput } from './validation/userValidation.js';
+
+const userService = new UserService();
+
+// Now uses pagination, different response format, and authentication
+app.get('/v2/users', authenticateToken, async (req, res) => {
+  const { page = 1, limit = 10 } = req.query;
+  const result = await userService.getPaginatedUsers(page, limit);
+  res.json({
+    users: result.data,
+    pagination: {
+      page: result.page,
+      totalPages: result.totalPages,
+      total: result.total
+    }
+  });
+});
+
+// Different validation, different response structure
+app.post('/v2/users', authenticateToken, async (req, res) => {
+  try {
+    const validatedData = validateUserInput(req.body);
+    const user = await userService.createUser(validatedData);
+    res.status(201).json({
+      success: true,
+      user: {
+        id: user.id,
+        profile: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          createdAt: user.createdAt
+        }
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});`;
+
+    await createTestFile(path.join(testDir, 'specs', 'user-api', 'user-api.md'), specContent);
+    await createTestFile(path.join(testDir, 'specs', 'user-api', 'assertions', 'user-endpoints.md'), assertionContent);
+    await createTestFile(path.join(testDir, 'src', 'api', 'users.js'), newApiCode);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    // Parse the test specs
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkOutdatedSpecs(specs, assertions, issues);
+    
+    const outdatedIssues = issues.filter(i => i.type === 'outdated_specs');
+    
+    if (outdatedIssues.length === 0) {
+      throw new Error('Expected to find outdated spec with significantly changed code');
+    }
+    
+    const issue = outdatedIssues[0];
+    if (!issue.description.includes('changed significantly') && !issue.description.includes('implementation') && !issue.description.includes('significantly')) {
+      throw new Error('Issue should indicate that implementation has changed significantly');
+    }
+    
+    console.log('✅ Observer detects outdated done specs test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
+// Test: Observer detects specs referencing deprecated functionality
+export async function testObserverDetectsDeprecatedFunctionality() {
+  const testDir = 'test-deprecated-functionality';
+  
+  try {
+    await createTestDir(testDir);
+    await createTestDir(path.join(testDir, 'specs', 'legacy-auth', 'assertions'));
+    
+    const specContent = `---
+id: legacy-auth
+created: 2024-06-01T10:00:00Z
+priority: 2
+status: not_started
+---
+
+# Legacy Authentication
+
+Authentication using the old session-based system with express-session middleware.`;
+
+    const assertionContent = `---
+id: session-auth
+parent: legacy-auth
+created: 2024-06-01T10:30:00Z
+priority: 1
+status: not_started
+---
+
+# Session Authentication
+
+## Success Criteria
+
+- [ ] Uses express-session middleware for session management
+- [ ] Stores session data in MemoryStore
+- [ ] Authenticates users with session cookies
+`;
+
+    // Create package.json showing deprecated packages are no longer installed
+    const packageJsonContent = JSON.stringify({
+      "dependencies": {
+        "express": "^4.18.0",
+        "jsonwebtoken": "^9.0.0",
+        "@auth0/express-jwt": "^7.0.0"
+      },
+      "devDependencies": {
+        "jest": "^29.0.0"
+      }
+    }, null, 2);
+
+    // Create current implementation using JWT instead of sessions
+    const currentAuthCode = `// Modern JWT-based authentication (no sessions)
+import jwt from 'jsonwebtoken';
+import { expressjwt } from 'express-jwt';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+
+// JWT middleware (no sessions)
+const authenticateJWT = expressjwt({
+  secret: JWT_SECRET,
+  algorithms: ['HS256'],
+  getToken: (req) => {
+    return req.headers.authorization?.split(' ')[1];
+  }
+});
+
+export { authenticateJWT };`;
+
+    await createTestFile(path.join(testDir, 'specs', 'legacy-auth', 'legacy-auth.md'), specContent);
+    await createTestFile(path.join(testDir, 'specs', 'legacy-auth', 'assertions', 'session-auth.md'), assertionContent);
+    await createTestFile(path.join(testDir, 'package.json'), packageJsonContent);
+    await createTestFile(path.join(testDir, 'src', 'auth', 'jwt.js'), currentAuthCode);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkOutdatedSpecs(specs, assertions, issues);
+    
+    const outdatedIssues = issues.filter(i => i.type === 'outdated_specs');
+    
+    if (outdatedIssues.length === 0) {
+      throw new Error('Expected to find spec referencing deprecated functionality');
+    }
+    
+    const issue = outdatedIssues[0];
+    if (!issue.description.includes('deprecated') && !issue.description.includes('no longer available')) {
+      throw new Error('Issue should indicate deprecated or removed functionality');
+    }
+    
+    console.log('✅ Observer detects deprecated functionality test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
+// Test: Observer detects stale specs based on timestamp patterns
+export async function testObserverDetectsStaleSpecsByTimestamp() {
+  const testDir = 'test-stale-timestamps';
+  
+  try {
+    await createTestDir(testDir);
+    await createTestDir(path.join(testDir, 'specs', 'old-feature', 'assertions'));
+    
+    // Create very old spec that hasn't been updated
+    const oldSpecContent = `---
+id: old-feature
+created: 2023-01-01T10:00:00Z
+priority: 2
+status: in_progress
+---
+
+# Old Feature
+
+A feature that was started long ago but never completed or updated.`;
+
+    const oldAssertionContent = `---
+id: old-assertion
+parent: old-feature
+created: 2023-01-01T10:30:00Z
+priority: 1
+status: in_progress
+---
+
+# Old Assertion
+
+## Success Criteria
+
+- [ ] Implement legacy API using outdated patterns
+`;
+
+    await createTestFile(path.join(testDir, 'specs', 'old-feature', 'old-feature.md'), oldSpecContent);
+    await createTestFile(path.join(testDir, 'specs', 'old-feature', 'assertions', 'old-assertion.md'), oldAssertionContent);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkOutdatedSpecs(specs, assertions, issues);
+    
+    const outdatedIssues = issues.filter(i => i.type === 'outdated_specs');
+    
+    if (outdatedIssues.length === 0) {
+      throw new Error('Expected to find stale spec based on timestamp');
+    }
+    
+    const issue = outdatedIssues[0];
+    if (!issue.description.includes('stale') && !issue.description.includes('old') && !issue.description.includes('timestamp')) {
+      throw new Error('Issue should indicate stale/old timestamp pattern');
+    }
+    
+    console.log('✅ Observer detects stale specs by timestamp test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
+// Test: Observer detects specs conflicting with newer implementation patterns  
+export async function testObserverDetectsNewerPatternConflicts() {
+  const testDir = 'test-newer-patterns';
+  
+  try {
+    await createTestDir(testDir);
+    await createTestDir(path.join(testDir, 'specs', 'callback-api', 'assertions'));
+    
+    // Old spec requiring callback-based patterns
+    const callbackSpecContent = `---
+id: callback-api
+created: 2024-01-01T10:00:00Z
+priority: 2
+status: not_started
+---
+
+# Callback-based API
+
+API using traditional callback patterns for async operations.`;
+
+    const callbackAssertionContent = `---
+id: callback-patterns
+parent: callback-api
+created: 2024-01-01T10:30:00Z
+priority: 1
+status: not_started
+---
+
+# Callback Patterns
+
+## Success Criteria
+
+- [ ] Use callback functions for async operations
+- [ ] Handle errors via error-first callback pattern
+- [ ] No promises or async/await patterns
+`;
+
+    // Modern codebase using async/await everywhere
+    const modernAsyncCode = `// Modern async/await implementation
+export class UserService {
+  async getUsers() {
+    try {
+      const users = await db.users.findMany();
+      return { success: true, data: users };
+    } catch (error) {
+      throw new Error(\`Failed to get users: \${error.message}\`);
+    }
+  }
+
+  async createUser(userData) {
+    try {
+      const user = await db.users.create({ data: userData });
+      return { success: true, user };
+    } catch (error) {
+      throw new Error(\`Failed to create user: \${error.message}\`);
+    }
+  }
+}
+
+// All async operations use promises/async-await
+export async function processUserData(userId) {
+  const user = await userService.getUsers();
+  const processed = await dataProcessor.process(user);
+  return await storage.save(processed);
+}`;
+
+    await createTestFile(path.join(testDir, 'specs', 'callback-api', 'callback-api.md'), callbackSpecContent);
+    await createTestFile(path.join(testDir, 'specs', 'callback-api', 'assertions', 'callback-patterns.md'), callbackAssertionContent);
+    await createTestFile(path.join(testDir, 'src', 'services', 'UserService.js'), modernAsyncCode);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkOutdatedSpecs(specs, assertions, issues);
+    
+    const outdatedIssues = issues.filter(i => i.type === 'outdated_specs');
+    
+    if (outdatedIssues.length === 0) {
+      throw new Error('Expected to find spec conflicting with newer implementation patterns');
+    }
+    
+    const issue = outdatedIssues[0];
+    if (!issue.description.includes('pattern') && !issue.description.includes('modern') && !issue.description.includes('newer')) {
+      throw new Error('Issue should indicate conflict with newer patterns');
+    }
+    
+    console.log('✅ Observer detects newer pattern conflicts test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
 // Run all tests
 export async function runAllTests() {
   console.log('🧪 Running Observer Agent tests...\n');
@@ -720,6 +1116,10 @@ export async function runAllTests() {
     await testObserverComparesAssertionSuccessCriteria();
     await testObserverDetectsSpecCompressionOpportunities();
     await testObserverDetectsFunctionRequirementMismatch();
+    await testObserverDetectsOutdatedDoneSpecs();
+    await testObserverDetectsDeprecatedFunctionality();
+    await testObserverDetectsStaleSpecsByTimestamp();
+    await testObserverDetectsNewerPatternConflicts();
     
     console.log('\n🎉 All Observer Agent tests passed!');
   } catch (error) {

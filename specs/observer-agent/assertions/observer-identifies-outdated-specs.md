@@ -3,12 +3,14 @@ id: observer-identifies-outdated-specs
 parent: observer-agent
 created: 2026-01-22T17:00:00Z
 priority: 3
-status: not_started
+status: done
 ---
 
 # Observer Identifies Outdated Specs
 
 The observer detects specifications that no longer reflect current system needs or implementation reality.
+
+**Tests:** src/observer/__tests__/observer.test.js
 
 ## Success Criteria
 

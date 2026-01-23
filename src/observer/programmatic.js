@@ -787,7 +787,27 @@ export class ObserverAgent {
   }
 
   async checkOutdatedSpecs(specs, assertions, issues) {
-    // Check for specs marked as done but with recent file changes
+    // Type 2: Outdated Specs - Multiple checks for different types of outdated specs
+    
+    // 1. Check for specs marked done but with significantly changed code
+    await this.checkDoneSpecsWithChangedCode(specs, assertions, issues);
+    
+    // 2. Check for specs referencing deprecated or removed functionality
+    await this.checkSpecsReferencingDeprecatedFunctionality(specs, assertions, issues);
+    
+    // 3. Check for specs with success criteria no longer relevant
+    await this.checkSpecsWithIrrelevantCriteria(specs, assertions, issues);
+    
+    // 4. Check for specs duplicating functionality handled elsewhere
+    await this.checkSpecsDuplicatingFunctionality(specs, assertions, issues);
+    
+    // 5. Check timestamp patterns to identify stale specs
+    await this.checkStaleSpecsByTimestamp(specs, assertions, issues);
+    
+    // 6. Check for specs conflicting with newer implementation patterns
+    await this.checkSpecsConflictingWithNewerPatterns(specs, assertions, issues);
+    
+    // Original check: specs marked done but with incomplete assertions
     for (const spec of specs) {
       if (spec.status === 'done') {
         const specAssertions = assertions.filter(a => a.parent === spec.id);
@@ -805,6 +825,547 @@ export class ObserverAgent {
         }
       }
     }
+  }
+
+  async checkDoneSpecsWithChangedCode(specs, assertions, issues) {
+    // Look for specs marked as done but code has changed significantly
+    const doneSpecs = specs.filter(s => s.status === 'done');
+    
+    for (const spec of doneSpecs) {
+      const specAssertions = assertions.filter(a => a.parent === spec.id && a.status === 'done');
+      
+      // Extract file paths and API endpoints from assertions
+      const referencedPaths = [];
+      const apiEndpoints = [];
+      
+      for (const assertion of specAssertions) {
+        // Look for file paths in success criteria
+        const pathMatches = assertion.content.match(/[\w/-]+\.(?:js|ts|jsx|tsx|py|java)/g);
+        if (pathMatches) {
+          referencedPaths.push(...pathMatches);
+        }
+        
+        // Look for API endpoints
+        const endpointMatches = assertion.content.match(/(?:GET|POST|PUT|DELETE|PATCH)\s+\/[^\s]*/gi);
+        if (endpointMatches) {
+          apiEndpoints.push(...endpointMatches);
+        }
+      }
+      
+      // Also scan for files that might implement the spec's functionality
+      // Look for files that could be related to the spec
+      const specKeywords = this.extractKeywords(spec.content + ' ' + specAssertions.map(a => a.content).join(' '));
+      const potentialFiles = await this.findFilesRelatedToSpec(specKeywords, apiEndpoints);
+      
+      // Combine explicitly referenced paths with potential files
+      const allPaths = [...new Set([...referencedPaths, ...potentialFiles])];
+      
+      // Check if referenced files still match the spec requirements
+      for (const filePath of allPaths) {
+        if (await this.pathExists(filePath)) {
+          try {
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            const hasSignificantChanges = await this.detectSignificantChanges(fileContent, spec, specAssertions);
+            
+            if (hasSignificantChanges) {
+              issues.push({
+                type: 'outdated_specs',
+                severity: 'high',
+                title: `Spec marked done but implementation has significantly changed: ${spec.id}`,
+                description: `Spec ${spec.id} is marked as done but the implementation in ${filePath} has changed significantly and may no longer match the specification`,
+                affected_specs: [spec.id],
+                affected_files: [spec.file, filePath]
+              });
+            }
+          } catch (error) {
+            // File read error - might be moved or renamed
+            issues.push({
+              type: 'outdated_specs',
+              severity: 'medium',
+              title: `Spec references inaccessible file: ${spec.id}`,
+              description: `Spec ${spec.id} references ${filePath} which cannot be read (may be moved, renamed, or deleted)`,
+              affected_specs: [spec.id],
+              affected_files: [spec.file, filePath]
+            });
+          }
+        }
+      }
+      
+      // Check API endpoints for significant changes
+      for (const endpoint of apiEndpoints) {
+        const hasChangedEndpoint = await this.detectChangedApiEndpoint(endpoint, spec);
+        if (hasChangedEndpoint) {
+          issues.push({
+            type: 'outdated_specs',
+            severity: 'high',
+            title: `API endpoint implementation changed: ${spec.id}`,
+            description: `Spec ${spec.id} defines ${endpoint} but the current implementation has different behavior or structure`,
+            affected_specs: [spec.id],
+            affected_files: [spec.file]
+          });
+        }
+      }
+    }
+  }
+
+  async checkSpecsReferencingDeprecatedFunctionality(specs, assertions, issues) {
+    // Check package.json and codebase for deprecated dependencies or patterns
+    const packageJsonPath = 'package.json';
+    let currentDependencies = {};
+    
+    try {
+      const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+      currentDependencies = {
+        ...packageJson.dependencies || {},
+        ...packageJson.devDependencies || {}
+      };
+    } catch (error) {
+      // No package.json or can't read it
+    }
+    
+    // Common deprecated packages/patterns to check for
+    const deprecatedPatterns = [
+      { pattern: /express-session|connect-session/i, replacement: 'JWT tokens', type: 'session management' },
+      { pattern: /body-parser/i, replacement: 'built-in express.json()', type: 'request parsing' },
+      { pattern: /request\s+package/i, replacement: 'fetch API or axios', type: 'HTTP client' },
+      { pattern: /bower/i, replacement: 'npm or yarn', type: 'package manager' },
+      { pattern: /grunt|gulp/i, replacement: 'webpack, vite, or npm scripts', type: 'build tools' },
+      { pattern: /callback.*pattern/i, replacement: 'promises or async/await', type: 'async patterns' },
+      { pattern: /var\s+/i, replacement: 'const or let', type: 'variable declaration' }
+    ];
+    
+    for (const spec of specs) {
+      for (const assertion of assertions.filter(a => a.parent === spec.id)) {
+        const content = (spec.content + ' ' + assertion.content).toLowerCase();
+        
+        for (const deprecated of deprecatedPatterns) {
+          if (deprecated.pattern.test(content)) {
+            // Check if the deprecated functionality is actually missing from current setup
+            const isDeprecated = await this.isDeprecatedInCurrentSetup(deprecated, currentDependencies);
+            
+            if (isDeprecated) {
+              issues.push({
+                type: 'outdated_specs',
+                severity: 'medium',
+                title: `Spec references deprecated functionality: ${deprecated.type}`,
+                description: `Spec ${spec.id} references ${deprecated.type} which is deprecated or no longer available. Consider updating to use ${deprecated.replacement}`,
+                affected_specs: [spec.id],
+                affected_files: [spec.file]
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  async checkSpecsWithIrrelevantCriteria(specs, assertions, issues) {
+    // Look for specs with success criteria that may no longer be relevant
+    for (const spec of specs) {
+      const specAssertions = assertions.filter(a => a.parent === spec.id);
+      
+      for (const assertion of specAssertions) {
+        const criteria = this.extractSuccessCriteria(assertion.content);
+        
+        for (const criterion of criteria) {
+          const isRelevant = await this.isCriterionStillRelevant(criterion, spec);
+          
+          if (!isRelevant) {
+            issues.push({
+              type: 'outdated_specs',
+              severity: 'low',
+              title: `Spec contains potentially irrelevant criteria: ${spec.id}`,
+              description: `Assertion ${assertion.id} in spec ${spec.id} contains criteria "${criterion.text}" which may no longer be relevant to current implementation`,
+              affected_specs: [spec.id],
+              affected_files: [spec.file, assertion.file]
+            });
+          }
+        }
+      }
+    }
+  }
+
+  async checkSpecsDuplicatingFunctionality(specs, assertions, issues) {
+    // Look for specs that may duplicate functionality now handled elsewhere
+    const functionalityMap = {};
+    
+    // Build a map of functionality described in specs
+    for (const spec of specs) {
+      const specAssertions = assertions.filter(a => a.parent === spec.id);
+      const functionality = this.extractSpecFunctionality(spec, specAssertions);
+      
+      for (const func of functionality) {
+        if (!functionalityMap[func.key]) {
+          functionalityMap[func.key] = [];
+        }
+        functionalityMap[func.key].push({ spec, functionality: func });
+      }
+    }
+    
+    // Check for duplicates and cross-reference with actual implementation
+    for (const [funcKey, specList] of Object.entries(functionalityMap)) {
+      if (specList.length > 1) {
+        // Check if this functionality is now handled by a single implementation
+        const isHandledElsewhere = await this.isFunctionalityHandledElsewhere(funcKey, specList);
+        
+        if (isHandledElsewhere) {
+          // Find which spec might be obsolete
+          const sortedByDate = specList.sort((a, b) => 
+            new Date(a.spec.created) - new Date(b.spec.created)
+          );
+          
+          // Suggest the older specs might be obsolete
+          for (let i = 0; i < sortedByDate.length - 1; i++) {
+            const spec = sortedByDate[i].spec;
+            issues.push({
+              type: 'outdated_specs',
+              severity: 'medium',
+              title: `Spec may duplicate functionality handled elsewhere: ${spec.id}`,
+              description: `Spec ${spec.id} describes functionality (${funcKey}) that appears to be handled by newer implementation. Consider if this spec is still needed.`,
+              affected_specs: [spec.id],
+              affected_files: [spec.file]
+            });
+          }
+        }
+      }
+    }
+  }
+
+  async checkStaleSpecsByTimestamp(specs, assertions, issues) {
+    const now = new Date();
+    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const sixMonthsAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+    
+    for (const spec of specs) {
+      const specDate = new Date(spec.created);
+      const specAssertions = assertions.filter(a => a.parent === spec.id);
+      
+      // Check if spec is very old and hasn't been updated
+      if (specDate < oneYearAgo) {
+        // Check if any assertions were updated recently
+        const hasRecentActivity = specAssertions.some(a => {
+          const assertionDate = new Date(a.created);
+          return assertionDate > sixMonthsAgo || a.status === 'done';
+        });
+        
+        if (!hasRecentActivity && spec.status !== 'done') {
+          issues.push({
+            type: 'outdated_specs',
+            severity: 'medium',
+            title: `Stale spec with old timestamp: ${spec.id}`,
+            description: `Spec ${spec.id} was created over a year ago (${spec.created}) with no recent activity. Consider if it's still relevant or needs updating.`,
+            affected_specs: [spec.id],
+            affected_files: [spec.file]
+          });
+        }
+      }
+      
+      // Check for specs in progress for a very long time
+      if (spec.status === 'in_progress' && specDate < sixMonthsAgo) {
+        issues.push({
+          type: 'outdated_specs',
+          severity: 'low',
+          title: `Long-running in-progress spec: ${spec.id}`,
+          description: `Spec ${spec.id} has been in progress for over 6 months (since ${spec.created}). Consider reviewing its status and relevance.`,
+          affected_specs: [spec.id],
+          affected_files: [spec.file]
+        });
+      }
+    }
+  }
+
+  async checkSpecsConflictingWithNewerPatterns(specs, assertions, issues) {
+    // Analyze current codebase patterns
+    const modernPatterns = await this.detectModernPatterns();
+    
+    // Patterns that indicate older approaches
+    const oldPatterns = [
+      { pattern: /callback.*function/i, modern: 'async/await', category: 'async' },
+      { pattern: /var\s+/i, modern: 'const/let', category: 'variables' },
+      { pattern: /function.*constructor/i, modern: 'class syntax', category: 'classes' },
+      { pattern: /\.prototype\./i, modern: 'class methods', category: 'classes' },
+      { pattern: /require\(/i, modern: 'ES6 imports', category: 'modules' },
+      { pattern: /express-session/i, modern: 'JWT tokens', category: 'auth' },
+      { pattern: /synchronous.*operation/i, modern: 'async patterns', category: 'async' }
+    ];
+    
+    for (const spec of specs) {
+      const specAssertions = assertions.filter(a => a.parent === spec.id);
+      const fullContent = spec.content + ' ' + specAssertions.map(a => a.content).join(' ');
+      
+      for (const oldPattern of oldPatterns) {
+        if (oldPattern.pattern.test(fullContent)) {
+          // Check if the modern equivalent is widely used in current codebase
+          const modernIsPreferred = modernPatterns[oldPattern.category] && 
+                                   modernPatterns[oldPattern.category].usage > 0.7;
+          
+          if (modernIsPreferred) {
+            issues.push({
+              type: 'outdated_specs',
+              severity: 'low',
+              title: `Spec conflicts with newer implementation patterns: ${spec.id}`,
+              description: `Spec ${spec.id} describes ${oldPattern.category} using older patterns, but the codebase has largely adopted ${oldPattern.modern}. Consider updating the spec to align with current patterns.`,
+              affected_specs: [spec.id],
+              affected_files: [spec.file]
+            });
+          }
+        }
+      }
+    }
+  }
+  
+  // Helper methods for outdated spec detection
+  
+  async detectSignificantChanges(fileContent, spec, assertions) {
+    // Simple heuristic: check if the file structure or key patterns have changed dramatically
+    const specContent = spec.content.toLowerCase();
+    const assertionContent = assertions.map(a => a.content.toLowerCase()).join(' ');
+    
+    // Look for key terms from the spec in the file
+    const specKeywords = this.extractKeywords(specContent + ' ' + assertionContent);
+    const fileKeywords = this.extractKeywords(fileContent.toLowerCase());
+    
+    const matchingKeywords = specKeywords.filter(keyword => 
+      fileKeywords.some(fkw => fkw.includes(keyword) || keyword.includes(fkw))
+    );
+    
+    // If less than 30% of spec keywords are found, consider it significantly changed
+    const matchRatio = matchingKeywords.length / Math.max(specKeywords.length, 1);
+    return matchRatio < 0.3;
+  }
+
+  async detectChangedApiEndpoint(endpoint, spec) {
+    // Look for the endpoint in route files
+    const routeFiles = await this.findRouteFiles();
+    const [method, path] = endpoint.split(' ');
+    
+    for (const file of routeFiles) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        
+        // Check if endpoint exists but with different implementation
+        const hasEndpoint = content.includes(path);
+        if (hasEndpoint) {
+          // Simple check: if the endpoint exists but the method or response structure looks very different
+          const methodPattern = new RegExp(`\\b${method.toLowerCase()}\\b.*${path.replace(/\//g, '\\/')}`, 'i');
+          if (!methodPattern.test(content)) {
+            return true; // Endpoint path exists but method changed
+          }
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    return false;
+  }
+
+  async isDeprecatedInCurrentSetup(deprecated, currentDependencies) {
+    const depName = deprecated.type;
+    
+    // Check if deprecated packages are missing from current dependencies
+    if (depName.includes('session') && !Object.keys(currentDependencies).includes('express-session')) {
+      return true;
+    }
+    
+    if (depName.includes('body-parser') && !Object.keys(currentDependencies).includes('body-parser')) {
+      return true;
+    }
+    
+    // For patterns, check current codebase usage
+    const codeFiles = await this.getAllCodeFiles();
+    const modernPatternFound = await this.checkForModernPatterns(codeFiles, deprecated);
+    
+    return modernPatternFound;
+  }
+
+  async isCriterionStillRelevant(criterion, spec) {
+    // Basic relevance check - see if the criterion references things that still exist
+    const keywords = this.extractKeywords(criterion.text);
+    const codeFiles = await this.getAllCodeFiles();
+    
+    let relevanceScore = 0;
+    for (const file of codeFiles.slice(0, 10)) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        const keywordMatches = keywords.filter(keyword => content.includes(keyword));
+        relevanceScore += keywordMatches.length;
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    // If very few keywords from the criterion are found in the codebase, it might be irrelevant
+    return relevanceScore > keywords.length * 0.2;
+  }
+
+  extractSpecFunctionality(spec, assertions) {
+    const functionality = [];
+    
+    // Extract functionality from spec and assertion content
+    const content = spec.content + ' ' + assertions.map(a => a.content).join(' ');
+    const functionalKeywords = [
+      'authentication', 'auth', 'login', 'signup', 'register',
+      'user management', 'users', 'user profile',
+      'api', 'endpoint', 'route', 'controller',
+      'database', 'storage', 'data', 'model',
+      'validation', 'error handling', 'logging',
+      'frontend', 'ui', 'component', 'page',
+      'testing', 'test', 'spec', 'assertion'
+    ];
+    
+    for (const keyword of functionalKeywords) {
+      if (content.toLowerCase().includes(keyword)) {
+        functionality.push({
+          key: keyword,
+          description: `${keyword} functionality`,
+          source: spec.id
+        });
+      }
+    }
+    
+    return functionality;
+  }
+
+  async isFunctionalityHandledElsewhere(funcKey, specList) {
+    // Simple check: see if there's implementation that handles this functionality
+    // in a way that might make multiple specs redundant
+    const codeFiles = await this.getAllCodeFiles();
+    
+    let implementationCount = 0;
+    for (const file of codeFiles.slice(0, 15)) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        if (content.toLowerCase().includes(funcKey)) {
+          implementationCount++;
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    // If there's significant implementation but multiple specs, might be duplication
+    return implementationCount > 0 && specList.length > 1;
+  }
+
+  async detectModernPatterns() {
+    const patterns = {
+      async: { usage: 0, total: 0 },
+      modules: { usage: 0, total: 0 },
+      variables: { usage: 0, total: 0 },
+      classes: { usage: 0, total: 0 }
+    };
+    
+    const codeFiles = await this.findJsFiles();
+    
+    for (const file of codeFiles.slice(0, 20)) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        
+        // Check async patterns
+        const hasAsync = /async|await|Promise/.test(content);
+        const hasCallbacks = /callback|cb\(/.test(content);
+        patterns.async.total++;
+        if (hasAsync && !hasCallbacks) patterns.async.usage++;
+        
+        // Check module patterns
+        const hasImports = /import.*from|export/.test(content);
+        const hasRequire = /require\(/.test(content);
+        patterns.modules.total++;
+        if (hasImports && !hasRequire) patterns.modules.usage++;
+        
+        // Check variable declarations
+        const hasModernVars = /const|let/.test(content);
+        const hasVar = /var\s/.test(content);
+        patterns.variables.total++;
+        if (hasModernVars && !hasVar) patterns.variables.usage++;
+        
+        // Check class patterns
+        const hasClass = /class\s+\w+/.test(content);
+        const hasPrototype = /\.prototype\./.test(content);
+        patterns.classes.total++;
+        if (hasClass && !hasPrototype) patterns.classes.usage++;
+        
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    // Calculate usage ratios
+    for (const pattern of Object.values(patterns)) {
+      pattern.usage = pattern.total > 0 ? pattern.usage / pattern.total : 0;
+    }
+    
+    return patterns;
+  }
+
+  async checkForModernPatterns(codeFiles, deprecated) {
+    // Check if modern alternatives to deprecated patterns are widely used
+    for (const file of codeFiles.slice(0, 10)) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        
+        // If looking for session patterns but finding JWT patterns
+        if (deprecated.type.includes('session') && /jwt|token|bearer/.test(content.toLowerCase())) {
+          return true;
+        }
+        
+        // If looking for callback patterns but finding async/await
+        if (deprecated.pattern.toString().includes('callback') && /async|await/.test(content)) {
+          return true;
+        }
+        
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    return false;
+  }
+
+  async findFilesRelatedToSpec(specKeywords, apiEndpoints) {
+    const relatedFiles = [];
+    const allFiles = await this.getAllCodeFiles();
+    
+    // If we have API endpoints, look for route/controller files
+    if (apiEndpoints.length > 0) {
+      const routeFiles = await this.findRouteFiles();
+      relatedFiles.push(...routeFiles);
+      
+      // Also look for files that might contain the API paths
+      for (const file of allFiles) {
+        try {
+          const content = await fs.readFile(file, 'utf8');
+          for (const endpoint of apiEndpoints) {
+            const path = endpoint.split(' ')[1]; // Get the path part
+            if (path && content.includes(path.replace(/^\//, ''))) {
+              relatedFiles.push(file);
+              break;
+            }
+          }
+        } catch (error) {
+          // Ignore file read errors
+        }
+      }
+    }
+    
+    // Look for files that contain spec keywords
+    for (const file of allFiles.slice(0, 20)) { // Limit for performance
+      try {
+        const content = (await fs.readFile(file, 'utf8')).toLowerCase();
+        const matchingKeywords = specKeywords.filter(keyword => 
+          content.includes(keyword.toLowerCase())
+        );
+        
+        if (matchingKeywords.length >= 2) { // Must match at least 2 keywords
+          relatedFiles.push(file);
+        }
+      } catch (error) {
+        // Ignore file read errors
+      }
+    }
+    
+    return [...new Set(relatedFiles)]; // Remove duplicates
   }
 
   async checkSpecConflicts(specs, assertions, issues) {
