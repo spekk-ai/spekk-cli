@@ -55,6 +55,9 @@ export class ObserverAgent {
       // Type 2: Outdated Specs - Check for done specs with changed files
       await this.checkOutdatedSpecs(specs, assertions, issues);
 
+      // Type 3: Spec Compression Opportunities - Check for specs that could be consolidated  
+      await this.checkSpecCompressionOpportunities(specs, assertions, issues);
+
       // Type 4: Spec Conflicts - Check for contradictory requirements
       await this.checkSpecConflicts(specs, assertions, issues);
 
@@ -1044,6 +1047,243 @@ export class ObserverAgent {
     return domains;
   }
 
+  async checkSpecCompressionOpportunities(specs, assertions, issues) {
+    // Skip if too few specs to compress
+    if (specs.length < 2) return;
+
+    // Find specs with overlapping functionality, scope, or targeting same components
+    const compressionCandidates = [];
+
+    for (let i = 0; i < specs.length; i++) {
+      for (let j = i + 1; j < specs.length; j++) {
+        const specA = specs[i];
+        const specB = specs[j];
+
+        const overlapAnalysis = this.analyzeSpecOverlap(specA, specB, assertions);
+        
+        if (overlapAnalysis.shouldCompress) {
+          compressionCandidates.push({
+            specs: [specA, specB],
+            overlapType: overlapAnalysis.overlapType,
+            confidence: overlapAnalysis.confidence,
+            reason: overlapAnalysis.reason,
+            evidence: overlapAnalysis.evidence
+          });
+        }
+      }
+    }
+
+    // Create compression opportunity observations
+    for (const candidate of compressionCandidates) {
+      // Consider priority and status when suggesting merges
+      const highPrioritySpecs = candidate.specs.filter(s => s.priority === 1);
+      const completedSpecs = candidate.specs.filter(s => s.status === 'done');
+      
+      let compressionAdvice = '';
+      let severity = 'medium';
+
+      if (completedSpecs.length > 0) {
+        severity = 'low';
+        compressionAdvice = 'Consider consolidation carefully as some specs are already completed.';
+      } else if (highPrioritySpecs.length > 1) {
+        severity = 'high';
+        compressionAdvice = 'High-priority specs with overlapping scope may benefit from consolidation to avoid duplication of effort.';
+      } else {
+        compressionAdvice = 'These specs could be consolidated to reduce complexity and improve clarity.';
+      }
+
+      issues.push({
+        type: 'compression_opportunity',
+        severity: severity,
+        title: `Spec compression opportunity: ${candidate.specs.map(s => s.id).join(' + ')}`,
+        description: `${candidate.reason}. ${compressionAdvice}`,
+        affected_specs: candidate.specs.map(s => s.id),
+        affected_files: candidate.specs.map(s => s.file),
+        overlap_type: candidate.overlapType,
+        confidence: candidate.confidence,
+        evidence: candidate.evidence,
+        original_specs: candidate.specs.map(s => ({ id: s.id, file: s.file, title: s.title }))
+      });
+    }
+  }
+
+  analyzeSpecOverlap(specA, specB, assertions) {
+    let overlapScore = 0;
+    let evidence = [];
+    let overlapType = [];
+
+    // 1. Check for overlapping functionality or scope
+    const functionalOverlap = this.checkFunctionalOverlap(specA, specB);
+    if (functionalOverlap.overlap) {
+      overlapScore += functionalOverlap.score;
+      evidence.push(functionalOverlap.evidence);
+      overlapType.push('functional');
+    }
+
+    // 2. Check if specs target the same system component
+    const componentOverlap = this.checkComponentOverlap(specA, specB);
+    if (componentOverlap.overlap) {
+      overlapScore += componentOverlap.score;
+      evidence.push(componentOverlap.evidence);
+      overlapType.push('component');
+    }
+
+    // 3. Check for similar success criteria patterns in assertions
+    const criteriaOverlap = this.checkSuccessCriteriaOverlap(specA, specB, assertions);
+    if (criteriaOverlap.overlap) {
+      overlapScore += criteriaOverlap.score;
+      evidence.push(criteriaOverlap.evidence);
+      overlapType.push('criteria');
+    }
+
+    // 4. Check for similar domains/keywords
+    const domainOverlap = this.checkDomainOverlap(specA, specB);
+    if (domainOverlap.overlap) {
+      overlapScore += domainOverlap.score;
+      evidence.push(domainOverlap.evidence);
+      overlapType.push('domain');
+    }
+
+    const shouldCompress = overlapScore >= 2; // Threshold for suggesting compression
+    const confidence = Math.min(overlapScore / 4, 1.0); // Confidence as percentage
+
+    let reason = '';
+    if (overlapType.includes('functional')) {
+      reason = 'Specs have overlapping functionality that could be consolidated';
+    } else if (overlapType.includes('component')) {
+      reason = 'Specs target the same system components';
+    } else if (overlapType.includes('criteria')) {
+      reason = 'Specs have similar success criteria patterns that suggest they could be merged';
+    } else if (overlapType.includes('domain')) {
+      reason = 'Specs operate in the same domain and could benefit from consolidation';
+    }
+
+    return {
+      shouldCompress,
+      overlapType: overlapType.join(', '),
+      confidence,
+      reason,
+      evidence
+    };
+  }
+
+  checkFunctionalOverlap(specA, specB) {
+    const functionalKeywords = [
+      'login', 'authentication', 'auth', 'user management', 'session',
+      'database', 'api', 'endpoint', 'crud', 'create', 'read', 'update', 'delete',
+      'validation', 'error handling', 'logging', 'configuration', 'config'
+    ];
+
+    const contentA = specA.content.toLowerCase();
+    const contentB = specB.content.toLowerCase();
+    
+    let matchCount = 0;
+    const matches = [];
+
+    for (const keyword of functionalKeywords) {
+      if (contentA.includes(keyword) && contentB.includes(keyword)) {
+        matchCount++;
+        matches.push(keyword);
+      }
+    }
+
+    const overlap = matchCount >= 2;
+    const score = overlap ? Math.min(matchCount, 3) : 0;
+    const evidence = overlap ? `Both specs mention: ${matches.join(', ')}` : '';
+
+    return { overlap, score, evidence };
+  }
+
+  checkComponentOverlap(specA, specB) {
+    // Look for file paths, directories, or component names
+    const pathPatterns = [
+      /\b[\w-]+\/[\w-]+(?:\/[\w-]+)*\.\w+\b/g, // File paths
+      /\b[\w-]+\/[\w-]+(?:\/[\w-]+)*\b/g, // Directory paths
+      /\bsrc\/[\w-]+\b/g, // Src directories
+      /\bcomponents\/[\w-]+\b/g // Components
+    ];
+
+    const pathsA = new Set();
+    const pathsB = new Set();
+
+    for (const pattern of pathPatterns) {
+      const matchesA = specA.content.match(pattern) || [];
+      const matchesB = specB.content.match(pattern) || [];
+      
+      matchesA.forEach(match => pathsA.add(match.toLowerCase()));
+      matchesB.forEach(match => pathsB.add(match.toLowerCase()));
+    }
+
+    const commonPaths = [...pathsA].filter(path => pathsB.has(path));
+    const overlap = commonPaths.length > 0;
+    const score = overlap ? Math.min(commonPaths.length, 2) : 0;
+    const evidence = overlap ? `Both specs reference: ${commonPaths.join(', ')}` : '';
+
+    return { overlap, score, evidence };
+  }
+
+  checkSuccessCriteriaOverlap(specA, specB, assertions) {
+    const assertionsA = assertions.filter(a => a.parent === specA.id);
+    const assertionsB = assertions.filter(a => a.parent === specB.id);
+
+    const criteriaA = [];
+    const criteriaB = [];
+
+    assertionsA.forEach(assertion => {
+      const criteria = this.extractSuccessCriteria(assertion.content);
+      criteriaA.push(...criteria.map(c => c.text.toLowerCase()));
+    });
+
+    assertionsB.forEach(assertion => {
+      const criteria = this.extractSuccessCriteria(assertion.content);
+      criteriaB.push(...criteria.map(c => c.text.toLowerCase()));
+    });
+
+    // Look for similar criteria patterns
+    let similarityScore = 0;
+    const similarities = [];
+
+    for (const criteriaTextA of criteriaA) {
+      for (const criteriaTextB of criteriaB) {
+        const similarity = this.calculateTextSimilarity(criteriaTextA, criteriaTextB);
+        if (similarity > 0.6) { // 60% similarity threshold
+          similarityScore++;
+          similarities.push(`"${criteriaTextA}" ≈ "${criteriaTextB}"`);
+        }
+      }
+    }
+
+    const overlap = similarityScore > 0;
+    const score = overlap ? Math.min(similarityScore, 2) : 0;
+    const evidence = overlap ? `Similar criteria: ${similarities.slice(0, 3).join(', ')}` : '';
+
+    return { overlap, score, evidence };
+  }
+
+  checkDomainOverlap(specA, specB) {
+    const domainsA = this.extractDomains(specA.content);
+    const domainsB = this.extractDomains(specB.content);
+
+    const commonDomains = domainsA.filter(domain => domainsB.includes(domain));
+    const overlap = commonDomains.length > 0;
+    const score = overlap ? Math.min(commonDomains.length, 2) : 0;
+    const evidence = overlap ? `Shared domains: ${commonDomains.join(', ')}` : '';
+
+    return { overlap, score, evidence };
+  }
+
+  calculateTextSimilarity(textA, textB) {
+    const wordsA = textA.split(/\s+/).filter(w => w.length > 2);
+    const wordsB = textB.split(/\s+/).filter(w => w.length > 2);
+    
+    if (wordsA.length === 0 || wordsB.length === 0) return 0;
+
+    const commonWords = wordsA.filter(word => wordsB.includes(word));
+    const similarity = commonWords.length / Math.max(wordsA.length, wordsB.length);
+    
+    return similarity;
+  }
+
   async createObservation(issue) {
     const timestamp = new Date().toISOString();
     const filename = `${timestamp.replace(/[:.]/g, '-')}.md`;
@@ -1061,11 +1301,17 @@ ${issue.affected_specs.map(spec => `  - ${spec}`).join('\n')}
 affected_files:
 ${issue.affected_files.map(file => `  - ${file}`).join('\n')}`;
 
-    // Add conflict-specific metadata for spec conflicts
+    // Add type-specific metadata
     if (issue.type === 'spec_conflicts') {
       frontmatter += `
 conflict_type: ${issue.conflict_type || 'unknown'}
 blocking: ${issue.blocking || false}`;
+    } else if (issue.type === 'compression_opportunity') {
+      frontmatter += `
+overlap_type: ${issue.overlap_type || 'unknown'}
+confidence: ${issue.confidence || 0}
+original_specs:
+${issue.original_specs.map(spec => `  - id: ${spec.id}\n    file: ${spec.file}\n    title: ${spec.title || spec.id}`).join('\n')}`;
     }
 
     frontmatter += `
@@ -1073,7 +1319,7 @@ blocking: ${issue.blocking || false}`;
 
     let recommendation = 'Review the affected specs and files to determine if updates are needed.';
     
-    // Add conflict-specific recommendations
+    // Add type-specific recommendations
     if (issue.type === 'spec_conflicts') {
       if (issue.blocking) {
         recommendation = `**BLOCKING CONFLICT**: This conflict prevents implementation progress. Immediate resolution required:
@@ -1090,11 +1336,50 @@ blocking: ${issue.blocking || false}`;
 3. Consider consolidating or clearly separating concerns
 4. Document any intentional differences`;
       }
+    } else if (issue.type === 'compression_opportunity') {
+      recommendation = `**SPEC COMPRESSION OPPORTUNITY**: These specs have overlapping scope and could be consolidated:
+
+1. Review the overlapping specs: ${issue.affected_specs.join(', ')}
+2. Analyze the overlap: ${issue.evidence.join('; ')}
+3. Consider merging into a single comprehensive spec
+4. Maintain traceability by referencing original specs in the consolidated version
+5. Update any existing assertions to point to the new consolidated spec
+
+**Confidence Level**: ${Math.round(issue.confidence * 100)}%
+**Overlap Type**: ${issue.overlap_type}`;
     }
     
-    const content = `${frontmatter}
+    let contentBody = '';
+    
+    if (issue.type === 'compression_opportunity') {
+      contentBody = `# ${issue.title}
 
-# ${issue.title}
+## Issue Description
+${issue.description}
+
+## Overlapping Specifications
+${issue.affected_specs.map(spec => `- **${spec}**: Referenced in specs/${spec}/${spec}.md`).join('\n')}
+
+## Overlap Analysis
+**Type**: ${issue.overlap_type}
+**Confidence**: ${Math.round(issue.confidence * 100)}%
+
+**Evidence**:
+${issue.evidence.map(evidence => `- ${evidence}`).join('\n')}
+
+## Original Specification Details
+${issue.original_specs.map(spec => `### ${spec.title || spec.id}
+- **File**: ${spec.file}
+- **ID**: ${spec.id}`).join('\n\n')}
+
+## Impact
+${this.getImpactMessage(issue.severity)}
+
+## Recommendation
+${recommendation}
+`;
+    } else {
+      contentBody = `# ${issue.title}
 
 ## Issue Description
 ${issue.description}
@@ -1111,6 +1396,9 @@ ${this.getImpactMessage(issue.severity)}
 ## Recommendation
 ${recommendation}
 `;
+    }
+
+    const content = frontmatter + '\n\n' + contentBody;
 
     await fs.writeFile(filePath, content, 'utf8');
     this.log(`Created observation: ${observationId}`);

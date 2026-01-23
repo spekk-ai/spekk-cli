@@ -465,6 +465,163 @@ export function calculateTotal(a) {
   }
 }
 
+// Test: Observer detects spec compression opportunities
+export async function testObserverDetectsSpecCompressionOpportunities() {
+  const testDir = 'test-compression-opportunities';
+  
+  try {
+    await createTestDir(testDir);
+    await createTestDir(path.join(testDir, 'specs', 'user-login', 'assertions'));
+    await createTestDir(path.join(testDir, 'specs', 'user-auth', 'assertions'));
+    await createTestDir(path.join(testDir, 'specs', 'authentication-system', 'assertions'));
+    
+    // Create three specs with overlapping functionality
+    const userLoginSpec = `---
+id: user-login
+created: 2026-01-01T10:00:00Z
+priority: 2
+status: not_started
+---
+
+# User Login
+
+Implements user login functionality with email and password validation.
+
+## Success Criteria
+
+- [ ] User can enter email and password
+- [ ] System validates credentials against database
+- [ ] Successful login redirects to dashboard
+- [ ] Failed login shows error message
+`;
+
+    const userAuthSpec = `---
+id: user-auth
+created: 2026-01-01T11:00:00Z
+priority: 2
+status: not_started
+---
+
+# User Authentication
+
+User authentication system with session management.
+
+## Success Criteria
+
+- [ ] User credentials are validated securely
+- [ ] JWT tokens are generated for authenticated users
+- [ ] Session management handles login/logout
+- [ ] Password reset functionality available
+`;
+
+    const authSystemSpec = `---
+id: authentication-system
+created: 2026-01-01T12:00:00Z
+priority: 2  
+status: not_started
+---
+
+# Authentication System
+
+Complete authentication system for user management.
+
+## Success Criteria
+
+- [ ] Login and logout functionality
+- [ ] Password validation and reset
+- [ ] Session token management
+- [ ] User profile management
+`;
+
+    // Create assertion files for each spec (required by parser)
+    const loginAssertion = `---
+id: login-validation
+parent: user-login
+created: 2026-01-01T10:30:00Z
+priority: 1
+status: not_started
+---
+
+# Login Validation
+
+User can login with email and password.
+`;
+
+    const authAssertion = `---
+id: jwt-tokens
+parent: user-auth
+created: 2026-01-01T11:30:00Z
+priority: 1
+status: not_started
+---
+
+# JWT Token Generation
+
+System generates JWT tokens for authenticated users.
+`;
+
+    const systemAssertion = `---
+id: session-management
+parent: authentication-system
+created: 2026-01-01T12:30:00Z
+priority: 1
+status: not_started
+---
+
+# Session Management
+
+Complete session management with login/logout.
+`;
+
+    await createTestFile(path.join(testDir, 'specs', 'user-login', 'user-login.md'), userLoginSpec);
+    await createTestFile(path.join(testDir, 'specs', 'user-auth', 'user-auth.md'), userAuthSpec);
+    await createTestFile(path.join(testDir, 'specs', 'authentication-system', 'authentication-system.md'), authSystemSpec);
+    
+    await createTestFile(path.join(testDir, 'specs', 'user-login', 'assertions', 'login-validation.md'), loginAssertion);
+    await createTestFile(path.join(testDir, 'specs', 'user-auth', 'assertions', 'jwt-tokens.md'), authAssertion);
+    await createTestFile(path.join(testDir, 'specs', 'authentication-system', 'assertions', 'session-management.md'), systemAssertion);
+    
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+    
+    const observer = new ObserverAgent({ quiet: true });
+    const issues = [];
+    
+    // Parse the test specs
+    const { specs, assertions } = parseAllSpecs();
+    
+    await observer.checkSpecCompressionOpportunities(specs, assertions, issues);
+    
+    const compressionIssues = issues.filter(i => i.type === 'compression_opportunity');
+    
+    if (compressionIssues.length === 0) {
+      throw new Error('Expected to find spec compression opportunities');
+    }
+    
+    const issue = compressionIssues[0];
+    
+    // Should find overlap between any of the authentication-related specs
+    const hasAuthSpecs = issue.affected_specs.some(spec => 
+      ['user-login', 'user-auth', 'authentication-system'].includes(spec)
+    );
+    
+    if (!hasAuthSpecs) {
+      throw new Error('Compression issue should reference authentication-related specs');
+    }
+    
+    if (!issue.description.includes('overlapping functionality') && !issue.description.includes('consolidated')) {
+      throw new Error('Issue should reference overlapping functionality');
+    }
+    
+    console.log('✅ Observer detects spec compression opportunities test passed');
+    
+    process.chdir(originalCwd);
+    
+  } finally {
+    await cleanup(testDir);
+  }
+}
+
 // Test: Observer detects when functions exist but don't meet spec requirements  
 export async function testObserverDetectsFunctionRequirementMismatch() {
   const testDir = 'test-function-requirements';
@@ -561,6 +718,7 @@ export async function runAllTests() {
     await testObserverDetectsPriorityConflicts();
     await testObserverCreatesObservationFiles();
     await testObserverComparesAssertionSuccessCriteria();
+    await testObserverDetectsSpecCompressionOpportunities();
     await testObserverDetectsFunctionRequirementMismatch();
     
     console.log('\n🎉 All Observer Agent tests passed!');
