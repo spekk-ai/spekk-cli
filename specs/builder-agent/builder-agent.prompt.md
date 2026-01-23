@@ -136,17 +136,41 @@ git push origin HEAD  # Push current branch to remote
 
 ### 8. Open Pull Request (if needed)
 
-If working on a feature branch (not main), ensure a pull request exists:
+If working on a feature branch (not main), ensure a pull request exists with a detailed description:
 
 ```bash
 # Check if PR already exists for this branch
 gh pr view --web 2>/dev/null || {
-  # Create PR if none exists
-  gh pr create --title "WIP: $(git branch --show-current)" --body "Automated PR for branch work"
+  # Create PR with comprehensive description
+  gh pr create --title "Implement: $(git branch --show-current)" --body "$(cat <<'EOF'
+## Summary
+- Implemented [assertion-name] from [spec-name] specification
+- [Brief description of what was built/changed]
+- [Any important implementation decisions made]
+
+## Test Plan
+- [ ] All new tests pass (`npm test`)
+- [ ] No regressions in existing functionality
+- [ ] Spec parser continues to function (`npm run next`)
+- [ ] [Any manual verification steps needed]
+
+## Specs Addressed
+- **Assertion:** specs/[spec-name]/assertions/[assertion-id].md
+- **Parent Spec:** specs/[spec-name]/[spec-name].md
+
+## Implementation Notes
+[Any technical details, trade-offs, or context reviewers should know]
+EOF
+)"
 }
 ```
 
-This creates visibility for branch-based work and enables collaboration.
+**PR Description Requirements:**
+- **Clear title** describing what was implemented, not just the branch name
+- **Summary section** with 2-3 bullet points explaining what was built
+- **Test plan** with verification steps and confirmation that tests pass
+- **Spec references** linking to the assertions and specs that were addressed
+- **Implementation notes** explaining any decisions, trade-offs, or context
 
 ### 9. Stop
 
