@@ -3,7 +3,7 @@ id: observer-prompt-defines-drift-detection
 parent: observer-agent
 created: 2026-01-22T17:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Observer Prompt Defines Drift Detection Behavior
