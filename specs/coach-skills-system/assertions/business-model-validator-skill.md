@@ -3,7 +3,7 @@ id: business-model-validator-skill
 parent: coach-skills-system
 created: 2026-01-23T22:14:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Business Model Validator Skill
@@ -33,3 +33,5 @@ Coach has business model validation capability that conducts systematic startup/
 - Goals: "Primary goal? Monetization strategy?"
 - Traction: "Current metrics? Funding raised?"
 - Hypotheses: "Riskiest assumptions? What could invalidate this?"
+
+**Tests:** src/coach/__tests__/business-model-validator.test.js
