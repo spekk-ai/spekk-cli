@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 export class BusinessModelValidator {
   constructor() {
     this.assessmentAreas = [
@@ -202,5 +205,138 @@ export class BusinessModelValidator {
       'hypothesis-prioritization': 'Hypothesis Prioritization'
     };
     return descriptions[area] || area;
+  }
+
+  generateStructuredReport(session) {
+    if (!this.isSessionComplete(session)) {
+      throw new Error('Cannot generate structured report for incomplete session');
+    }
+
+    const report = this.generateReport(session);
+    const maxPossible = this.assessmentAreas.length * 2;
+
+    // Identify strengths (areas with score 2)
+    const strengths = [];
+    Object.entries(session.scores).forEach(([area, score]) => {
+      if (score === 2) {
+        strengths.push(this.getAreaDescription(area));
+      }
+    });
+
+    // Identify concerns (areas with score 0)
+    const concerns = [];
+    Object.entries(session.scores).forEach(([area, score]) => {
+      if (score === 0) {
+        concerns.push(this.getAreaDescription(area));
+      }
+    });
+
+    // Generate priority hypotheses from high-priority recommendations
+    const priorityHypotheses = [];
+    const highPriorityRecs = report.recommendations.filter(rec => rec.priority === 'high');
+    highPriorityRecs.slice(0, 3).forEach(rec => {
+      const hypothesisMap = {
+        'industry-background': 'Validate that domain expertise gaps can be addressed through advisors or partnerships',
+        'product-validation': 'Test core product assumptions with target users through prototyping',
+        'market-demand': 'Validate market size and customer willingness to pay for the solution',
+        'business-goals': 'Confirm revenue model viability and path to profitability',
+        'traction-momentum': 'Identify sustainable customer acquisition channels',
+        'hypothesis-prioritization': 'Test the most critical business model assumptions first'
+      };
+      priorityHypotheses.push(hypothesisMap[rec.area] || `Validate key assumptions in ${this.getAreaDescription(rec.area)}`);
+    });
+
+    // Generate recommended actions from all recommendations
+    const recommendedActions = report.recommendations.map(rec => rec.message);
+
+    // Create markdown report
+    let markdownContent = `BUSINESS MODEL VALIDATION REPORT
+================================
+Overall Health Score: ${report.totalScore}/${maxPossible} points (${report.percentageScore}%)
+
+Strengths:`;
+
+    if (strengths.length > 0) {
+      strengths.forEach(strength => {
+        markdownContent += `\n- ${strength}`;
+      });
+    } else {
+      markdownContent += `\n- No areas scored at maximum level`;
+    }
+
+    markdownContent += `\n\nConcerns:`;
+    if (concerns.length > 0) {
+      concerns.forEach(concern => {
+        markdownContent += `\n- ${concern}`;
+      });
+    } else {
+      markdownContent += `\n- No critical gaps identified`;
+    }
+
+    markdownContent += `\n\nUnanswered/Unclear:`;
+    // For areas with score 1 (adequate but not clear)
+    const unclearAreas = [];
+    Object.entries(session.scores).forEach(([area, score]) => {
+      if (score === 1) {
+        unclearAreas.push(this.getAreaDescription(area));
+      }
+    });
+    
+    if (unclearAreas.length > 0) {
+      unclearAreas.forEach(area => {
+        markdownContent += `\n- ${area} needs additional clarity and validation`;
+      });
+    } else {
+      markdownContent += `\n- All areas have clear evidence or identified gaps`;
+    }
+
+    markdownContent += `\n\nPriority Hypotheses to Test (Next 6 Months):`;
+    if (priorityHypotheses.length > 0) {
+      priorityHypotheses.forEach((hypothesis, index) => {
+        markdownContent += `\n${index + 1}. ${hypothesis}`;
+      });
+    } else {
+      markdownContent += `\n1. Continue strengthening existing validated areas`;
+      markdownContent += `\n2. Expand market validation and customer research`;
+      markdownContent += `\n3. Test scalability of current business model`;
+    }
+
+    markdownContent += `\n\nRecommended Actions:`;
+    if (recommendedActions.length > 0) {
+      recommendedActions.forEach(action => {
+        markdownContent += `\n- ${action}`;
+      });
+    } else {
+      markdownContent += `\n- Continue monitoring and optimizing current strong performance`;
+    }
+
+    return markdownContent;
+  }
+
+  saveStructuredReport(session, projectName) {
+    if (!projectName || typeof projectName !== 'string') {
+      throw new Error('Project name is required and must be a string');
+    }
+
+    const markdownContent = this.generateStructuredReport(session);
+    
+    // Create projects directory path relative to current working directory
+    const projectsDir = path.join(process.cwd(), 'projects');
+    const projectDir = path.join(projectsDir, projectName);
+    const filePath = path.join(projectDir, 'business-model-validation.md');
+    
+    // Create directories if they don't exist
+    if (!fs.existsSync(projectsDir)) {
+      fs.mkdirSync(projectsDir, { recursive: true });
+    }
+    
+    if (!fs.existsSync(projectDir)) {
+      fs.mkdirSync(projectDir, { recursive: true });
+    }
+    
+    // Save the report
+    fs.writeFileSync(filePath, markdownContent, 'utf8');
+    
+    return filePath;
   }
 }

@@ -51,3 +51,5 @@ Recommended Actions:
 - Create project folder if it doesn't exist
 - Report is actionable and constructive
 - Scoring is transparent and explained
+
+**Tests:** src/coach/__tests__/business-model-validator.test.js

@@ -1,5 +1,7 @@
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
 import { BusinessModelValidator } from '../business-model-validator.js';
 
 describe('BusinessModelValidator', () => {
@@ -171,6 +173,135 @@ describe('BusinessModelValidator', () => {
       assert.ok(report.areaScores !== undefined);
       assert.ok(report.recommendations !== undefined);
       assert.ok(report.summary !== undefined);
+    });
+  });
+
+  describe('structured assessment report', () => {
+    test('generates markdown report content', () => {
+      const session = validator.createSession();
+      const areas = validator.getAssessmentAreas();
+      
+      // Complete the session with mixed scores
+      areas.forEach((area, index) => {
+        validator.recordResponse(session, area, `Response for ${area}`);
+        validator.recordScore(session, area, index % 3);
+      });
+      
+      const markdownReport = validator.generateStructuredReport(session);
+      
+      assert.strictEqual(typeof markdownReport, 'string');
+      assert.ok(markdownReport.includes('BUSINESS MODEL VALIDATION REPORT'));
+      assert.ok(markdownReport.includes('Overall Health Score:'));
+      assert.ok(markdownReport.includes('Strengths:'));
+      assert.ok(markdownReport.includes('Concerns:'));
+      assert.ok(markdownReport.includes('Unanswered/Unclear:'));
+      assert.ok(markdownReport.includes('Priority Hypotheses to Test'));
+      assert.ok(markdownReport.includes('Recommended Actions:'));
+    });
+
+    test('identifies strengths from high scoring areas', () => {
+      const session = validator.createSession();
+      const areas = validator.getAssessmentAreas();
+      
+      // Set specific scores - make some areas strong (score 2)
+      validator.recordScore(session, 'industry-background', 2);
+      validator.recordScore(session, 'product-validation', 2);
+      validator.recordScore(session, 'market-demand', 0);
+      validator.recordScore(session, 'business-goals', 1);
+      validator.recordScore(session, 'traction-momentum', 0);
+      validator.recordScore(session, 'hypothesis-prioritization', 1);
+      
+      const markdownReport = validator.generateStructuredReport(session);
+      
+      // Should identify strengths from score 2 areas
+      assert.ok(markdownReport.includes('Industry Background & Expertise'));
+      assert.ok(markdownReport.includes('Product Validation'));
+    });
+
+    test('identifies concerns from low scoring areas', () => {
+      const session = validator.createSession();
+      
+      validator.recordScore(session, 'industry-background', 2);
+      validator.recordScore(session, 'product-validation', 1);
+      validator.recordScore(session, 'market-demand', 0);
+      validator.recordScore(session, 'business-goals', 1);
+      validator.recordScore(session, 'traction-momentum', 0);
+      validator.recordScore(session, 'hypothesis-prioritization', 1);
+      
+      const markdownReport = validator.generateStructuredReport(session);
+      
+      // Should identify concerns from score 0 areas
+      assert.ok(markdownReport.includes('Market Demand'));
+      assert.ok(markdownReport.includes('Traction & Momentum'));
+    });
+
+    test('generates priority hypotheses from recommendations', () => {
+      const session = validator.createSession();
+      
+      validator.recordScore(session, 'industry-background', 0);
+      validator.recordScore(session, 'product-validation', 0);
+      validator.recordScore(session, 'market-demand', 2);
+      validator.recordScore(session, 'business-goals', 2);
+      validator.recordScore(session, 'traction-momentum', 2);
+      validator.recordScore(session, 'hypothesis-prioritization', 2);
+      
+      const markdownReport = validator.generateStructuredReport(session);
+      
+      // Should have priority hypotheses based on low-scoring areas
+      assert.ok(markdownReport.includes('Priority Hypotheses to Test'));
+      assert.ok(markdownReport.includes('1.'));
+      assert.ok(markdownReport.includes('2.'));
+    });
+
+    test('saves structured report to projects directory', () => {
+      const session = validator.createSession();
+      const areas = validator.getAssessmentAreas();
+      
+      areas.forEach((area, index) => {
+        validator.recordScore(session, area, index % 3);
+      });
+      
+      const projectName = 'test-project';
+      const filePath = validator.saveStructuredReport(session, projectName);
+      
+      // Verify file was created
+      assert.ok(fs.existsSync(filePath));
+      
+      // Verify file is in correct location
+      assert.ok(filePath.includes('/projects/'));
+      assert.ok(filePath.includes('business-model-validation.md'));
+      
+      // Verify file content
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      assert.ok(fileContent.includes('BUSINESS MODEL VALIDATION REPORT'));
+      
+      // Clean up
+      fs.unlinkSync(filePath);
+      const projectDir = path.dirname(filePath);
+      if (fs.existsSync(projectDir) && fs.readdirSync(projectDir).length === 0) {
+        fs.rmdirSync(projectDir);
+      }
+    });
+
+    test('creates project directory if it does not exist', () => {
+      const session = validator.createSession();
+      const areas = validator.getAssessmentAreas();
+      
+      areas.forEach((area, index) => {
+        validator.recordScore(session, area, index % 3);
+      });
+      
+      const projectName = 'new-test-project';
+      const filePath = validator.saveStructuredReport(session, projectName);
+      
+      // Verify directory and file were created
+      const projectDir = path.dirname(filePath);
+      assert.ok(fs.existsSync(projectDir));
+      assert.ok(fs.existsSync(filePath));
+      
+      // Clean up
+      fs.unlinkSync(filePath);
+      fs.rmdirSync(projectDir);
     });
   });
 });
