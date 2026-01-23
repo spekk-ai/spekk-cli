@@ -19,4 +19,4 @@ The observer agent records its findings in a centralized observations directory 
 - [ ] Files are named with timestamp pattern (e.g., `2026-01-22T17-30-00Z.md`)
 - [ ] Directory serves as ephemeral inbox for processing and dismissal
 
-**Tests:** src/observer/__tests__/observations-directory.test.js
+**Tests:** src/observer/__tests__/observer.test.js (testObserverCreatesObservationsDir, testObserverCreatesObservationFiles), src/observer/__tests__/observation-format.test.js

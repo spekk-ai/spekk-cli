@@ -16,6 +16,31 @@ User says something like:
 - "Make the dashboard faster"
 - "Users can't export their data"
 
+### 1.5. Detect Skill Opportunities
+
+**BEFORE proceeding with normal spec creation, check if the user's request triggers any specialized skills:**
+
+**Business Model Validation Triggers:**
+Check if the user mentions any of these phrases:
+- "validate this business model"
+- "assess this startup"  
+- "founder wants to..."
+- "business plan review"
+- "is this viable?"
+- "startup validation"
+- "business model"
+- "market demand"
+- "product validation"
+
+**If business model validation is detected:**
+1. **Suggest the skill:** "I can use my business-model-validator skill to systematically assess this through structured questions and provide a quantitative health score. Would you like me to do that?"
+2. **Wait for user response**
+3. **If user accepts:** Apply the business-model-validator skill workflow (see specs/coach-skills-system/ for details)
+4. **If user declines:** Continue with normal spec creation workflow below
+
+**Future Skills:**
+As new skills are added to the system, add their trigger detection here.
+
 ### 2. Check Existing Specs
 
 Before asking questions, scan `specs/` to see:
