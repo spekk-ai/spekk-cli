@@ -2,10 +2,11 @@
 
 import { startObserver } from './index.js';
 
-async function launchObserverAgent() {
+async function launchObserverAgent(cliArgs = null) {
   try {
     // Parse command line arguments
-    const args = process.argv.slice(2);
+    // When called from main CLI, use provided args; otherwise use process.argv
+    const args = cliArgs || process.argv.slice(2);
     const options = {};
     
     for (let i = 0; i < args.length; i++) {

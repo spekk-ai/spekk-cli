@@ -3,6 +3,7 @@
 import { run } from '../src/parser/cli.js';
 import { launchCoachAgent } from '../src/coach/cli.js';
 import { launchBuilderAgent } from '../src/builder/cli.js';
+import { launchObserverAgent } from '../src/observer/cli.js';
 import { runBuilderLoop, runCoachLoop } from '../src/loops/index.js';
 import { showStatus } from '../src/status/cli.js';
 import { showSpekk } from '../src/show/cli.js';
@@ -50,6 +51,10 @@ COMMANDS:
     await launchBuilderAgent();
     break;
   
+  case 'observer':
+    await launchObserverAgent(args.slice(1));
+    break;
+  
   case 'status':
     await showStatus();
     break;
@@ -72,6 +77,7 @@ COMMANDS:
   status    Show comprehensive overview of all specs and assertions
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
+  observer  Launch the Observer Agent to monitor spec-code drift
   loop      Run orchestration workflows (builder/coach loops)
   help      Show this help message
 
