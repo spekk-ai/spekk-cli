@@ -787,24 +787,458 @@ export class ObserverAgent {
   }
 
   async checkOutdatedSpecs(specs, assertions, issues) {
-    // Check for specs marked as done but with recent file changes
+    // This method now delegates to the comprehensive identifyOutdatedSpecs
+    const outdatedObservations = await this.identifyOutdatedSpecs({ 
+      specs: specs.reduce((acc, spec) => ({ ...acc, [spec.id]: spec }), {}),
+      assertions: assertions
+    });
+
+    for (const observation of outdatedObservations) {
+      issues.push({
+        type: observation.type,
+        severity: observation.severity,
+        title: observation.title,
+        description: observation.description,
+        affected_specs: observation.affected_specs,
+        affected_files: observation.affected_files
+      });
+    }
+  }
+
+  async identifyOutdatedSpecs(specsData) {
+    const observations = [];
+    const specs = Array.isArray(specsData) ? specsData : Object.values(specsData.specs || specsData);
+    const assertions = specsData.assertions || [];
+    
+    await this.ensureObservationsDirectory();
+    
     for (const spec of specs) {
-      if (spec.status === 'done') {
-        const specAssertions = assertions.filter(a => a.parent === spec.id);
-        const allDone = specAssertions.every(a => a.status === 'done');
-        
-        if (!allDone) {
-          issues.push({
-            type: 'outdated_specs',
-            severity: 'medium',
-            title: `Spec marked done but has incomplete assertions: ${spec.id}`,
-            description: `Spec ${spec.id} has status 'done' but contains assertions that are not done`,
-            affected_specs: [spec.id],
-            affected_files: [spec.file]
-          });
+      // 1. Check specs marked done but code significantly changed
+      await this.checkSpecCodeChanges(spec, observations);
+      
+      // 2. Check for deprecated/removed functionality references
+      await this.checkDeprecatedReferences(spec, observations);
+      
+      // 3. Check for irrelevant success criteria
+      await this.checkIrrelevantCriteria(spec, assertions, observations);
+      
+      // 4. Check for basic done/incomplete assertion mismatches (legacy functionality)
+      await this.checkDoneSpecWithIncompleteAssertions(spec, assertions, observations);
+    }
+    
+    // 5. Check for duplicate functionality across specs
+    await this.checkDuplicateFunctionality(specs, observations);
+    
+    // 6. Check timestamp patterns for stale specs
+    await this.checkTimestampPatterns(specs, observations);
+    
+    // 7. Check for outdated architectural patterns
+    await this.checkOutdatedPatterns(specs, observations);
+    
+    // Create observation files for each finding
+    for (const observation of observations) {
+      await this.createOutdatedSpecObservation(observation);
+    }
+    
+    return observations;
+  }
+  
+  async checkSpecCodeChanges(spec, observations) {
+    if (spec.status !== 'done') return;
+    
+    try {
+      // Look for files referenced in the spec
+      const fileReferences = this.extractFileReferences(spec.content);
+      const specCompletionTime = new Date(spec.created || '2000-01-01');
+      
+      let hasSignificantChanges = false;
+      const modifiedFiles = [];
+      
+      for (const filePath of fileReferences) {
+        try {
+          await fs.access(filePath);
+          const stats = await fs.stat(filePath);
+          
+          // If file was modified significantly after spec completion
+          if (stats.mtime > specCompletionTime) {
+            const timeDiff = (stats.mtime - specCompletionTime) / (1000 * 60 * 60 * 24); // days
+            if (timeDiff > 1) { // Modified more than 1 day after spec completion
+              hasSignificantChanges = true;
+              modifiedFiles.push(filePath);
+            }
+          }
+        } catch (error) {
+          // File doesn't exist anymore - also a significant change
+          hasSignificantChanges = true;
+          modifiedFiles.push(filePath + ' (removed)');
+        }
+      }
+      
+      if (hasSignificantChanges) {
+        observations.push({
+          type: 'outdated-spec-code-changed',
+          severity: 'medium',
+          title: `Spec marked done but code significantly changed: ${spec.id}`,
+          description: `Spec ${spec.id} is marked as done but related files have been modified or removed since completion`,
+          affected_specs: [spec.id],
+          affected_files: [spec.file, ...modifiedFiles.filter(f => !f.includes('(removed)'))],
+          evidence: `Modified files: ${modifiedFiles.join(', ')}`,
+          recommendation: 'Review spec to ensure it still accurately reflects current implementation'
+        });
+      }
+    } catch (error) {
+      // Ignore errors in this detection method
+    }
+  }
+  
+  extractFileReferences(content) {
+    const filePatterns = [
+      /`([^`]+\.(js|ts|jsx|tsx|py|java|c|cpp|cs|php|rb|go|md|json|yaml|yml))`/g,
+      /\b([a-zA-Z0-9_-]+\/[a-zA-Z0-9_/-]+\.(js|ts|jsx|tsx|py|java|c|cpp|cs|php|rb|go|md|json|yaml|yml))\b/g
+    ];
+    
+    const files = new Set();
+    
+    for (const pattern of filePatterns) {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        files.add(match[1]);
+      }
+    }
+    
+    return Array.from(files);
+  }
+  
+  async checkDeprecatedReferences(spec, observations) {
+    try {
+      // Check for references to removed npm packages
+      const packageJsonPath = 'package.json';
+      let packageJson = {};
+      
+      try {
+        const packageContent = await fs.readFile(packageJsonPath, 'utf8');
+        packageJson = JSON.parse(packageContent);
+      } catch (error) {
+        return; // No package.json found
+      }
+      
+      const allDependencies = {
+        ...packageJson.dependencies,
+        ...packageJson.devDependencies,
+        ...packageJson.peerDependencies
+      };
+      
+      // Look for package references in spec content
+      const packageReferences = this.extractPackageReferences(spec.content);
+      const removedPackages = packageReferences.filter(pkg => !allDependencies[pkg]);
+      
+      if (removedPackages.length > 0) {
+        observations.push({
+          type: 'outdated-spec-deprecated-reference',
+          severity: 'medium',
+          title: `Spec references removed packages: ${spec.id}`,
+          description: `Spec ${spec.id} references packages that are no longer in package.json: ${removedPackages.join(', ')}`,
+          affected_specs: [spec.id],
+          affected_files: [spec.file, packageJsonPath],
+          evidence: `Removed packages: ${removedPackages.join(', ')}`,
+          recommendation: 'Update spec to remove references to deprecated packages or add packages back if still needed'
+        });
+      }
+      
+      // Check for missing file references
+      const fileReferences = this.extractFileReferences(spec.content);
+      const missingFiles = [];
+      
+      for (const filePath of fileReferences) {
+        try {
+          await fs.access(filePath);
+        } catch (error) {
+          missingFiles.push(filePath);
+        }
+      }
+      
+      if (missingFiles.length > 0) {
+        observations.push({
+          type: 'outdated-spec-missing-reference',
+          severity: 'medium',
+          title: `Spec references missing files: ${spec.id}`,
+          description: `Spec ${spec.id} references files that no longer exist: ${missingFiles.join(', ')}`,
+          affected_specs: [spec.id],
+          affected_files: [spec.file],
+          evidence: `Missing files: ${missingFiles.join(', ')}`,
+          recommendation: 'Update spec to remove references to missing files or restore files if still needed'
+        });
+      }
+    } catch (error) {
+      // Ignore errors in this detection method
+    }
+  }
+  
+  extractPackageReferences(content) {
+    const packagePatterns = [
+      /`([a-zA-Z0-9_-]+)`/g, // Backtick-wrapped package names
+      /import.*?from\s+['"]([^'"]+)['"]/g, // Import statements
+      /require\(['"]([^'"]+)['"]\)/g // Require statements
+    ];
+    
+    const packages = new Set();
+    
+    for (const pattern of packagePatterns) {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        const packageName = match[1];
+        // Filter for likely package names (no file extensions, no paths)
+        if (!packageName.includes('/') && !packageName.includes('.') && 
+            packageName.length > 1 && /^[a-zA-Z0-9_-]+$/.test(packageName)) {
+          packages.add(packageName);
         }
       }
     }
+    
+    return Array.from(packages);
+  }
+  
+  async checkIrrelevantCriteria(spec, assertions, observations) {
+    const specAssertions = assertions.filter(a => a.parent === spec.id);
+    
+    for (const assertion of specAssertions) {
+      const criteria = this.extractSuccessCriteria(assertion.content);
+      const irrelevantCriteria = [];
+      
+      for (const criterion of criteria) {
+        // Check if criterion references non-existent functionality
+        if (await this.isCriterionIrrelevant(criterion)) {
+          irrelevantCriteria.push(criterion.text);
+        }
+      }
+      
+      if (irrelevantCriteria.length > 0) {
+        observations.push({
+          type: 'outdated-spec-irrelevant-criteria',
+          severity: 'low',
+          title: `Spec has irrelevant success criteria: ${spec.id}`,
+          description: `Spec ${spec.id} contains success criteria that may no longer be relevant: ${irrelevantCriteria.join('; ')}`,
+          affected_specs: [spec.id],
+          affected_files: [spec.file],
+          evidence: `Irrelevant criteria: ${irrelevantCriteria.join(', ')}`,
+          recommendation: 'Review and update success criteria to match current system needs'
+        });
+      }
+    }
+  }
+  
+  async isCriterionIrrelevant(criterion) {
+    // Look for criteria that reference deprecated technologies or patterns
+    const deprecatedKeywords = [
+      'jQuery', 'bower', 'grunt', 'gulp', 'webpack 1', 'angular 1', 'angularjs',
+      'coffeescript', 'jade', 'stylus', 'less', 'sass-node', 'node-sass'
+    ];
+    
+    const text = criterion.text.toLowerCase();
+    return deprecatedKeywords.some(keyword => text.includes(keyword.toLowerCase()));
+  }
+  
+  async checkDoneSpecWithIncompleteAssertions(spec, assertions, observations) {
+    if (spec.status === 'done') {
+      const specAssertions = assertions.filter(a => a.parent === spec.id);
+      const allDone = specAssertions.every(a => a.status === 'done');
+      
+      if (!allDone) {
+        const incompleteCount = specAssertions.filter(a => a.status !== 'done').length;
+        observations.push({
+          type: 'outdated-spec-incomplete-assertions',
+          severity: 'medium',
+          title: `Spec marked done but has incomplete assertions: ${spec.id}`,
+          description: `Spec ${spec.id} has status 'done' but ${incompleteCount} assertions are not completed`,
+          affected_specs: [spec.id],
+          affected_files: [spec.file],
+          evidence: `${incompleteCount} incomplete assertions out of ${specAssertions.length} total`,
+          recommendation: 'Either complete remaining assertions or update spec status to reflect actual completion state'
+        });
+      }
+    }
+  }
+  
+  async checkDuplicateFunctionality(specs, observations) {
+    for (let i = 0; i < specs.length; i++) {
+      for (let j = i + 1; j < specs.length; j++) {
+        const specA = specs[i];
+        const specB = specs[j];
+        
+        const similarity = this.calculateContentSimilarity(specA.content, specB.content);
+        
+        if (similarity > 0.7) { // 70% similarity threshold
+          observations.push({
+            type: 'outdated-spec-duplicate-functionality',
+            severity: 'medium',
+            title: `Specs have duplicate functionality: ${specA.id} and ${specB.id}`,
+            description: `Specs ${specA.id} and ${specB.id} have very similar content and may represent duplicate functionality`,
+            affected_specs: [specA.id, specB.id],
+            affected_files: [specA.file, specB.file],
+            evidence: `Content similarity: ${Math.round(similarity * 100)}%`,
+            recommendation: 'Consider consolidating these specs or clarifying their distinct purposes'
+          });
+          
+          // Only report each pair once
+          break;
+        }
+      }
+    }
+  }
+  
+  calculateContentSimilarity(contentA, contentB) {
+    const wordsA = this.extractSignificantWords(contentA);
+    const wordsB = this.extractSignificantWords(contentB);
+    
+    if (wordsA.length === 0 || wordsB.length === 0) return 0;
+    
+    const setA = new Set(wordsA);
+    const setB = new Set(wordsB);
+    const intersection = new Set([...setA].filter(word => setB.has(word)));
+    const union = new Set([...setA, ...setB]);
+    
+    return intersection.size / union.size; // Jaccard similarity
+  }
+  
+  extractSignificantWords(content) {
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'shall']);
+    
+    return content.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !stopWords.has(word));
+  }
+  
+  async checkTimestampPatterns(specs, observations) {
+    const now = new Date();
+    const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+    
+    const veryOldSpecs = specs.filter(spec => {
+      const created = new Date(spec.created);
+      return created < oneYearAgo && spec.status === 'done';
+    });
+    
+    if (veryOldSpecs.length > 0) {
+      // Only flag as stale if there's recent activity in other specs
+      const recentSpecs = specs.filter(spec => {
+        const created = new Date(spec.created);
+        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+        return created > threeMonthsAgo;
+      });
+      
+      if (recentSpecs.length > 0) {
+        const staleSpecIds = veryOldSpecs.map(s => s.id);
+        observations.push({
+          type: 'outdated-spec-timestamp-stale',
+          severity: 'low',
+          title: `Old specs may be stale: ${staleSpecIds.join(', ')}`,
+          description: `${veryOldSpecs.length} specs are over a year old while development appears to be active on newer specs`,
+          affected_specs: staleSpecIds,
+          affected_files: veryOldSpecs.map(s => s.file),
+          evidence: `Oldest spec: ${Math.min(...veryOldSpecs.map(s => new Date(s.created)))}`,
+          recommendation: 'Review old specs to ensure they still represent current system needs or archive if no longer relevant'
+        });
+      }
+    }
+  }
+  
+  async checkOutdatedPatterns(specs, observations) {
+    const outdatedPatterns = [
+      { pattern: /jquery|jQuery/i, modern: 'React/Vue/Angular', category: 'frontend' },
+      { pattern: /callbacks?.*async/i, modern: 'async/await or Promises', category: 'async' },
+      { pattern: /var\s+\w+/i, modern: 'const/let', category: 'variables' },
+      { pattern: /function\s*\([^)]*\)\s*\{/i, modern: 'arrow functions', category: 'functions' },
+      { pattern: /bower/i, modern: 'npm or yarn', category: 'package-manager' }
+    ];
+    
+    for (const spec of specs) {
+      const conflicts = [];
+      
+      for (const { pattern, modern, category } of outdatedPatterns) {
+        if (pattern.test(spec.content)) {
+          // Check if there are other specs using modern patterns
+          const hasModernSpecs = specs.some(otherSpec => 
+            otherSpec.id !== spec.id && 
+            this.containsModernPattern(otherSpec.content, category)
+          );
+          
+          if (hasModernSpecs) {
+            conflicts.push({ pattern: pattern.source, modern, category });
+          }
+        }
+      }
+      
+      if (conflicts.length > 0) {
+        observations.push({
+          type: 'outdated-spec-pattern-conflict',
+          severity: 'low',
+          title: `Spec uses outdated patterns: ${spec.id}`,
+          description: `Spec ${spec.id} references outdated patterns while other specs use modern alternatives`,
+          affected_specs: [spec.id],
+          affected_files: [spec.file],
+          evidence: conflicts.map(c => `${c.category}: suggests ${c.modern}`).join(', '),
+          recommendation: 'Consider updating spec to align with modern development patterns used elsewhere in the project'
+        });
+      }
+    }
+  }
+  
+  containsModernPattern(content, category) {
+    const modernPatterns = {
+      'frontend': /react|vue|angular|svelte/i,
+      'async': /async\/await|Promise\./i,
+      'variables': /\b(const|let)\s+\w+/i,
+      'functions': /=>\s*\{|=>\s*[^{]/i,
+      'package-manager': /npm|yarn/i
+    };
+    
+    const pattern = modernPatterns[category];
+    return pattern && pattern.test(content);
+  }
+  
+  async createOutdatedSpecObservation(observation) {
+    const timestamp = new Date().toISOString();
+    const observationId = `${observation.type}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    
+    // Find existing observations to get next sequence number
+    let existingFiles = [];
+    try {
+      existingFiles = await fs.readdir('observations');
+    } catch (error) {
+      // Directory doesn't exist yet
+    }
+    
+    const sequenceNum = String(existingFiles.length + 1).padStart(3, '0');
+    const filename = `${timestamp.replace(/[:.]/g, '-').replace('T', 'T').replace('Z', 'Z')}-${sequenceNum}.md`;
+    const filePath = path.join('observations', filename);
+    
+    const frontmatter = `---
+id: ${observationId}
+created: ${timestamp}
+type: ${observation.type}
+severity: ${observation.severity}
+affected_specs: [${observation.affected_specs.map(s => s).join(', ')}]
+affected_files: [${observation.affected_files.map(f => f).join(', ')}]
+---`;
+    
+    const content = `${frontmatter}
+
+# ${observation.title}
+
+## Issue Description
+${observation.description}
+
+## Evidence
+${observation.evidence || 'Automatically detected during observer scan'}
+
+## Impact
+${this.getImpactMessage(observation.severity)}
+
+## Recommendation
+${observation.recommendation || 'Review affected specs and update as needed'}
+`;
+    
+    await fs.writeFile(filePath, content, 'utf8');
   }
 
   async checkSpecConflicts(specs, assertions, issues) {
