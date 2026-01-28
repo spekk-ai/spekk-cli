@@ -3,10 +3,12 @@ id: verify-prompt-file-accessible
 parent: cli-prompt-resolution
 created: 2026-01-28T19:45:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Verify Prompt File Accessible
+
+**Tests:** src/cli/__tests__/verify-prompt-file-accessible.test.js
 
 ## Assertion
 
