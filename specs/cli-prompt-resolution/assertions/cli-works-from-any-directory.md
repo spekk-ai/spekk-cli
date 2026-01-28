@@ -3,7 +3,7 @@ id: cli-works-from-any-directory
 parent: cli-prompt-resolution
 created: 2026-01-28T19:30:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # CLI Works From Any Directory
@@ -19,9 +19,7 @@ All spekk CLI commands (`spekk coach`, `spekk builder`, `spekk observer`) work w
 - No "file not found" errors related to agent prompt files
 - All agent types work consistently across different working directories
 
-**Tests Required:**
-- `integration-test-external-directory` assertion must be completed
-- Similar tests for builder and observer agents
+**Tests:** src/cli/__tests__/external-directory-integration.test.js
 
 ## Context
 
