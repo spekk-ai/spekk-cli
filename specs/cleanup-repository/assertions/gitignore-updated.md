@@ -19,6 +19,9 @@ The `.gitignore` must include:
 ```gitignore
 # Temporary directory for all development artifacts
 .tmp/
+
+# Observations directory (ephemeral files for observer agent)
+observations/
 ```
 
 ## Success Criteria

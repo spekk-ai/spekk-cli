@@ -10,18 +10,18 @@ status: not_started
 
 ## What Must Be True
 
-The `observations/` directory is moved to `.tmp/observations/` and no longer exists in the repository root.
+The `observations/` directory exists and is properly configured according to observer-agent specs.
 
 ## Current State
 
-The directory contains hundreds of timestamped markdown files that appear to be debug/observation logs from development sessions.
+The directory contains hundreds of timestamped markdown files. According to the observer-agent specs, this directory should exist and contain observations.
 
 ## Success Criteria
 
-- ✅ `observations/` directory moved to `.tmp/observations/`
-- ✅ No `observations/` directory in repository root
-- ✅ Observation files preserved but not tracked by git
+- ✅ `observations/` directory remains in repository root (required by observer-agent spec)
+- ✅ Directory is added to `.gitignore` (observations are ephemeral)
+- ✅ Observer-agent functionality preserved
 
 ## Implementation
 
-Move the entire `observations/` directory to `.tmp/observations/` to preserve the files while removing them from version control tracking.
+The observations directory should stay but be git-ignored since observations are meant to be ephemeral files for human review and processing.

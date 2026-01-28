@@ -23,8 +23,8 @@ debug-test/
 temp-test-DB4WyD/
 temp-test-debug/
 temp-test-mKLbyt/
-observations/
 spekk-app-reference/
+app/ (incomplete implementation artifacts)
 ```
 
 ## Success Criteria
