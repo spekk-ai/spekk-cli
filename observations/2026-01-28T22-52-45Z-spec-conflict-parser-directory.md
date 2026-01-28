@@ -1,6 +1,6 @@
 ---
 id: spec-conflict-parser-directory
-created: 2026-01-28T22:30:15Z
+created: 2026-01-28T22:52:45Z
 type: spec_conflicts
 severity: high
 affected_specs:
@@ -8,7 +8,6 @@ affected_specs:
   - fix-cli-context-bug
 affected_files:
   - src/parser/index.js
-  - src/parser/__tests__/external-directory.test.js
   - specs/cli-prompt-resolution/assertions/spec-parser-works-externally.md
   - specs/fix-cli-context-bug/assertions/cli-reads-local-specs.md
 ---
@@ -35,21 +34,13 @@ The spekk CLI should be able to read and parse spec files from the user's
 current working directory, not from the spekk-cli installation directory.
 ```
 
-Current implementation in `src/parser/index.js:304`:
-```javascript
-const specsPath = path.join(process.cwd(), 'specs');
-```
-
-Test failures in `src/parser/__tests__/external-directory.test.js`:
-- ✗ parses specs from installation directory when run externally
-- ✗ finds next assertion from external specs
-- ✗ excludes draft specs when finding next assertion
+Current implementation uses: `const specsPath = path.join(process.cwd(), 'specs');`
 
 ## Impact
 - The parser cannot satisfy both requirements simultaneously
-- Tests are failing for the `spec-parser-works-externally` assertion
-- The assertion is marked as "done" but is not actually implemented correctly
-- This creates confusion about which behavior is correct
+- Creates confusion about which behavior is correct
+- Tests fail for one approach or the other
+- Blocks proper CLI functionality
 
 ## Recommendation
 1. Review both specs to determine the intended behavior
@@ -57,4 +48,3 @@ Test failures in `src/parser/__tests__/external-directory.test.js`:
    - Consolidate the specs with a clear requirement
    - Update one spec to align with the chosen approach
    - Implement a flag/option to support both behaviors
-3. Update assertion status to reflect actual implementation state

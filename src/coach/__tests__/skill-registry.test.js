@@ -190,19 +190,19 @@ describe('SkillSession', () => {
       session.recordResponse('q1', 'Answer 1');
       session.recordResponse('q2', 'Answer 2');
       
-      assert(session.isComplete(), true);
+      assert.strictEqual(session.isComplete(), true);
     });
   });
 
   describe('getProgress', () => {
     test('should calculate progress percentage', () => {
-      assert(session.getProgress(), 0);
+      assert.strictEqual(session.getProgress(), 0);
       
       session.recordResponse('q1', 'Answer 1');
-      assert(session.getProgress(), 50);
+      assert.strictEqual(session.getProgress(), 50);
       
       session.recordResponse('q2', 'Answer 2');
-      assert(session.getProgress(), 100);
+      assert.strictEqual(session.getProgress(), 100);
     });
   });
 
@@ -211,11 +211,11 @@ describe('SkillSession', () => {
       session.recordResponse('q1', 'Answer 1');
       
       const validation1 = session.validate();
-      assert(validation1.valid, false);
+      assert.strictEqual(validation1.valid, false);
       
       session.recordResponse('q2', 'Answer 2');
       const validation2 = session.validate();
-      assert(validation2.valid, true);
+      assert.strictEqual(validation2.valid, true);
     });
   });
 
@@ -225,15 +225,15 @@ describe('SkillSession', () => {
       session.recordResponse('q2', 'Answer 2');
       
       const result = session.process();
-      assert(result.summary, 'Mock1 processed');
-      assert(result.data).toEqual({ q1: 'Answer 1', q2: 'Answer 2' });
-      assert(session.completedAt).toBeTruthy();
+      assert.strictEqual(result.summary, 'Mock1 processed');
+      assert.deepStrictEqual(result.data, { q1: 'Answer 1', q2: 'Answer 2' });
+      assert(session.completedAt);
     });
 
     test('should throw error for incomplete session', () => {
       session.recordResponse('q1', 'Answer 1');
       
-      assert(() => session.process()).toThrow('Session is not complete');
+      assert.throws(() => session.process(), /Session is not complete/);
     });
   });
 
@@ -242,12 +242,12 @@ describe('SkillSession', () => {
       session.recordResponse('q1', 'Answer 1');
       
       const metadata = session.getMetadata();
-      assert(metadata.skillId, 'mock-skill-1');
-      assert(metadata.skillName, 'Mock Skill 1');
-      assert(metadata.progress, 50);
-      assert(metadata.responseCount, 1);
-      assert(metadata.startedAt).toBeTruthy();
-      assert(metadata.completedAt).toBeNull();
+      assert.strictEqual(metadata.skillId, 'mock-skill-1');
+      assert.strictEqual(metadata.skillName, 'Mock Skill 1');
+      assert.strictEqual(metadata.progress, 50);
+      assert.strictEqual(metadata.responseCount, 1);
+      assert(metadata.startedAt);
+      assert.strictEqual(metadata.completedAt, null);
     });
   });
 });

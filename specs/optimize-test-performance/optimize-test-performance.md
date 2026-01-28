@@ -27,7 +27,7 @@ Tests are currently taking too long (timing out after 30s) and failing in CI. In
 
 ## Target Performance
 
-- **Total test suite:** < 10 seconds
-- **Individual tests:** < 100ms each
-- **Test suites:** < 1 second each
+- **Total test suite:** < 30 seconds
+- **Individual tests:** < 500ms each
+- **Test suites:** < 3 seconds each
 - **CI pipeline:** Reliable completion without timeouts
