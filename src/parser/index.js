@@ -195,24 +195,30 @@ function parseObservations(rootDirectory = null) {
   const observationFiles = fs.readdirSync(observationsDir).filter(file => file.endsWith('.md'));
   
   for (const observationFile of observationFiles) {
-    const observationPath = path.join(observationsDir, observationFile);
-    const content = fs.readFileSync(observationPath, 'utf8');
-    
-    // Skip files that don't start with YAML frontmatter
-    if (!content.trimStart().startsWith('---')) {
+    try {
+      const observationPath = path.join(observationsDir, observationFile);
+      const content = fs.readFileSync(observationPath, 'utf8');
+      
+      // Skip files that don't start with YAML frontmatter
+      if (!content.trimStart().startsWith('---')) {
+        continue;
+      }
+      
+      const { data, content: markdownContent } = parseFrontmatter(content);
+      
+      validateObservationFields(data, `observations/${observationFile}`);
+      
+      observations.push({
+        ...data,
+        file: `observations/${observationFile}`,
+        title: extractTitle(markdownContent),
+        content: content
+      });
+    } catch (error) {
+      // Log warning to stderr and continue processing
+      console.warn(`Warning: Skipping malformed observation file observations/${observationFile}: ${error.message}`);
       continue;
     }
-    
-    const { data, content: markdownContent } = parseFrontmatter(content);
-    
-    validateObservationFields(data, `observations/${observationFile}`);
-    
-    observations.push({
-      ...data,
-      file: `observations/${observationFile}`,
-      title: extractTitle(markdownContent),
-      content: content
-    });
   }
   
   return observations;
@@ -326,32 +332,37 @@ function parseAllSpecs(specsDirectory = null) {
     
     // Parse spec file
     if (fs.existsSync(specFilePath)) {
-      const content = fs.readFileSync(specFilePath, 'utf8');
-      
-      // Skip files that don't start with YAML frontmatter
-      if (!content.trimStart().startsWith('---')) {
+      try {
+        const content = fs.readFileSync(specFilePath, 'utf8');
+        
+        // Skip files that don't start with YAML frontmatter
+        if (!content.trimStart().startsWith('---')) {
+          continue;
+        }
+        
+        const { data, content: markdownContent } = parseFrontmatter(content);
+        
+        validateFields(data, `specs/${specDir}/${specDir}.md`, false);
+        
+        // Check for duplicate spec IDs
+        const currentSpecFile = `specs/${specDir}/${specDir}.md`;
+        if (specIds.has(data.id)) {
+          const existingFile = specIds.get(data.id);
+          throw new Error(`Duplicate spec id '${data.id}' found in files: ${existingFile}, ${currentSpecFile}`);
+        }
+        specIds.set(data.id, currentSpecFile);
+        
+        specs.push({
+          ...data,
+          status: data.status || 'not_started',
+          file: `specs/${specDir}/${specDir}.md`,
+          title: extractTitle(markdownContent),
+          content: content
+        });
+      } catch (error) {
+        console.warn(`Warning: Skipping malformed spec file specs/${specDir}/${specDir}.md: ${error.message}`);
         continue;
       }
-      
-      const { data, content: markdownContent } = parseFrontmatter(content);
-      
-      validateFields(data, `specs/${specDir}/${specDir}.md`, false);
-      
-      // Check for duplicate spec IDs
-      const currentSpecFile = `specs/${specDir}/${specDir}.md`;
-      if (specIds.has(data.id)) {
-        const existingFile = specIds.get(data.id);
-        throw new Error(`Duplicate spec id '${data.id}' found in files: ${existingFile}, ${currentSpecFile}`);
-      }
-      specIds.set(data.id, currentSpecFile);
-      
-      specs.push({
-        ...data,
-        status: data.status || 'not_started',
-        file: `specs/${specDir}/${specDir}.md`,
-        title: extractTitle(markdownContent),
-        content: content
-      });
     }
     
     // Parse assertions
@@ -361,32 +372,37 @@ function parseAllSpecs(specsDirectory = null) {
       const assertionFiles = fs.readdirSync(assertionsDir).filter(file => file.endsWith('.md'));
       
       for (const assertionFile of assertionFiles) {
-        const assertionPath = path.join(assertionsDir, assertionFile);
-        const content = fs.readFileSync(assertionPath, 'utf8');
-        
-        // Skip files that don't start with YAML frontmatter
-        if (!content.trimStart().startsWith('---')) {
+        try {
+          const assertionPath = path.join(assertionsDir, assertionFile);
+          const content = fs.readFileSync(assertionPath, 'utf8');
+          
+          // Skip files that don't start with YAML frontmatter
+          if (!content.trimStart().startsWith('---')) {
+            continue;
+          }
+          
+          const { data, content: markdownContent } = parseFrontmatter(content);
+          
+          validateFields(data, `specs/${specDir}/assertions/${assertionFile}`, true);
+          
+          // Check for duplicate assertion IDs within this spec
+          if (assertionIds.has(data.id)) {
+            const existingFile = assertionIds.get(data.id);
+            throw new Error(`Duplicate assertion id '${data.id}' in spec '${specDir}' found in files: ${existingFile}, ${assertionFile}`);
+          }
+          assertionIds.set(data.id, assertionFile);
+          
+          assertions.push({
+            ...data,
+            status: data.status || 'not_started',
+            file: `specs/${specDir}/assertions/${assertionFile}`,
+            title: extractTitle(markdownContent),
+            content: content
+          });
+        } catch (error) {
+          console.warn(`Warning: Skipping malformed assertion file specs/${specDir}/assertions/${assertionFile}: ${error.message}`);
           continue;
         }
-        
-        const { data, content: markdownContent } = parseFrontmatter(content);
-        
-        validateFields(data, `specs/${specDir}/assertions/${assertionFile}`, true);
-        
-        // Check for duplicate assertion IDs within this spec
-        if (assertionIds.has(data.id)) {
-          const existingFile = assertionIds.get(data.id);
-          throw new Error(`Duplicate assertion id '${data.id}' in spec '${specDir}' found in files: ${existingFile}, ${assertionFile}`);
-        }
-        assertionIds.set(data.id, assertionFile);
-        
-        assertions.push({
-          ...data,
-          status: data.status || 'not_started',
-          file: `specs/${specDir}/assertions/${assertionFile}`,
-          title: extractTitle(markdownContent),
-          content: content
-        });
       }
     }
   }

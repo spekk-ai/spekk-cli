@@ -3,7 +3,8 @@ id: outdated-documentation-app-directory
 created: 2026-01-28T22:30:45Z
 type: outdated_specs
 severity: low
-affected_specs: []
+affected_specs:
+  - spec-parser
 affected_files:
   - CLAUDE.md
 ---

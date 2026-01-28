@@ -80,8 +80,8 @@ describe('SkillRegistry', () => {
       
       const skills = registry.getAllSkills();
       assert.strictEqual(skills.length, 2);
-      assert(skills.includes(skill1));
-      assert(skills.includes(skill2));
+      assert.strictEqual(skills.includes(skill1));
+      assert.strictEqual(skills.includes(skill2));
     });
   });
 
@@ -97,16 +97,16 @@ describe('SkillRegistry', () => {
       assert.strictEqual(skills1[0].getId(), 'mock-skill-1');
       
       const skills2 = registry.detectSkills('Tell me about mock2');
-      assert(skills2).toHaveLength(1);
-      assert(skills2[0].getId()).toBe('mock-skill-2');
+      assert.strictEqual(skills2.length, 1);
+      assert.strictEqual(skills2[0].getId(), 'mock-skill-2');
       
       const skills3 = registry.detectSkills('mock1 and mock2 together');
-      assert(skills3).toHaveLength(2);
+      assert.strictEqual(skills3.length, 2);
     });
 
     test('should return empty array when no skills trigger', () => {
       const skills = registry.detectSkills('unrelated input');
-      assert(skills).toHaveLength(0);
+      assert.strictEqual(skills.length, 0);
     });
   });
 
@@ -119,8 +119,8 @@ describe('SkillRegistry', () => {
     test('should return formatted skill suggestions', () => {
       const suggestions = registry.getSuggestions('I need mock1 help');
       
-      assert(suggestions).toHaveLength(1);
-      assert(suggestions[0]).toEqual({
+      assert.strictEqual(suggestions.length, 1);
+      assert.deepStrictEqual(suggestions[0], {
         id: 'mock-skill-1',
         name: 'Mock Skill 1',
         description: 'First mock skill'
@@ -134,12 +134,12 @@ describe('SkillRegistry', () => {
       registry.register(skill);
       
       const session = registry.createSession('mock-skill-1');
-      assert(session).toBeInstanceOf(SkillSession);
-      assert(session.skill).toBe(skill);
+      assert(session instanceof SkillSession);
+      assert.strictEqual(session.skill, skill);
     });
 
     test('should throw error for non-existent skill', () => {
-      assert(() => registry.createSession('unknown-skill')).toThrow("Skill 'unknown-skill' not found");
+      assert.throws(() => registry.createSession('unknown-skill'), /Skill 'unknown-skill' not found/);
     });
   });
 });
@@ -156,15 +156,15 @@ describe('SkillSession', () => {
   describe('getCurrentQuestion', () => {
     test('should return current question', () => {
       const question = session.getCurrentQuestion();
-      assert(question.id).toBe('q1');
-      assert(question.text).toBe('Question 1?');
+      assert.strictEqual(question.id, 'q1');
+      assert.strictEqual(question.text, 'Question 1?');
     });
 
     test('should return null when complete', () => {
       session.recordResponse('q1', 'Answer 1');
       session.recordResponse('q2', 'Answer 2');
       
-      assert(session.getCurrentQuestion()).toBeNull();
+      assert.strictEqual(session.getCurrentQuestion(), null);
     });
   });
 
@@ -172,9 +172,9 @@ describe('SkillSession', () => {
     test('should record response and advance to next question', () => {
       session.recordResponse('q1', 'Answer 1');
       
-      assert(session.responses.q1).toBe('Answer 1');
-      assert(session.currentQuestionIndex).toBe(1);
-      assert(session.getCurrentQuestion().id).toBe('q2');
+      assert.strictEqual(session.responses.q1, 'Answer 1');
+      assert.strictEqual(session.currentQuestionIndex, 1);
+      assert.strictEqual(session.getCurrentQuestion().id, 'q2');
     });
   });
 
@@ -190,19 +190,19 @@ describe('SkillSession', () => {
       session.recordResponse('q1', 'Answer 1');
       session.recordResponse('q2', 'Answer 2');
       
-      assert(session.isComplete()).toBe(true);
+      assert(session.isComplete(), true);
     });
   });
 
   describe('getProgress', () => {
     test('should calculate progress percentage', () => {
-      assert(session.getProgress()).toBe(0);
+      assert(session.getProgress(), 0);
       
       session.recordResponse('q1', 'Answer 1');
-      assert(session.getProgress()).toBe(50);
+      assert(session.getProgress(), 50);
       
       session.recordResponse('q2', 'Answer 2');
-      assert(session.getProgress()).toBe(100);
+      assert(session.getProgress(), 100);
     });
   });
 
@@ -211,11 +211,11 @@ describe('SkillSession', () => {
       session.recordResponse('q1', 'Answer 1');
       
       const validation1 = session.validate();
-      assert(validation1.valid).toBe(false);
+      assert(validation1.valid, false);
       
       session.recordResponse('q2', 'Answer 2');
       const validation2 = session.validate();
-      assert(validation2.valid).toBe(true);
+      assert(validation2.valid, true);
     });
   });
 
@@ -225,7 +225,7 @@ describe('SkillSession', () => {
       session.recordResponse('q2', 'Answer 2');
       
       const result = session.process();
-      assert(result.summary).toBe('Mock1 processed');
+      assert(result.summary, 'Mock1 processed');
       assert(result.data).toEqual({ q1: 'Answer 1', q2: 'Answer 2' });
       assert(session.completedAt).toBeTruthy();
     });
@@ -242,10 +242,10 @@ describe('SkillSession', () => {
       session.recordResponse('q1', 'Answer 1');
       
       const metadata = session.getMetadata();
-      assert(metadata.skillId).toBe('mock-skill-1');
-      assert(metadata.skillName).toBe('Mock Skill 1');
-      assert(metadata.progress).toBe(50);
-      assert(metadata.responseCount).toBe(1);
+      assert(metadata.skillId, 'mock-skill-1');
+      assert(metadata.skillName, 'Mock Skill 1');
+      assert(metadata.progress, 50);
+      assert(metadata.responseCount, 1);
       assert(metadata.startedAt).toBeTruthy();
       assert(metadata.completedAt).toBeNull();
     });
