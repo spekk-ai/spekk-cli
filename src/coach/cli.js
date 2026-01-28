@@ -5,7 +5,7 @@ import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
 
 async function launchCoachAgent() {
   try {
-    const { activationMessage, resolver } = launchAgentWithPrompt('coach-agent');
+    const { activationMessage } = launchAgentWithPrompt('coach-agent');
     
     // Launch Claude Code with the coach agent message and prompt
     const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
@@ -44,7 +44,6 @@ async function launchCoachAgent() {
     
     await new Promise((resolve, reject) => {
       claudeProcess.on('exit', (code) => {
-        resolver.cleanupCopiedFiles();
         if (code !== 0) {
           console.error(`❌ Claude Code exited with code ${code}`);
           reject(new Error(`Claude Code exited with code ${code}`));
@@ -57,7 +56,6 @@ async function launchCoachAgent() {
       process.on('SIGINT', () => {
         console.log('\n🛑 Stopping Coach Agent...');
         claudeProcess.kill('SIGINT');
-        resolver.cleanupCopiedFiles();
         resolve();
       });
     });

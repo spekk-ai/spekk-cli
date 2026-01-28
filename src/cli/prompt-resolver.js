@@ -1,6 +1,6 @@
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,7 +22,6 @@ export class PromptResolver {
         path: join(projectRoot, 'specs/observer-agent/observer-agent.prompt.md')
       }
     ];
-    this.copiedFiles = [];
   }
 
   getPromptContent(agentName) {
@@ -67,63 +66,6 @@ ${promptContent}`;
     return missing;
   }
 
-  copyPromptsToUserDirectory() {
-    const userCwd = process.cwd();
-    
-    for (const promptFile of this.promptFiles) {
-      if (!existsSync(promptFile.path)) {
-        continue; // Skip missing files
-      }
-      
-      // Create the relative path in user directory (e.g. specs/coach-agent/coach-agent.prompt.md)
-      const relativePath = promptFile.path.replace(projectRoot + '/', '');
-      const userPath = join(userCwd, relativePath);
-      
-      // Create directory structure
-      mkdirSync(dirname(userPath), { recursive: true });
-      
-      // Copy file content
-      const content = readFileSync(promptFile.path, 'utf8');
-      writeFileSync(userPath, content);
-      
-      // Track copied files for cleanup
-      this.copiedFiles.push(userPath);
-      console.log(`Copied ${relativePath}`);
-    }
-  }
-
-  cleanupCopiedFiles() {
-    let cleanedCount = 0;
-    
-    for (const filePath of this.copiedFiles) {
-      try {
-        if (existsSync(filePath)) {
-          rmSync(filePath);
-          cleanedCount++;
-        }
-      } catch (error) {
-        console.warn(`Warning: Could not clean up ${filePath}:`, error.message);
-      }
-    }
-    
-    // Also clean up directories if they're empty
-    const dirs = [...new Set(this.copiedFiles.map(f => dirname(f)))];
-    for (const dir of dirs) {
-      try {
-        if (existsSync(dir)) {
-          rmSync(dir, { recursive: true, force: true });
-        }
-      } catch (error) {
-        // Ignore cleanup errors for directories
-      }
-    }
-    
-    if (cleanedCount > 0) {
-      console.log(`Cleaned up ${cleanedCount} temporary files`);
-    }
-    
-    this.copiedFiles = [];
-  }
 }
 
 export function launchAgentWithPrompt(agentName, claudeArgs = ['--dangerously-skip-permissions']) {
@@ -135,14 +77,10 @@ export function launchAgentWithPrompt(agentName, claudeArgs = ['--dangerously-sk
     console.log('Press Ctrl+C to exit the agent session.');
     console.log(''); 
     
-    // Copy prompt files to user directory
-    resolver.copyPromptsToUserDirectory();
-    
     const activationMessage = resolver.createActivationMessage(agentName);
     
     return {
-      activationMessage,
-      resolver
+      activationMessage
     };
   } catch (error) {
     console.error(`❌ Error preparing ${agentName} agent:`, error.message);
