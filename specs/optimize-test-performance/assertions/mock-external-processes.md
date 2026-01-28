@@ -3,7 +3,7 @@ id: mock-external-processes
 parent: optimize-test-performance
 created: 2026-01-28T21:25:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # Mock External Processes
