@@ -3,7 +3,7 @@ id: spec-parser-works-externally
 parent: cli-prompt-resolution
 created: 2026-01-28T20:15:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Spec Parser Works Externally
@@ -25,6 +25,8 @@ The spec parser (default `spekk` command) works when run from any directory, not
 Currently, the spec parser looks for `specs/` relative to the current working directory. When run from external directories (like `~/thinknimble/vuenome`), it can't find the specs and fails.
 
 This is the same path resolution issue that affected agent prompts. The parser needs to resolve the specs directory relative to the spekk-cli installation, not the user's working directory.
+
+**Tests:** src/parser/__tests__/external-directory.test.js
 
 ## Implementation Requirements
 
