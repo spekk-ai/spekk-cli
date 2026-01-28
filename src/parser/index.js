@@ -78,20 +78,20 @@ function parseFrontmatter(content) {
         // If value is empty, might be start of array
         if (!value) {
           // Next lines might be array items
-          continue;
+          // Keep currentKey set so we can collect array values
+        } else {
+          // Handle different value types
+          if (value === 'true') value = true;
+          else if (value === 'false') value = false;
+          else if (/^\d+$/.test(value)) value = parseInt(value);
+          else if (/^\d+\.\d+$/.test(value)) value = parseFloat(value);
+          else if (value.startsWith('"') && value.endsWith('"')) {
+            value = value.slice(1, -1);
+          }
+          
+          frontmatter[key] = value;
+          currentKey = null; // Reset if we got a value
         }
-        
-        // Handle different value types
-        if (value === 'true') value = true;
-        else if (value === 'false') value = false;
-        else if (/^\d+$/.test(value)) value = parseInt(value);
-        else if (/^\d+\.\d+$/.test(value)) value = parseFloat(value);
-        else if (value.startsWith('"') && value.endsWith('"')) {
-          value = value.slice(1, -1);
-        }
-        
-        frontmatter[key] = value;
-        currentKey = null; // Reset if we got a value
       }
     }
   }
