@@ -24,6 +24,7 @@ temp-test-DB4WyD/
 temp-test-debug/
 temp-test-mKLbyt/
 observations/
+spekk-app-reference/
 ```
 
 ## Success Criteria

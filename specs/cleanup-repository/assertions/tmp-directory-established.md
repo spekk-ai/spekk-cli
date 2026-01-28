@@ -25,6 +25,7 @@ A `.tmp/` directory exists as the centralized location for all temporary develop
    - `temp-test-debug/` → `.tmp/temp-test-debug/`
    - `temp-test-mKLbyt/` → `.tmp/temp-test-mKLbyt/`
    - `observations/` → `.tmp/observations/`
+   - `spekk-app-reference/` → `.tmp/spekk-app-reference/`
 
 ## Success Criteria
 
