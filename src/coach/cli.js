@@ -5,16 +5,31 @@ import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
 
 async function launchCoachAgent() {
   try {
-    const { activationMessage } = launchAgentWithPrompt('coach-agent');
+    const { activationMessage, resolver } = launchAgentWithPrompt('coach-agent');
     
     // Launch Claude Code with the coach agent message and prompt
     const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
       stdio: ['pipe', 'inherit', 'inherit']
     });
     
+    // Handle stdin errors (like EPIPE when Claude exits quickly)
+    claudeProcess.stdin.on('error', (error) => {
+      // Ignore EPIPE errors when Claude exits quickly
+      if (error.code !== 'EPIPE') {
+        console.error('❌ Error writing to Claude stdin:', error.message);
+      }
+    });
+    
     // Send the agent activation message with full prompt content
-    claudeProcess.stdin.write(activationMessage + '\n');
-    claudeProcess.stdin.end();
+    try {
+      claudeProcess.stdin.write(activationMessage + '\n');
+      claudeProcess.stdin.end();
+    } catch (error) {
+      // Ignore EPIPE errors when Claude exits quickly
+      if (error.code !== 'EPIPE') {
+        throw error;
+      }
+    }
   
     // Handle process events
     claudeProcess.on('error', (error) => {
@@ -29,6 +44,7 @@ async function launchCoachAgent() {
     
     await new Promise((resolve, reject) => {
       claudeProcess.on('exit', (code) => {
+        resolver.cleanupCopiedFiles();
         if (code !== 0) {
           console.error(`❌ Claude Code exited with code ${code}`);
           reject(new Error(`Claude Code exited with code ${code}`));
@@ -41,6 +57,7 @@ async function launchCoachAgent() {
       process.on('SIGINT', () => {
         console.log('\n🛑 Stopping Coach Agent...');
         claudeProcess.kill('SIGINT');
+        resolver.cleanupCopiedFiles();
         resolve();
       });
     });
