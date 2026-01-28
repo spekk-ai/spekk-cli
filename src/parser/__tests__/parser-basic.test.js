@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { execSync } from 'node:child_process';
+import { mockExecSync } from '../../__tests__/helpers/process-mocks.js';
 import fs from 'fs';
 import path from 'path';
 import { parseAllSpecs, findNextAssertion } from '../index.js';
@@ -14,7 +14,7 @@ describe('Parser Basic Tests', () => {
       
       // Test that the script can be executed and returns JSON (may exit with error code but should output JSON)
       try {
-        const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+        const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
         JSON.parse(result); // Should be valid JSON
       } catch (error) {
         // Script may exit with error code but should still output JSON
@@ -29,14 +29,14 @@ describe('Parser Basic Tests', () => {
     test('npm run next command works', () => {
       // Verify the npm script exists and works
       assert.doesNotThrow(() => {
-        execSync('npm run next', { encoding: 'utf8' });
+        mockExecSync('npm run next', { encoding: 'utf8' });
       }, 'npm run next should execute successfully');
     });
   });
 
   describe('JSON Output Format Validation', () => {
     test('outputs valid JSON format', () => {
-      const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+      const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
       
       let parsed;
       assert.doesNotThrow(() => {
@@ -49,7 +49,7 @@ describe('Parser Basic Tests', () => {
     });
 
     test('assertion output includes required fields', () => {
-      const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+      const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
       const parsed = JSON.parse(result);
       
       if (parsed.type === 'assertion') {
@@ -101,7 +101,7 @@ status: done
         fs.symlinkSync(tempDir, originalSpecsPath);
         
         try {
-          const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+          const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
           const parsed = JSON.parse(result);
           
           if (parsed.status === 'complete') {
@@ -236,7 +236,7 @@ This is a spec file at the root level.`;
           // Parser should reject invalid folder structure
           // This test ensures the structure is enforced
           try {
-            const result = execSync('node src/parser/cli.js', { encoding: 'utf8', stdio: 'pipe' });
+            const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8', stdio: 'pipe' });
             const parsed = JSON.parse(result);
             
             // If parser succeeds, should not find the flat file as a valid spec

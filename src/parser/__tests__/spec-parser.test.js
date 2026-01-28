@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { execSync } from 'node:child_process';
+import { mockExecSync } from '../../__tests__/helpers/process-mocks.js';
 import fs from 'fs';
 import path from 'path';
 import { parseAllSpecs, parseFrontmatter, validateFields, findNextAssertion } from '../index.js';
@@ -695,7 +695,7 @@ priority: 0
 describe('JSON Output Validation', () => {
   describe('Valid JSON Structure', () => {
     test('outputs parseable JSON to stdout', () => {
-      const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+      const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
       
       // Should not throw when parsing
       let parsed;
@@ -747,7 +747,7 @@ Test assertion for JSON output.`;
         fs.symlinkSync(tempDir, originalSpecsPath);
         
         try {
-          const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+          const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
           const parsed = JSON.parse(result);
           
           if (parsed.type === 'assertion') {
@@ -824,7 +824,7 @@ This assertion is complete.`;
         fs.symlinkSync(tempDir, originalSpecsPath);
         
         try {
-          const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+          const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
           const parsed = JSON.parse(result);
           
           if (parsed.status === 'complete') {
@@ -853,7 +853,7 @@ This assertion is complete.`;
         try {
           fs.renameSync(specsDir, backupDir);
           
-          const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+          const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
           const parsed = JSON.parse(result);
           
           assert.equal(parsed.status, 'empty', 'Should have empty status');
@@ -891,7 +891,7 @@ priority: 1
         fs.symlinkSync(tempDir, originalSpecsPath);
         
         try {
-          const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+          const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
           const parsed = JSON.parse(result);
           
           assert.equal(parsed.error, true, 'Should have error: true');
@@ -918,7 +918,7 @@ priority: 1
     });
 
     test('outputs single JSON object, not multiple or streaming', () => {
-      const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+      const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
       
       // Should parse as exactly one JSON object (pretty-printed is OK)
       let parsed;
@@ -937,7 +937,7 @@ priority: 1
     });
 
     test('field values match expected types and formats', () => {
-      const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+      const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
       const parsed = JSON.parse(result);
       
       if (parsed.type === 'assertion') {
@@ -961,8 +961,8 @@ priority: 1
 
   describe('Output Consistency', () => {
     test('multiple runs produce identical JSON structure', () => {
-      const result1 = execSync('node src/parser/cli.js', { encoding: 'utf8' });
-      const result2 = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+      const result1 = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
+      const result2 = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
       
       const parsed1 = JSON.parse(result1);
       const parsed2 = JSON.parse(result2);
@@ -984,7 +984,7 @@ priority: 1
     });
 
     test('JSON is properly formatted and indented', () => {
-      const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+      const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
       
       // Should be pretty-printed (contain newlines and spaces)
       assert.ok(result.includes('\n'), 'JSON should be formatted with newlines');
@@ -1402,7 +1402,7 @@ This is in progress and should be picked up.`;
 
   describe('CLI Integration', () => {
     test('npm run next returns valid JSON with next assertion', () => {
-      const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+      const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
       const parsed = JSON.parse(result);
       
       // Should return either an assertion or completion status
@@ -1494,7 +1494,7 @@ status: not_started
           const nextAssertion = findNextAssertion(testAssertions, testSpecs);
           
           // Test CLI output (uses all real specs, so we can't guarantee it matches test data)
-          const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });
+          const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
           const parsed = JSON.parse(result);
           
           // Verify CLI returns valid structure (can't guarantee specific test assertion due to real specs)
