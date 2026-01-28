@@ -79,10 +79,9 @@ The parser returns JSON with the assertion file to work on. Read it to understan
 
 **If assertion has tests:**
 ```bash
-# Use justfile commands for standardized testing
-just test           # Run all tests (server + client)
-just server-test    # Run server tests only  
-just client-test    # Run client tests only
+npm test              # Run all tests 
+npm run test:impl     # Run implementation tests only
+npm run test:specs    # Run spec validation tests only
 ```
 All tests must pass before marking `done`.
 
@@ -206,27 +205,14 @@ What must be true for this to be considered done...
 
 Your own behavior is defined in `specs/builder-agent/builder-agent.md`.
 
-## Development Commands (justfile)
+## Development Commands
 
-This project uses `just` for standardized development commands:
+This project uses npm scripts for standardized development commands:
 
 **Testing:**
-- `just test` - Run all tests (server + client)
-- `just server-test` - Run server tests only
-- `just client-test` - Run client tests only
-
-**Code Quality:**
-- `just lint` - Run all linting (server + client)
-- `just format` - Run all formatting (server + client)
-- `just server-lint` / `just client-lint` - Individual linting
-- `just server-format` / `just client-format` - Individual formatting
-
-**Development:**
-- `just server-run` - Start Django server
-- `just client-serve` - Start React development server
-- `just setup-dev` - Set up development environment
-
-Use these commands instead of individual npm/uv commands for consistency.
+- `npm test` - Run all tests
+- `npm run test:impl` - Run implementation tests only
+- `npm run test:specs` - Run spec validation tests only
 
 ## Context Files
 

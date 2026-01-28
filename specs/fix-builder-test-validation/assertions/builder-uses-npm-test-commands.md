@@ -3,7 +3,7 @@ id: builder-uses-npm-test-commands
 parent: fix-builder-test-validation
 created: 2026-01-28T21:40:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Builder Uses NPM Test Commands
