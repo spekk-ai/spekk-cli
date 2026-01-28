@@ -16,16 +16,16 @@ You work in a **spec-driven development** system. Your job is to turn declarativ
 
 **IMPORTANT: You work on ONE assertion at a time, then STOP.**
 
-Run the spec parser to identify the next highest-priority incomplete assertion:
+Run the spec parser to identify the next highest-priority incomplete assertion using the global `spekk` CLI tool:
 
 ```bash
-npm run next
+spekk next
 ```
 
 **If parser doesn't exist yet (bootstrap):**
 - Work on `specs/spec-parser/assertions/` in priority order
 - Start with priority 1, oldest `created` timestamp first
-- Build the parser so we can be fully spec-driven
+- Build the parser so we can use `spekk next` and be fully spec-driven
 
 ### 2. Read the Assertion
 
@@ -43,8 +43,8 @@ The parser returns JSON with the assertion file to work on. Read it to understan
    - Manual processes → NO (prose validation)
 
 2. **If testable, write tests first:**
-   - Create test file (e.g., `src/parser/__tests__/parser.test.js`)
-   - Link test in assertion markdown: `**Tests:** src/parser/__tests__/parser.test.js`
+   - Create test file (e.g., `app/parser/__tests__/parser.test.js`)
+   - Link test in assertion markdown: `**Tests:** app/parser/__tests__/parser.test.js`
    - Write tests that validate the assertion's success criteria
 
 3. **Implement to make tests pass**
@@ -79,10 +79,9 @@ The parser returns JSON with the assertion file to work on. Read it to understan
 
 **If assertion has tests:**
 ```bash
-# Use justfile commands for standardized testing
-just test           # Run all tests (server + client)
-just server-test    # Run server tests only  
-just client-test    # Run client tests only
+npm test              # Run all tests 
+npm run test:impl     # Run implementation tests only
+npm run test:specs    # Run spec validation tests only
 ```
 All tests must pass before marking `done`.
 
@@ -114,7 +113,7 @@ status: done
 **CRITICAL:** Before completing work, verify the spec parser still functions:
 
 ```bash
-npm run next
+spekk next
 ```
 
 This command MUST succeed and return valid JSON. If it fails:
@@ -136,21 +135,45 @@ git push origin HEAD  # Push current branch to remote
 
 ### 8. Open Pull Request (if needed)
 
-If working on a feature branch (not main), ensure a pull request exists:
+If working on a feature branch (not main), ensure a pull request exists with a detailed description:
 
 ```bash
 # Check if PR already exists for this branch
 gh pr view --web 2>/dev/null || {
-  # Create PR if none exists
-  gh pr create --title "WIP: $(git branch --show-current)" --body "Automated PR for branch work"
+  # Create PR with comprehensive description
+  gh pr create --title "Implement: $(git branch --show-current)" --body "$(cat <<'EOF'
+## Summary
+- Implemented [assertion-name] from [spec-name] specification
+- [Brief description of what was built/changed]
+- [Any important implementation decisions made]
+
+## Test Plan
+- [ ] All new tests pass (`npm test`)
+- [ ] No regressions in existing functionality
+- [ ] Spec parser continues to function (`spekk next`)
+- [ ] [Any manual verification steps needed]
+
+## Specs Addressed
+- **Assertion:** specs/[spec-name]/assertions/[assertion-id].md
+- **Parent Spec:** specs/[spec-name]/[spec-name].md
+
+## Implementation Notes
+[Any technical details, trade-offs, or context reviewers should know]
+EOF
+)"
 }
 ```
 
-This creates visibility for branch-based work and enables collaboration.
+**PR Description Requirements:**
+- **Clear title** describing what was implemented, not just the branch name
+- **Summary section** with 2-3 bullet points explaining what was built
+- **Test plan** with verification steps and confirmation that tests pass
+- **Spec references** linking to the assertions and specs that were addressed
+- **Implementation notes** explaining any decisions, trade-offs, or context
 
 ### 9. Stop
 
-**Your work is done for this session.** Do NOT run `npm run next` again or pick up another task. The orchestration system (Ralph loop or user) will invoke you again when it's time to work on the next assertion.
+**Your work is done for this session.** Do NOT run `spekk next` again or pick up another task. The orchestration system (Ralph loop or user) will invoke you again when it's time to work on the next assertion.
 
 ## Spec Format
 
@@ -182,27 +205,14 @@ What must be true for this to be considered done...
 
 Your own behavior is defined in `specs/builder-agent/builder-agent.md`.
 
-## Development Commands (justfile)
+## Development Commands
 
-This project uses `just` for standardized development commands:
+This project uses npm scripts for standardized development commands:
 
 **Testing:**
-- `just test` - Run all tests (server + client)
-- `just server-test` - Run server tests only
-- `just client-test` - Run client tests only
-
-**Code Quality:**
-- `just lint` - Run all linting (server + client)
-- `just format` - Run all formatting (server + client)
-- `just server-lint` / `just client-lint` - Individual linting
-- `just server-format` / `just client-format` - Individual formatting
-
-**Development:**
-- `just server-run` - Start Django server
-- `just client-serve` - Start React development server
-- `just setup-dev` - Set up development environment
-
-Use these commands instead of individual npm/uv commands for consistency.
+- `npm test` - Run all tests
+- `npm run test:impl` - Run implementation tests only
+- `npm run test:specs` - Run spec validation tests only
 
 ## Context Files
 

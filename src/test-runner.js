@@ -15,8 +15,8 @@ async function runTests() {
     
     console.log(`Found ${testFiles.length} test files`);
     
-    // Run Node.js test runner with all test files (sequential to avoid test interference)
-    const nodeTest = spawn('node', ['--test', '--test-concurrency=1', ...testFiles], {
+    // Run Node.js test runner with all test files (parallel execution enabled)
+    const nodeTest = spawn('node', ['--test', ...testFiles], {
       stdio: 'inherit',
       shell: false // Avoid shell-specific behavior for cross-platform compatibility
     });

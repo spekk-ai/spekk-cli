@@ -1,0 +1,27 @@
+---
+id: cli-works-from-any-directory
+parent: cli-prompt-resolution
+created: 2026-01-28T19:30:00Z
+priority: 1
+status: done
+---
+
+# CLI Works From Any Directory
+
+## Assertion
+
+All spekk CLI commands (`spekk`, `spekk coach`, `spekk builder`, `spekk observer`) work when run from any directory, not just from within the spekk-cli installation directory.
+
+## Success Criteria
+
+- Integration tests verify `spekk`, `spekk coach`, `spekk builder`, and `spekk observer` work from external directories
+- Commands exit successfully (code 0) when run from any directory
+- No "file not found" or "directory not found" errors when running from external directories
+- Parser finds specs from spekk-cli installation, not current directory
+- All commands work consistently across different working directories
+
+**Tests:** src/cli/__tests__/external-directory-integration.test.js
+
+## Context
+
+Currently, when running from an external directory, Claude Code cannot locate the agent prompt files because they are resolved relative to the current working directory instead of the spekk-cli installation directory.

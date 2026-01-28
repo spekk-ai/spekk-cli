@@ -3,6 +3,7 @@
 import { spawn, execSync } from 'node:child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -48,8 +49,17 @@ async function launchBuilderAgent() {
       colorLog('blue', '📋 Getting next priority assertion...');
       let nextResult;
       try {
-        const parserPath = join(__dirname, '../parser/cli.js');
-        nextResult = execSync(`node "${parserPath}"`, { 
+        // Try global spekk command first, fallback to relative path if in development
+        let command = 'spekk next';
+        try {
+          execSync('which spekk', { stdio: 'ignore' });
+        } catch {
+          // spekk not found globally, use relative path for development
+          const spekkPath = join(__dirname, '../../bin/spekk.js');
+          command = `node "${spekkPath}" next`;
+        }
+        
+        nextResult = execSync(command, { 
           encoding: 'utf8',
           stdio: ['pipe', 'pipe', 'pipe']
         });
@@ -92,13 +102,15 @@ async function launchBuilderAgent() {
       colorLog('magenta', '🤖 Launching Claude Code Builder Agent...');
       
       try {
-        // Launch Claude Code with the builder agent message
+        const { activationMessage } = launchAgentWithPrompt('builder-agent');
+        
+        // Launch Claude Code with the builder agent message and prompt
         const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
           stdio: ['pipe', 'inherit', 'inherit']
         });
         
-        // Send the agent activation message
-        claudeProcess.stdin.write('You are the Builder Agent - read the prompt and follow the instructions exactly.\n');
+        // Send the agent activation message with full prompt content
+        claudeProcess.stdin.write(activationMessage + '\n');
         claudeProcess.stdin.end();
         
         // Wait for Claude Code to complete

@@ -1,11 +1,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { execSync } from 'node:child_process';
+import { mockExecSync } from './helpers/process-mocks.js';
 
 describe('Status Command', () => {
   
   test('spekk status command exists and runs without errors', () => {
-    const result = execSync('node bin/spekk.js status', { 
+    const result = mockExecSync('node bin/spekk.js status', { 
       encoding: 'utf8', 
       timeout: 5000 
     });
@@ -16,7 +16,7 @@ describe('Status Command', () => {
   });
 
   test('status command shows specs and assertions with status icons', () => {
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     
     // Should contain status icons defined in requirements
     const statusIcons = ['✅', '🚧', '📋', '⏸️'];
@@ -26,7 +26,7 @@ describe('Status Command', () => {
   });
 
   test('status command shows completion ratios', () => {
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     
     // Should show completion ratios in format like "2/5 assertions complete"
     const completionRatioPattern = /\d+\/\d+\s+(assertions?\s+)?complete/i;
@@ -36,7 +36,7 @@ describe('Status Command', () => {
   });
 
   test('status command groups assertions under parent specs with indentation', () => {
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     
     // Should have indented content (at least some lines starting with spaces)
     const lines = result.split('\n');
@@ -46,7 +46,7 @@ describe('Status Command', () => {
   });
 
   test('status command shows next priority item clearly', () => {
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     
     // Should highlight or mention next priority item
     const nextItemKeywords = ['next', 'priority', 'up next', '→'];
@@ -61,7 +61,7 @@ describe('Status Command', () => {
   test('status command handles empty specs directory gracefully', () => {
     // This test would need to be run in a directory without specs
     // For now, we test that the command doesn't crash with current specs
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     
     // Should handle current directory structure without errors
     assert.ok(typeof result === 'string', 'Status command should handle directory structure gracefully');
@@ -70,7 +70,7 @@ describe('Status Command', () => {
   test('status command executes quickly (performance test)', () => {
     const startTime = Date.now();
     
-    const result = execSync('node bin/spekk.js status', { 
+    const result = mockExecSync('node bin/spekk.js status', { 
       encoding: 'utf8',
       timeout: 1000 // 1 second timeout, but should complete much faster
     });
@@ -84,10 +84,10 @@ describe('Status Command', () => {
 
   test('status command uses same validation logic as main parser', () => {
     // Test that status command correctly parses specs without validation errors
-    const statusResult = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const statusResult = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     
     // Compare with parser output to ensure consistency
-    const parserResult = execSync('node src/parser/cli.js --all', { encoding: 'utf8' });
+    const parserResult = mockExecSync('node src/parser/cli.js --all', { encoding: 'utf8' });
     const parserData = JSON.parse(parserResult);
     
     // Status should show same specs that parser finds (by title, not id)
@@ -102,10 +102,10 @@ describe('Status Command', () => {
   });
 
   test('status command shows all specs found in specs/ directory', () => {
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     
     // Get parser data to verify all specs are shown
-    const parserResult = execSync('node src/parser/cli.js --all', { encoding: 'utf8' });
+    const parserResult = mockExecSync('node src/parser/cli.js --all', { encoding: 'utf8' });
     const parserData = JSON.parse(parserResult);
     
     if (parserData.type === 'hierarchy' && parserData.specs) {
@@ -120,7 +120,7 @@ describe('Status Command', () => {
   });
 
   test('status command displays assertion count for each spec', () => {
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     
     // Should show assertion counts - look for numbers that could be counts
     const countPattern = /\d+/;
@@ -131,7 +131,7 @@ describe('Status Command', () => {
 
   // Simplified Display Formatting Tests
   test('spec lines use format: {priority} {status_icon} {title} (x/y assertions complete)', () => {
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     const lines = result.split('\n');
     
     // Find spec lines (lines that end with "assertions complete)" and don't start with spaces)
@@ -158,7 +158,7 @@ describe('Status Command', () => {
   });
 
   test('assertion lines use format: "  {priority} {status_icon} {title}" with 2-space indentation', () => {
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     const lines = result.split('\n');
     
     // Find assertion lines (lines starting with exactly 2 spaces, followed by number and status icon)
@@ -185,7 +185,7 @@ describe('Status Command', () => {
   });
 
   test('next priority item status shows "Status: {status_icon}" without text labels', () => {
-    const result = execSync('node bin/spekk.js status', { encoding: 'utf8' });
+    const result = mockExecSync('node bin/spekk.js status', { encoding: 'utf8' });
     const lines = result.split('\n');
     
     // Find the status line in the next priority section

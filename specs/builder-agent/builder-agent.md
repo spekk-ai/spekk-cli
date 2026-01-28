@@ -2,7 +2,7 @@
 id: builder-agent
 created: 2026-01-20T18:15:00Z
 priority: 1
-status: done
+status: in_progress
 ---
 
 # Builder Agent
