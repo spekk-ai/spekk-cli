@@ -1,5 +1,15 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Get the spekk-cli installation directory
+function getSpekkInstallationDirectory() {
+  // From parser/index.js, go up to project root: ../../
+  return path.join(__dirname, '../..');
+}
 
 // Simple YAML frontmatter parser (since we don't have gray-matter)
 function parseFrontmatter(content) {
@@ -171,9 +181,11 @@ function validateFolderStructure(specsDir) {
   }
 }
 
-// Read and parse all specs and assertions from current working directory
-function parseAllSpecs() {
-  const specsDir = path.join(process.cwd(), 'specs');
+// Read and parse all specs and assertions from specs directory
+function parseAllSpecs(specsDirectory = null) {
+  // If no directory provided, use the spekk-cli installation directory
+  // This allows CLI commands to work from any directory
+  const specsDir = specsDirectory || path.join(getSpekkInstallationDirectory(), 'specs');
   
   if (!fs.existsSync(specsDir)) {
     return { specs: [], assertions: [] };
@@ -350,7 +362,7 @@ function findNextAssertion(assertions, specs = []) {
 // Main function
 export function run(options = {}) {
   try {
-    const { specs, assertions } = parseAllSpecs();
+    const { specs, assertions } = parseAllSpecs(options.specsDirectory);
     
     if (specs.length === 0 && assertions.length === 0) {
       console.log(JSON.stringify({
@@ -439,4 +451,4 @@ export function run(options = {}) {
 }
 
 // Export the parser functions for testing
-export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus };
+export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory };
