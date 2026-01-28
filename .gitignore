@@ -85,3 +85,6 @@ spekk-app-reference/
 
 # Temporary directory for all development artifacts
 .tmp/
+
+# Observations directory (ephemeral files for human review)
+observations/
