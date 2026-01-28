@@ -3,7 +3,7 @@ id: integration-test-external-directory
 parent: cli-prompt-resolution
 created: 2026-01-28T19:45:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Integration Test External Directory
