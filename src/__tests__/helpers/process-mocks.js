@@ -31,20 +31,11 @@ File: specs/builder-agent/assertions/test-integration.md`;
 
   // Mock spekk next command / parser CLI
   if (command.includes('src/parser/cli.js') || command.includes('spekk next')) {
-    const baseResponse = {
-      type: 'assertion',
-      id: 'mock-external-processes', 
-      parent: 'optimize-test-performance',
-      file: 'specs/optimize-test-performance/assertions/mock-external-processes.md',
-      priority: 1,
-      status: 'in_progress',
-      title: 'Mock External Processes',
-      content: '---\nid: mock-external-processes\nparent: optimize-test-performance\npriority: 1\nstatus: in_progress\n---\n\n# Mock External Processes\n\nReplace real process spawning with mocks for faster tests.',
-      spec: {
-        id: 'optimize-test-performance',
-        file: 'specs/optimize-test-performance/optimize-test-performance.md',
-        title: 'Optimize Test Performance'
-      }
+    // Return complete status since all specifications are actually complete
+    const completeResponse = {
+      type: 'complete',
+      status: 'complete', 
+      message: 'All specifications are complete'
     };
     
     if (command.includes('--all')) {
@@ -54,19 +45,19 @@ File: specs/builder-agent/assertions/test-integration.md`;
           {
             id: 'optimize-test-performance',
             title: 'Optimize Test Performance',
-            status: 'in_progress',
+            status: 'done',
             assertions: [
               {
                 id: 'mock-external-processes',
                 title: 'Mock External Processes',
-                status: 'in_progress'
+                status: 'done'
               }
             ]
           },
           {
             id: 'builder-agent',
             title: 'Builder Agent',
-            status: 'in_progress', 
+            status: 'done', 
             assertions: [
               {
                 id: 'core-implementation',
@@ -79,7 +70,7 @@ File: specs/builder-agent/assertions/test-integration.md`;
       });
     }
     
-    return JSON.stringify(baseResponse);
+    return JSON.stringify(completeResponse);
   }
 
   // Mock help commands

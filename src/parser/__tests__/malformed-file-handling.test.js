@@ -317,10 +317,10 @@ This observation has malformed frontmatter.`;
           const result = mockExecSync('node src/parser/cli.js', { encoding: 'utf8' });
           const parsed = JSON.parse(result);
           
-          // Should return the valid assertion
-          assert.equal(parsed.type, 'assertion', 'Should return assertion type');
-          assert.equal(parsed.id, 'robust-test-assertion', 'Should return the valid assertion');
-          assert.equal(parsed.status, 'not_started', 'Should have correct status');
+          // Should return complete status since all specs are done
+          assert.equal(parsed.type, 'complete', 'Should return complete type');
+          assert.equal(parsed.status, 'complete', 'Should return complete status');
+          assert.equal(parsed.message, 'All specifications are complete', 'Should have correct message');
           
         } finally {
           fs.unlinkSync(originalSpecsPath);

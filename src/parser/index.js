@@ -230,10 +230,18 @@ function validateFolderStructure(specsDir) {
   const specsDirContents = fs.readdirSync(specsDir);
   const flatMdFiles = specsDirContents.filter(item => {
     const itemPath = path.join(specsDir, item);
-    if (fs.statSync(itemPath).isFile() && item.endsWith('.md')) {
-      // Check if file has frontmatter - if not, it should be ignored
-      const content = fs.readFileSync(itemPath, 'utf8');
-      return content.trimStart().startsWith('---');
+    try {
+      if (fs.statSync(itemPath).isFile() && item.endsWith('.md')) {
+        // Check if file has frontmatter - if not, it should be ignored
+        const content = fs.readFileSync(itemPath, 'utf8');
+        return content.trimStart().startsWith('---');
+      }
+    } catch (err) {
+      // Skip broken symlinks or files that can't be accessed
+      if (err.code === 'ENOENT') {
+        return false;
+      }
+      throw err;
     }
     return false;
   });
@@ -245,7 +253,15 @@ function validateFolderStructure(specsDir) {
   // Check each spec directory has required structure
   const specDirs = specsDirContents.filter(item => {
     const itemPath = path.join(specsDir, item);
-    return fs.statSync(itemPath).isDirectory();
+    try {
+      return fs.statSync(itemPath).isDirectory();
+    } catch (err) {
+      // Skip broken symlinks or items that can't be accessed
+      if (err.code === 'ENOENT') {
+        return false;
+      }
+      throw err;
+    }
   });
   
   for (const specDir of specDirs) {
