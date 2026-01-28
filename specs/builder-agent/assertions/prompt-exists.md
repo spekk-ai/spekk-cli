@@ -3,7 +3,7 @@ id: prompt-exists
 parent: builder-agent
 created: 2026-01-20T19:30:00Z
 priority: 1
-status: done
+status: in_progress
 ---
 
 # Builder Agent Prompt Must Exist
@@ -36,7 +36,7 @@ The prompt must include:
 **Directory references must be current:**
 - ✅ References `app/parser/` for implementation
 - ✅ References `app/**/__tests__/` for tests
-- ✅ Uses `npm run next` command (not `node scripts/next-spec.js`)
+- ✅ Uses `spekk next` command (global CLI, not `npm run next`)
 - ❌ No references to `scripts/` directory
 - ❌ No references to `tests/` directory
 
@@ -52,7 +52,7 @@ The prompt must include:
 - ✅ Includes complete workflow (get task, read, implement, test, validate, update status, commit, stop)
 - ✅ Explicitly instructs builder to work on ONE task and STOP
 - ✅ References correct directory structure (`app/` not `scripts/` or `tests/`)
-- ✅ Uses current commands (`npm run next`, `npm test`)
+- ✅ Uses global CLI commands (`spekk next`, not local npm scripts)
 - ✅ Explains status values (not_started, in_progress, done)
 - ✅ Describes priority levels (1, 2, 3)
 
@@ -62,5 +62,6 @@ Sidecar test should validate:
 - File exists at correct path
 - Contains key sections (role, workflow, stop instruction)
 - References `app/` directory structure
-- Uses `npm run next` command
+- Uses `spekk next` command (global CLI)
 - Does not reference deprecated `scripts/` or `tests/` directories
+- Does not use local npm scripts for spec parsing
