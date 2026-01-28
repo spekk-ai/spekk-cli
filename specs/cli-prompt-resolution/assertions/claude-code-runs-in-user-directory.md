@@ -3,7 +3,7 @@ id: claude-code-runs-in-user-directory
 parent: cli-prompt-resolution
 created: 2026-01-28T19:30:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Claude Code Runs in User Directory
@@ -19,8 +19,10 @@ When launching agent commands via spekk CLI, Claude Code runs in the user's curr
 - Test verifies user's project CLAUDE.md is loaded (not spekk-cli's CLAUDE.md)
 - Integration tests prove Claude Code doesn't run from spekk-cli installation directory
 
+**Tests:** src/cli/__tests__/working-directory-verification.test.js
+
 **Tests Required:**
-- `verify-claude-working-directory` assertion must be completed
+- `verify-claude-working-directory` assertion must be completed  
 - Test should verify file access and working directory programmatically
 
 ## Context
