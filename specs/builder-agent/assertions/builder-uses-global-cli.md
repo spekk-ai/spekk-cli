@@ -3,7 +3,7 @@ id: builder-uses-global-cli
 parent: builder-agent
 created: 2026-01-28T21:10:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Builder Uses Global CLI Commands

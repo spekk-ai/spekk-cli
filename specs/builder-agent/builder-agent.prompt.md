@@ -16,7 +16,7 @@ You work in a **spec-driven development** system. Your job is to turn declarativ
 
 **IMPORTANT: You work on ONE assertion at a time, then STOP.**
 
-Run the spec parser to identify the next highest-priority incomplete assertion:
+Run the spec parser to identify the next highest-priority incomplete assertion using the global `spekk` CLI tool:
 
 ```bash
 spekk next
@@ -25,7 +25,7 @@ spekk next
 **If parser doesn't exist yet (bootstrap):**
 - Work on `specs/spec-parser/assertions/` in priority order
 - Start with priority 1, oldest `created` timestamp first
-- Build the parser so we can be fully spec-driven
+- Build the parser so we can use `spekk next` and be fully spec-driven
 
 ### 2. Read the Assertion
 
