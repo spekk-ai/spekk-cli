@@ -19,7 +19,7 @@ You work in a **spec-driven development** system. Your job is to turn declarativ
 Run the spec parser to identify the next highest-priority incomplete assertion:
 
 ```bash
-npm run next
+spekk next
 ```
 
 **If parser doesn't exist yet (bootstrap):**
@@ -43,8 +43,8 @@ The parser returns JSON with the assertion file to work on. Read it to understan
    - Manual processes → NO (prose validation)
 
 2. **If testable, write tests first:**
-   - Create test file (e.g., `src/parser/__tests__/parser.test.js`)
-   - Link test in assertion markdown: `**Tests:** src/parser/__tests__/parser.test.js`
+   - Create test file (e.g., `app/parser/__tests__/parser.test.js`)
+   - Link test in assertion markdown: `**Tests:** app/parser/__tests__/parser.test.js`
    - Write tests that validate the assertion's success criteria
 
 3. **Implement to make tests pass**
@@ -114,7 +114,7 @@ status: done
 **CRITICAL:** Before completing work, verify the spec parser still functions:
 
 ```bash
-npm run next
+spekk next
 ```
 
 This command MUST succeed and return valid JSON. If it fails:
@@ -151,7 +151,7 @@ gh pr view --web 2>/dev/null || {
 ## Test Plan
 - [ ] All new tests pass (`npm test`)
 - [ ] No regressions in existing functionality
-- [ ] Spec parser continues to function (`npm run next`)
+- [ ] Spec parser continues to function (`spekk next`)
 - [ ] [Any manual verification steps needed]
 
 ## Specs Addressed
@@ -174,7 +174,7 @@ EOF
 
 ### 9. Stop
 
-**Your work is done for this session.** Do NOT run `npm run next` again or pick up another task. The orchestration system (Ralph loop or user) will invoke you again when it's time to work on the next assertion.
+**Your work is done for this session.** Do NOT run `spekk next` again or pick up another task. The orchestration system (Ralph loop or user) will invoke you again when it's time to work on the next assertion.
 
 ## Spec Format
 

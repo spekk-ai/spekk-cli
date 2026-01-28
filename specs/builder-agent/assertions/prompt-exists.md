@@ -3,7 +3,7 @@ id: prompt-exists
 parent: builder-agent
 created: 2026-01-20T19:30:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # Builder Agent Prompt Must Exist
