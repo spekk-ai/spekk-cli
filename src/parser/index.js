@@ -34,25 +34,72 @@ function parseFrontmatter(content) {
   const yamlContent = lines.slice(1, frontmatterEnd).join('\n');
   const markdownContent = lines.slice(frontmatterEnd + 1).join('\n');
   
-  // Simple YAML parser for our specific needs
+  // Enhanced YAML parser to handle arrays
   const frontmatter = {};
-  yamlContent.split('\n').forEach(line => {
-    const match = line.match(/^([^:]+):\s*(.+)$/);
-    if (match) {
-      const key = match[1].trim();
-      let value = match[2].trim();
-      
-      // Handle different value types
-      if (value === 'true') value = true;
-      else if (value === 'false') value = false;
-      else if (/^\d+$/.test(value)) value = parseInt(value);
-      else if (value.startsWith('"') && value.endsWith('"')) {
-        value = value.slice(1, -1);
+  let currentKey = null;
+  let inArray = false;
+  let arrayValues = [];
+  
+  const yamlLines = yamlContent.split('\n');
+  for (let i = 0; i < yamlLines.length; i++) {
+    const line = yamlLines[i];
+    
+    // Check if line starts an array
+    if (line.match(/^\s*-\s+(.+)$/)) {
+      const arrayMatch = line.match(/^\s*-\s+(.+)$/);
+      if (arrayMatch && currentKey) {
+        inArray = true;
+        let value = arrayMatch[1].trim();
+        // Handle value types for array items
+        if (value === 'true') value = true;
+        else if (value === 'false') value = false;
+        else if (/^\d+$/.test(value)) value = parseInt(value);
+        else if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        arrayValues.push(value);
+      }
+    } else {
+      // If we were in an array, save it
+      if (inArray && currentKey) {
+        frontmatter[currentKey] = arrayValues;
+        arrayValues = [];
+        inArray = false;
       }
       
-      frontmatter[key] = value;
+      // Check for key-value pair
+      const match = line.match(/^([^:]+):\s*(.*)$/);
+      if (match) {
+        const key = match[1].trim();
+        let value = match[2].trim();
+        
+        currentKey = key;
+        
+        // If value is empty, might be start of array
+        if (!value) {
+          // Next lines might be array items
+          continue;
+        }
+        
+        // Handle different value types
+        if (value === 'true') value = true;
+        else if (value === 'false') value = false;
+        else if (/^\d+$/.test(value)) value = parseInt(value);
+        else if (/^\d+\.\d+$/.test(value)) value = parseFloat(value);
+        else if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        
+        frontmatter[key] = value;
+        currentKey = null; // Reset if we got a value
+      }
     }
-  });
+  }
+  
+  // Handle any remaining array
+  if (inArray && currentKey) {
+    frontmatter[currentKey] = arrayValues;
+  }
   
   return { data: frontmatter, content: markdownContent };
 }
@@ -100,6 +147,75 @@ function validateFields(data, filePath, isAssertion = false) {
   if (data.updated && !timestampPattern.test(data.updated)) {
     throw new Error(`Invalid ISO 8601 timestamp in 'updated' field: '${data.updated}' in ${filePath}`);
   }
+}
+
+// Validate observation fields
+function validateObservationFields(data, filePath) {
+  const requiredFields = ['id', 'created', 'type', 'severity', 'affected_specs', 'affected_files'];
+  
+  for (const field of requiredFields) {
+    if (data[field] === undefined || data[field] === null) {
+      throw new Error(`Missing required field '${field}' in ${filePath}`);
+    }
+  }
+  
+  // Validate severity
+  if (!['low', 'medium', 'high'].includes(data.severity)) {
+    throw new Error(`Invalid severity value '${data.severity}' (must be: low, medium, high) in ${filePath}`);
+  }
+  
+  // Validate arrays
+  if (!Array.isArray(data.affected_specs)) {
+    throw new Error(`Field 'affected_specs' must be an array in ${filePath}`);
+  }
+  
+  if (!Array.isArray(data.affected_files)) {
+    throw new Error(`Field 'affected_files' must be an array in ${filePath}`);
+  }
+  
+  // Validate timestamp format
+  const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+  const isoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+  
+  if (!timestampPattern.test(data.created) && !isoTimestamp.test(data.created)) {
+    throw new Error(`Invalid ISO 8601 timestamp in 'created' field: '${data.created}' in ${filePath}`);
+  }
+}
+
+// Parse observation files from observations directory
+function parseObservations(rootDirectory = null) {
+  const rootDir = rootDirectory || getSpekkInstallationDirectory();
+  const observationsDir = path.join(rootDir, 'observations');
+  
+  if (!fs.existsSync(observationsDir)) {
+    return [];
+  }
+  
+  const observations = [];
+  const observationFiles = fs.readdirSync(observationsDir).filter(file => file.endsWith('.md'));
+  
+  for (const observationFile of observationFiles) {
+    const observationPath = path.join(observationsDir, observationFile);
+    const content = fs.readFileSync(observationPath, 'utf8');
+    
+    // Skip files that don't start with YAML frontmatter
+    if (!content.trimStart().startsWith('---')) {
+      continue;
+    }
+    
+    const { data, content: markdownContent } = parseFrontmatter(content);
+    
+    validateObservationFields(data, `observations/${observationFile}`);
+    
+    observations.push({
+      ...data,
+      file: `observations/${observationFile}`,
+      title: extractTitle(markdownContent),
+      content: content
+    });
+  }
+  
+  return observations;
 }
 
 // Validate folder structure requirements
@@ -185,10 +301,11 @@ function validateFolderStructure(specsDir) {
 function parseAllSpecs(specsDirectory = null) {
   // If no directory provided, use the spekk-cli installation directory
   // This allows CLI commands to work from any directory
-  const specsDir = specsDirectory || path.join(getSpekkInstallationDirectory(), 'specs');
+  const rootDir = specsDirectory || getSpekkInstallationDirectory();
+  const specsDir = specsDirectory || path.join(rootDir, 'specs');
   
   if (!fs.existsSync(specsDir)) {
-    return { specs: [], assertions: [] };
+    return { specs: [], assertions: [], observations: [] };
   }
   
   // Validate folder structure before parsing
@@ -290,7 +407,36 @@ function parseAllSpecs(specsDirectory = null) {
     }
   }
   
-  return { specs, assertions };
+  // Parse observations
+  const observations = parseObservations(rootDir);
+  
+  // Validate observation references
+  // Create a set of all valid IDs (both specs and assertions)
+  const allValidIds = new Set();
+  for (const spec of specs) {
+    allValidIds.add(spec.id);
+  }
+  for (const assertion of assertions) {
+    allValidIds.add(assertion.id);
+  }
+  
+  for (const observation of observations) {
+    // Validate affected_specs references (can be spec or assertion IDs)
+    for (const specId of observation.affected_specs) {
+      if (!allValidIds.has(specId)) {
+        throw new Error(`Observation '${observation.id}' references non-existent spec/assertion '${specId}'`);
+      }
+    }
+    
+    // Validate affected_files paths
+    for (const filePath of observation.affected_files) {
+      if (path.isAbsolute(filePath)) {
+        throw new Error(`Observation '${observation.id}' contains absolute path '${filePath}' (must be relative)`);
+      }
+    }
+  }
+  
+  return { specs, assertions, observations };
 }
 
 // Compute parent spec status based on child assertions
@@ -362,7 +508,7 @@ function findNextAssertion(assertions, specs = []) {
 // Main function
 export function run(options = {}) {
   try {
-    const { specs, assertions } = parseAllSpecs(options.specsDirectory);
+    const { specs, assertions, observations } = parseAllSpecs(options.specsDirectory);
     
     if (specs.length === 0 && assertions.length === 0) {
       console.log(JSON.stringify({
@@ -406,7 +552,8 @@ export function run(options = {}) {
       
       console.log(JSON.stringify({
         type: 'hierarchy',
-        specs: specsWithAssertions
+        specs: specsWithAssertions,
+        observations: observations
       }, null, 2));
       return;
     }
@@ -451,4 +598,4 @@ export function run(options = {}) {
 }
 
 // Export the parser functions for testing
-export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory };
+export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields };

@@ -3,10 +3,12 @@ id: spec-parser-handles-observations
 parent: observer-agent
 created: 2026-01-22T17:00:00Z
 priority: 3
-status: not_started
+status: done
 ---
 
 # Spec Parser Handles Observation Files
+
+**Tests:** src/parser/__tests__/observations-parsing.test.js
 
 The existing spec parser is extended to parse and validate observation files alongside specs and assertions.
 
