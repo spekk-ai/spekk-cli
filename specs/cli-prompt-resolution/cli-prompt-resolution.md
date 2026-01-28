@@ -20,15 +20,18 @@ The CLI should work from any directory while:
 ## Requirements
 
 - `spekk coach`, `spekk builder`, and `spekk observer` commands work from any directory
+- `spekk` (spec parser) and `spekk --all` commands work from any directory  
 - Claude Code runs in user's working directory to access their project files  
 - Agent prompt files are read directly from spekk-cli installation directory (NO copying)
+- Spec parser reads specs from spekk-cli installation directory, not current directory
 - User's working directory remains clean and unmodified
 - Solution works consistently across different environments and installation methods
 
 ## Success Criteria
 
 - User can run `spekk coach` from `~/thinknimble/vuenome` and Claude Code successfully loads the coach prompt from spekk-cli installation
+- User can run `spekk` from `~/thinknimble/vuenome` and get next assertion from spekk-cli specs
 - Claude Code's working directory remains `~/thinknimble/vuenome` so it can work with user's files
 - No temporary files or directories created in user's working directory
-- All agent commands (coach, builder, observer) work consistently from any directory
+- All commands (coach, builder, observer, parser) work consistently from any directory
 - User's project directory structure is never modified by the CLI
