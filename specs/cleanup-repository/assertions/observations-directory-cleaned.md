@@ -19,9 +19,9 @@ The directory contains hundreds of timestamped markdown files. According to the 
 ## Success Criteria
 
 - ✅ `observations/` directory remains in repository root (required by observer-agent spec)
-- ✅ Directory is added to `.gitignore` (observations are ephemeral)
+- ✅ Directory is tracked in Git (using Git as database for observations)
 - ✅ Observer-agent functionality preserved
 
 ## Implementation
 
-The observations directory should stay but be git-ignored since observations are meant to be ephemeral files for human review and processing.
+The observations directory should stay and be committed to Git since we use Git as our database. While observations are ephemeral from a human workflow perspective, they need to be tracked in version control for proper system operation.
