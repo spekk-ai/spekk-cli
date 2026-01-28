@@ -15,10 +15,11 @@ A test exists that verifies Claude Code can find and access the coach prompt fil
 ## Success Criteria
 
 - Test runs `spekk coach` from external directory
-- Test verifies `specs/coach-agent/coach-agent.prompt.md` file is present in the working directory during Claude Code execution
-- Test confirms Claude Code receives the agent activation message successfully
-- Test verifies the copied prompt file contains the expected coach agent instructions
-- Test confirms prompt files are cleaned up after Claude Code exits
+- Test verifies NO `specs/` directory is created in the user's working directory
+- Test confirms Claude Code receives the agent activation message successfully  
+- Test verifies Claude Code can access coach prompt from spekk-cli installation directory
+- Test confirms user's working directory remains completely unmodified
+- Test verifies no temporary files or cleanup needed in user's directory
 
 ## Context
 

@@ -3,7 +3,7 @@ id: agent-prompts-accessible-anywhere
 parent: cli-prompt-resolution
 created: 2026-01-28T19:30:00Z
 priority: 1
-status: done
+status: in_progress
 ---
 
 # Agent Prompts Accessible Anywhere
@@ -24,23 +24,22 @@ Agent prompt files from the spekk-cli installation are accessible to Claude Code
 - Unit tests in `src/cli/__tests__/prompt-resolution.test.js` (✅ completed)
 - Integration tests proving end-to-end prompt access
 
+## Constraints
+
+**❌ PROHIBITED APPROACH:**
+- Copying prompt files to user's working directory (messy, pollutes user's project)
+- Creating temporary files or directories in user's project space
+- Any approach that modifies the user's working directory structure
+
+**✅ REQUIRED APPROACH:**
+- Read prompt files directly from spekk-cli installation directory
+- Keep user's working directory clean and unmodified
+- Claude Code runs in user's directory but accesses prompts from installation
+
 ## Context
 
-The CLI needs to make these prompt files available to Claude Code through one of these potential approaches:
-- Copying prompt files to user directory temporarily
-- Setting up symlinks to prompt files
-- Using Claude Code's memory/instruction system
-- Modifying how Claude Code resolves prompt file paths
-
-## Implementation
-
-Implemented using the **copying prompt files to user directory temporarily** approach:
-
-1. Created `src/cli/prompt-resolver.js` utility with `PromptResolver` class and `withPromptFiles()` function
-2. Updated all agent CLI files to use `withPromptFiles()` wrapper:
-   - `src/coach/cli.js` - Coach agent CLI
-   - `src/builder/cli.js` - Builder agent CLI
-   - `src/observer/cli.js` - Observer agent CLI
-3. Prompt files are copied to user's current directory when agents launch
-4. Files are automatically cleaned up when agents exit
-5. Empty directories created during setup are removed during cleanup
+The CLI needs to make these prompt files available to Claude Code through one of these approaches:
+- Pass prompt content directly via stdin (along with agent activation message)
+- Use Claude Code's memory/instruction system to load prompt content
+- Set environment variables with prompt file paths for Claude Code to read
+- Send prompt file path in agent activation message for Claude Code to read directly
