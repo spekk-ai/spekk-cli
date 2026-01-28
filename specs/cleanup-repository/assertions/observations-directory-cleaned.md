@@ -10,7 +10,7 @@ status: not_started
 
 ## What Must Be True
 
-The `observations/` directory either doesn't exist or is properly managed.
+The `observations/` directory is moved to `.tmp/observations/` and no longer exists in the repository root.
 
 ## Current State
 
@@ -18,13 +18,10 @@ The directory contains hundreds of timestamped markdown files that appear to be 
 
 ## Success Criteria
 
-- ✅ Either the `observations/` directory is removed entirely, OR
-- ✅ The directory is added to `.gitignore` if it's needed for development
-- ✅ No observation files are committed to version control
+- ✅ `observations/` directory moved to `.tmp/observations/`
+- ✅ No `observations/` directory in repository root
+- ✅ Observation files preserved but not tracked by git
 
-## Decision Required
+## Implementation
 
-The implementation should determine if these observation files serve a purpose:
-- If they're debug logs → Remove directory and add to `.gitignore`
-- If they're important → Move to appropriate location or document their purpose
-- If they're generated → Ensure they're git-ignored
+Move the entire `observations/` directory to `.tmp/observations/` to preserve the files while removing them from version control tracking.

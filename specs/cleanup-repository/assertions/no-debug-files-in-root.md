@@ -10,9 +10,9 @@ status: not_started
 
 ## What Must Be True
 
-No debug or test files exist in the repository root directory.
+No debug or test files exist in the repository root directory. All temporary artifacts must be in `.tmp/`.
 
-## Files That Must Not Exist
+## Files That Must Not Exist in Root
 
 ```
 debug-coach.js
@@ -23,19 +23,15 @@ debug-test/
 temp-test-DB4WyD/
 temp-test-debug/
 temp-test-mKLbyt/
+observations/
 ```
 
 ## Success Criteria
 
-- ✅ No `debug-*.js` files in root directory
-- ✅ No `test-*.js` files in root directory (except proper test files in test directories)
-- ✅ No `debug-*` directories in root
-- ✅ No `temp-test-*` directories in root
-- ✅ Repository root is clean of temporary development artifacts
+- ✅ Repository root contains no temporary development artifacts
+- ✅ All debug/test files are moved to `.tmp/` directory
+- ✅ Repository follows clean organization principles
 
 ## Implementation Notes
 
-These files should be:
-1. Deleted if they're truly temporary
-2. Moved to appropriate directories if they're needed
-3. Added to `.gitignore` if they're generated during development
+These files should be moved to `.tmp/` rather than deleted, in case they're still needed for development or debugging purposes.
