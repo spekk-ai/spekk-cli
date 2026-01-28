@@ -88,7 +88,7 @@ process.exit(0);
     }
   });
 
-  test('prompt files are copied to user directory and cleaned up', async () => {
+  test('prompt files are NOT copied to user directory (per spec)', async () => {
     // Create a mock Claude that exits immediately
     const mockClaudePath = path.join(tempDir, 'claude');
     const mockScript = `#!/usr/bin/env node
@@ -127,26 +127,31 @@ process.exit(0);
         }, 2000);
       });
       
-      // Verify prompt files were copied to user directory
-      assert.ok(output.includes('Copied specs/coach-agent/coach-agent.prompt.md'), 
-        'Coach agent prompt should be copied to user directory');
-      assert.ok(output.includes('Copied specs/builder-agent/builder-agent.prompt.md'), 
-        'Builder agent prompt should be copied to user directory');
+      // Verify spekk launches successfully without copying files
+      assert.ok(output.includes('Launching Coach Agent with Claude Code'), 
+        'Coach CLI should launch successfully');
+      assert.ok(output.includes(`Working directory: ${tempDir}`), 
+        'Should report correct working directory');
       
-      // Verify prompt files were cleaned up
-      assert.ok(output.includes('Cleaned up 3 temporary files'), 
-        'Temporary prompt files should be cleaned up');
-      
-      // Verify prompt files don't remain in user directory
+      // Verify NO prompt files are copied to user directory (per spec requirement)
       const expectedPromptFiles = [
-        path.join(tempDir, 'specs/coach-agent/coach-agent.prompt.md'),
-        path.join(tempDir, 'specs/builder-agent/builder-agent.prompt.md'),
-        path.join(tempDir, 'specs/observer-agent/observer-agent.prompt.md')
+        path.join(tempDir, 'specs'),
+        path.join(tempDir, 'specs/coach-agent'),
+        path.join(tempDir, 'specs/builder-agent'),
+        path.join(tempDir, 'specs/observer-agent')
       ];
       
-      expectedPromptFiles.forEach(filePath => {
-        assert.ok(!fs.existsSync(filePath), 
-          `Temporary prompt file should be cleaned up: ${filePath}`);
+      expectedPromptFiles.forEach(dirPath => {
+        assert.ok(!fs.existsSync(dirPath), 
+          `No specs directory should be created in user directory: ${dirPath}`);
+      });
+      
+      // Verify user directory remains clean (spec requirement)
+      const userFiles = fs.readdirSync(tempDir);
+      const expectedFiles = ['test-file.txt', 'claude'];
+      userFiles.forEach(file => {
+        assert.ok(expectedFiles.includes(file) || file.startsWith('temp-wd-test-'), 
+          `Unexpected file in user directory: ${file}`);
       });
         
     } finally {

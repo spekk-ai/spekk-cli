@@ -3,7 +3,7 @@ id: verify-claude-working-directory
 parent: cli-prompt-resolution
 created: 2026-01-28T19:45:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Verify Claude Working Directory
@@ -19,6 +19,8 @@ A test exists that verifies Claude Code runs in the user's current working direc
 - Test verifies Claude Code can see and access the test file in its working directory
 - Test confirms Claude Code working directory matches the directory where spekk was run
 - Test verifies Claude Code does NOT run from the spekk-cli installation directory
+
+**Tests:** src/cli/__tests__/working-directory-verification.test.js
 
 ## Context
 
