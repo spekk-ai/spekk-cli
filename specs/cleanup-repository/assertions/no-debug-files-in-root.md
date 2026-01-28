@@ -3,7 +3,7 @@ id: no-debug-files-in-root
 parent: cleanup-repository
 created: 2026-01-28T21:18:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # No Debug Files in Root
