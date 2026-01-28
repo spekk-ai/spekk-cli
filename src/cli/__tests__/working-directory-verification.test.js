@@ -128,7 +128,7 @@ process.exit(0);
       });
       
       // Verify spekk launches successfully without copying files
-      assert.ok(output.includes('Launching Coach Agent with Claude Code'), 
+      assert.ok(output.includes('Launching Coach Agent Agent with Claude Code'), 
         'Coach CLI should launch successfully');
       assert.ok(output.includes(`Working directory: ${tempDir}`), 
         'Should report correct working directory');
