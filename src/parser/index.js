@@ -184,7 +184,7 @@ function validateObservationFields(data, filePath) {
 
 // Parse observation files from observations directory
 function parseObservations(rootDirectory = null) {
-  const rootDir = rootDirectory || getSpekkInstallationDirectory();
+  const rootDir = rootDirectory || process.cwd();
   const observationsDir = path.join(rootDir, 'observations');
   
   if (!fs.existsSync(observationsDir)) {

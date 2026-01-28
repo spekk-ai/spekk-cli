@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { Skill } from './skill-interface.js';
 
-export class BusinessModelValidator {
+export class BusinessModelValidator extends Skill {
   constructor() {
+    super();
     this.assessmentAreas = [
       'industry-background',
       'product-validation', 
@@ -83,6 +85,101 @@ export class BusinessModelValidator {
         1: { priority: 'medium', message: 'Prioritize hypotheses by impact and validation difficulty' }
       }
     };
+  }
+
+  // Skill interface implementation
+  getId() {
+    return 'business-model-validator';
+  }
+
+  getName() {
+    return 'Business Model Validator';
+  }
+
+  getDescription() {
+    return 'Validates startup/business models through structured questioning and scoring across key areas like product validation, market demand, and business strategy.';
+  }
+
+  shouldTrigger(userInput, context = {}) {
+    const keywords = [
+      'business model', 'startup', 'validate', 'business idea',
+      'startup idea', 'business validation', 'market validation',
+      'product validation', 'business strategy', 'business plan',
+      'monetization', 'revenue model', 'traction', 'market demand'
+    ];
+    
+    const lowerInput = userInput.toLowerCase();
+    return keywords.some(keyword => lowerInput.includes(keyword));
+  }
+
+  getQuestions() {
+    const questions = [];
+    
+    this.assessmentAreas.forEach(area => {
+      const areaQuestions = this.getQuestionsForArea(area);
+      areaQuestions.forEach((questionText, index) => {
+        questions.push({
+          id: `${area}_q${index + 1}`,
+          text: questionText,
+          type: 'text',
+          area: area
+        });
+      });
+    });
+    
+    return questions;
+  }
+
+  processResponses(responses) {
+    // Create a session to use existing methods
+    const session = this.createSession();
+    
+    // Group responses by area and record them
+    this.assessmentAreas.forEach(area => {
+      const areaResponses = [];
+      const areaQuestions = this.getQuestionsForArea(area);
+      
+      areaQuestions.forEach((_, index) => {
+        const responseKey = `${area}_q${index + 1}`;
+        if (responses[responseKey]) {
+          areaResponses.push(responses[responseKey]);
+        }
+      });
+      
+      if (areaResponses.length > 0) {
+        this.recordResponse(session, area, areaResponses.join(' '));
+        // For now, auto-score based on response completeness
+        // In a real implementation, this would involve Claude analyzing the responses
+        const score = this.autoScore(areaResponses);
+        this.recordScore(session, area, score);
+      }
+    });
+    
+    // Generate the report
+    const report = this.generateReport(session);
+    const structuredReport = this.generateStructuredReport(session);
+    
+    return {
+      summary: report.summary,
+      recommendations: report.recommendations,
+      data: {
+        totalScore: report.totalScore,
+        percentageScore: report.percentageScore,
+        areaScores: report.areaScores,
+        responses: report.responses
+      },
+      markdownReport: structuredReport
+    };
+  }
+
+  // Helper method to auto-score based on response completeness (simplified)
+  autoScore(responses) {
+    const totalLength = responses.join(' ').length;
+    const avgLength = totalLength / responses.length;
+    
+    if (avgLength > 100) return 2; // Detailed responses
+    if (avgLength > 50) return 1;  // Adequate responses
+    return 0; // Minimal responses
   }
 
   getAssessmentAreas() {

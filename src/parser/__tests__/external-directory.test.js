@@ -14,12 +14,17 @@ describe('External Directory Functionality', () => {
 
   beforeEach(() => {
     originalCwd = process.cwd();
-    tempDir = path.join(__dirname, '../../../temp-test-hVn1Qd');
+    
+    // Create .tmp directory if it doesn't exist
+    const tmpBase = path.join(__dirname, '../../../.tmp');
+    if (!fs.existsSync(tmpBase)) {
+      fs.mkdirSync(tmpBase, { recursive: true });
+    }
+    
+    tempDir = path.join(tmpBase, `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
     
     // Create a temporary directory to simulate external usage
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
+    fs.mkdirSync(tempDir, { recursive: true });
     
     // Change to the temp directory
     process.chdir(tempDir);

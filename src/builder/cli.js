@@ -49,8 +49,17 @@ async function launchBuilderAgent() {
       colorLog('blue', '📋 Getting next priority assertion...');
       let nextResult;
       try {
-        const parserPath = join(__dirname, '../parser/cli.js');
-        nextResult = execSync(`node "${parserPath}"`, { 
+        // Try global spekk command first, fallback to relative path if in development
+        let command = 'spekk next';
+        try {
+          execSync('which spekk', { stdio: 'ignore' });
+        } catch {
+          // spekk not found globally, use relative path for development
+          const spekkPath = join(__dirname, '../../bin/spekk.js');
+          command = `node "${spekkPath}" next`;
+        }
+        
+        nextResult = execSync(command, { 
           encoding: 'utf8',
           stdio: ['pipe', 'pipe', 'pipe']
         });

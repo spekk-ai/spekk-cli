@@ -18,7 +18,13 @@ test('basic test framework validation', () => {
 });
       `.trim();
 
-      const tempTestFile = path.join(process.cwd(), 'temp-test-framework-check.js');
+      // Create .tmp directory if it doesn't exist
+      const tmpBase = path.join(process.cwd(), '.tmp');
+      if (!fs.existsSync(tmpBase)) {
+        fs.mkdirSync(tmpBase, { recursive: true });
+      }
+      
+      const tempTestFile = path.join(tmpBase, 'temp-test-framework-check.js');
       
       try {
         fs.writeFileSync(tempTestFile, testCode);
@@ -46,7 +52,13 @@ else
 fi
       `.trim();
 
-      const tempTestFile = path.join(process.cwd(), 'temp-bash-test-check.sh');
+      // Create .tmp directory if it doesn't exist
+      const tmpBase = path.join(process.cwd(), '.tmp');
+      if (!fs.existsSync(tmpBase)) {
+        fs.mkdirSync(tmpBase, { recursive: true });
+      }
+      
+      const tempTestFile = path.join(tmpBase, 'temp-bash-test-check.sh');
       
       try {
         fs.writeFileSync(tempTestFile, testScript);
@@ -93,7 +105,13 @@ fi
 
   describe('Sidecar Test Support', () => {
     test('bash sidecar tests can be executed', () => {
-      const tempDir = path.join(process.cwd(), 'temp-sidecar-test');
+      // Create .tmp directory if it doesn't exist
+      const tmpBase = path.join(process.cwd(), '.tmp');
+      if (!fs.existsSync(tmpBase)) {
+        fs.mkdirSync(tmpBase, { recursive: true });
+      }
+      
+      const tempDir = path.join(tmpBase, 'temp-sidecar-test');
       const assertionsDir = path.join(tempDir, 'assertions');
       
       try {
@@ -164,7 +182,13 @@ Test spec for sidecar test validation.`;
     });
 
     test('sidecar tests can detect missing files', () => {
-      const tempDir = path.join(process.cwd(), 'temp-sidecar-fail-test');
+      // Create .tmp directory if it doesn't exist
+      const tmpBase = path.join(process.cwd(), '.tmp');
+      if (!fs.existsSync(tmpBase)) {
+        fs.mkdirSync(tmpBase, { recursive: true });
+      }
+      
+      const tempDir = path.join(tmpBase, 'temp-sidecar-fail-test');
       const assertionsDir = path.join(tempDir, 'assertions');
       
       try {
@@ -231,7 +255,13 @@ Test spec for sidecar test failure validation.`;
 
   describe('Test Discovery and Linking', () => {
     test('can identify assertions with linked tests', () => {
-      const tempDir = path.join(process.cwd(), 'temp-test-linking');
+      // Create .tmp directory if it doesn't exist
+      const tmpBase = path.join(process.cwd(), '.tmp');
+      if (!fs.existsSync(tmpBase)) {
+        fs.mkdirSync(tmpBase, { recursive: true });
+      }
+      
+      const tempDir = path.join(tmpBase, 'temp-test-linking');
       const assertionsDir = path.join(tempDir, 'assertions');
       
       try {
