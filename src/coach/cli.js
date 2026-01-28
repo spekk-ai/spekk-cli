@@ -1,52 +1,47 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { withPromptFiles } from '../cli/prompt-resolver.js';
+import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
 
 async function launchCoachAgent() {
   try {
-    console.log('🏃‍♀️ Launching Coach Agent with Claude Code...');
-    console.log('Working directory:', process.cwd());
-    console.log('Press Ctrl+C to exit the coaching session.');
-    console.log(''); // Empty line for better readability
+    const { activationMessage } = launchAgentWithPrompt('coach-agent');
     
-    await withPromptFiles(async () => {
-      // Launch Claude Code with the coach agent message
-      const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
-        stdio: ['pipe', 'inherit', 'inherit']
-      });
-      
-      // Send the agent activation message
-      claudeProcess.stdin.write('You are the Coach Agent - read the prompt and follow the instructions exactly.\n');
-      claudeProcess.stdin.end();
+    // Launch Claude Code with the coach agent message and prompt
+    const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
+      stdio: ['pipe', 'inherit', 'inherit']
+    });
     
-      // Handle process events
-      claudeProcess.on('error', (error) => {
-        if (error.code === 'ENOENT') {
-          console.error('❌ Error: Claude Code CLI not found. Please install Claude Code first.');
-          console.error('Visit: https://claude.ai/code for installation instructions.');
+    // Send the agent activation message with full prompt content
+    claudeProcess.stdin.write(activationMessage + '\n');
+    claudeProcess.stdin.end();
+  
+    // Handle process events
+    claudeProcess.on('error', (error) => {
+      if (error.code === 'ENOENT') {
+        console.error('❌ Error: Claude Code CLI not found. Please install Claude Code first.');
+        console.error('Visit: https://claude.ai/code for installation instructions.');
+      } else {
+        console.error('❌ Error launching Claude Code:', error.message);
+      }
+      process.exit(1);
+    });
+    
+    await new Promise((resolve, reject) => {
+      claudeProcess.on('exit', (code) => {
+        if (code !== 0) {
+          console.error(`❌ Claude Code exited with code ${code}`);
+          reject(new Error(`Claude Code exited with code ${code}`));
         } else {
-          console.error('❌ Error launching Claude Code:', error.message);
+          resolve();
         }
-        process.exit(1);
       });
       
-      await new Promise((resolve, reject) => {
-        claudeProcess.on('exit', (code) => {
-          if (code !== 0) {
-            console.error(`❌ Claude Code exited with code ${code}`);
-            reject(new Error(`Claude Code exited with code ${code}`));
-          } else {
-            resolve();
-          }
-        });
-        
-        // Handle interrupts gracefully
-        process.on('SIGINT', () => {
-          console.log('\n🛑 Stopping Coach Agent...');
-          claudeProcess.kill('SIGINT');
-          resolve();
-        });
+      // Handle interrupts gracefully
+      process.on('SIGINT', () => {
+        console.log('\n🛑 Stopping Coach Agent...');
+        claudeProcess.kill('SIGINT');
+        resolve();
       });
     });
     

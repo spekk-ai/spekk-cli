@@ -3,7 +3,7 @@
 import { spawn, execSync } from 'node:child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { withPromptFiles } from '../cli/prompt-resolver.js';
+import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -93,37 +93,37 @@ async function launchBuilderAgent() {
       colorLog('magenta', '🤖 Launching Claude Code Builder Agent...');
       
       try {
-        await withPromptFiles(async () => {
-          // Launch Claude Code with the builder agent message
-          const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
-            stdio: ['pipe', 'inherit', 'inherit']
+        const { activationMessage } = launchAgentWithPrompt('builder-agent');
+        
+        // Launch Claude Code with the builder agent message and prompt
+        const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
+          stdio: ['pipe', 'inherit', 'inherit']
+        });
+        
+        // Send the agent activation message with full prompt content
+        claudeProcess.stdin.write(activationMessage + '\n');
+        claudeProcess.stdin.end();
+        
+        // Wait for Claude Code to complete
+        await new Promise((resolve, reject) => {
+          claudeProcess.on('error', (error) => {
+            if (error.code === 'ENOENT') {
+              colorLog('red', '❌ Error: Claude Code CLI not found. Please install Claude Code first.');
+              colorLog('blue', 'Visit: https://claude.ai/code for installation instructions.');
+            } else {
+              colorLog('red', '❌ Error launching Claude Code: ' + error.message);
+            }
+            reject(error);
           });
           
-          // Send the agent activation message
-          claudeProcess.stdin.write('You are the Builder Agent - read the prompt and follow the instructions exactly.\n');
-          claudeProcess.stdin.end();
-          
-          // Wait for Claude Code to complete
-          await new Promise((resolve, reject) => {
-            claudeProcess.on('error', (error) => {
-              if (error.code === 'ENOENT') {
-                colorLog('red', '❌ Error: Claude Code CLI not found. Please install Claude Code first.');
-                colorLog('blue', 'Visit: https://claude.ai/code for installation instructions.');
-              } else {
-                colorLog('red', '❌ Error launching Claude Code: ' + error.message);
-              }
-              reject(error);
-            });
-            
-            claudeProcess.on('exit', (code) => {
-              if (code === 0) {
-                colorLog('green', '   ✅ Builder agent completed work');
-                resolve();
-              } else {
-                colorLog('red', `❌ Claude Code exited with code ${code}`);
-                reject(new Error(`Claude Code exited with code ${code}`));
-              }
-            });
+          claudeProcess.on('exit', (code) => {
+            if (code === 0) {
+              colorLog('green', '   ✅ Builder agent completed work');
+              resolve();
+            } else {
+              colorLog('red', `❌ Claude Code exited with code ${code}`);
+              reject(new Error(`Claude Code exited with code ${code}`));
+            }
           });
         });
         

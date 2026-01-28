@@ -2,9 +2,8 @@
 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
-import { execSync } from 'child_process';
-import { spawn } from 'child_process';
+import { existsSync, mkdirSync, rmSync } from 'fs';
+import { readdirSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,10 +27,11 @@ class PromptResolutionTest {
       // Test that prompt files exist in the spekk-cli installation
       await this.testPromptFilesExist();
       
-      // Test that agent CLI commands can find prompt files from different directories
-      await this.testPromptAccessFromDifferentDirectory();
+      // Test that PromptResolver can create activation messages from different directories
+      await this.testPromptContentAccessFromDifferentDirectory();
       
-      // Test cleanup is now included in the previous test
+      // Test that user directory stays clean (no copying)
+      await this.testUserDirectoryStaysClean();
       
     } catch (error) {
       console.error('❌ Test setup failed:', error.message);
@@ -75,16 +75,16 @@ class PromptResolutionTest {
     }
     
     if (allExist) {
-      console.log('   ✅ All prompt files exist');
+      console.log('   ✅ All prompt files exist in installation');
       this.passed++;
     } else {
-      console.error('   ❌ Some prompt files are missing');
+      console.error('   ❌ Some prompt files are missing from installation');
       this.failed++;
     }
   }
 
-  async testPromptAccessFromDifferentDirectory() {
-    console.log('\n📂 Testing prompt file access from different directory...');
+  async testPromptContentAccessFromDifferentDirectory() {
+    console.log('\n📂 Testing prompt content access from different directory...');
     
     // Change to test directory
     const originalCwd = process.cwd();
@@ -95,59 +95,117 @@ class PromptResolutionTest {
       const { PromptResolver } = await import('../prompt-resolver.js');
       const resolver = new PromptResolver();
       
-      const expectedPromptFiles = [
-        'specs/coach-agent/coach-agent.prompt.md',
-        'specs/builder-agent/builder-agent.prompt.md', 
-        'specs/observer-agent/observer-agent.prompt.md'
-      ];
+      // Test that resolver can create activation messages
+      const coachMessage = resolver.createActivationMessage('coach-agent');
+      const builderMessage = resolver.createActivationMessage('builder-agent');
+      const observerMessage = resolver.createActivationMessage('observer-agent');
       
-      // Test setup of prompt files
-      resolver.setupPromptFiles();
-      
-      // Check if all expected files are now accessible
-      let allAccessible = expectedPromptFiles.every(file => {
-        const localPath = join(process.cwd(), file);
-        return existsSync(localPath);
-      });
-      
-      if (allAccessible) {
-        console.log('   ✅ All prompt files accessible after setup');
+      // Verify messages contain expected content
+      if (coachMessage.includes('You are the Coach Agent') && coachMessage.length > 100) {
+        console.log('   ✅ Coach agent activation message created');
         this.passed++;
-        
-        // Test cleanup
-        resolver.cleanupPromptFiles();
-        
-        // Verify files are cleaned up
-        let allCleaned = expectedPromptFiles.every(file => {
-          const localPath = join(process.cwd(), file);
-          return !existsSync(localPath);
-        });
-        
-        if (allCleaned) {
-          console.log('   ✅ All prompt files cleaned up properly');
+      } else {
+        console.error('   ❌ Coach agent activation message invalid');
+        this.failed++;
+      }
+      
+      if (builderMessage.includes('You are the Builder Agent') && builderMessage.length > 100) {
+        console.log('   ✅ Builder agent activation message created');
+        this.passed++;
+      } else {
+        console.error('   ❌ Builder agent activation message invalid');
+        this.failed++;
+      }
+      
+      if (observerMessage.includes('You are the Observer Agent') && observerMessage.length > 100) {
+        console.log('   ✅ Observer agent activation message created');
+        this.passed++;
+      } else {
+        console.error('   ❌ Observer agent activation message invalid');
+        this.failed++;
+      }
+      
+      // Test individual prompt content access
+      try {
+        const coachContent = resolver.getPromptContent('coach-agent');
+        if (coachContent.length > 50) {
+          console.log('   ✅ Coach agent prompt content readable');
           this.passed++;
         } else {
-          console.error('   ❌ Some prompt files not cleaned up');
+          console.error('   ❌ Coach agent prompt content too short or empty');
           this.failed++;
         }
-        
-      } else {
-        console.error('   ❌ Some prompt files not accessible after setup');
+      } catch (error) {
+        console.error('   ❌ Error reading coach agent prompt:', error.message);
         this.failed++;
       }
       
     } catch (error) {
-      console.error('   ❌ Error testing prompt access:', error.message);
+      console.error('   ❌ Error testing prompt content access:', error.message);
       this.failed++;
     } finally {
       process.chdir(originalCwd);
     }
   }
 
-  async testPromptFileCleanup() {
-    console.log('\n🧹 Testing prompt file cleanup...');
-    console.log('   ✅ Cleanup testing integrated with access test');
-    this.passed++;
+  async testUserDirectoryStaysClean() {
+    console.log('\n🧹 Testing user directory stays clean (no copying)...');
+    
+    // Change to test directory
+    const originalCwd = process.cwd();
+    process.chdir(this.testDir);
+    
+    try {
+      // Record initial directory contents
+      const initialContents = this.getDirectoryContents(this.testDir);
+      
+      // Import and use PromptResolver 
+      const { PromptResolver } = await import('../prompt-resolver.js');
+      const resolver = new PromptResolver();
+      
+      // Create activation messages (this should NOT create any local files)
+      resolver.createActivationMessage('coach-agent');
+      resolver.createActivationMessage('builder-agent'); 
+      resolver.createActivationMessage('observer-agent');
+      
+      // Check that no new files were created
+      const finalContents = this.getDirectoryContents(this.testDir);
+      
+      if (JSON.stringify(initialContents.sort()) === JSON.stringify(finalContents.sort())) {
+        console.log('   ✅ User directory remains clean - no files copied');
+        this.passed++;
+      } else {
+        console.error('   ❌ User directory was modified');
+        console.error('   Initial:', initialContents);
+        console.error('   Final:', finalContents);
+        this.failed++;
+      }
+      
+      // Specifically check that no 'specs' directory was created
+      const specsDir = join(this.testDir, 'specs');
+      if (!existsSync(specsDir)) {
+        console.log('   ✅ No specs directory created in user directory');
+        this.passed++;
+      } else {
+        console.error('   ❌ specs directory was created in user directory (prohibited)');
+        this.failed++;
+      }
+      
+    } catch (error) {
+      console.error('   ❌ Error testing directory cleanliness:', error.message);
+      this.failed++;
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }
+
+  getDirectoryContents(dir) {
+    try {
+      return readdirSync(dir, { withFileTypes: true })
+        .map(dirent => dirent.name);
+    } catch (error) {
+      return [];
+    }
   }
 
   printResults() {

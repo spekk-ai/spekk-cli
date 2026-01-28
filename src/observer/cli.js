@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { withPromptFiles } from '../cli/prompt-resolver.js';
+import { PromptResolver } from '../cli/prompt-resolver.js';
 
 async function launchObserverAgent(cliArgs = null) {
   try {
@@ -26,62 +26,61 @@ async function launchObserverAgent(cliArgs = null) {
 
     console.log('🔍 Launching Observer Agent with Claude Code...');
     console.log('Working directory:', process.cwd());
-    
-    // Parse options to pass context to Claude agent
-    const options = parseOptions(args);
-    let contextMessage = 'You are the Observer Agent - read the prompt and follow the instructions exactly.';
-    
-    if (Object.keys(options).length > 0) {
-      contextMessage += '\n\nCLI Options provided:\n';
-      if (options.scanInterval) {
-        contextMessage += `- Scan interval: ${options.scanInterval} seconds\n`;
-      }
-      if (options.quiet) {
-        contextMessage += '- Quiet mode: enabled\n';
-      }
-      contextMessage += '\nYou can use these preferences in your monitoring approach. The programmatic observer tool is available in src/observer/programmatic.js if you want to use it.';
-    }
-    
     console.log('Press Ctrl+C to exit the observation session.');
     console.log(''); // Empty line for better readability
     
-    await withPromptFiles(async () => {
-      // Launch Claude Code with the observer agent message
-      const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
-        stdio: ['pipe', 'inherit', 'inherit']
-      });
-      
-      // Send the agent activation message with context
-      claudeProcess.stdin.write(contextMessage + '\n');
-      claudeProcess.stdin.end();
-      
-      // Handle process events
-      claudeProcess.on('error', (error) => {
-        if (error.code === 'ENOENT') {
-          console.error('❌ Error: Claude Code CLI not found. Please install Claude Code first.');
-          console.error('Visit: https://claude.ai/code for installation instructions.');
+    const resolver = new PromptResolver();
+    
+    // Parse options to pass context to Claude agent
+    const options = parseOptions(args);
+    let baseMessage = resolver.createActivationMessage('observer-agent');
+    
+    if (Object.keys(options).length > 0) {
+      baseMessage += '\n\nCLI Options provided:\n';
+      if (options.scanInterval) {
+        baseMessage += `- Scan interval: ${options.scanInterval} seconds\n`;
+      }
+      if (options.quiet) {
+        baseMessage += '- Quiet mode: enabled\n';
+      }
+      baseMessage += '\nYou can use these preferences in your monitoring approach. The programmatic observer tool is available in src/observer/programmatic.js if you want to use it.';
+    }
+    
+    // Launch Claude Code with the observer agent message and prompt
+    const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
+      stdio: ['pipe', 'inherit', 'inherit']
+    });
+    
+    // Send the agent activation message with full prompt content and context
+    claudeProcess.stdin.write(baseMessage + '\n');
+    claudeProcess.stdin.end();
+    
+    // Handle process events
+    claudeProcess.on('error', (error) => {
+      if (error.code === 'ENOENT') {
+        console.error('❌ Error: Claude Code CLI not found. Please install Claude Code first.');
+        console.error('Visit: https://claude.ai/code for installation instructions.');
+      } else {
+        console.error('❌ Error launching Claude Code:', error.message);
+      }
+      process.exit(1);
+    });
+    
+    await new Promise((resolve, reject) => {
+      claudeProcess.on('exit', (code) => {
+        if (code !== 0) {
+          console.error(`❌ Claude Code exited with code ${code}`);
+          reject(new Error(`Claude Code exited with code ${code}`));
         } else {
-          console.error('❌ Error launching Claude Code:', error.message);
+          resolve();
         }
-        process.exit(1);
       });
       
-      await new Promise((resolve, reject) => {
-        claudeProcess.on('exit', (code) => {
-          if (code !== 0) {
-            console.error(`❌ Claude Code exited with code ${code}`);
-            reject(new Error(`Claude Code exited with code ${code}`));
-          } else {
-            resolve();
-          }
-        });
-        
-        // Handle interrupts gracefully
-        process.on('SIGINT', () => {
-          console.log('\n🛑 Stopping Observer Agent...');
-          claudeProcess.kill('SIGINT');
-          resolve();
-        });
+      // Handle interrupts gracefully
+      process.on('SIGINT', () => {
+        console.log('\n🛑 Stopping Observer Agent...');
+        claudeProcess.kill('SIGINT');
+        resolve();
       });
     });
     

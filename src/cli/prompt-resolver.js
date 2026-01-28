@@ -1,6 +1,6 @@
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, mkdirSync, copyFileSync, rmSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -8,112 +8,82 @@ const projectRoot = join(__dirname, '../..');
 
 export class PromptResolver {
   constructor() {
-    this.tempPromptFiles = [];
     this.promptFiles = [
       {
-        source: join(projectRoot, 'specs/coach-agent/coach-agent.prompt.md'),
-        target: 'specs/coach-agent/coach-agent.prompt.md'
+        name: 'coach-agent',
+        path: join(projectRoot, 'specs/coach-agent/coach-agent.prompt.md')
       },
       {
-        source: join(projectRoot, 'specs/builder-agent/builder-agent.prompt.md'), 
-        target: 'specs/builder-agent/builder-agent.prompt.md'
+        name: 'builder-agent', 
+        path: join(projectRoot, 'specs/builder-agent/builder-agent.prompt.md')
       },
       {
-        source: join(projectRoot, 'specs/observer-agent/observer-agent.prompt.md'),
-        target: 'specs/observer-agent/observer-agent.prompt.md'
+        name: 'observer-agent',
+        path: join(projectRoot, 'specs/observer-agent/observer-agent.prompt.md')
       }
     ];
   }
 
-  setupPromptFiles() {
-    console.log('📋 Setting up prompt files for Claude Code access...');
+  getPromptContent(agentName) {
+    const promptFile = this.promptFiles.find(p => p.name === agentName);
+    if (!promptFile) {
+      throw new Error(`Unknown agent: ${agentName}`);
+    }
+    
+    if (!existsSync(promptFile.path)) {
+      throw new Error(`Prompt file not found: ${promptFile.path}`);
+    }
+    
+    return readFileSync(promptFile.path, 'utf8');
+  }
+
+  createActivationMessage(agentName) {
+    const agentDisplayName = agentName.split('-').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
     
     try {
-      for (const prompt of this.promptFiles) {
-        // Ensure target directory exists
-        const targetDir = dirname(prompt.target);
-        if (!existsSync(targetDir)) {
-          mkdirSync(targetDir, { recursive: true });
-        }
-        
-        // Copy source prompt file to target location
-        if (existsSync(prompt.source)) {
-          copyFileSync(prompt.source, prompt.target);
-          this.tempPromptFiles.push(prompt.target);
-          console.log(`   ✅ Copied ${prompt.target}`);
-        } else {
-          console.warn(`   ⚠️  Warning: Source prompt file not found: ${prompt.source}`);
-        }
-      }
+      const promptContent = this.getPromptContent(agentName);
       
-      if (this.tempPromptFiles.length > 0) {
-        console.log(`   📁 ${this.tempPromptFiles.length} prompt files ready for Claude Code`);
-      }
-      
+      return `You are the ${agentDisplayName} Agent - read the prompt and follow the instructions exactly.
+
+Here is your prompt:
+
+${promptContent}`;
     } catch (error) {
-      console.error('❌ Error setting up prompt files:', error.message);
-      // Clean up any partially created files
-      this.cleanupPromptFiles();
+      console.error(`❌ Error loading prompt for ${agentName}:`, error.message);
       throw error;
     }
   }
 
-  cleanupPromptFiles() {
-    if (this.tempPromptFiles.length === 0) {
-      return;
-    }
-    
-    console.log('🧹 Cleaning up temporary prompt files...');
-    
-    try {
-      for (const tempFile of this.tempPromptFiles) {
-        if (existsSync(tempFile)) {
-          // Remove the file
-          rmSync(tempFile, { force: true });
-          
-          // Remove parent directories if they're empty
-          const dir = dirname(tempFile);
-          this.removeEmptyDirectories(dir);
-        }
+  verifyPromptFilesExist() {
+    const missing = [];
+    for (const prompt of this.promptFiles) {
+      if (!existsSync(prompt.path)) {
+        missing.push(prompt.path);
       }
-      
-      console.log(`   ✅ Cleaned up ${this.tempPromptFiles.length} temporary files`);
-      this.tempPromptFiles = [];
-      
-    } catch (error) {
-      console.error('❌ Error cleaning up prompt files:', error.message);
-      // Don't throw here - cleanup errors shouldn't crash the process
     }
-  }
-
-  removeEmptyDirectories(dir) {
-    try {
-      // Only remove specs/ subdirectories we created, not user's existing directories
-      if (!dir.includes('specs/') || dir === 'specs') {
-        return;
-      }
-      
-      // Try to remove if empty
-      rmSync(dir, { force: true });
-      
-      // Recursively try parent directory
-      const parentDir = dirname(dir);
-      if (parentDir !== dir && parentDir.includes('specs/')) {
-        this.removeEmptyDirectories(parentDir);
-      }
-    } catch (error) {
-      // Directory not empty or other error - ignore silently
-    }
+    return missing;
   }
 }
 
-export async function withPromptFiles(callback) {
+export function launchAgentWithPrompt(agentName, claudeArgs = ['--dangerously-skip-permissions']) {
   const resolver = new PromptResolver();
   
   try {
-    resolver.setupPromptFiles();
-    await callback();
-  } finally {
-    resolver.cleanupPromptFiles();
+    console.log(`🏃‍♀️ Launching ${agentName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Agent with Claude Code...`);
+    console.log('Working directory:', process.cwd());
+    console.log('Press Ctrl+C to exit the agent session.');
+    console.log(''); 
+    
+    const activationMessage = resolver.createActivationMessage(agentName);
+    
+    return {
+      activationMessage,
+      resolver
+    };
+  } catch (error) {
+    console.error(`❌ Error preparing ${agentName} agent:`, error.message);
+    throw error;
   }
 }

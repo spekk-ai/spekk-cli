@@ -3,7 +3,7 @@ id: agent-prompts-accessible-anywhere
 parent: cli-prompt-resolution
 created: 2026-01-28T19:30:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # Agent Prompts Accessible Anywhere
