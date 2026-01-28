@@ -299,9 +299,9 @@ function validateFolderStructure(specsDir) {
 
 // Read and parse all specs and assertions from specs directory
 function parseAllSpecs(specsDirectory = null) {
-  // If no directory provided, use the spekk-cli installation directory
-  // This allows CLI commands to work from any directory
-  const rootDir = specsDirectory || getSpekkInstallationDirectory();
+  // If no directory provided, use the current working directory
+  // This allows CLI commands to work on specs in the current directory
+  const rootDir = process.cwd();
   const specsDir = specsDirectory || path.join(rootDir, 'specs');
   
   if (!fs.existsSync(specsDir)) {

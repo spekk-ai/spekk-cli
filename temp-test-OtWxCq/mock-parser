@@ -1,0 +1,2 @@
+#!/usr/bin/env node
+console.log('{"type":"assertion","id":"test-assertion","parent":"test-spec","file":"test.md","priority":1,"status":"not_started","title":"Test Assertion"}');

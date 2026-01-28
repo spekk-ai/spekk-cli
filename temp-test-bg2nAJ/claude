@@ -1,0 +1,7 @@
+#!/usr/bin/env node
+process.stdin.on('data', (data) => {
+  console.log('STDIN_CONTENT:', data.toString());
+});
+process.stdin.on('end', () => {
+  process.exit(0);
+});

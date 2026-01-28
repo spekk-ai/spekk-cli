@@ -3,7 +3,7 @@ id: cli-reads-local-specs
 parent: fix-cli-context-bug
 created: 2026-01-28T21:22:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # CLI Reads Local Specs
@@ -35,6 +35,10 @@ The parser logic needs to:
 - Use `process.cwd()` to determine the working directory
 - Look for specs in `${process.cwd()}/specs/`
 - Not hardcode paths to the CLI's own specs directory
+
+## Tests
+
+**Tests:** src/parser/__tests__/cli-reads-local-specs.test.js
 
 ## Validation Commands
 

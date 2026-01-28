@@ -1,0 +1,3 @@
+#!/usr/bin/env node
+process.stdin.on('data', () => process.exit(0));
+process.exit(0);
