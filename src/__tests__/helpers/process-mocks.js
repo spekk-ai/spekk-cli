@@ -38,7 +38,13 @@ File: specs/builder-agent/assertions/test-integration.md`;
       file: 'specs/optimize-test-performance/assertions/mock-external-processes.md',
       priority: 1,
       status: 'in_progress',
-      title: 'Mock External Processes'
+      title: 'Mock External Processes',
+      content: '---\nid: mock-external-processes\nparent: optimize-test-performance\npriority: 1\nstatus: in_progress\n---\n\n# Mock External Processes\n\nReplace real process spawning with mocks for faster tests.',
+      spec: {
+        id: 'optimize-test-performance',
+        file: 'specs/optimize-test-performance/optimize-test-performance.md',
+        title: 'Optimize Test Performance'
+      }
     };
     
     if (command.includes('--all')) {

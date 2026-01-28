@@ -80,8 +80,8 @@ describe('SkillRegistry', () => {
       
       const skills = registry.getAllSkills();
       assert.strictEqual(skills.length, 2);
-      assert.strictEqual(skills.includes(skill1));
-      assert.strictEqual(skills.includes(skill2));
+      assert.strictEqual(skills.includes(skill1), true);
+      assert.strictEqual(skills.includes(skill2), true);
     });
   });
 
