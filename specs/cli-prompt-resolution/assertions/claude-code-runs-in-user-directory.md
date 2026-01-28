@@ -3,7 +3,7 @@ id: claude-code-runs-in-user-directory
 parent: cli-prompt-resolution
 created: 2026-01-28T19:30:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # Claude Code Runs in User Directory

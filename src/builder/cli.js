@@ -93,7 +93,7 @@ async function launchBuilderAgent() {
       colorLog('magenta', '🤖 Launching Claude Code Builder Agent...');
       
       try {
-        const { activationMessage } = launchAgentWithPrompt('builder-agent');
+        const { activationMessage, resolver } = launchAgentWithPrompt('builder-agent');
         
         // Launch Claude Code with the builder agent message and prompt
         const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
@@ -117,6 +117,7 @@ async function launchBuilderAgent() {
           });
           
           claudeProcess.on('exit', (code) => {
+            resolver.cleanupCopiedFiles();
             if (code === 0) {
               colorLog('green', '   ✅ Builder agent completed work');
               resolve();
