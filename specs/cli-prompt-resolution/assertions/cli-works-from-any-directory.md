@@ -14,10 +14,14 @@ All spekk CLI commands (`spekk coach`, `spekk builder`, `spekk observer`) work w
 
 ## Success Criteria
 
-- Running `spekk coach` from `~/thinknimble/vuenome` successfully launches Claude Code with coach prompt
-- Running `spekk builder` from any external project directory works correctly
-- Running `spekk observer` from any external project directory works correctly
-- No "file not found" errors related to agent prompt files when running from external directories
+- Integration tests verify `spekk coach`, `spekk builder`, and `spekk observer` work from external directories
+- Commands exit successfully (code 0) when run from any directory
+- No "file not found" errors related to agent prompt files
+- All agent types work consistently across different working directories
+
+**Tests Required:**
+- `integration-test-external-directory` assertion must be completed
+- Similar tests for builder and observer agents
 
 ## Context
 

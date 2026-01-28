@@ -19,7 +19,10 @@ Agent prompt files from the spekk-cli installation are accessible to Claude Code
 - Observer agent prompt (`specs/observer-agent/observer-agent.prompt.md`) is found by Claude Code when run from any directory
 - Claude Code receives the correct "You are the [Agent] Agent - read the prompt and follow the instructions exactly" message and can access the corresponding prompt file
 
-**Tests:** src/cli/__tests__/prompt-resolution.test.js
+**Tests Required:**
+- `verify-prompt-file-accessible` assertion must be completed
+- Unit tests in `src/cli/__tests__/prompt-resolution.test.js` (✅ completed)
+- Integration tests proving end-to-end prompt access
 
 ## Context
 

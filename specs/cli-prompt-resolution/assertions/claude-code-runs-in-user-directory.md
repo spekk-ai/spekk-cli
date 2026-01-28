@@ -14,10 +14,14 @@ When launching agent commands via spekk CLI, Claude Code runs in the user's curr
 
 ## Success Criteria
 
-- Running `spekk coach` from `~/thinknimble/vuenome` sets Claude Code's working directory to `~/thinknimble/vuenome`
-- Claude Code can access and modify files in the user's project directory
-- User can work with their project files through Claude Code without changing directories
-- The CLAUDE.md file from the user's project is loaded (if it exists) rather than the spekk-cli CLAUDE.md
+- Test verifies Claude Code's working directory matches where `spekk coach` was run
+- Test confirms Claude Code can access files in the user's project directory  
+- Test verifies user's project CLAUDE.md is loaded (not spekk-cli's CLAUDE.md)
+- Integration tests prove Claude Code doesn't run from spekk-cli installation directory
+
+**Tests Required:**
+- `verify-claude-working-directory` assertion must be completed
+- Test should verify file access and working directory programmatically
 
 ## Context
 
