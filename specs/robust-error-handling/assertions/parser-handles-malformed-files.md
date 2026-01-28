@@ -3,10 +3,12 @@ id: parser-handles-malformed-files
 parent: robust-error-handling
 created: 2026-01-28T21:35:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Parser Handles Malformed Files
+
+**Tests:** src/parser/__tests__/malformed-file-handling.test.js
 
 ## What Must Be True
 
