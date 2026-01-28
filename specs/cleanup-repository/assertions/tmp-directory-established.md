@@ -3,7 +3,7 @@ id: tmp-directory-established
 parent: cleanup-repository
 created: 2026-01-28T21:20:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Tmp Directory Established
