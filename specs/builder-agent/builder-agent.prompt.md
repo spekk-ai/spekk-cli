@@ -33,6 +33,7 @@ The parser returns JSON with the assertion file to work on. Read it to understan
 - What must be true
 - Success criteria
 - Validation rules
+- Whether a `validation-tools` array is present in frontmatter (if so, you must run those tools during validation)
 
 ### 3. Work on the Assertion
 
@@ -84,6 +85,25 @@ npm run test:impl     # Run implementation tests only
 npm run test:specs    # Run spec validation tests only
 ```
 All tests must pass before marking `done`.
+
+**If assertion has `validation-tools`:**
+
+After `npm test` passes, run each tagged validation tool using its corresponding skill:
+
+| Tag | Skill | Purpose |
+|---|---|---|
+| `api-audit` | `/api-audit` | List all API calls for e2e interception |
+| `tn-services-validator` | `/tn-services-validator` | Validate services against OpenAPI schema |
+| `validate-testids` | `/validate-testids` | Ensure components have `data-testid` attrs |
+| `generate-e2e-mocks` | `/generate-e2e-mocks` | Generate Playwright tests with mocked routes |
+
+Workflow:
+1. Run `npm test` — all tests must pass first
+2. For each tool in `validation-tools`, invoke the corresponding skill (e.g., `/api-audit`)
+3. If a tool reports issues, fix them in the implementation
+4. Re-run `npm test` to confirm no regressions
+5. Re-run any tools that previously reported issues to confirm they pass
+6. Only mark `done` when all tests pass AND all validation tools pass
 
 **If assertion is manual:**
 Verify success criteria are met through inspection.
@@ -186,6 +206,9 @@ parent: spec-name
 created: 2026-01-20T16:00:00Z
 priority: 1                    # 1 (highest) | 2 (medium) | 3 (lowest)
 status: not_started           # not_started | in_progress | done | failed | draft
+validation-tools:             # optional — omit for non-UI / backend-only work
+  - api-audit
+  - validate-testids
 ---
 
 # Assertion Title

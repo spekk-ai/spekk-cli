@@ -78,6 +78,20 @@ Topics to explore (one at a time):
 - **Experimental changes** (trying new approaches) → "A feature branch would let you experiment safely"
 - **Breaking changes** (might disrupt main) → "This should definitely be on a feature branch"
 
+**Validation Tooling:** Determine which e2e validation tools should be tagged on each assertion. Use the decision matrix below:
+
+| Assertion involves... | Tools to tag |
+|---|---|
+| UI component (no API) | `validate-testids` |
+| UI component + API data | `api-audit`, `tn-services-validator`, `validate-testids` |
+| Complete user flow (form, navigation) | `api-audit`, `validate-testids`, `generate-e2e-mocks` |
+| Frontend-backend contract only | `tn-services-validator` |
+| Backend / CLI / infra / non-UI | No `validation-tools` field (omit entirely) |
+
+- If the assertion is purely backend, CLI, or infrastructure work, **do not add** a `validation-tools` field at all.
+- When uncertain whether a tool applies, ask the user: "This assertion touches [area]. Should we include [tool] for validation?"
+- Only use valid tool names: `api-audit`, `tn-services-validator`, `validate-testids`, `generate-e2e-mocks`
+
 **NEVER ask multiple questions in one response.** Ask one question, get an answer, then proceed to the next logical question based on their response.
 
 ### 4. Draft Spec Structure
@@ -115,7 +129,7 @@ specs/
 ```
 
 Use proper format:
-- YAML frontmatter with: id, created (ISO 8601), priority, status
+- YAML frontmatter with: id, created (ISO 8601), priority, status, validation-tools (optional)
 - Kebab-case IDs
 - Clear markdown content
 - Success criteria for each assertion
@@ -273,6 +287,23 @@ priority: 1
 status: not_started             # not_started | in_progress | done | failed | draft
 ---
 ```
+
+Assertions that require e2e validation should include `validation-tools`:
+```yaml
+---
+id: dashboard-shows-recent-orders
+parent: user-dashboard
+created: 2026-01-20T17:00:00Z
+priority: 1
+status: not_started
+validation-tools:
+  - api-audit
+  - tn-services-validator
+  - validate-testids
+---
+```
+
+Valid tool names: `api-audit`, `tn-services-validator`, `validate-testids`, `generate-e2e-mocks`
 
 Use `npm run next` to validate your output.
 
