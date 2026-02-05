@@ -1,0 +1,6 @@
+__tests__/
+*.test.js
+*.test.sh
+src/test-runner.js
+src/test-runner-mocked.js
+.tmp/

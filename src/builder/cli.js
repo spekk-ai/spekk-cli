@@ -29,6 +29,26 @@ function handleInterrupt(signal) {
   process.exit(0);
 }
 
+// Known validation tools and their corresponding Claude Code skills
+const KNOWN_VALIDATION_TOOLS = {
+  'api-audit': '/api-audit',
+  'tn-services-validator': '/tn-services-validator',
+  'validate-testids': '/validate-testids',
+  'generate-e2e-mocks': '/generate-e2e-mocks'
+};
+
+function checkValidationTools(assertion) {
+  const tools = assertion['validation-tools'];
+  if (!tools || tools.length === 0) return;
+
+  colorLog('blue', `   Validation tools: ${tools.join(', ')}`);
+
+  const unknown = tools.filter(t => !KNOWN_VALIDATION_TOOLS[t]);
+  if (unknown.length > 0) {
+    colorLog('yellow', `   ⚠ Unknown validation tools: ${unknown.join(', ')} — these will be skipped if not available as Claude Code skills`);
+  }
+}
+
 async function launchBuilderAgent() {
   colorLog('cyan', '🔧 Starting Builder Agent Loop...');
   colorLog('blue', 'This will continuously get next assertions and launch Claude Code to implement them.');
@@ -97,7 +117,8 @@ async function launchBuilderAgent() {
       colorLog('blue', `   File: ${assertion.file}`);
       colorLog('blue', `   Status: ${assertion.status}`);
       colorLog('blue', `   Priority: ${assertion.priority}`);
-      
+      checkValidationTools(assertion);
+
       // Step 2: Launch Claude Code with builder agent
       colorLog('magenta', '🤖 Launching Claude Code Builder Agent...');
       

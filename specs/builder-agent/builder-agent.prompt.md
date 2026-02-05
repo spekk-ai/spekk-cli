@@ -99,11 +99,12 @@ After `npm test` passes, run each tagged validation tool using its corresponding
 
 Workflow:
 1. Run `npm test` — all tests must pass first
-2. For each tool in `validation-tools`, invoke the corresponding skill (e.g., `/api-audit`)
-3. If a tool reports issues, fix them in the implementation
-4. Re-run `npm test` to confirm no regressions
-5. Re-run any tools that previously reported issues to confirm they pass
-6. Only mark `done` when all tests pass AND all validation tools pass
+2. For each tool in `validation-tools`, attempt to invoke the corresponding skill (e.g., `/api-audit`)
+3. **If a skill is not available** (unrecognized command, missing tool, or errors on invocation), log a warning and skip it — do NOT block progress
+4. If a tool reports issues, fix them in the implementation
+5. Re-run `npm test` to confirm no regressions
+6. Re-run any tools that previously reported issues to confirm they pass
+7. Mark `done` when all tests pass AND all *available* validation tools pass (unavailable tools are skipped with a warning, not treated as failures)
 
 **If assertion is manual:**
 Verify success criteria are met through inspection.

@@ -613,6 +613,7 @@ export function run(options = {}) {
       status: nextAssertion.status,
       title: nextAssertion.title,
       content: nextAssertion.content,
+      'validation-tools': nextAssertion['validation-tools'] || [],
       spec: parentSpec ? {
         id: parentSpec.id,
         file: parentSpec.file,
