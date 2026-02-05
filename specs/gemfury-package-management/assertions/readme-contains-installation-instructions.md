@@ -40,13 +40,13 @@ Then reload: `source ~/.zshrc` (or `~/.bashrc`)
 Add to global `~/.npmrc`:
 ```
 @spekk:registry=https://npm.fury.io/thinknimble/
-//npm.fury.io/thinknimple/:_authToken=${GEMFURY_SPEKK_TOKEN}
+//npm.fury.io/thinknimble/:_authToken=${GEMFURY_SPEKK_TOKEN}
 ```
 
 Or run:
 ```bash
-npm config set @spekk:registry https://npm.fury.io/thinknimple/
-npm config set //npm.fury.io/thinknimple/:_authToken "$GEMFURY_SPEKK_TOKEN"
+npm config set @spekk:registry https://npm.fury.io/thinknimble/
+npm config set //npm.fury.io/thinknimble/:_authToken "$GEMFURY_SPEKK_TOKEN"
 ```
 
 ### 4. Install

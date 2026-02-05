@@ -30,8 +30,8 @@ Add the publish configuration to your `~/.npmrc`:
 Or run these commands:
 
 ```bash
-npm config set @spekk:registry https://npm.fury.io/thinknimple/
-npm config set //npm.fury.io/thinknimple/:_authToken "$GEMFURY_SPEKK_PUBLISH_TOKEN"
+npm config set @spekk:registry https://npm.fury.io/thinknimble/
+npm config set //npm.fury.io/thinknimble/:_authToken "$GEMFURY_SPEKK_PUBLISH_TOKEN"
 ```
 
 ## Versioning
@@ -88,7 +88,7 @@ Ensure all tests pass before proceeding.
 npm publish
 ```
 
-This publishes the package to the GemFury registry at `npm.fury.io/thinknimple`.
+This publishes the package to the GemFury registry at `npm.fury.io/thinknimble`.
 
 ### 4. Push to Git
 
@@ -104,7 +104,7 @@ After publishing, verify the package is available:
 
 ```bash
 # Check the package info on GemFury
-npm view @spekk/cli --registry https://npm.fury.io/thinknimple/
+npm view @spekk/cli --registry https://npm.fury.io/thinknimble/
 
 # Or install the latest version globally
 npm update -g @spekk/cli
@@ -121,7 +121,7 @@ spekk --help
 
 ### "403 Forbidden" during publish
 
-- You may not have publish permissions in the thinknimple org
+- You may not have publish permissions in the thinknimble org
 - Contact an org admin to get publish access
 
 ### Package name mismatch
