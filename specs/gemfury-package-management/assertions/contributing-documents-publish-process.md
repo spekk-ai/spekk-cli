@@ -3,7 +3,7 @@ id: contributing-documents-publish-process
 parent: gemfury-package-management
 created: 2026-02-05T12:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # CONTRIBUTING.md Documents Publish Process
