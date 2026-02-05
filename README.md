@@ -9,6 +9,56 @@ Spekk CLI enables spec-driven development by:
 - **Orchestrating** AI agents (Coach and Builder) to create and implement specs
 - **Automating** the development workflow loop
 
+## Installation
+
+### 1. Get a GemFury Token
+
+Ask a team lead for a GemFury **read** (or full access) token for the `thinknimble` org.
+
+### 2. Add the Token to Your Shell
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc
+export GEMFURY_SPEKK_TOKEN=your_token_here
+```
+
+Then reload your shell config:
+```bash
+source ~/.zshrc  # or ~/.bashrc
+```
+
+### 3. Configure npm
+
+Add to your global `~/.npmrc`:
+```
+@spekk:registry=https://npm.fury.io/thinknimble/
+//npm.fury.io/thinknimble/:_authToken=${GEMFURY_SPEKK_TOKEN}
+```
+
+Or run these commands:
+```bash
+npm config set @spekk:registry https://npm.fury.io/thinknimble/
+npm config set //npm.fury.io/thinknimble/:_authToken "\$GEMFURY_SPEKK_TOKEN"
+```
+
+### 4. Install
+
+```bash
+npm install -g @spekk/cli
+```
+
+### 5. Verify
+
+```bash
+spekk --help
+```
+
+### Updating
+
+```bash
+npm update -g @spekk/cli
+```
+
 ## Quick Start
 
 ```bash
