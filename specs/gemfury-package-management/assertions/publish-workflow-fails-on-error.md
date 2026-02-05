@@ -3,7 +3,7 @@ id: publish-workflow-fails-on-error
 parent: gemfury-package-management
 created: 2026-02-05T21:15:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Publish Workflow Fails on Error
