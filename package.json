@@ -1,12 +1,21 @@
 {
-  "name": "spekk-cli",
-  "version": "1.0.0",
+  "name": "@spekk/cli",
+  "version": "1.0.2",
   "description": "CLI tool for spec-driven development with coach and builder agents",
   "main": "src/index.js",
   "type": "module",
   "bin": {
     "spekk": "./bin/spekk.js"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "!src/**/*.test.js",
+    "!src/test-runner.js",
+    "!src/test-runner-mocked.js",
+    "specs/builder-agent/",
+    "specs/coach-agent/"
+  ],
   "scripts": {
     "next": "node src/parser/cli.js",
     "status": "node bin/spekk.js status",
@@ -16,7 +25,11 @@
     "test": "npm run test:impl && npm run test:specs",
     "test:impl": "node src/test-runner.js",
     "test:specs": "echo 'No spec validator configured'",
-    "start": "node bin/spekk.js"
+    "start": "node bin/spekk.js",
+    "prepublishOnly": "npm test"
+  },
+  "publishConfig": {
+    "registry": "https://npm.fury.io/thinknimple/"
   },
   "keywords": [
     "spec-driven",
