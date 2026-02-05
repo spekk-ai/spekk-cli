@@ -1,6 +1,6 @@
 {
   "name": "@spekk/cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "CLI tool for spec-driven development with coach and builder agents",
   "main": "src/index.js",
   "type": "module",
@@ -10,8 +10,7 @@
   "files": [
     "bin/",
     "src/",
-    "!src/__tests__/",
-    "!src/**/__tests__/",
+    "!src/**/*.test.js",
     "!src/test-runner.js",
     "!src/test-runner-mocked.js",
     "specs/builder-agent/",
@@ -30,7 +29,7 @@
     "prepublishOnly": "npm test"
   },
   "publishConfig": {
-    "registry": "https://npm.fury.io/thinknimble/"
+    "registry": "https://npm.fury.io/thinknimple/"
   },
   "keywords": [
     "spec-driven",

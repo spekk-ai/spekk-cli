@@ -1,4 +1,4 @@
-name: Publish to Gemfury
+name: Publish to GemFury
 
 on:
   workflow_dispatch:
@@ -19,12 +19,12 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Pack and publish
+      - name: Pack tarball
+        run: npm pack
+
+      - name: Publish to GemFury
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "Publishing v${VERSION}"
-          npm pack
           TARBALL=$(ls *.tgz)
-          curl -F "package=@${TARBALL}" "https://${GEMFURY_TOKEN}@push.fury.io/thinknimble/"
+          curl -F package=@${TARBALL} https://${GEMFURY_TOKEN}@push.fury.io/thinknimple/
         env:
           GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
