@@ -61,3 +61,35 @@ spekk --help
 ```bash
 npm update -g @spekk/cli
 ```
+
+---
+
+## Publishing to Gemfury
+
+### 1. Bump the version
+
+```bash
+npm version patch   # or minor / major
+```
+
+### 2. Pack the tarball
+
+```bash
+npm pack
+```
+
+This creates `spekk-cli-<version>.tgz`.
+
+### 3. Push to Gemfury
+
+```bash
+curl -F package=@spekk-cli-<version>.tgz https://<TOKEN>@push.fury.io/thinknimble/
+```
+
+Replace `<TOKEN>` with a Gemfury **push** token for the `thinknimble` org.
+
+### 4. Verify
+
+```bash
+npm info @spekk/cli --registry https://npm.fury.io/thinknimble/
+```
