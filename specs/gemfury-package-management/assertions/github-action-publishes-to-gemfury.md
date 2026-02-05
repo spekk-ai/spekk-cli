@@ -3,7 +3,7 @@ id: github-action-publishes-to-gemfury
 parent: gemfury-package-management
 created: 2026-02-05T18:00:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # GitHub Action Publishes to GemFury
