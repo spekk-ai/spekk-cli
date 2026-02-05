@@ -32,7 +32,7 @@ A GitHub Action workflow automates publishing the `@spekk/cli` package to GemFur
 
 ### NPM Registry Config
 - `.npmrc` file exists
-- Configures `@spekk` scope to use `https://npm.fury.io/thinknimple/`
+- Configures `@spekk` scope to use `https://npm.fury.io/thinknimble/`
 
 ### Package.json Updates
 - Name is scoped: `@spekk/cli`
@@ -41,7 +41,7 @@ A GitHub Action workflow automates publishing the `@spekk/cli` package to GemFur
   - `src/` (excluding test files)
   - `specs/builder-agent/`
   - `specs/coach-agent/`
-- `publishConfig.registry` points to `https://npm.fury.io/thinknimple/`
+- `publishConfig.registry` points to `https://npm.fury.io/thinknimble/`
 - `prepublishOnly` script runs `npm test`
 
 ## Validation

@@ -25,6 +25,6 @@ jobs:
       - name: Publish to GemFury
         run: |
           TARBALL=$(ls *.tgz)
-          curl -F package=@${TARBALL} https://${GEMFURY_TOKEN}@push.fury.io/thinknimple/
+          curl -F package=@${TARBALL} https://${GEMFURY_TOKEN}@push.fury.io/thinknimble/
         env:
           GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
