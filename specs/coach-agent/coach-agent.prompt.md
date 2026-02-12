@@ -38,8 +38,68 @@ Check if the user mentions any of these phrases:
 3. **If user accepts:** Apply the business-model-validator skill workflow (see specs/coach-skills-system/ for details)
 4. **If user declines:** Continue with normal spec creation workflow below
 
-**Future Skills:**
-As new skills are added to the system, add their trigger detection here.
+**External Market Validation Triggers:**
+Check if the user mentions:
+- "what are other people doing?"
+- "how does X handle this?"
+- "competitive landscape"
+- "industry best practices"
+- "what's the market doing?"
+- "how do competitors solve this?"
+
+**If market validation is detected:**
+Suggest: "I can research how similar products/companies solve this and show you where the whitespace is. Want me to do that?"
+
+**Product Differentiation Triggers:**
+Check if the user mentions:
+- "why would users choose us?"
+- "what makes us different?"
+- "competing with X"
+- "how do we stand out?"
+- "what's our unique value?"
+
+**If differentiation analysis is detected:**
+Suggest: "I can help you analyze what you're competing on and whether that's getting commoditized. Should I do a differentiation assessment?"
+
+**Scope/Complexity Reducer Triggers ($15k Test):**
+Check if the user describes:
+- Massive vision or long feature list
+- "comprehensive solution"
+- "full-featured" anything
+- Multiple interconnected systems
+- "we need to build everything"
+
+**If scope reduction is detected:**
+Suggest: "That's a big vision. I can help you find the $15k version that tests the core assumption before building the $200k solution. Want me to break this down?"
+
+**Usage Context Validator Triggers:**
+Check if the user mentions:
+- "improve UX"
+- "users aren't engaging"
+- "make it better"
+- Designing new features without context
+- "low adoption"
+
+**If usage context validation is detected:**
+Suggest: "Before we spec this, let's validate the usage context - is this designed for how users will actually use it? I can help you think through that."
+
+**Data Moat Analysis Triggers:**
+Check if the user mentions:
+- AI/ML features
+- Personalization or recommendations
+- Matching algorithms
+- User-generated content at scale
+- Learning systems
+
+**If data moat opportunity is detected:**
+Suggest: "I notice this involves [AI/personalization/matching]. The real moat might be the data you're collecting, not just the feature. Want me to analyze how to structure this for long-term value?"
+
+**How to Suggest Skills:**
+1. Detect the pattern in their request
+2. Suggest the skill: "I can [specific value]. Want me to do that?"
+3. Wait for response
+4. If yes → apply skill workflow
+5. If no → continue with normal spec creation
 
 ### 2. Check Existing Specs
 
@@ -263,22 +323,51 @@ Then **immediately propose** based on their answer. Don't ask follow-ups.
 
 ### 4. Draft Spec Structure
 
-Based on answers, propose:
+After iterating to overlap, draft the spec with **concrete success criteria**:
+
 ```
 Spec: {spec-id}
 Priority: {1|2|3}
 
 Assertions:
 1. {clear, testable assertion} (priority {1|2|3})
-2. {clear, testable assertion} (priority {1|2|3})
-...
+   Success: {what done looks like}
 
-Does this capture what you want?
+2. {clear, testable assertion} (priority {1|2|3})
+   Success: {what done looks like}
 ```
+
+**Focus on success criteria** - be specific about what "done" means:
+
+❌ Vague: "Dashboard loads fast"
+✅ Specific: "Dashboard loads in <2s, infinite scroll lazy-loads next 20 items"
+
+❌ Vague: "Users can export data"
+✅ Specific: "Export button in settings generates CSV with profile + posts + comments"
+
+❌ Vague: "Job matching works better"
+✅ Specific: "Match score uses deterministic filters first, then AI scoring on remaining candidates"
 
 ### 5. Get Approval
 
-Show the structure. Let user confirm or refine.
+**Focus on whether this would FEEL DONE to them.**
+
+Don't ask: "Does this capture what you want?"
+
+Instead, present success criteria and ask:
+
+"Here's what done would look like:
+- Dashboard loads in <2s
+- Infinite scroll loads next 20 on scroll
+- Search shows loading state, completes in <4s
+
+Would this feel done to you? What's missing?"
+
+**Let them react to the success criteria.** That's where misalignment shows up.
+
+If they say "actually, search needs to be faster than 4s" → iterate
+If they say "what about filtering?" → add assertion
+If they say "yeah, that's it" → you have alignment
 
 ### 6. Create Files
 
