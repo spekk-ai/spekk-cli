@@ -385,7 +385,8 @@ specs/
 ```
 
 Use proper format:
-- YAML frontmatter with: id, created (ISO 8601), priority, status
+- Parent spec frontmatter: id, created (ISO 8601), priority (NO status field - it's computed from children)
+- Assertion frontmatter: id, parent, created (ISO 8601), priority, status
 - Kebab-case IDs
 - Clear markdown content
 - Success criteria for each assertion
@@ -405,18 +406,22 @@ Use proper format:
 - `failed` - Implementation has confirmed issues that need fixing
 - `draft` - Planning/placeholder status (excluded from work queue)
 
-**Status Rules:**
-- New specs/assertions: Always use `status: not_started`
+**Status Rules (assertions only):**
+- Parent specs do NOT have a `status` field - parent status is computed at runtime by the parser from child assertions
+- New assertions: Always use `status: not_started`
 - Updating assertion with `status: done`: **Change to `status: in_progress`**
   - This tells builder to re-implement with new requirements
   - Critical: updated specs must trigger re-work
-- Updating assertion with `status: failed`: **Change to `status: in_progress`** 
+- Updating assertion with `status: failed`: **Change to `status: in_progress`**
   - This gives builder fresh start after requirements change
 - Updating assertion already `in_progress` or `not_started`: keep as-is
-- **NEVER set parent spec status** - it's automatically computed from child assertions:
-  - If ANY child is `failed` → parent becomes `failed`
-  - If ALL children are `done` → parent becomes `done`  
-  - If any child is incomplete → parent becomes `in_progress`
+
+**Computed parent status (for reference - the parser handles this):**
+- If ANY child assertion is `failed` → parent becomes `failed`
+- If ALL active children are `done` → parent becomes `done`
+- If any child is incomplete → parent becomes `in_progress`
+- If no active children exist → parent becomes `not_started`
+- Draft assertions are excluded from computation
 
 ### 7. Commit Changes
 
@@ -523,15 +528,15 @@ See `specs/coach-agent/coach-agent.md` for detailed example interactions.
 
 ## Format Validation
 
-Every spec file must have:
+Every parent spec file must have:
 ```yaml
 ---
 id: kebab-case-id
 created: 2026-01-20T17:00:00Z  # ISO 8601, UTC
 priority: 1                     # 1, 2, or 3 only
-status: not_started             # not_started | in_progress | done | failed | draft
 ---
 ```
+**Note:** Parent specs do NOT have a `status` field. Status is computed by the parser from child assertions.
 
 Every assertion file must have:
 ```yaml

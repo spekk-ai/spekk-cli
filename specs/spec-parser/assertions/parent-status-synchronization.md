@@ -12,7 +12,7 @@ status: done
 
 ## What Must Be True
 
-The parser must automatically compute and set parent spec status based on the status of their child assertions. Parent spec status should never be manually set - it's always derived from children.
+Parent spec files do NOT contain a `status` field in their YAML frontmatter. Parent status is always computed at runtime by the parser from child assertions. The parser must compute parent status during `parseAllSpecs()` and expose it in the returned data, regardless of whether the file contains a `status` field.
 
 ## Status Synchronization Rules
 
@@ -55,17 +55,18 @@ Parent status computation follows this priority:
 
 The parser must:
 - Compute parent status automatically during `parseAllSpecs()`
-- Override any manually-set parent status in spec files
 - Apply synchronization after all assertions are loaded
 - Use the `computeParentStatus()` function for consistency
+- If a parent spec file contains a `status` field (legacy), ignore/override it with the computed value
 
 ## Success Criteria
 
+- ✅ Parent spec files do not contain a `status` field (coach agent enforces this)
 - ✅ Parent status automatically computed from child assertion statuses
 - ✅ Failed children force parent to failed status (highest priority)
 - ✅ All done children make parent done (when no failures)
 - ✅ Any incomplete children make parent in_progress
-- ✅ No active children make parent not_started  
+- ✅ No active children make parent not_started
 - ✅ Draft children are excluded from status computation
-- ✅ Manual parent status in files is overridden by computed status
+- ✅ Legacy `status` fields in parent files are overridden by computed status
 - ✅ Status computation happens automatically during parsing
