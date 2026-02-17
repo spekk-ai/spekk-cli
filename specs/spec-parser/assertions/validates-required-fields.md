@@ -23,9 +23,11 @@ The parser must validate that all spec and assertion files have required frontma
 - `created` (string, ISO 8601 timestamp)
 - `priority` (integer, 0 or greater)
 
-### Optional Fields
-- `status` (string: not_started | in_progress | done) - defaults to `not_started`
+### Optional Fields (assertions only)
+- `status` (string: not_started | in_progress | done | failed | draft) - defaults to `not_started`
 - `updated` (string, ISO 8601 timestamp)
+
+**Note:** Parent spec files should NOT contain a `status` field. Parent status is computed by the parser from child assertions. If a legacy `status` field is present on a parent spec, the parser overrides it.
 
 ## Validation Rules
 
