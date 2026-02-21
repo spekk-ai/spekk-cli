@@ -14,12 +14,16 @@ export class PromptResolver {
         path: join(projectRoot, 'specs/coach-agent/coach-agent.prompt.md')
       },
       {
-        name: 'builder-agent', 
+        name: 'builder-agent',
         path: join(projectRoot, 'specs/builder-agent/builder-agent.prompt.md')
       },
       {
         name: 'observer-agent',
         path: join(projectRoot, 'specs/observer-agent/observer-agent.prompt.md')
+      },
+      {
+        name: 'meeting-processor-agent',
+        path: join(projectRoot, 'specs/meeting-notes-to-specs/meeting-notes-to-specs.prompt.md')
       }
     ];
   }

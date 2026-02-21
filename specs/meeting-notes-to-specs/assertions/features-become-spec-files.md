@@ -3,12 +3,14 @@ id: features-become-spec-files
 parent: meeting-notes-to-specs
 created: 2025-02-12T19:30:00Z
 priority: 1
-status: draft
+status: done
 ---
 
 # Features Become Proper Spec Files
 
 Feature discussions from meetings are converted into proper spec files in the specs/ directory.
+
+**Tests:** src/meeting-processor/__tests__/cli.test.js
 
 ## Success Criteria
 
