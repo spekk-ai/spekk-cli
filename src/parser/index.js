@@ -89,7 +89,9 @@ function parseFrontmatter(content) {
             value = value.slice(1, -1);
           }
           
-          frontmatter[key] = value;
+          // Convert kebab-case keys to camelCase for JavaScript
+          const jsKey = key === 'depends-on' ? 'dependsOn' : key;
+          frontmatter[jsKey] = value;
           currentKey = null; // Reset if we got a value
         }
       }
@@ -146,6 +148,62 @@ function validateFields(data, filePath, isAssertion = false) {
   
   if (data.updated && !timestampPattern.test(data.updated)) {
     throw new Error(`Invalid ISO 8601 timestamp in 'updated' field: '${data.updated}' in ${filePath}`);
+  }
+}
+
+// Validate depends-on field
+function validateDependsOn(data, filePath, allAssertions) {
+  // Skip if field is not present or is null (both are valid)
+  if (data.dependsOn === undefined || data.dependsOn === null) {
+    return;
+  }
+  
+  const dependsOn = data.dependsOn;
+  
+  // Type check
+  if (typeof dependsOn !== 'string') {
+    throw new Error(`Field 'depends-on' must be a string or null in ${filePath}\nFound: ${JSON.stringify(dependsOn)}`);
+  }
+  
+  // Format check (kebab-case)
+  const kebabCasePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+  if (!kebabCasePattern.test(dependsOn)) {
+    throw new Error(`Field 'depends-on' must be kebab-case (lowercase with hyphens) in ${filePath}\nFound: "${dependsOn}"`);
+  }
+  
+  // Reference check
+  if (!allAssertions.some(a => a.id === dependsOn)) {
+    throw new Error(`Field 'depends-on' references non-existent assertion '${dependsOn}' in ${filePath}`);
+  }
+  
+  // Self-reference check
+  if (dependsOn === data.id) {
+    throw new Error(`Field 'depends-on' cannot reference itself in ${filePath}`);
+  }
+}
+
+// Detect circular dependencies
+function detectCircularDependencies(assertions) {
+  for (const assertion of assertions) {
+    if (!assertion.dependsOn) continue;
+    
+    const visited = new Set();
+    const path = [];
+    let current = assertion;
+    
+    while (current && current.dependsOn) {
+      if (visited.has(current.id)) {
+        // Found a cycle - build the cycle path
+        path.push(current.id);
+        const cycleStart = path.indexOf(current.id);
+        const cycle = path.slice(cycleStart).join(' → ');
+        throw new Error(`Circular dependency detected:\n  ${cycle}\n\nBreak the cycle by removing or changing one of the dependencies.`);
+      }
+      
+      visited.add(current.id);
+      path.push(current.id);
+      current = assertions.find(a => a.id === current.dependsOn);
+    }
   }
 }
 
@@ -430,6 +488,14 @@ function parseAllSpecs(specsDirectory = null) {
     }
   }
   
+  // Validate depends-on fields (after all assertions are loaded)
+  for (const assertion of assertions) {
+    validateDependsOn(assertion, assertion.file, assertions);
+  }
+  
+  // Detect circular dependencies
+  detectCircularDependencies(assertions);
+  
   // Update parent spec statuses based on child assertions
   for (const spec of specs) {
     // Only compute status if not manually set to draft
@@ -661,4 +727,4 @@ export function run(options = {}) {
 }
 
 // Export the parser functions for testing
-export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields };
+export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields, validateDependsOn, detectCircularDependencies };

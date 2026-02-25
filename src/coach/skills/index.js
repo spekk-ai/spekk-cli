@@ -6,6 +6,7 @@
 import { skillRegistry } from '../skill-registry.js';
 import { BusinessModelValidator } from '../business-model-validator.js';
 import { MeetingNotesToSpecs } from '../meeting-notes-to-specs.js';
+import { Coordinator } from '../coordinator.js';
 
 // Register all available skills
 export function registerAllSkills() {
@@ -14,6 +15,9 @@ export function registerAllSkills() {
 
   // Meeting Notes to Specs
   skillRegistry.register(new MeetingNotesToSpecs());
+
+  // Coordinator
+  skillRegistry.register(new Coordinator());
 }
 
 // Initialize skills on module load

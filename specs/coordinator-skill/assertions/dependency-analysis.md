@@ -3,7 +3,7 @@ id: dependency-analysis
 parent: coordinator-skill
 created: 2026-02-25T00:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Coordinator Analyzes Dependencies Between Assertions
