@@ -14,7 +14,7 @@ export class PromptResolver {
         path: join(projectRoot, 'specs/coach-agent/coach-agent.prompt.md')
       },
       {
-        name: 'builder-agent', 
+        name: 'builder-agent',
         path: join(projectRoot, 'specs/builder-agent/builder-agent.prompt.md')
       },
       {

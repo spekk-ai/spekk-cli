@@ -44,7 +44,7 @@ COMMANDS:
     break;
 
   case 'coach':
-    await launchCoachAgent();
+    await launchCoachAgent(args.slice(1));
     break;
   
   case 'builder':
@@ -54,7 +54,7 @@ COMMANDS:
   case 'observer':
     await launchObserverAgent(args.slice(1));
     break;
-  
+
   case 'status':
     await showStatus();
     break;
@@ -76,6 +76,7 @@ COMMANDS:
   show      Generate and display spec explorer web interface
   status    Show comprehensive overview of all specs and assertions
   coach     Launch the Coach Agent to create and refine specs
+              Use "spekk coach meeting [file]" for meeting transcript processing
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
   loop      Run orchestration workflows (builder/coach loops)
