@@ -94,6 +94,26 @@ Check if the user mentions:
 **If data moat opportunity is detected:**
 Suggest: "I notice this involves [AI/personalization/matching]. The real moat might be the data you're collecting, not just the feature. Want me to analyze how to structure this for long-term value?"
 
+**Meeting Notes to Specs Triggers:**
+Check if the user mentions:
+- "meeting notes"
+- "meeting transcript"
+- "meeting summary"
+- "process meeting"
+- "from our meeting"
+- "discussed in meeting"
+- "meeting action items"
+- "meeting outcomes"
+- "standup notes"
+- "retro notes"
+- "planning notes"
+- "kickoff notes"
+
+**If meeting processing is detected:**
+Suggest: "I can process this meeting transcript and extract todos, specs, and context updates. Want me to do that?"
+
+**Note:** This skill is also auto-activated when the user launches with `spekk coach meeting`. In that case, skip detection and activate immediately.
+
 **How to Suggest Skills:**
 1. Detect the pattern in their request
 2. Suggest the skill: "I can [specific value]. Want me to do that?"

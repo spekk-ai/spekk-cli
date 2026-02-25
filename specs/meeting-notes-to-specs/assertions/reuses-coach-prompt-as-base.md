@@ -3,10 +3,12 @@ id: reuses-coach-prompt-as-base
 parent: meeting-notes-to-specs
 created: 2026-02-24T23:59:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Reuses Coach Prompt as Base
+
+**Tests:** src/coach/__tests__/reuses-coach-prompt-as-base.test.js
 
 Meeting processing extends the coach prompt rather than defining a standalone agent prompt with duplicated rules.
 

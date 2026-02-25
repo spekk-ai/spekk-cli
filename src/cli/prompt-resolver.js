@@ -20,10 +20,6 @@ export class PromptResolver {
       {
         name: 'observer-agent',
         path: join(projectRoot, 'specs/observer-agent/observer-agent.prompt.md')
-      },
-      {
-        name: 'meeting-processor-agent',
-        path: join(projectRoot, 'specs/meeting-notes-to-specs/meeting-notes-to-specs.prompt.md')
       }
     ];
   }
