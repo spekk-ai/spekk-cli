@@ -693,10 +693,12 @@ export function generateSpecExplorerHTML(specs, assertions) {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 20px;
+            padding: 8px 20px;
             background: #f1f5f9;
             cursor: pointer;
             user-select: none;
+            flex-shrink: 0;
+            height: 36px;
         }
 
         .metro-map-header:hover {
@@ -1383,7 +1385,16 @@ export function generateSpecExplorerHTML(specs, assertions) {
             const metroMapSection = document.getElementById('metro-map-section');
             const metroMapToggle = document.getElementById('metro-map-toggle');
 
-            // Load saved preference from localStorage (default: false = expanded)
+            // Load saved height from localStorage (default: 300px)
+            const savedHeight = localStorage.getItem('spekkMetroMapHeight');
+            if (savedHeight) {
+                const h = parseInt(savedHeight, 10);
+                if (h >= 100 && h <= 600) {
+                    metroMapSection.style.height = h + 'px';
+                }
+            }
+
+            // Load saved collapse preference from localStorage (default: false = expanded)
             const isCollapsed = localStorage.getItem('spekkMetroMapCollapsed') === 'true';
 
             if (isCollapsed) {
@@ -1395,6 +1406,66 @@ export function generateSpecExplorerHTML(specs, assertions) {
                 metroMapSection.classList.toggle('collapsed');
                 const collapsed = metroMapSection.classList.contains('collapsed');
                 localStorage.setItem('spekkMetroMapCollapsed', collapsed.toString());
+            });
+
+            // Drag handle resize functionality
+            initializeMetroMapResize();
+        }
+
+        function initializeMetroMapResize() {
+            const metroMapSection = document.getElementById('metro-map-section');
+            const resizeHandle = document.getElementById('metro-map-resize-handle');
+            if (!resizeHandle || !metroMapSection) return;
+
+            let isDragging = false;
+            let startY = 0;
+            let startHeight = 0;
+
+            resizeHandle.addEventListener('mousedown', function(e) {
+                // Don't resize when collapsed
+                if (metroMapSection.classList.contains('collapsed')) return;
+
+                isDragging = true;
+                startY = e.clientY;
+                startHeight = metroMapSection.getBoundingClientRect().height;
+
+                // Disable transition during drag for responsive feel
+                metroMapSection.classList.add('no-transition');
+
+                // Prevent text selection during drag
+                document.body.style.cursor = 'ns-resize';
+                document.body.style.userSelect = 'none';
+
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+
+                const deltaY = e.clientY - startY;
+                let newHeight = startHeight + deltaY;
+
+                // Constrain between 100px min and 600px max
+                newHeight = Math.max(100, Math.min(600, newHeight));
+
+                metroMapSection.style.height = newHeight + 'px';
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (!isDragging) return;
+
+                isDragging = false;
+
+                // Re-enable transition
+                metroMapSection.classList.remove('no-transition');
+
+                // Restore cursor and selection
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+
+                // Save new height to localStorage
+                const currentHeight = Math.round(metroMapSection.getBoundingClientRect().height);
+                localStorage.setItem('spekkMetroMapHeight', currentHeight.toString());
             });
         }
 

@@ -42,25 +42,38 @@
         }
 
         .metro-map-section {
-            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
             background: #f8fafc;
             overflow: hidden;
-            transition: max-height 0.3s ease;
-            max-height: 340px;
+            position: relative;
+            transition: height 0.3s ease;
+            height: 300px;
+            min-height: 100px;
+            max-height: 600px;
         }
 
         .metro-map-section.collapsed {
-            max-height: 44px;
+            height: 36px !important;
+            min-height: 36px !important;
+            cursor: default;
+            overflow: hidden;
+        }
+
+        .metro-map-section.no-transition {
+            transition: none !important;
         }
 
         .metro-map-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 20px;
+            padding: 8px 20px;
             background: #f1f5f9;
             cursor: pointer;
             user-select: none;
+            flex-shrink: 0;
+            height: 36px;
         }
 
         .metro-map-header:hover {
@@ -96,7 +109,7 @@
         }
 
         .metro-map-container {
-            max-height: 280px;
+            flex: 1;
             overflow: hidden;
             position: relative;
             cursor: grab;
@@ -110,6 +123,37 @@
 
         .metro-map-container .metro-map {
             transition: transform 0.1s ease-out;
+        }
+
+        .metro-map-resize-handle {
+            height: 6px;
+            cursor: ns-resize;
+            background: #e2e8f0;
+            border-bottom: 1px solid #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .metro-map-resize-handle:hover {
+            background: #cbd5e1;
+        }
+
+        .metro-map-resize-handle .grip-dots {
+            display: flex;
+            gap: 3px;
+        }
+
+        .metro-map-resize-handle .grip-dots span {
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: #94a3b8;
+        }
+
+        .metro-map-section.collapsed .metro-map-resize-handle {
+            display: none;
         }
 
         .detail-content-section {
@@ -1598,7 +1642,7 @@
                                 <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-map-scrollable-viewport" data-type="assertion">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
-                                        <span class="status-badge status-in_progress"></span>
+                                        <span class="status-badge status-done"></span>
                                         <span>Metro Map Collapsible &amp; Resizable Viewport</span>
                                     </div>
                                 </li>
@@ -1686,7 +1730,7 @@
                                 <li class="assertion-item" data-action="show-detail" data-assertion-id="show-convergence-terminal" data-type="assertion">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
-                                        <span class="status-badge status-in_progress"></span>
+                                        <span class="status-badge status-done"></span>
                                         <span>Show Convergence Terminal</span>
                                     </div>
                                 </li>
@@ -3001,717 +3045,479 @@
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 80)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 125)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 170)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 215)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 260)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 305)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 350)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 395)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 440)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 485)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 530)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 575)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 620)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 665)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 710)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 755)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 800)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 845)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 890)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 935)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 980)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1025)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1070)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1115)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1160)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1205)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1250)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1295)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1340)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1385)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1430)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1475)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1520)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1565)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1610)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1655)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1700)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1745)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1790)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1835)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1880)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1925)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 1970)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2015)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2060)">
-    <circle r="12" fill="#94a3b8" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#94a3b8" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2105)">
-    <circle r="12" fill="#94a3b8" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#94a3b8" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2150)">
-    <circle r="12" fill="#94a3b8" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#94a3b8" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2195)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2240)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2285)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2330)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2375)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2420)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2465)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2510)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2555)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2600)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2645)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2690)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2735)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2780)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2825)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2870)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2915)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 2960)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3005)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3050)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3095)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3140)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3185)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3230)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3275)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3320)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3365)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3410)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3455)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3500)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3545)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3590)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3635)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3680)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3725)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3770)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3815)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3860)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3905)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3950)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 3995)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4040)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4085)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4130)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4175)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4220)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4265)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4310)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4355)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4400)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4445)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4490)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4535)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4580)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4625)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4670)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4715)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4760)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4805)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4850)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4895)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4940)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 4985)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 5030)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 5075)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 5120)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 5165)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 5210)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 5255)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 5300)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 5345)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(180, 5390)">
-    <circle r="12" fill="#94a3b8" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#94a3b8" stroke="#fff" stroke-width="2"/>
   </g>
 </svg>
                         </div>
@@ -3801,13 +3607,13 @@
   <!-- Station: show-convergence-terminal -->
   <g class="metro-station" data-action="show-detail" data-assertion-id="show-convergence-terminal" data-type="assertion" transform="translate(180, 440)">
     <title>Show Convergence Terminal</title>
-    <circle r="8" fill="#f59e0b" stroke="#fff" stroke-width="3"/>
+    <circle r="8" fill="#10b981" stroke="#fff" stroke-width="3"/>
     <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: 400;">Show Convergence ...</text>
   </g>
   <!-- Station: metro-map-scrollable-viewport -->
   <g class="metro-station" data-action="show-detail" data-assertion-id="metro-map-scrollable-viewport" data-type="assertion" transform="translate(180, 395)">
     <title>Metro Map Collapsible &amp; Resizable Viewport</title>
-    <circle r="8" fill="#f59e0b" stroke="#fff" stroke-width="3"/>
+    <circle r="8" fill="#10b981" stroke="#fff" stroke-width="3"/>
     <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: 400;">Metro Map Collaps...</text>
   </g>
   <!-- Station: hide-metro-map-for-ungrouped-assertions -->
@@ -3848,61 +3654,46 @@
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(420, 80)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(420, 125)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(420, 170)">
-    <circle r="12" fill="#94a3b8" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#94a3b8" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(420, 215)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(420, 260)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(420, 305)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(420, 350)">
-    <circle r="12" fill="#10b981" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(420, 395)">
-    <circle r="12" fill="#94a3b8" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#94a3b8" stroke="#fff" stroke-width="2"/>
   </g>
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(420, 440)">
-    <circle r="12" fill="#94a3b8" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="5" fill="#10b981" stroke="#fff" stroke-width="2"/>
   </g>
 </svg>
                         </div>
                     
+                </div>
+                <div class="metro-map-resize-handle" id="metro-map-resize-handle">
+                    <div class="grip-dots"><span></span><span></span><span></span></div>
                 </div>
             </div>
 
@@ -10897,7 +10688,7 @@ This ensures the SVG is sized to contain all nodes with padding, and pan bounds 
                         <div class="detail-header">
                             <div class="detail-title">Metro Map Collapsible &amp; Resizable Viewport</div>
                             <div class="detail-meta">
-                                <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
+                                <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
                                 <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
                                 <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                                 <span class="meta-item">Branch: <strong>feature/dependency-visualization</strong></span>
@@ -10910,7 +10701,7 @@ id: metro-map-scrollable-viewport
 parent: spec-explorer-web-interface
 created: 2026-02-25T20:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
@@ -11444,7 +11235,7 @@ spekk show
                         <div class="detail-header">
                             <div class="detail-title">Show Convergence Terminal</div>
                             <div class="detail-meta">
-                                <span class="meta-item">Status: <span class="detail-status-badge">🔄</span></span>
+                                <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
                                 <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
                                 <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
                                 <span class="meta-item">Branch: <strong>feature/dependency-visualization</strong></span>
@@ -11457,7 +11248,7 @@ id: show-convergence-terminal
 parent: spec-explorer-web-interface
 created: 2026-02-25T19:21:00Z
 priority: 2
-status: in_progress
+status: done
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
@@ -14104,7 +13895,16 @@ This should be the final step after all other test organization assertions are c
             const metroMapSection = document.getElementById('metro-map-section');
             const metroMapToggle = document.getElementById('metro-map-toggle');
 
-            // Load saved preference from localStorage (default: false = expanded)
+            // Load saved height from localStorage (default: 300px)
+            const savedHeight = localStorage.getItem('spekkMetroMapHeight');
+            if (savedHeight) {
+                const h = parseInt(savedHeight, 10);
+                if (h >= 100 && h <= 600) {
+                    metroMapSection.style.height = h + 'px';
+                }
+            }
+
+            // Load saved collapse preference from localStorage (default: false = expanded)
             const isCollapsed = localStorage.getItem('spekkMetroMapCollapsed') === 'true';
 
             if (isCollapsed) {
@@ -14116,6 +13916,66 @@ This should be the final step after all other test organization assertions are c
                 metroMapSection.classList.toggle('collapsed');
                 const collapsed = metroMapSection.classList.contains('collapsed');
                 localStorage.setItem('spekkMetroMapCollapsed', collapsed.toString());
+            });
+
+            // Drag handle resize functionality
+            initializeMetroMapResize();
+        }
+
+        function initializeMetroMapResize() {
+            const metroMapSection = document.getElementById('metro-map-section');
+            const resizeHandle = document.getElementById('metro-map-resize-handle');
+            if (!resizeHandle || !metroMapSection) return;
+
+            let isDragging = false;
+            let startY = 0;
+            let startHeight = 0;
+
+            resizeHandle.addEventListener('mousedown', function(e) {
+                // Don't resize when collapsed
+                if (metroMapSection.classList.contains('collapsed')) return;
+
+                isDragging = true;
+                startY = e.clientY;
+                startHeight = metroMapSection.getBoundingClientRect().height;
+
+                // Disable transition during drag for responsive feel
+                metroMapSection.classList.add('no-transition');
+
+                // Prevent text selection during drag
+                document.body.style.cursor = 'ns-resize';
+                document.body.style.userSelect = 'none';
+
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+
+                const deltaY = e.clientY - startY;
+                let newHeight = startHeight + deltaY;
+
+                // Constrain between 100px min and 600px max
+                newHeight = Math.max(100, Math.min(600, newHeight));
+
+                metroMapSection.style.height = newHeight + 'px';
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (!isDragging) return;
+
+                isDragging = false;
+
+                // Re-enable transition
+                metroMapSection.classList.remove('no-transition');
+
+                // Restore cursor and selection
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+
+                // Save new height to localStorage
+                const currentHeight = Math.round(metroMapSection.getBoundingClientRect().height);
+                localStorage.setItem('spekkMetroMapHeight', currentHeight.toString());
             });
         }
 
