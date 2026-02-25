@@ -144,40 +144,46 @@ function assignTrackColors(assertions) {
     !assertions.some(child => child.dependsOn === assertion.id)
   );
 
-  // Build a map: assertion.id -> terminal assertion it leads to
+  // Build maps: assertion.id -> track index, color, terminal
+  const assertionToTrack = new Map();
   const assertionToTerminal = new Map();
   const assertionToColor = new Map();
 
-  // Assign colors to terminal assertions
+  // Assign track index and color to terminal assertions
   terminalAssertions.forEach((terminal, index) => {
+    const trackIndex = index;
     const colorIndex = index % trackPalette.length;
+
+    assertionToTrack.set(terminal.id, trackIndex);
     assertionToColor.set(terminal.id, trackPalette[colorIndex]);
     assertionToTerminal.set(terminal.id, terminal.id);
   });
 
-  // Trace back from each terminal to color its entire dependency chain
-  function traceBackAndColor(assertionId, terminalId, color) {
+  // Trace back from each terminal to assign track and color to entire dependency chain
+  function traceBackAndAssign(assertionId, terminalId, trackIndex, color) {
     if (assertionToColor.has(assertionId)) {
-      return; // Already colored
+      return; // Already assigned
     }
 
+    assertionToTrack.set(assertionId, trackIndex);
     assertionToColor.set(assertionId, color);
     assertionToTerminal.set(assertionId, terminalId);
 
     // Find parent (assertion this depends on)
     const assertion = assertions.find(a => a.id === assertionId);
     if (assertion && assertion.dependsOn) {
-      traceBackAndColor(assertion.dependsOn, terminalId, color);
+      traceBackAndAssign(assertion.dependsOn, terminalId, trackIndex, color);
     }
   }
 
   // Trace back from each terminal
   terminalAssertions.forEach((terminal, index) => {
+    const trackIndex = index;
     const color = trackPalette[index % trackPalette.length];
-    traceBackAndColor(terminal.id, terminal.id, color);
+    traceBackAndAssign(terminal.id, terminal.id, trackIndex, color);
   });
 
-  return { assertionToColor, assertionToTerminal, terminalAssertions };
+  return { assertionToTrack, assertionToColor, assertionToTerminal, terminalAssertions };
 }
 
 function calculateDependencyDepth(assertion, assertions) {
@@ -238,7 +244,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     });
 
   // Assign track colors based on dependency lines
-  const { assertionToColor, terminalAssertions } = assignTrackColors(branchAssertions);
+  const { assertionToTrack, assertionToColor, terminalAssertions } = assignTrackColors(branchAssertions);
 
   if (branchAssertions.length === 0) {
     return '';
@@ -246,23 +252,24 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
   const stationSpacing = 110;
   const startX = 60;
-  const trackY = 80;
+  const startY = 80;
   const stationRadius = 8;
   const currentStationRadius = 10;
-  const verticalSpacing = 50;
+  const laneHeight = 100; // Vertical spacing between track lanes
   const terminusRadius = 12;
 
-  // Calculate positions - handle multiple assertions at same depth
+  // Calculate positions using track-based horizontal lanes
   const positions = new Map();
-  const depthCounts = new Map();
 
   branchAssertions.forEach((assertion) => {
     const depth = assertion.depth;
-    const countAtDepth = depthCounts.get(depth) || 0;
-    depthCounts.set(depth, countAtDepth + 1);
+    const trackIndex = assertionToTrack.get(assertion.id) || 0;
 
+    // X position based on dependency depth (horizontal progression)
     const x = startX + (depth * stationSpacing);
-    const y = trackY + (countAtDepth * verticalSpacing);
+
+    // Y position based on track lane (each track gets its own horizontal lane)
+    const y = startY + (trackIndex * laneHeight);
 
     positions.set(assertion.id, { x, y });
   });
