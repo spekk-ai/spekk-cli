@@ -119,6 +119,67 @@ function getStatusColor(status) {
   }
 }
 
+// Track color management for metro map dependency lines
+const trackPalette = [
+  '#3b82f6', // Blue
+  '#f97316', // Orange
+  '#10b981', // Green
+  '#a855f7', // Purple
+  '#ec4899', // Pink
+  '#14b8a6', // Teal
+  '#eab308', // Yellow
+  '#ef4444'  // Red
+];
+
+export function getBranchColor(branchName) {
+  // For testing compatibility - returns a color from palette
+  const index = Array.from(branchName).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return trackPalette[index % trackPalette.length];
+}
+
+// Assign a track (dependency line) to each assertion based on terminal assertion it leads to
+function assignTrackColors(assertions) {
+  // Find terminal assertions (no children)
+  const terminalAssertions = assertions.filter(assertion =>
+    !assertions.some(child => child.dependsOn === assertion.id)
+  );
+
+  // Build a map: assertion.id -> terminal assertion it leads to
+  const assertionToTerminal = new Map();
+  const assertionToColor = new Map();
+
+  // Assign colors to terminal assertions
+  terminalAssertions.forEach((terminal, index) => {
+    const colorIndex = index % trackPalette.length;
+    assertionToColor.set(terminal.id, trackPalette[colorIndex]);
+    assertionToTerminal.set(terminal.id, terminal.id);
+  });
+
+  // Trace back from each terminal to color its entire dependency chain
+  function traceBackAndColor(assertionId, terminalId, color) {
+    if (assertionToColor.has(assertionId)) {
+      return; // Already colored
+    }
+
+    assertionToColor.set(assertionId, color);
+    assertionToTerminal.set(assertionId, terminalId);
+
+    // Find parent (assertion this depends on)
+    const assertion = assertions.find(a => a.id === assertionId);
+    if (assertion && assertion.dependsOn) {
+      traceBackAndColor(assertion.dependsOn, terminalId, color);
+    }
+  }
+
+  // Trace back from each terminal
+  terminalAssertions.forEach((terminal, index) => {
+    const color = trackPalette[index % trackPalette.length];
+    traceBackAndColor(terminal.id, terminal.id, color);
+  });
+
+  return { assertionToColor, assertionToTerminal, terminalAssertions };
+}
+
 function calculateDependencyDepth(assertion, assertions) {
   if (!assertion.dependsOn) {
     return 0;
@@ -176,14 +237,12 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
       return a.created.localeCompare(b.created);
     });
 
+  // Assign track colors based on dependency lines
+  const { assertionToColor, terminalAssertions } = assignTrackColors(branchAssertions);
+
   if (branchAssertions.length === 0) {
     return '';
   }
-
-  // Identify terminal assertions (assertions with no children)
-  const terminalAssertions = branchAssertions.filter(assertion =>
-    !branchAssertions.some(child => child.dependsOn === assertion.id)
-  );
 
   const stationSpacing = 110;
   const startX = 60;
@@ -242,18 +301,19 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
       const childPos = positions.get(assertion.id);
 
       if (parentPos && childPos) {
+        const trackColor = assertionToColor.get(assertion.id) || '#94a3b8';
         // Draw curved line if y positions differ, otherwise straight line
         if (parentPos.y !== childPos.y) {
           const midX = (parentPos.x + childPos.x) / 2;
           svg += `
   <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
   <path class="metro-dependency" d="M${parentPos.x},${parentPos.y} Q${midX},${parentPos.y} ${midX},${(parentPos.y + childPos.y) / 2} T${childPos.x},${childPos.y}"
-        fill="none" stroke="${getStatusColor(assertion.status)}" stroke-width="3" opacity="0.4"/>`;
+        fill="none" stroke="${trackColor}" stroke-width="3" opacity="0.6"/>`;
         } else {
           svg += `
   <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
   <line class="metro-dependency" x1="${parentPos.x}" y1="${parentPos.y}" x2="${childPos.x}" y2="${childPos.y}"
-        stroke="${getStatusColor(assertion.status)}" stroke-width="4" opacity="0.3"/>`;
+        stroke="${trackColor}" stroke-width="3" opacity="0.6"/>`;
         }
       }
     }
@@ -264,12 +324,13 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     terminalAssertions.forEach(assertion => {
       const terminalPos = positions.get(assertion.id);
       if (terminalPos) {
+        const trackColor = assertionToColor.get(assertion.id) || '#94a3b8';
         // Draw curved line to terminus
         const midX = (terminalPos.x + terminusPosition.x) / 2;
         svg += `
   <!-- Convergence: ${escapeHTML(assertion.id)} → Done -->
   <path class="metro-dependency" d="M${terminalPos.x},${terminalPos.y} Q${midX},${terminalPos.y} ${midX},${(terminalPos.y + terminusPosition.y) / 2} T${terminusPosition.x},${terminusPosition.y}"
-        fill="none" stroke="#10b981" stroke-width="3" opacity="0.4"/>`;
+        fill="none" stroke="${trackColor}" stroke-width="3" opacity="0.6"/>`;
       }
     });
   }

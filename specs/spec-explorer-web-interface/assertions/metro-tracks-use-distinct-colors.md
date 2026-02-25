@@ -3,44 +3,47 @@ id: metro-tracks-use-distinct-colors
 parent: spec-explorer-web-interface
 created: 2026-02-25T21:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
 
 # Metro Tracks Use Distinct Colors
 
+**Tests:** src/__tests__/metro-track-colors.test.js
+
 ## What Must Be True
 
-Dependency tracks (lines connecting stations) use distinct, ordinal colors that make overlapping paths easy to distinguish and follow visually.
+Dependency tracks (lines connecting stations) use distinct, ordinal colors that make overlapping paths easy to distinguish and follow visually. Each separate dependency chain/line gets its own color, similar to how different subway lines have different colors.
 
 ## Success Criteria
 
-- ✅ Each branch gets a unique track color (not all gray/same color)
+- ✅ Each dependency track/line gets a unique color (not all gray/same color)
 - ✅ Colors are visually distinct and accessible (sufficient contrast)
 - ✅ Color palette uses ordinal progression (e.g., subway line colors)
 - ✅ Overlapping tracks remain distinguishable due to color differences
-- ✅ Legend shows branch name → track color mapping
-- ✅ Main branch uses neutral color (gray), feature branches use distinct colors
+- ✅ Dependencies leading to different endpoints use different colors
+- ✅ Colors are sufficient to trace paths without needing a legend
 
 ## Current Issue
 
 **Problem:**
-- Tracks are hard to follow when they overlap
+- Multiple dependency chains converge toward "Done"
+- When tracks overlap, they're all the same color
 - Lines blend together making dependency chains unclear
-- Difficult to trace which station belongs to which branch
+- Difficult to trace which path a station belongs to
 
 **Solution:**
-- Assign distinct colors per branch
+- Assign distinct colors per dependency track/line
 - Use standard metro/subway color palette
-- Minimum: distinguish main vs feature branches
-- Better: each feature branch gets unique color
+- Each terminal assertion (endpoint) defines a separate colored track
+- All dependencies leading to that terminal use the same color
+- Different tracks use different colors
 
 ## Color Palette
 
-**Suggested colors (accessible, distinct):**
-- Main branch: `#94a3b8` (neutral gray)
-- Feature branches (cycle through):
+**Track colors (accessible, distinct):**
+- Cycle through for each dependency track:
   - Blue: `#3b82f6`
   - Orange: `#f97316`
   - Green: `#10b981`
@@ -53,38 +56,51 @@ Dependency tracks (lines connecting stations) use distinct, ordinal colors that 
 **Accessibility:**
 - All colors meet WCAG AA contrast on white background
 - Distinguishable for common color vision deficiencies
-- Consistent stroke-width (2-3px) for clarity
+- Consistent stroke-width (3px) for clarity
 
 ## Implementation
 
-**Assign colors during rendering:**
+**Assign colors per dependency track:**
 ```javascript
-const branchColors = {
-  'main': '#94a3b8',
-  // Cycle through palette for feature branches
-};
+function assignTrackColors(assertions) {
+  // Find terminal assertions (endpoints with no children)
+  const terminalAssertions = assertions.filter(assertion =>
+    !assertions.some(child => child.dependsOn === assertion.id)
+  );
 
-function getBranchColor(branchName) {
-  if (!branchColors[branchName]) {
-    const palette = ['#3b82f6', '#f97316', '#10b981', '#a855f7', '#ec4899', '#14b8a6'];
-    const index = Object.keys(branchColors).length % palette.length;
-    branchColors[branchName] = palette[index];
+  // Assign a color to each terminal
+  const assertionToColor = new Map();
+  terminalAssertions.forEach((terminal, index) => {
+    const color = trackPalette[index % trackPalette.length];
+    assertionToColor.set(terminal.id, color);
+  });
+
+  // Trace back and color entire dependency chain
+  function colorChain(assertionId, color) {
+    assertionToColor.set(assertionId, color);
+    const assertion = assertions.find(a => a.id === assertionId);
+    if (assertion?.dependsOn) {
+      colorChain(assertion.dependsOn, color);
+    }
   }
-  return branchColors[branchName];
+
+  terminalAssertions.forEach((terminal, index) => {
+    const color = trackPalette[index % trackPalette.length];
+    colorChain(terminal.id, color);
+  });
+
+  return assertionToColor;
 }
 ```
 
 **Apply to SVG paths:**
 ```javascript
 // When rendering track lines
-path.setAttribute('stroke', getBranchColor(assertion.branch || 'main'));
+const trackColor = assertionToColor.get(assertion.id);
+path.setAttribute('stroke', trackColor);
 path.setAttribute('stroke-width', '3');
+path.setAttribute('opacity', '0.6');
 ```
-
-**Legend:**
-- Show colored squares/lines next to branch names
-- Positioned above or beside metro map
-- Format: `■ feature/auth` with colored square
 
 ## Alternative: Reduce Overlap
 
