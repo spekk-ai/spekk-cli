@@ -411,8 +411,8 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
   // Layout each tree independently, stacking vertically
   const positions = new Map();
-  const layerSpacing = 150;
-  const treeSpacing = 100; // Vertical spacing between trees
+  const layerSpacing = 120; // Reduced for compactness
+  const treeSpacing = 70; // Reduced vertical spacing between trees
   const startX = 60;
   let currentTreeY = 80;
 
@@ -446,7 +446,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
   if (showTerminus) {
     const maxX = Math.max(...Array.from(positions.values()).map(p => p.x));
-    const terminusX = maxX + 150;
+    const terminusX = maxX + 120; // Reduced spacing
 
     // Each terminal gets its own Done node at the same Y position
     terminalAssertions.forEach(terminal => {
@@ -460,7 +460,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     });
   }
 
-  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + (showTerminus ? 200 : 150);
+  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + (showTerminus ? 170 : 120);
   const maxY = Math.max(...Array.from(positions.values()).map(p => p.y)) + 50;
   const svgWidth = Math.max(maxX, 800);
   const svgHeight = Math.max(maxY, 200);
@@ -477,19 +477,19 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
       const childPos = positions.get(assertion.id);
 
       if (parentPos && childPos) {
-        const trackColor = assertionToColor.get(assertion.id) || '#94a3b8';
+        const lineColor = '#94a3b8'; // Gray for all dependency lines
         // Draw curved line if y positions differ, otherwise straight line
         if (parentPos.y !== childPos.y) {
           const midX = (parentPos.x + childPos.x) / 2;
           svg += `
   <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
   <path class="metro-dependency" d="M${parentPos.x},${parentPos.y} Q${midX},${parentPos.y} ${midX},${(parentPos.y + childPos.y) / 2} T${childPos.x},${childPos.y}"
-        fill="none" stroke="${trackColor}" stroke-width="4" opacity="0.8"/>`;
+        fill="none" stroke="${lineColor}" stroke-width="3" opacity="0.4"/>`;
         } else {
           svg += `
   <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
   <line class="metro-dependency" x1="${parentPos.x}" y1="${parentPos.y}" x2="${childPos.x}" y2="${childPos.y}"
-        stroke="${trackColor}" stroke-width="4" opacity="0.8"/>`;
+        stroke="${lineColor}" stroke-width="3" opacity="0.4"/>`;
         }
       }
     }
@@ -502,11 +502,11 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
       const donePos = terminusPositions.get(assertion.id);
 
       if (terminalPos && donePos) {
-        const trackColor = assertionToColor.get(assertion.id) || '#94a3b8';
+        const lineColor = '#94a3b8'; // Gray for convergence lines
         svg += `
   <!-- Convergence: ${escapeHTML(assertion.id)} → Done -->
   <line class="metro-dependency" x1="${terminalPos.x}" y1="${terminalPos.y}" x2="${donePos.x}" y2="${donePos.y}"
-        stroke="${trackColor}" stroke-width="4" opacity="0.8"/>`;
+        stroke="${lineColor}" stroke-width="3" opacity="0.4"/>`;
       }
     });
   }
@@ -518,11 +518,9 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
     const isCurrent = assertion.id === currentAssertion.id;
     const radius = isCurrent ? currentStationRadius : stationRadius;
-    const trackColor = assertionToColor.get(assertion.id) || '#94a3b8';
     const statusColor = getStatusColor(assertion.status);
 
-    // Use track color for fill, status color for border
-    const fillOpacity = assertion.status === 'done' ? 0.7 : 1.0;
+    // Use status color for fill and border
     const strokeWidth = isCurrent ? 4 : 3;
     const glowFilter = isCurrent ? ' filter="drop-shadow(0 0 6px rgba(59, 130, 246, 0.6))"' : '';
 
@@ -536,7 +534,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   <!-- Station: ${escapeHTML(assertion.id)} -->
   <g class="metro-station" data-action="show-detail" data-assertion-id="${escapeHTML(assertion.id)}" data-type="assertion" transform="translate(${pos.x}, ${pos.y})">
     <title>${escapeHTML(assertion.title)}</title>
-    <circle r="${radius}" fill="${trackColor}" fill-opacity="${fillOpacity}" stroke="${statusColor}" stroke-width="${strokeWidth}"${glowFilter}/>
+    <circle r="${radius}" fill="${statusColor}" stroke="#fff" stroke-width="${strokeWidth}"${glowFilter}/>
     <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: ${isCurrent ? '700' : '400'};">${escapeHTML(displayTitle)}</text>
   </g>`;
   });
@@ -546,11 +544,22 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     terminalAssertions.forEach(assertion => {
       const donePos = terminusPositions.get(assertion.id);
       if (donePos) {
-        const trackColor = assertionToColor.get(assertion.id) || '#94a3b8';
+        // Check if all assertions in this tree are done
+        const treeNodes = [];
+        let currentNode = assertion;
+        while (currentNode) {
+          treeNodes.push(currentNode);
+          const parent = branchAssertions.find(a => a.id === currentNode.dependsOn);
+          currentNode = parent;
+        }
+
+        const allDone = treeNodes.every(node => node.status === 'done');
+        const doneColor = allDone ? '#10b981' : '#94a3b8'; // Green if all done, gray otherwise
+
         svg += `
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(${donePos.x}, ${donePos.y})">
-    <circle r="${terminusRadius}" fill="${trackColor}" stroke="#fff" stroke-width="4"/>
+    <circle r="${terminusRadius}" fill="${doneColor}" stroke="#fff" stroke-width="4"/>
     <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
     <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
   </g>`;
