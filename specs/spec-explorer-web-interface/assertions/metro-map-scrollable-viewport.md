@@ -8,56 +8,74 @@ depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
 
-# Metro Map Column Viewport
+# Metro Map Collapsible Viewport
 
 **Tests:** src/__tests__/metro-map-scrollable-viewport.test.js
 
 ## What Must Be True
 
-The metro map occupies a dedicated right column that takes the full viewport height. Navigation is handled by pan-and-zoom (no scrollbars).
+The metro map section at the top of the detail panel has a constrained height with pan-and-zoom for navigation, and can be collapsed to a thin header bar.
 
 ## Success Criteria
 
-- Metro map column takes full viewport height (100vh)
-- `overflow: hidden` — no scrollbars visible
-- Pan-and-zoom handles all navigation (see metro-map-pan-and-zoom)
-- Background: `#f8fafc` with left border separator
-- Column width: ~400px fixed
-- "Branch Dependencies" header at top showing branch name
-- Column collapses or shows notice when metro map is not applicable
+- Metro map section has max-height (~300px) when expanded
+- `overflow: hidden` — no scrollbars, pan-and-zoom handles navigation
+- Background: `#f8fafc` with border separating it from content below
+- Full width of detail panel (~800px)
+- Collapsible header bar with toggle: "▼ Branch Dependencies — {branch-name}"
+- Collapsed state: ~36px header-only bar, "▶ Branch Dependencies"
+- Collapse/expand has smooth height transition
+- Collapsed state persisted in localStorage
+- When metro map is not applicable, section is hidden entirely or shows notice
+- SVG has dynamic width/height based on tree layout dimensions
 
 ## Visual Structure
 
+**Expanded:**
 ```
-╔══════════════════════════════╗
-║ Branch Dependencies          ║
-║ feature/dependency-visual... ║
-╠══════════════════════════════╣
-║                              ║
-║  [pan-and-zoom SVG canvas]   ║
-║                              ║
-║  ○───○───◉───○───●           ║
-║       └──○───○───●           ║
-║  ○───○───●                   ║
-║                              ║
-╚══════════════════════════════╝
+╔═══════════════════════════════════════════════╗
+║ ▼ Branch Dependencies — feature/dep-viz  [−] ║
+║ ┌───────────────────────────────────────────┐ ║
+║ │ ○───○───◉───○───●                         │ ║
+║ │      └──○───○───●   [pan-and-zoom canvas] │ ║
+║ │ ○───○───●                                 │ ║
+║ └───────────────────────────────────────────┘ ║
+╠═══════════════════════════════════════════════╣
+║ [assertion content below]                     ║
+╚═══════════════════════════════════════════════╝
+```
+
+**Collapsed:**
+```
+╔═══════════════════════════════════════════════╗
+║ ▶ Branch Dependencies — feature/dep-viz  [+] ║
+╠═══════════════════════════════════════════════╣
+║ [assertion content below]                     ║
+╚═══════════════════════════════════════════════╝
 ```
 
 ## Implementation Notes
 
-- CSS for metro map column:
+- CSS for metro map section:
   ```css
-  .metro-map-panel {
-    width: 400px;
-    height: 100vh;
+  .metro-map-section {
+    max-height: 300px;
     overflow: hidden;
     background: #f8fafc;
-    border-left: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
     position: relative;
     cursor: grab;
+    transition: max-height 0.3s ease;
+  }
+
+  .metro-map-section.collapsed {
+    max-height: 36px;
+    cursor: default;
+    overflow: hidden;
   }
   ```
-- SVG has dynamic width/height based on tree layout dimensions
-- Pan-and-zoom handlers attached to `.metro-map-panel`
+- Pan-and-zoom handlers attached to `.metro-map-section`
+- When collapsed, pan-and-zoom handlers are disabled
 - When branch changes, replace SVG content and reset pan position
-- Column visibility controlled by `shouldShowMetroMap()` logic
+- Visibility controlled by `shouldShowMetroMap()` logic
+- Toggle click handler on `.metro-map-header` bar
