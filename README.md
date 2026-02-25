@@ -9,6 +9,13 @@ Spekk CLI enables spec-driven development by:
 - **Orchestrating** AI agents (Coach and Builder) to create and implement specs
 - **Automating** the development workflow loop
 
+## Documentation
+
+- **[Getting Started Guide](./docs/GETTING-STARTED.md)** - Quick introduction to Spekk
+- **[CLI Reference](./docs/CLI-REFERENCE.md)** - Complete command documentation
+- **[Coach Skills Guide](./docs/COACH-SKILLS.md)** - Detailed skill workflows
+- **[Release Notes](./docs/RELEASE-NOTES-1.1.0.md)** - Version history
+
 ## Installation
 
 ### 1. Get a GemFury Token
