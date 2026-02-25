@@ -151,12 +151,18 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     return '';
   }
 
+  // Identify terminal assertions (assertions with no children)
+  const terminalAssertions = branchAssertions.filter(assertion =>
+    !branchAssertions.some(child => child.dependsOn === assertion.id)
+  );
+
   const stationSpacing = 110;
   const startX = 60;
   const trackY = 80;
   const stationRadius = 8;
   const currentStationRadius = 10;
   const verticalSpacing = 50;
+  const terminusRadius = 12;
 
   // Calculate positions - handle multiple assertions at same depth
   const positions = new Map();
@@ -173,7 +179,24 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     positions.set(assertion.id, { x, y });
   });
 
-  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + 100;
+  // Determine if we need a "Done" terminus (2+ terminal assertions)
+  const showTerminus = terminalAssertions.length > 1;
+  let terminusPosition = null;
+
+  if (showTerminus) {
+    const maxX = Math.max(...Array.from(positions.values()).map(p => p.x));
+    const terminusX = maxX + stationSpacing;
+
+    // Position terminus at the vertical center of terminal assertions
+    const terminalYPositions = terminalAssertions.map(a => positions.get(a.id).y);
+    const minY = Math.min(...terminalYPositions);
+    const maxTerminalY = Math.max(...terminalYPositions);
+    const terminusY = (minY + maxTerminalY) / 2;
+
+    terminusPosition = { x: terminusX, y: terminusY };
+  }
+
+  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + (showTerminus ? stationSpacing + 50 : 100);
   const maxY = Math.max(...Array.from(positions.values()).map(p => p.y)) + 50;
   const svgWidth = Math.max(maxX, 800);
   const svgHeight = Math.max(maxY, 200);
@@ -209,6 +232,21 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     }
   });
 
+  // Add lines from terminal assertions to "Done" terminus
+  if (showTerminus && terminusPosition) {
+    terminalAssertions.forEach(assertion => {
+      const terminalPos = positions.get(assertion.id);
+      if (terminalPos) {
+        // Draw curved line to terminus
+        const midX = (terminalPos.x + terminusPosition.x) / 2;
+        svg += `
+  <!-- Convergence: ${escapeHTML(assertion.id)} → Done -->
+  <path class="metro-dependency" d="M${terminalPos.x},${terminalPos.y} Q${midX},${terminalPos.y} ${midX},${(terminalPos.y + terminusPosition.y) / 2} T${terminusPosition.x},${terminusPosition.y}"
+        fill="none" stroke="#10b981" stroke-width="3" opacity="0.4"/>`;
+      }
+    });
+  }
+
   // Add stations
   branchAssertions.forEach(assertion => {
     const pos = positions.get(assertion.id);
@@ -233,6 +271,17 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: ${isCurrent ? '700' : '400'};">${escapeHTML(displayTitle)}</text>
   </g>`;
   });
+
+  // Add "Done" terminus if there are multiple terminal assertions
+  if (showTerminus && terminusPosition) {
+    svg += `
+  <!-- Done Terminus -->
+  <g class="metro-terminus" transform="translate(${terminusPosition.x}, ${terminusPosition.y})">
+    <circle r="${terminusRadius}" fill="#10b981" stroke="#fff" stroke-width="4"/>
+    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
+    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+  </g>`;
+  }
 
   svg += `
 </svg>`;
@@ -618,10 +667,17 @@ export function generateSpecExplorerHTML(specs, assertions) {
         .metro-station {
             cursor: pointer;
             transition: transform 0.15s;
+            transform-origin: center;
+            transform-box: fill-box;
         }
 
         .metro-station:hover {
             transform: scale(1.15);
+        }
+
+        .metro-terminus {
+            cursor: default;
+            pointer-events: none;
         }
 
         .metro-label {

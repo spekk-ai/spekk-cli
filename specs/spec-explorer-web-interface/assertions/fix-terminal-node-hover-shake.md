@@ -3,7 +3,7 @@ id: fix-terminal-node-hover-shake
 parent: spec-explorer-web-interface
 created: 2026-02-25T19:20:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/dependency-visualization
 ---
 
