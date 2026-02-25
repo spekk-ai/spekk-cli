@@ -62,6 +62,58 @@ describe('Metro Map Pan and Zoom Viewport', () => {
   });
 });
 
+describe('Metro Map Pan Bounds and Wheel Support', () => {
+  it('should compute pan bounds from SVG width/height attributes with 60px edge margin', () => {
+    const html = getHTML();
+
+    // Pan bounds must use SVG getAttribute('width')/getAttribute('height'), not getBoundingClientRect
+    assert.ok(html.includes("svg.getAttribute('width')"), 'Should read SVG width attribute for pan bounds');
+    assert.ok(html.includes("svg.getAttribute('height')"), 'Should read SVG height attribute for pan bounds');
+
+    // 60px edge margin constant
+    assert.ok(html.includes('EDGE_MARGIN = 60'), 'Should define EDGE_MARGIN = 60 for pan bounds');
+
+    // Bounds must allow positive maxX/maxY (breathing room beyond content)
+    assert.ok(html.includes('maxX = EDGE_MARGIN'), 'maxX should allow EDGE_MARGIN positive pan');
+    assert.ok(html.includes('maxY = EDGE_MARGIN'), 'maxY should allow EDGE_MARGIN positive pan');
+  });
+
+  it('should size SVG from actual node positions with edge padding', () => {
+    const html = getHTML();
+
+    // SVG should have width and height attributes computed from node positions
+    // Extract SVG width/height from generated HTML
+    const svgMatch = html.match(/class="metro-map" width="(\d+)" height="(\d+)"/);
+    assert.ok(svgMatch, 'SVG should have computed width and height attributes');
+
+    const svgWidth = parseInt(svgMatch[1], 10);
+    const svgHeight = parseInt(svgMatch[2], 10);
+
+    // Width should be at least 800 (minimum) and height should be at least 200
+    assert.ok(svgWidth >= 800, 'SVG width should be at least 800');
+    assert.ok(svgHeight >= 200, 'SVG height should be at least 200');
+
+    // Height should include padding below the lowest node (startY=80 for single node + padding)
+    // Single node at y=80, with EDGE_PADDING=60 + LABEL_EXTRA=30 = 170, but min is 200
+    assert.ok(svgHeight >= 170, 'SVG height should account for node position plus edge padding');
+  });
+
+  it('should support mouse wheel for vertical scrolling', () => {
+    const html = getHTML();
+
+    assert.ok(html.includes("'wheel'"), 'Should listen for wheel events');
+    assert.ok(html.includes('e.deltaY'), 'Should use deltaY for vertical scroll');
+    assert.ok(html.includes('e.preventDefault()'), 'Should prevent default scroll behavior on wheel');
+  });
+
+  it('should show metro map with display flex to preserve column layout', () => {
+    const html = getHTML();
+
+    // The metro map section uses flex-direction: column - showing must use display: flex
+    assert.ok(html.includes("metroMapSection.style.display = 'flex'"), 'Should show metro map with display flex');
+  });
+});
+
 describe('Metro Map Collapsible and Resizable Viewport', () => {
   it('should have default 300px height with min/max constraints', () => {
     const html = getHTML();

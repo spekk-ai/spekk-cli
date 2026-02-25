@@ -3,7 +3,7 @@ id: metro-map-pan-and-zoom
 parent: spec-explorer-web-interface
 created: 2026-02-25T20:31:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: metro-map-scrollable-viewport
 branch: feature/dependency-visualization
 ---

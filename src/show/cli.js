@@ -460,10 +460,15 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     });
   }
 
-  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + (showTerminus ? 170 : 120);
-  const maxY = Math.max(...Array.from(positions.values()).map(p => p.y)) + 50;
-  const svgWidth = Math.max(maxX, 800);
-  const svgHeight = Math.max(maxY, 200);
+  // Compute SVG dimensions from actual node positions with 60px edge padding on all sides
+  // Labels extend ~30px below stations, so add that to the bottom padding
+  const EDGE_PADDING = 60;
+  const LABEL_EXTRA = 30; // metro-label y="28" plus some buffer
+  const rawMaxX = Math.max(...Array.from(positions.values()).map(p => p.x),
+    ...(showTerminus ? Array.from(terminusPositions.values()).map(p => p.x) : [0]));
+  const rawMaxY = Math.max(...Array.from(positions.values()).map(p => p.y));
+  const svgWidth = Math.max(rawMaxX + EDGE_PADDING * 2, 800);
+  const svgHeight = Math.max(rawMaxY + EDGE_PADDING + LABEL_EXTRA, 200);
 
   // Generate SVG
   let svg = `
@@ -1593,7 +1598,8 @@ export function generateSpecExplorerHTML(specs, assertions) {
             const branchNameEl = document.getElementById('metro-branch-name');
 
             // Show metro map section (for assertions)
-            metroMapSection.style.display = 'block';
+            // Use 'flex' to preserve the flex-direction: column layout from CSS
+            metroMapSection.style.display = 'flex';
 
             // Update branch name
             branchNameEl.textContent = branch;
@@ -1769,15 +1775,20 @@ export function generateSpecExplorerHTML(specs, assertions) {
                 const newX = e.clientX - startX;
                 const newY = e.clientY - startY;
 
-                // Calculate bounds to constrain panning
+                // Calculate bounds from actual SVG dimensions (width/height attributes) + 60px edge margin
                 const containerRect = mapContainer.getBoundingClientRect();
-                const svgRect = svg.getBoundingClientRect();
-                const minX = Math.min(0, containerRect.width - svgRect.width);
-                const minY = Math.min(0, containerRect.height - svgRect.height);
+                const svgWidth = parseFloat(svg.getAttribute('width')) || containerRect.width;
+                const svgHeight = parseFloat(svg.getAttribute('height')) || containerRect.height;
+                const EDGE_MARGIN = 60;
 
-                // Constrain to bounds
-                panState.currentX = Math.max(minX, Math.min(0, newX));
-                panState.currentY = Math.max(minY, Math.min(0, newY));
+                const minX = Math.min(0, containerRect.width - svgWidth - EDGE_MARGIN);
+                const maxX = EDGE_MARGIN;
+                const minY = Math.min(0, containerRect.height - svgHeight - EDGE_MARGIN);
+                const maxY = EDGE_MARGIN;
+
+                // Constrain to bounds with breathing room on all edges
+                panState.currentX = Math.max(minX, Math.min(maxX, newX));
+                panState.currentY = Math.max(minY, Math.min(maxY, newY));
 
                 svg.style.transform = \`translate(\${panState.currentX}px, \${panState.currentY}px)\`;
             });
@@ -1797,6 +1808,44 @@ export function generateSpecExplorerHTML(specs, assertions) {
                     mapContainer.classList.remove('panning');
                 }
             });
+
+            // Mouse wheel for vertical (and horizontal with shift) scrolling
+            mapContainer.addEventListener('wheel', function(e) {
+                const currentBranch = metroMapState.currentBranch;
+                if (!currentBranch) return;
+
+                const visibleMap = document.getElementById('metro-map-' + currentBranch);
+                const svg = visibleMap?.querySelector('.metro-map');
+                if (!svg) return;
+
+                let panState = metroMapState.panStates.get(currentBranch);
+                if (!panState) {
+                    panState = { currentX: 0, currentY: 0 };
+                    metroMapState.panStates.set(currentBranch, panState);
+                }
+
+                // Calculate bounds
+                const containerRect = mapContainer.getBoundingClientRect();
+                const svgWidth = parseFloat(svg.getAttribute('width')) || containerRect.width;
+                const svgHeight = parseFloat(svg.getAttribute('height')) || containerRect.height;
+                const EDGE_MARGIN = 60;
+
+                const minX = Math.min(0, containerRect.width - svgWidth - EDGE_MARGIN);
+                const maxX = EDGE_MARGIN;
+                const minY = Math.min(0, containerRect.height - svgHeight - EDGE_MARGIN);
+                const maxY = EDGE_MARGIN;
+
+                // Apply scroll delta (shift+wheel = horizontal, wheel = vertical)
+                if (e.shiftKey) {
+                    panState.currentX = Math.max(minX, Math.min(maxX, panState.currentX - e.deltaY));
+                } else {
+                    panState.currentY = Math.max(minY, Math.min(maxY, panState.currentY - e.deltaY));
+                    panState.currentX = Math.max(minX, Math.min(maxX, panState.currentX - e.deltaX));
+                }
+
+                svg.style.transform = \`translate(\${panState.currentX}px, \${panState.currentY}px)\`;
+                e.preventDefault();
+            }, { passive: false });
         })();
     </script>
 </body>
