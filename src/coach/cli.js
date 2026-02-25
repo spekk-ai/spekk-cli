@@ -2,8 +2,71 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const projectRoot = join(__dirname, '../..');
+
+// Mapping from subcommand name to skill filename in specs/coach-skills-system/
+const SKILL_MAP = {
+  meeting: 'meeting-notes-to-specs-skill.md',
+};
+
+/**
+ * Resolve and read a skill markdown file for a given subcommand.
+ * Returns the full content of the skill file.
+ * Throws if the subcommand has no mapped skill or the file is missing.
+ */
+function resolveSkillContent(subcommand) {
+  const skillFilename = SKILL_MAP[subcommand];
+  if (!skillFilename) {
+    return null;
+  }
+  const skillPath = join(projectRoot, 'specs', 'coach-skills-system', skillFilename);
+  if (!existsSync(skillPath)) {
+    throw new Error(`Skill file not found: ${skillPath}`);
+  }
+  return readFileSync(skillPath, 'utf8');
+}
+
+/**
+ * Build the activation message for a skill subcommand.
+ * Exported for testing.
+ */
+function buildSkillActivationMessage(baseMessage, subcommand, args) {
+  const skillContent = resolveSkillContent(subcommand);
+  if (!skillContent) {
+    return baseMessage;
+  }
+
+  let message = baseMessage;
+  message += '\n\n---\n\n**Skill Activation: `spekk coach ' + subcommand + '`**\n\n';
+  message += 'The user has launched you with a skill active via `spekk coach ' + subcommand + '`.\n';
+  message += 'Follow the inlined skill workflow below immediately — do not wait for trigger detection.\n';
+  message += '\n<skill-content>\n' + skillContent + '\n</skill-content>\n';
+
+  // Subcommand-specific argument handling
+  if (subcommand === 'meeting') {
+    const transcriptFile = args[1];
+    if (transcriptFile) {
+      const resolvedPath = resolve(process.cwd(), transcriptFile);
+      if (!existsSync(resolvedPath)) {
+        throw new Error(`Transcript file not found: ${resolvedPath}`);
+      }
+      const content = readFileSync(resolvedPath, 'utf8');
+      message += `\nThe user provided a transcript file: ${transcriptFile}\n`;
+      message += '\n<transcript>\n' + content + '\n</transcript>\n';
+      message += '\nProcess this transcript now.\n';
+    } else {
+      message += '\nNo transcript file was provided. Ask the user to paste or provide their meeting transcript.\n';
+    }
+  }
+
+  return message;
+}
 
 async function launchCoachAgent(cliArgs = null) {
   try {
@@ -17,29 +80,18 @@ async function launchCoachAgent(cliArgs = null) {
     }
 
     const { activationMessage } = launchAgentWithPrompt('coach-agent');
-    let message = activationMessage;
+    let message;
 
-    // Handle meeting subcommand
-    if (subcommand === 'meeting') {
-      const transcriptFile = args[1];
-      message += '\n\n---\n\n**Skill Activation: Meeting Notes to Specs**\n\n';
-      message += 'The user has launched you with the meeting-processing skill active via `spekk coach meeting`.\n';
-      message += 'Activate your meeting-notes-to-specs skill immediately — do not wait for trigger detection.\n';
-
-      if (transcriptFile) {
-        const resolvedPath = resolve(process.cwd(), transcriptFile);
-        if (existsSync(resolvedPath)) {
-          const content = readFileSync(resolvedPath, 'utf8');
-          message += `\nThe user provided a transcript file: ${transcriptFile}\n`;
-          message += '\n<transcript>\n' + content + '\n</transcript>\n';
-          message += '\nProcess this transcript now.\n';
-        } else {
-          console.error(`Error: Transcript file not found: ${resolvedPath}`);
-          process.exit(1);
-        }
-      } else {
-        message += '\nNo transcript file was provided. Ask the user to paste or provide their meeting transcript.\n';
+    // Handle skill subcommands
+    if (subcommand && SKILL_MAP[subcommand]) {
+      try {
+        message = buildSkillActivationMessage(activationMessage, subcommand, args);
+      } catch (error) {
+        console.error(`Error: ${error.message}`);
+        process.exit(1);
       }
+    } else {
+      message = activationMessage;
     }
 
     // Launch Claude Code with the coach agent message and prompt
@@ -128,4 +180,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   launchCoachAgent();
 }
 
-export { launchCoachAgent };
+export { launchCoachAgent, buildSkillActivationMessage, resolveSkillContent, SKILL_MAP };

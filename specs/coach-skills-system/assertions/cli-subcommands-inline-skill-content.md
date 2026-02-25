@@ -3,7 +3,7 @@ id: cli-subcommands-inline-skill-content
 parent: coach-skills-system
 created: 2026-02-25T20:15:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # CLI Subcommands Inline Skill Content from Markdown Files
