@@ -186,174 +186,6 @@ function assignTrackColors(assertions) {
   return { assertionToTrack, assertionToColor, assertionToTerminal, terminalAssertions };
 }
 
-function calculateDependencyDepth(assertion, assertions) {
-  if (!assertion.dependsOn) {
-    return 0;
-  }
-
-  const parent = assertions.find(a => a.id === assertion.dependsOn);
-  if (!parent) {
-    return 0;
-  }
-
-  return 1 + calculateDependencyDepth(parent, assertions);
-}
-
-// Sugiyama layout algorithm functions
-function assignLayers(assertions) {
-  const layers = new Map(); // assertion.id -> layer number
-
-  function getLongestPath(assertionId, visited = new Set()) {
-    if (visited.has(assertionId)) return 0; // Cycle detection
-
-    const layer = layers.get(assertionId);
-    if (layer !== undefined) return layer;
-
-    const assertion = assertions.find(a => a.id === assertionId);
-    if (!assertion || !assertion.dependsOn) {
-      layers.set(assertionId, 0);
-      return 0;
-    }
-
-    visited.add(assertionId);
-    const parentLayer = getLongestPath(assertion.dependsOn, visited);
-    const myLayer = parentLayer + 1;
-    layers.set(assertionId, myLayer);
-    visited.delete(assertionId);
-    return myLayer;
-  }
-
-  assertions.forEach(a => getLongestPath(a.id));
-  return layers;
-}
-
-function minimizeCrossings(assertions, layers) {
-  // Group assertions by layer
-  const maxLayer = Math.max(...layers.values());
-  const layerGroups = Array.from({ length: maxLayer + 1 }, () => []);
-
-  assertions.forEach(assertion => {
-    const layer = layers.get(assertion.id);
-    layerGroups[layer].push(assertion);
-  });
-
-  // Build adjacency information
-  const children = new Map(); // parent.id -> [child assertions]
-  assertions.forEach(assertion => {
-    if (assertion.dependsOn) {
-      if (!children.has(assertion.dependsOn)) {
-        children.set(assertion.dependsOn, []);
-      }
-      children.get(assertion.dependsOn).push(assertion);
-    }
-  });
-
-  // Helper: Calculate depth of longest chain starting from this node
-  const getChainDepth = (nodeId, memo = new Map()) => {
-    if (memo.has(nodeId)) return memo.get(nodeId);
-
-    const nodeChildren = children.get(nodeId) || [];
-    if (nodeChildren.length === 0) {
-      memo.set(nodeId, 0);
-      return 0;
-    }
-
-    const maxChildDepth = Math.max(...nodeChildren.map(child => getChainDepth(child.id, memo)));
-    const depth = 1 + maxChildDepth;
-    memo.set(nodeId, depth);
-    return depth;
-  };
-
-  // Multiple sweeps to minimize crossings (forward and backward passes)
-  for (let sweep = 0; sweep < 4; sweep++) {
-    if (sweep % 2 === 0) {
-      // Forward pass: sort by parent position and chain depth
-      for (let i = 0; i <= maxLayer; i++) {
-        layerGroups[i].sort((a, b) => {
-          // Calculate chain depth (how many more layers this track continues)
-          const aDepth = getChainDepth(a.id);
-          const bDepth = getChainDepth(b.id);
-
-          // Longer chains (more depth) go to top, shorter chains to bottom
-          if (aDepth !== bDepth) return bDepth - aDepth;
-
-          // For non-root layers, sort by parent position as secondary key
-          if (i > 0) {
-            const aParent = assertions.find(p => p.id === a.dependsOn);
-            const bParent = assertions.find(p => p.id === b.dependsOn);
-
-            if (!aParent && !bParent) return 0;
-            if (!aParent) return -1;
-            if (!bParent) return 1;
-
-            const aParentIndex = layerGroups[i-1].findIndex(n => n.id === aParent.id);
-            const bParentIndex = layerGroups[i-1].findIndex(n => n.id === bParent.id);
-
-            if (aParentIndex === -1 && bParentIndex === -1) return 0;
-            if (aParentIndex === -1) return 1;
-            if (bParentIndex === -1) return -1;
-
-            return aParentIndex - bParentIndex;
-          }
-
-          return 0;
-        });
-      }
-    } else {
-      // Backward pass: sort by children positions and chain depth
-      for (let i = maxLayer - 1; i >= 0; i--) {
-        layerGroups[i].sort((a, b) => {
-          // Calculate chain depth - longer chains go to top
-          const aDepth = getChainDepth(a.id);
-          const bDepth = getChainDepth(b.id);
-          if (aDepth !== bDepth) return bDepth - aDepth;
-
-          const aChildren = children.get(a.id) || [];
-          const bChildren = children.get(b.id) || [];
-
-          if (aChildren.length === 0 && bChildren.length === 0) return 0;
-          if (aChildren.length === 0) return 1;
-          if (bChildren.length === 0) return -1;
-
-          // Calculate barycenter (average position) of children in next layer
-          const aBarycenter = aChildren.reduce((sum, child) => {
-            const childIndex = layerGroups[i+1].findIndex(n => n.id === child.id);
-            return sum + (childIndex === -1 ? 0 : childIndex);
-          }, 0) / aChildren.length;
-
-          const bBarycenter = bChildren.reduce((sum, child) => {
-            const childIndex = layerGroups[i+1].findIndex(n => n.id === child.id);
-            return sum + (childIndex === -1 ? 0 : childIndex);
-          }, 0) / bChildren.length;
-
-          return aBarycenter - bBarycenter;
-        });
-      }
-    }
-  }
-
-  return layerGroups;
-}
-
-function assignCoordinatesWithSugiyama(layerGroups, assertionToColor) {
-  const positions = new Map();
-  const layerSpacing = 150; // X spacing between layers
-  const nodeSpacing = 70; // Y spacing between nodes (compact)
-  const startX = 60;
-  const startY = 80;
-
-  layerGroups.forEach((layer, layerIndex) => {
-    const x = startX + (layerIndex * layerSpacing);
-
-    layer.forEach((assertion, nodeIndex) => {
-      const y = startY + (nodeIndex * nodeSpacing);
-      positions.set(assertion.id, { x, y });
-    });
-  });
-
-  return positions;
-}
-
 function shouldShowMetroMap(assertion, allAssertions) {
   const assertionBranch = assertion.branch || 'main';
 
@@ -387,16 +219,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   // Filter assertions in the same branch
   const assertionBranch = currentAssertion.branch || 'main';
   const branchAssertions = allAssertions
-    .filter(a => (a.branch || 'main') === assertionBranch)
-    .map(a => ({
-      ...a,
-      depth: calculateDependencyDepth(a, allAssertions)
-    }))
-    .sort((a, b) => {
-      // Sort by depth first, then by created date
-      if (a.depth !== b.depth) return a.depth - b.depth;
-      return a.created.localeCompare(b.created);
-    });
+    .filter(a => (a.branch || 'main') === assertionBranch);
 
   // Assign track colors based on dependency lines
   const { assertionToTrack, assertionToColor, terminalAssertions } = assignTrackColors(branchAssertions);
@@ -409,35 +232,85 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   const currentStationRadius = 10;
   const terminusRadius = 5;
 
-  // Layout each tree independently, stacking vertically
+  // Build parent-to-children map for tree traversal
+  const childrenMap = new Map(); // parentId -> [child assertions]
+  branchAssertions.forEach(a => {
+    if (a.dependsOn) {
+      if (!childrenMap.has(a.dependsOn)) {
+        childrenMap.set(a.dependsOn, []);
+      }
+      childrenMap.get(a.dependsOn).push(a);
+    }
+  });
+
+  // Find true root nodes: assertions with no dependsOn (or whose dependsOn target is not in this branch)
+  const branchIds = new Set(branchAssertions.map(a => a.id));
+  const rootNodes = branchAssertions.filter(a =>
+    !a.dependsOn || !branchIds.has(a.dependsOn)
+  );
+
+  // Layout constants
   const positions = new Map();
   const layerSpacing = 120; // Horizontal spacing between dependency levels
-  const treeSpacing = 45; // Vertical spacing between independent trees (compact)
+  const nodeSpacing = 45;   // Vertical spacing between sibling rows
+  const treeGap = 45;       // Vertical gap between independent trees
   const startX = 60;
-  let currentTreeY = 80;
+  let nextTreeY = 80;       // Running Y cursor for stacking trees
 
-  terminalAssertions.forEach((terminal, treeIndex) => {
-    // Get all nodes in this tree (terminal and its ancestors)
-    const treeNodes = [];
-    let currentNode = terminal;
-    while (currentNode) {
-      treeNodes.push(currentNode);
-      const parent = branchAssertions.find(a => a.id === currentNode.dependsOn);
-      currentNode = parent;
+  // Calculate dependency depth for a node (distance from its tree root)
+  function getDepth(nodeId, visited = new Set()) {
+    if (visited.has(nodeId)) return 0;
+    const node = branchAssertions.find(a => a.id === nodeId);
+    if (!node || !node.dependsOn || !branchIds.has(node.dependsOn)) return 0;
+    visited.add(nodeId);
+    return 1 + getDepth(node.dependsOn, visited);
+  }
+
+  // Recursively layout a tree rooted at `node`, starting at yStart.
+  // Returns the total vertical extent (height) consumed by this subtree.
+  function layoutTree(node, yStart) {
+    const depth = getDepth(node.id);
+    const x = startX + (depth * layerSpacing);
+    const children = childrenMap.get(node.id) || [];
+
+    if (children.length === 0) {
+      // Leaf node: place at yStart
+      positions.set(node.id, { x, y: yStart });
+      return nodeSpacing; // Single row height
     }
 
-    // Reverse to go from root to terminal
-    treeNodes.reverse();
+    // Sort children by created date for stable ordering
+    children.sort((a, b) => a.created.localeCompare(b.created));
 
-    // Position nodes left-to-right
-    treeNodes.forEach((node, depth) => {
-      const x = startX + (depth * layerSpacing);
-      const y = currentTreeY;
-      positions.set(node.id, { x, y });
+    // Layout each child subtree, stacking them vertically
+    let childY = yStart;
+    let totalChildHeight = 0;
+    const childYPositions = []; // Track each child's Y for centering parent
+
+    children.forEach((child, i) => {
+      const childHeight = layoutTree(child, childY);
+      // Record the child's actual Y position (already set by recursive call)
+      childYPositions.push(positions.get(child.id).y);
+      childY += childHeight;
+      totalChildHeight += childHeight;
     });
 
-    // Move down for next tree
-    currentTreeY += treeSpacing;
+    // Position parent at vertical center of its children's Y range
+    const minChildY = Math.min(...childYPositions);
+    const maxChildY = Math.max(...childYPositions);
+    const parentY = (minChildY + maxChildY) / 2;
+    positions.set(node.id, { x, y: parentY });
+
+    return totalChildHeight;
+  }
+
+  // Sort roots by created date for stable ordering
+  rootNodes.sort((a, b) => a.created.localeCompare(b.created));
+
+  // Layout each independent tree, stacking vertically
+  rootNodes.forEach((root, i) => {
+    const treeHeight = layoutTree(root, nextTreeY);
+    nextTreeY += treeHeight + treeGap;
   });
 
   // Give each terminal assertion its own "Done" node (only if multiple terminals)
@@ -446,7 +319,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
   if (showTerminus) {
     const maxX = Math.max(...Array.from(positions.values()).map(p => p.x));
-    const terminusX = maxX + 120; // Reduced spacing
+    const terminusX = maxX + 120;
 
     // Each terminal gets its own Done node at the same Y position
     terminalAssertions.forEach(terminal => {
@@ -475,26 +348,26 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 <svg class="metro-map" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
   `;
 
-  // Add dependency lines
+  // Add dependency lines with track colors
   branchAssertions.forEach(assertion => {
     if (assertion.dependsOn) {
       const parentPos = positions.get(assertion.dependsOn);
       const childPos = positions.get(assertion.id);
 
       if (parentPos && childPos) {
-        const lineColor = '#94a3b8'; // Gray for all dependency lines
+        const lineColor = assertionToColor.get(assertion.id) || '#94a3b8';
         // Draw curved line if y positions differ, otherwise straight line
         if (parentPos.y !== childPos.y) {
           const midX = (parentPos.x + childPos.x) / 2;
           svg += `
   <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
   <path class="metro-dependency" d="M${parentPos.x},${parentPos.y} Q${midX},${parentPos.y} ${midX},${(parentPos.y + childPos.y) / 2} T${childPos.x},${childPos.y}"
-        fill="none" stroke="${lineColor}" stroke-width="3" opacity="0.4"/>`;
+        fill="none" stroke="${lineColor}" stroke-width="3" opacity="0.6"/>`;
         } else {
           svg += `
   <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
   <line class="metro-dependency" x1="${parentPos.x}" y1="${parentPos.y}" x2="${childPos.x}" y2="${childPos.y}"
-        stroke="${lineColor}" stroke-width="3" opacity="0.4"/>`;
+        stroke="${lineColor}" stroke-width="3" opacity="0.6"/>`;
         }
       }
     }
@@ -507,11 +380,11 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
       const donePos = terminusPositions.get(assertion.id);
 
       if (terminalPos && donePos) {
-        const lineColor = '#94a3b8'; // Gray for convergence lines
+        const lineColor = assertionToColor.get(assertion.id) || '#94a3b8';
         svg += `
   <!-- Convergence: ${escapeHTML(assertion.id)} → Done -->
   <line class="metro-dependency" x1="${terminalPos.x}" y1="${terminalPos.y}" x2="${donePos.x}" y2="${donePos.y}"
-        stroke="${lineColor}" stroke-width="3" opacity="0.4"/>`;
+        stroke="${lineColor}" stroke-width="3" opacity="0.6"/>`;
       }
     });
   }
@@ -549,7 +422,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     terminalAssertions.forEach(assertion => {
       const donePos = terminusPositions.get(assertion.id);
       if (donePos) {
-        // Check if all assertions in this tree are done
+        // Check if all assertions in this tree are done by tracing back to root
         const treeNodes = [];
         let currentNode = assertion;
         while (currentNode) {
