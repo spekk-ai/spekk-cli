@@ -305,26 +305,15 @@ function minimizeCrossings(assertions, layers) {
 function assignCoordinatesWithSugiyama(layerGroups, assertionToColor) {
   const positions = new Map();
   const layerSpacing = 150; // X spacing between layers
-  const baseNodeSpacing = 80; // Base Y spacing between nodes in same layer (reduced for compactness)
+  const nodeSpacing = 70; // Y spacing between nodes (compact)
   const startX = 60;
   const startY = 80;
 
   layerGroups.forEach((layer, layerIndex) => {
     const x = startX + (layerIndex * layerSpacing);
 
-    // Calculate dynamic spacing based on fanout to prevent overlapping parallel tracks
     layer.forEach((assertion, nodeIndex) => {
-      // Check if previous nodes in this layer share the same parent
-      let extraSpacing = 0;
-      if (nodeIndex > 0 && assertion.dependsOn) {
-        const prevAssertion = layer[nodeIndex - 1];
-        if (prevAssertion.dependsOn === assertion.dependsOn) {
-          // Same parent - add extra spacing to fan out the parallel tracks
-          extraSpacing = 20;
-        }
-      }
-
-      const y = startY + (nodeIndex * baseNodeSpacing) + extraSpacing;
+      const y = startY + (nodeIndex * nodeSpacing);
       positions.set(assertion.id, { x, y });
     });
   });
@@ -387,24 +376,39 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   const currentStationRadius = 10;
   const terminusRadius = 12;
 
-  // Use hybrid approach: Sugiyama for X (depth), track assignment for Y (lane)
-  const layers = assignLayers(branchAssertions);
-
-  // Position nodes: X by layer (depth), Y by track (dependency chain)
+  // Position each track independently in its own horizontal lane
   const positions = new Map();
   const layerSpacing = 150;
-  const trackSpacing = 80; // Vertical spacing between tracks
+  const trackSpacing = 70; // Vertical spacing between tracks
   const startX = 60;
   const startY = 80;
 
+  // For each terminal assertion, layout its entire dependency chain
+  terminalAssertions.forEach((terminal, trackIndex) => {
+    // Get all assertions in this track
+    const trackAssertions = branchAssertions.filter(a =>
+      assertionToTrack.get(a.id) === trackIndex
+    );
+
+    // Sort by dependency depth
+    trackAssertions.sort((a, b) => a.depth - b.depth);
+
+    // Position assertions left-to-right by depth, in this track's horizontal lane
+    trackAssertions.forEach(assertion => {
+      const x = startX + (assertion.depth * layerSpacing);
+      const y = startY + (trackIndex * trackSpacing);
+      positions.set(assertion.id, { x, y });
+    });
+  });
+
+  // Handle any assertions not assigned to a track (shouldn't happen, but be defensive)
   branchAssertions.forEach(assertion => {
-    const layer = layers.get(assertion.id) || 0;
-    const trackIndex = assertionToTrack.get(assertion.id) || 0;
-
-    const x = startX + (layer * layerSpacing);
-    const y = startY + (trackIndex * trackSpacing);
-
-    positions.set(assertion.id, { x, y });
+    if (!positions.has(assertion.id)) {
+      const trackIndex = assertionToTrack.get(assertion.id) || 0;
+      const x = startX + (assertion.depth * layerSpacing);
+      const y = startY + (trackIndex * trackSpacing);
+      positions.set(assertion.id, { x, y });
+    }
   });
 
   // Determine if we need a "Done" terminus (2+ terminal assertions)
@@ -413,7 +417,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
   if (showTerminus) {
     const maxX = Math.max(...Array.from(positions.values()).map(p => p.x));
-    const terminusX = maxX + layerSpacing;
+    const terminusX = maxX + 150; // layerSpacing
 
     // Position terminus at the vertical center of terminal assertions
     const terminalYPositions = terminalAssertions.map(a => positions.get(a.id).y);
@@ -424,7 +428,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     terminusPosition = { x: terminusX, y: terminusY };
   }
 
-  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + (showTerminus ? layerSpacing + 50 : 150);
+  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + (showTerminus ? 200 : 150);
   const maxY = Math.max(...Array.from(positions.values()).map(p => p.y)) + 50;
   const svgWidth = Math.max(maxX, 800);
   const svgHeight = Math.max(maxY, 200);
