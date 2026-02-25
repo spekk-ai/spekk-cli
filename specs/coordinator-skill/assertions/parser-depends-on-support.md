@@ -10,159 +10,42 @@ status: done
 
 Spec parser reads and validates the `depends-on` field in assertion frontmatter.
 
-## Success Criteria
+## What Must Be True
 
 ### Field Parsing
-
-Parser extracts `depends-on` field from YAML:
-```yaml
----
-id: chat-message-input
-depends-on: chat-session-model
----
-```
-
-Result:
-```javascript
-{
-  id: 'chat-message-input',
-  dependsOn: 'chat-session-model',  // camelCase in JS
-  // ... other fields
-}
-```
+- [ ] Parser extracts `depends-on` field from YAML frontmatter
+- [ ] Field name is converted to camelCase (`dependsOn`) in parsed object
+- [ ] Omitted field is treated as null (no dependency)
+- [ ] Explicit `null` value is accepted
 
 ### Field Validation
+- [ ] `depends-on` must be a string or null if present
+- [ ] String values must be kebab-case (lowercase with hyphens)
+- [ ] Referenced assertion ID must exist in the spec tree
+- [ ] Assertion cannot depend on itself
+- [ ] No circular dependency chains are allowed
 
-**Valid values:**
-- String (assertion ID in kebab-case)
-- `null` (explicit no dependency)
-- Omitted (implicit no dependency, same as null)
+### Circular Dependency Detection
+- [ ] Dependency chains are validated after all assertions are parsed
+- [ ] Cycles are detected by walking the full dependency graph
+- [ ] Circular dependency errors show the complete cycle path
+- [ ] Error messages explain how to break the cycle
 
-**Validation rules:**
-1. **Type check**: If present, must be string or null
-2. **Format check**: If string, must be kebab-case (lowercase, hyphens)
-3. **Reference check**: Referenced assertion ID must exist in specs/
-4. **No self-reference**: `depends-on` cannot point to same assertion
-5. **No circular deps**: Walk dependency chain, detect cycles
+### Error Handling
+- [ ] Type errors identify the file and invalid value
+- [ ] Format errors specify expected kebab-case format
+- [ ] Missing reference errors name the non-existent ID
+- [ ] Self-reference errors are clear
+- [ ] Circular dependency errors show full path
+- [ ] All error messages are actionable
 
-### Error Messages
+## Validation Points
 
-**Invalid type:**
-```
-Error: Field 'depends-on' must be a string or null in specs/chat-system/assertions/chat-message-input.md
-Found: ["chat-session-model", "websocket-connection"]
-```
-
-**Invalid format:**
-```
-Error: Field 'depends-on' must be kebab-case (lowercase with hyphens) in specs/chat-system/assertions/chat-message-input.md
-Found: "chatSessionModel"
-```
-
-**Missing reference:**
-```
-Error: Field 'depends-on' references non-existent assertion 'nonexistent-id' in specs/chat-system/assertions/chat-message-input.md
-```
-
-**Circular dependency:**
-```
-Error: Circular dependency detected:
-  chat-message-input → chat-session-model → user-auth → chat-message-input
-
-Break the cycle by removing or changing one of the dependencies.
-```
-
-## Implementation
-
-### Parser Updates
-
-Update `src/parser/index.js`:
-
-```javascript
-function validateAssertionFields(data, filePath, allAssertions) {
-  // ... existing validations ...
-  
-  // Validate depends-on field
-  if (data['depends-on'] !== undefined && data['depends-on'] !== null) {
-    const dependsOn = data['depends-on'];
-    
-    // Type check
-    if (typeof dependsOn !== 'string') {
-      throw new Error(`Field 'depends-on' must be a string or null in ${filePath}`);
-    }
-    
-    // Format check (kebab-case)
-    const kebabCasePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
-    if (!kebabCasePattern.test(dependsOn)) {
-      throw new Error(`Field 'depends-on' must be kebab-case in ${filePath}`);
-    }
-    
-    // Reference check
-    if (!allAssertions.some(a => a.id === dependsOn)) {
-      throw new Error(`Field 'depends-on' references non-existent assertion '${dependsOn}' in ${filePath}`);
-    }
-    
-    // Self-reference check
-    if (dependsOn === data.id) {
-      throw new Error(`Field 'depends-on' cannot reference itself in ${filePath}`);
-    }
-  }
-}
-
-// Circular dependency detection (after all assertions parsed)
-function detectCircularDependencies(assertions) {
-  for (const assertion of assertions) {
-    const visited = new Set();
-    let current = assertion;
-    
-    while (current && current.dependsOn) {
-      if (visited.has(current.id)) {
-        const cycle = [...visited, current.id].join(' → ');
-        throw new Error(`Circular dependency detected:\n  ${cycle}\n\nBreak the cycle by removing or changing one of the dependencies.`);
-      }
-      
-      visited.add(current.id);
-      current = assertions.find(a => a.id === current.dependsOn);
-    }
-  }
-}
-```
-
-### Parsing Logic
-
-Convert YAML field name to camelCase:
-```javascript
-// In parseFrontmatter()
-const frontmatter = {};
-// ...
-if (key === 'depends-on') {
-  frontmatter.dependsOn = value;
-} else {
-  frontmatter[key] = value;
-}
-```
-
-## Validation
-
-- Parser reads `depends-on` field correctly
-- Parser converts to camelCase `dependsOn` in JS
-- Omitted field treated as null (no dependency)
-- Invalid types rejected with clear error
-- Invalid formats rejected with clear error
-- Missing references rejected with clear error
-- Self-references rejected with clear error
-- Circular dependencies detected and rejected
-- Error messages are actionable
-
-**Tests:** `src/parser/__tests__/depends-on-validation.test.js`
-
-All tests passing:
-- Parses `depends-on` field and converts to camelCase ✓
-- Accepts omitted depends-on field ✓
-- Rejects invalid type (arrays) ✓
-- Rejects invalid format (non-kebab-case) ✓
-- Rejects non-existent assertion references ✓
-- Rejects self-references ✓
-- Detects circular dependencies ✓
-- Accepts valid dependency chains without cycles ✓
-- Unit tests for validateDependsOn and detectCircularDependencies ✓
+- Parser successfully reads `depends-on` field
+- Field name converted to `dependsOn`
+- Invalid types are rejected
+- Invalid formats are rejected
+- Missing references are rejected
+- Self-references are rejected
+- Circular dependencies are detected
+- Error messages guide correction
