@@ -3,33 +3,40 @@ id: dependency-analysis
 parent: coordinator-skill
 created: 2026-02-25T00:00:00Z
 priority: 1
-status: done
+status: not_started
 ---
 
-# Coordinator Analyzes Dependencies Between Assertions
+# Coordinator Analyzes Dependencies Using Claude
 
-Coordinator uses LLM reasoning to infer single-parent dependency chains between draft/not_started assertions.
+Coordinator asks Claude to analyze assertions and propose single-parent dependency chains.
 
 ## What Must Be True
 
 ### Reading Assertions
-- [ ] Coordinator reads all assertions with `status: draft` or `status: not_started`
-- [ ] Each assertion's metadata is available for analysis
+- [ ] Uses existing parser to read draft/not_started assertions
+- [ ] Sends assertion content (title, description, parent spec) to Claude
 
-### Dependency Inference
-- [ ] For each assertion, the coordinator identifies which other assertion (if any) is its prerequisite
-- [ ] Each assertion has at most one parent (single-parent tree structure)
-- [ ] When multiple prerequisites exist, they are sequenced or a junction is created
-- [ ] Dependencies are based on functional relationships (what must exist first)
+### LLM Analysis
+- [ ] Coordinator provides Claude with structured prompt
+- [ ] Claude analyzes relationships between assertions
+- [ ] Claude returns JSON: `{assertionId: {dependsOn: parentId | null, reasoning: string}}`
+- [ ] Single-parent enforced (prompt instructs: max one parent)
+- [ ] Claude detects circular dependencies
 
-### Dependency Tree Output
-- [ ] Dependencies are presented in a visual tree structure (indented or ASCII tree)
-- [ ] Assertions are grouped by feature branch
-- [ ] Assertions without dependencies are clearly shown
-- [ ] User can review and confirm the analysis
+### User Confirmation
+- [ ] Dependency tree displayed clearly
+- [ ] User can approve or request changes
+- [ ] No updates happen without confirmation
 
-### Validation
-- [ ] Circular dependencies are detected and reported as errors
-- [ ] Ambiguous dependencies prompt user for clarification
-- [ ] Dependency relationships are logical and defensible
-- [ ] Tree structure is correct (no multi-parent nodes)
+### No Manual Algorithms
+- [ ] No graph traversal code
+- [ ] No heuristics or keyword matching
+- [ ] Claude does the intelligent analysis
+- [ ] Code just orchestrates (read → prompt → show → confirm)
+
+## Validation
+
+- Run coordinator on test project
+- Verify Claude returns valid structure
+- Verify circular dependencies caught
+- Verify user can confirm/reject

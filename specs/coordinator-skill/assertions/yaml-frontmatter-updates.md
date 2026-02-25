@@ -29,11 +29,17 @@ Coordinator writes `depends-on` and `branch` fields to assertion YAML frontmatte
 - [ ] Commit message shows dependency chains
 - [ ] No changes to spec content or existing metadata
 
-### Validation
+### Validation (Parse Don't Validate)
 
-- [ ] All dependency IDs reference existing assertions
-- [ ] No circular dependencies exist
-- [ ] Branch names are valid (kebab-case)
-- [ ] All modified files have valid YAML
+- [ ] After YAML updates, run `parseAllSpecs()` to validate structure
+- [ ] Parser catches invalid dependency IDs (non-existent assertions)
+- [ ] Parser catches circular dependencies
+- [ ] Parser catches invalid branch names
+- [ ] Parser catches malformed YAML
+- [ ] If parser reports errors, show them to user and abort
+- [ ] No manual validation logic - let parser do its job
+
+### User Confirmation
+
 - [ ] User can preview changes before commit
 - [ ] User can confirm or cancel before writing files

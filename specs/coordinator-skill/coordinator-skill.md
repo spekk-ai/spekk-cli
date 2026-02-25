@@ -26,13 +26,20 @@ Current state:
 
 ### Coordinator Capability
 - Coach can be invoked with coordination mode
-- Coordinator analyzes draft/not_started assertions
-- Dependency relationships are inferred from domain knowledge
+- Coordinator uses Claude to analyze draft/not_started assertions
+- Claude infers dependency relationships from assertion content
 - Related assertions are grouped into logical feature clusters
 - Each cluster is assigned a semantic branch name
 - YAML frontmatter is updated across affected files
+- Parser validates updated specs ("parse don't validate")
 - Changes are committed with clear summary
 - User can review plan before applying
+
+### Implementation Philosophy
+- **LLM does analysis** - Claude analyzes dependencies, no manual graph algorithms
+- **Parse don't validate** - Use existing parser to verify structure after updates
+- **Simple orchestration** - Code reads assertions, prompts Claude, updates files, validates
+- **~100-200 lines** - Not 1000+ lines of custom graph/tree/clustering logic
 
 ### Branch-Aware Operation
 - `spekk next` defaults to filtering by current git branch
