@@ -54,6 +54,19 @@ The parser returns JSON with the assertion file to work on. Read it to understan
    - Tests also catch regressions in other assertions
    - Fix any failing tests before proceeding
 
+**Testing Philosophy: Keep Tests LEAN**
+
+Write high-value tests only. Every test should earn its place.
+
+- **Test behavior, not implementation** — test what the code does, not how it does it
+- **One test per meaningful behavior** — if two tests would fail for the same reason, you only need one
+- **Delete redundant tests** — if you find overlapping or low-value tests while working, remove them
+- **No tests for trivial code** — don't test getters, simple pass-throughs, or framework behavior
+- **Prefer fewer, stronger assertions** — a test with 3 meaningful checks beats 3 tests with 1 trivial check each
+- **Integration over unit when appropriate** — one integration test that covers a workflow is worth more than 5 unit tests of its internals
+
+The goal is a fast, trustworthy test suite — not maximum line coverage.
+
 **If status is `not_started`:**
 - Implement what the assertion requires
 - Write tests if assertion is testable
