@@ -53,7 +53,8 @@ All special chars: '"'\`{}.`);
       execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, {
         encoding: 'utf8',
         cwd: testDir,
-        timeout: 5000
+        timeout: 5000,
+        env: { ...process.env, NODE_ENV: 'test' }
       });
 
       const htmlFile = join(testDir, '.spekk', 'index.html');
