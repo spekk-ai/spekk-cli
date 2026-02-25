@@ -25,15 +25,16 @@ describe('Branch-aware spekk next', () => {
   });
 
   describe('Branch filtering', () => {
-    test('returns assertion matching current git branch', (t) => {
-      // Mock getCurrentGitBranch to return a controlled value
-      t.mock.method(parserModule, 'getCurrentGitBranch', () => 'feature/chat-system');
-
-      run({ specsDirectory: 'src/parser/__tests__/fixtures/branch-aware' });
+    test('returns assertion matching current git branch', () => {
+      // Inject a controlled branch value for testing
+      run({ 
+        specsDirectory: 'src/parser/__tests__/fixtures/branch-aware',
+        currentBranch: 'feature/chat-system'
+      });
 
       const output = JSON.parse(logOutput[0]);
       
-      // Should return an assertion for the mocked branch
+      // Should return an assertion for the specified branch
       assert.strictEqual(output.type, 'assertion');
       assert.strictEqual(output.branch, 'feature/chat-system');
     });
@@ -53,7 +54,10 @@ describe('Branch-aware spekk next', () => {
 
   describe('Dependency blocking', () => {
     test('filters out assertions with incomplete dependencies', () => {
-      run({ specsDirectory: 'src/parser/__tests__/fixtures/dependencies' });
+      run({ 
+        specsDirectory: 'src/parser/__tests__/fixtures/dependencies',
+        currentBranch: 'feature/chat-system'
+      });
 
       const output = JSON.parse(logOutput[0]);
       assert.strictEqual(output.type, 'assertion');
@@ -63,7 +67,10 @@ describe('Branch-aware spekk next', () => {
     });
 
     test('returns assertion when dependency is satisfied', () => {
-      run({ specsDirectory: 'src/parser/__tests__/fixtures/dependencies-satisfied' });
+      run({ 
+        specsDirectory: 'src/parser/__tests__/fixtures/dependencies-satisfied',
+        currentBranch: 'feature/chat-system'
+      });
 
       const output = JSON.parse(logOutput[0]);
       assert.strictEqual(output.type, 'assertion');
@@ -75,7 +82,10 @@ describe('Branch-aware spekk next', () => {
 
   describe('Priority and timestamp sorting', () => {
     test('sorts by priority first (lower number = higher priority)', () => {
-      run({ specsDirectory: 'src/parser/__tests__/fixtures/priority-sort' });
+      run({ 
+        specsDirectory: 'src/parser/__tests__/fixtures/priority-sort',
+        currentBranch: 'main'
+      });
 
       const output = JSON.parse(logOutput[0]);
       assert.strictEqual(output.type, 'assertion');
@@ -84,7 +94,10 @@ describe('Branch-aware spekk next', () => {
     });
 
     test('breaks priority ties with creation timestamp (older first)', () => {
-      run({ specsDirectory: 'src/parser/__tests__/fixtures/timestamp-tiebreak' });
+      run({ 
+        specsDirectory: 'src/parser/__tests__/fixtures/timestamp-tiebreak',
+        currentBranch: 'main'
+      });
 
       const output = JSON.parse(logOutput[0]);
       assert.strictEqual(output.type, 'assertion');
@@ -95,7 +108,10 @@ describe('Branch-aware spekk next', () => {
 
   describe('Backwards compatibility', () => {
     test('assertions without branch field are available on all branches', () => {
-      run({ specsDirectory: 'src/parser/__tests__/fixtures/branch-aware' });
+      run({ 
+        specsDirectory: 'src/parser/__tests__/fixtures/branch-aware',
+        currentBranch: 'main'
+      });
 
       const output = JSON.parse(logOutput[0]);
       assert.strictEqual(output.type, 'assertion');

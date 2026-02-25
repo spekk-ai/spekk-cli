@@ -3,7 +3,7 @@ id: test-environment-decoupling
 parent: coordinator-skill
 created: 2026-02-25T11:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Tests Are Decoupled From Environment

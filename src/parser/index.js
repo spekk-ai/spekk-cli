@@ -650,7 +650,8 @@ function findNextAssertion(assertions, specs = [], options = {}) {
 
   // Filter by branch (unless --all-branches is specified)
   if (!options.allBranches) {
-    const currentBranch = getCurrentGitBranch();
+    // Allow currentBranch to be injected for testing, otherwise detect it
+    const currentBranch = options.currentBranch || getCurrentGitBranch();
     
     // Filter to assertions with matching branch OR no branch field (for backwards compatibility)
     const branchFiltered = incomplete.filter(a => !a.branch || a.branch === currentBranch);
@@ -750,7 +751,8 @@ export function run(options = {}) {
     const nextAssertion = findNextAssertion(assertions, specs, {
       spec: options.spec,
       assertion: options.assertion,
-      allBranches: options.allBranches
+      allBranches: options.allBranches,
+      currentBranch: options.currentBranch
     });
 
     // Handle error from findNextAssertion
@@ -782,6 +784,9 @@ export function run(options = {}) {
       file: nextAssertion.file,
       priority: nextAssertion.priority,
       status: nextAssertion.status,
+      branch: nextAssertion.branch,
+      created: nextAssertion.created,
+      dependsOn: nextAssertion.dependsOn,
       title: nextAssertion.title,
       content: nextAssertion.content,
       spec: parentSpec ? {
