@@ -195,6 +195,16 @@ describe('Builder CLI Flag Parsing', () => {
     assert.strictEqual(flags.assertion, 'my-assertion');
   });
 
+  test('parseFlags recognizes --interactive flag', () => {
+    const flags = parseFlags(['--interactive']);
+    assert.strictEqual(flags.interactive, true);
+  });
+
+  test('parseFlags recognizes -i short flag', () => {
+    const flags = parseFlags(['-i']);
+    assert.strictEqual(flags.interactive, true);
+  });
+
   test('parseFlags recognizes --help flag', () => {
     const flags = parseFlags(['--help']);
     assert.strictEqual(flags.help, true);
