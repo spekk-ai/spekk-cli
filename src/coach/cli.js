@@ -42,6 +42,30 @@ async function launchCoachAgent(cliArgs = null) {
       }
     }
 
+    // Handle coordinator subcommand
+    if (subcommand === 'coordinator') {
+      message += '\n\n---\n\n**Skill Activation: Work Coordination & Dependency Analysis**\n\n';
+      message += 'The user has launched you with the coordinator skill active via `spekk coach coordinator`.\n';
+      message += 'Activate your coordinator skill immediately — do not wait for trigger detection.\n\n';
+      message += '**Your Coordinator Workflow:**\n\n';
+      message += '1. Analyze all draft and not_started assertions across specs/\n';
+      message += '2. Build dependency graph (single-parent chains)\n';
+      message += '3. Identify parallelizable vs serial work\n';
+      message += '4. Group related assertions into feature branch clusters\n';
+      message += '5. Assign semantic branch names (e.g., feature/chat-system)\n';
+      message += '6. Present the plan for user confirmation\n';
+      message += '7. Update YAML frontmatter with `depends-on` and `branch` fields\n';
+      message += '8. Commit changes with clear summary\n\n';
+      message += '**Key Rules:**\n';
+      message += '- Use single-parent dependencies only (A depends-on B, not [B, C])\n';
+      message += '- Omit `depends-on` field when no dependency (sparse YAML)\n';
+      message += '- Group dependent assertions into same branch\n';
+      message += '- Isolated assertions can stay on main or group into "quick-wins"\n';
+      message += '- Present plan BEFORE updating files\n';
+      message += '- Show dependency tree visually (ASCII art or markdown)\n\n';
+      message += 'Start by scanning specs/ for draft and not_started assertions.\n';
+    }
+
     // Launch Claude Code with the coach agent message and prompt
     const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
       stdio: ['pipe', 'inherit', 'inherit']
@@ -113,6 +137,9 @@ SUBCOMMANDS:
                    If a transcript file is provided, it will be processed immediately.
                    Without a file, the coach will prompt for a transcript.
 
+  coordinator      Launch coach with work coordination skill active
+                   Analyzes specs, builds dependency graphs, assigns branches.
+
 OPTIONS:
   --help, -h       Show this help message
 
@@ -120,6 +147,7 @@ EXAMPLES:
   spekk coach                          # Launch interactive coach
   spekk coach meeting                  # Launch coach in meeting mode (prompts for transcript)
   spekk coach meeting notes.txt        # Process a transcript file
+  spekk coach coordinator              # Launch coach in coordinator mode
 `);
 }
 
