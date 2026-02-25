@@ -18,124 +18,25 @@ User says something like:
 
 ### 1.5. Detect Skill Opportunities
 
-**BEFORE proceeding with normal spec creation, check if the user's request triggers any specialized skills:**
+**Available Skills:**
 
-**Business Model Validation Triggers:**
-Check if the user mentions any of these phrases:
-- "validate this business model"
-- "assess this startup"  
-- "founder wants to..."
-- "business plan review"
-- "is this viable?"
-- "startup validation"
-- "business model"
-- "market demand"
-- "product validation"
+1. **Business Model Validator** - Systematic startup/business assessment with scoring
+   - Triggers: "validate business model", "startup validation", "is this viable"
+   - CLI: `spekk coach` (auto-detect) 
 
-**If business model validation is detected:**
-1. **Suggest the skill:** "I can use my business-model-validator skill to systematically assess this through structured questions and provide a quantitative health score. Would you like me to do that?"
-2. **Wait for user response**
-3. **If user accepts:** Apply the business-model-validator skill workflow (see specs/coach-skills-system/ for details)
-4. **If user declines:** Continue with normal spec creation workflow below
+2. **Meeting Notes to Specs** - Extract todos, specs, and context from meeting transcripts
+   - Triggers: "meeting notes", "meeting transcript", "process meeting"
+   - CLI: `spekk coach meeting [file]`
 
-**External Market Validation Triggers:**
-Check if the user mentions:
-- "what are other people doing?"
-- "how does X handle this?"
-- "competitive landscape"
-- "industry best practices"
-- "what's the market doing?"
-- "how do competitors solve this?"
+3. **Coordinator** - Dependency analysis and branch-scoped work planning
+   - Triggers: "plan the work", "organize branches", "dependency graph", "parallel work"
+   - CLI: `spekk coach coordinator`
 
-**If market validation is detected:**
-Suggest: "I can research how similar products/companies solve this and show you where the whitespace is. Want me to do that?"
-
-**Product Differentiation Triggers:**
-Check if the user mentions:
-- "why would users choose us?"
-- "what makes us different?"
-- "competing with X"
-- "how do we stand out?"
-- "what's our unique value?"
-
-**If differentiation analysis is detected:**
-Suggest: "I can help you analyze what you're competing on and whether that's getting commoditized. Should I do a differentiation assessment?"
-
-**Scope/Complexity Reducer Triggers ($15k Test):**
-Check if the user describes:
-- Massive vision or long feature list
-- "comprehensive solution"
-- "full-featured" anything
-- Multiple interconnected systems
-- "we need to build everything"
-
-**If scope reduction is detected:**
-Suggest: "That's a big vision. I can help you find the $15k version that tests the core assumption before building the $200k solution. Want me to break this down?"
-
-**Usage Context Validator Triggers:**
-Check if the user mentions:
-- "improve UX"
-- "users aren't engaging"
-- "make it better"
-- Designing new features without context
-- "low adoption"
-
-**If usage context validation is detected:**
-Suggest: "Before we spec this, let's validate the usage context - is this designed for how users will actually use it? I can help you think through that."
-
-**Data Moat Analysis Triggers:**
-Check if the user mentions:
-- AI/ML features
-- Personalization or recommendations
-- Matching algorithms
-- User-generated content at scale
-- Learning systems
-
-**If data moat opportunity is detected:**
-Suggest: "I notice this involves [AI/personalization/matching]. The real moat might be the data you're collecting, not just the feature. Want me to analyze how to structure this for long-term value?"
-
-**Meeting Notes to Specs Triggers:**
-Check if the user mentions:
-- "meeting notes"
-- "meeting transcript"
-- "meeting summary"
-- "process meeting"
-- "from our meeting"
-- "discussed in meeting"
-- "meeting action items"
-- "meeting outcomes"
-- "standup notes"
-- "retro notes"
-- "planning notes"
-- "kickoff notes"
-
-**If meeting processing is detected:**
-Suggest: "I can process this meeting transcript and extract todos, specs, and context updates. Want me to do that?"
-
-**Note:** This skill is also auto-activated when the user launches with `spekk coach meeting`. In that case, skip detection and activate immediately.
-
-**Work Coordination Triggers:**
-Check if the user mentions:
-- "plan the work"
-- "organize branches"
-- "dependency graph"
-- "what can we build in parallel"
-- "coordinate development"
-- "scope the work"
-- "branch strategy"
-- "work plan"
-
-**If work coordination is detected:**
-Suggest: "I can analyze your specs and create a dependency-aware work plan with branch assignments. This will let the builder work autonomously on parallel feature branches. Want me to do that?"
-
-**Note:** This skill is also auto-activated when the user launches with `spekk coach coordinator`. In that case, skip detection and activate immediately.
-
-**How to Suggest Skills:**
-1. Detect the pattern in their request
-2. Suggest the skill: "I can [specific value]. Want me to do that?"
-3. Wait for response
-4. If yes → apply skill workflow
-5. If no → continue with normal spec creation
+**When triggered:**
+- Suggest the skill: "I can [specific value]. Want me to do that?"
+- Wait for response
+- If yes → apply skill workflow (see `specs/coach-skills-system/` for details)
+- If no → continue with normal spec creation
 
 ### 2. Check Existing Specs
 
