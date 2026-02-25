@@ -163,15 +163,15 @@ function validateFields(data, filePath, isAssertion = false) {
       throw new Error(`Field 'branch' must be a string in ${filePath}`);
     }
     
+    // Cannot start or end with /
+    if (branch.startsWith('/') || branch.endsWith('/')) {
+      throw new Error(`Field 'branch' cannot start or end with '/' in ${filePath}`);
+    }
+    
     // Format check (valid git branch name)
     const validBranchPattern = /^[a-zA-Z0-9][a-zA-Z0-9/_-]*$/;
     if (!validBranchPattern.test(branch)) {
       throw new Error(`Field 'branch' contains invalid characters in ${filePath}\nFound: "${branch}"\nGit branch names can only contain letters, numbers, slashes, hyphens, and underscores.`);
-    }
-    
-    // Cannot start or end with /
-    if (branch.startsWith('/') || branch.endsWith('/')) {
-      throw new Error(`Field 'branch' cannot start or end with '/' in ${filePath}`);
     }
     
     // Warning for non-standard patterns (don't throw, just warn)
