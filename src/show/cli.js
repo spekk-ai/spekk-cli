@@ -411,8 +411,8 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
   // Layout each tree independently, stacking vertically
   const positions = new Map();
-  const layerSpacing = 120; // Reduced for compactness
-  const treeSpacing = 70; // Reduced vertical spacing between trees
+  const layerSpacing = 120; // Horizontal spacing between dependency levels
+  const treeSpacing = 45; // Vertical spacing between independent trees (compact)
   const startX = 60;
   let currentTreeY = 80;
 
@@ -576,7 +576,31 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 export function generateSpecExplorerHTML(specs, assertions) {
   // Get project name from current working directory
   const projectName = basename(process.cwd());
-  
+
+  // Group assertions by branch and generate metro maps
+  const branchGroups = new Map();
+  assertions.forEach(assertion => {
+    const branch = assertion.branch || 'main';
+    if (!branchGroups.has(branch)) {
+      branchGroups.set(branch, []);
+    }
+    branchGroups.get(branch).push(assertion);
+  });
+
+  // Generate metro map for each branch
+  const branchMetroMaps = new Map();
+  branchGroups.forEach((branchAssertions, branch) => {
+    if (branchAssertions.length > 0) {
+      // Use the first assertion as reference point for generation
+      const refAssertion = branchAssertions[0];
+      const shouldShow = shouldShowMetroMap(refAssertion, assertions);
+      const metroMapHTML = shouldShow ?
+        generateMetroMapSVG(refAssertion, assertions) :
+        generateNoDependenciesNotice();
+      branchMetroMaps.set(branch, metroMapHTML);
+    }
+  });
+
   // Group assertions by parent spec
   const specHierarchy = specs.map(spec => {
     const specAssertions = assertions
@@ -588,7 +612,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
         }
         return a.created.localeCompare(b.created);
       });
-    
+
     return {
       ...spec,
       assertions: specAssertions
@@ -624,23 +648,33 @@ export function generateSpecExplorerHTML(specs, assertions) {
         .container {
             display: flex;
             height: 100vh;
-            max-width: 1200px;
+            max-width: 1600px;
             margin: 0 auto;
             background: white;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-        
+
         .tree-panel {
-            width: 400px;
+            width: 300px;
             padding: 20px;
             border-right: 1px solid #e2e8f0;
             overflow-y: auto;
         }
-        
+
         .detail-panel {
             flex: 1;
             padding: 20px;
             overflow-y: auto;
+            border-right: 1px solid #e2e8f0;
+        }
+
+        .metro-map-panel {
+            width: 400px;
+            padding: 20px;
+            background: #f8fafc;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
         
         .header {
@@ -954,47 +988,46 @@ export function generateSpecExplorerHTML(specs, assertions) {
             color: #374151;
         }
 
-        .metro-map-section {
-            margin: 20px 0;
-            padding: 16px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            max-height: 400px;
+        .metro-map-panel-header {
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            margin-bottom: 16px;
+        }
+
+        .metro-map-panel-header h2 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .metro-map-panel-header .branch-name {
+            font-size: 12px;
+            color: #64748b;
+            font-family: 'Courier New', monospace;
+        }
+
+        .metro-map-container {
+            flex: 1;
             overflow: hidden;
             position: relative;
             cursor: grab;
         }
 
-        .metro-map-section.panning {
+        .metro-map-container.panning {
             cursor: grabbing;
             user-select: none;
         }
 
-        .metro-map-section .metro-map {
+        .metro-map-container .metro-map {
             transition: transform 0.1s ease-out;
         }
 
-        .metro-map-section::after {
-            content: '';
-            position: absolute;
-            right: 0;
-            top: 0;
+        .metro-map-branch {
+            width: 100%;
             height: 100%;
-            width: 40px;
-            background: linear-gradient(to right, transparent, #f8fafc);
-            pointer-events: none;
-            border-top-right-radius: 8px;
-            border-bottom-right-radius: 8px;
-        }
-
-        .metro-map-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: #475569;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
 
         .metro-map {
@@ -1164,7 +1197,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
             `).join('')}
             
             ${assertions.map(assertion => `
-                <div class="detail-content" id="detail-assertion-${assertion.id}">
+                <div class="detail-content" id="detail-assertion-${assertion.id}" data-branch="${assertion.branch || 'main'}">
                     <div class="detail-header">
                         <div class="detail-title">${escapeHTML(assertion.title)}</div>
                         <div class="detail-meta">
@@ -1175,15 +1208,28 @@ export function generateSpecExplorerHTML(specs, assertions) {
                             <span class="meta-item">File: <strong>${assertion.file}</strong></span>
                         </div>
                     </div>
-                    <div class="metro-map-section">
-                        <h3 class="metro-map-title">Branch Dependencies</h3>
-                        ${shouldShowMetroMap(assertion, assertions) ? generateMetroMapSVG(assertion, assertions) : generateNoDependenciesNotice()}
-                    </div>
                     <div class="detail-body">
                         <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHTML(assertion.content)}</pre>
                     </div>
                 </div>
             `).join('')}
+        </div>
+
+        <div class="metro-map-panel">
+            <div class="metro-map-panel-header">
+                <h2>Branch Dependencies</h2>
+                <div class="branch-name" id="metro-branch-name">Select an assertion</div>
+            </div>
+            <div class="metro-map-container" id="metro-map-container">
+                <div class="empty-state" id="metro-empty-state" style="margin-top: 60px;">
+                    <p>Click on an assertion to view its dependency map</p>
+                </div>
+                ${Array.from(branchMetroMaps.entries()).map(([branch, mapHTML]) => `
+                    <div class="metro-map-branch" id="metro-map-${escapeHTML(branch)}" data-branch="${escapeHTML(branch)}" style="display: none;">
+                        ${mapHTML}
+                    </div>
+                `).join('')}
+            </div>
         </div>
     </div>
     
@@ -1291,6 +1337,13 @@ export function generateSpecExplorerHTML(specs, assertions) {
             }
         }
         
+        // Metro map state management
+        const metroMapState = {
+            currentBranch: null,
+            svgCache: new Map(), // branch -> SVG HTML
+            panStates: new Map() // branch -> { currentX, currentY }
+        };
+
         function showDetail(id, type, event) {
             // Hide all detail content
             document.querySelectorAll('.detail-content').forEach(el => {
@@ -1307,6 +1360,12 @@ export function generateSpecExplorerHTML(specs, assertions) {
             const detailElement = document.getElementById('detail-' + type + '-' + id);
             if (detailElement) {
                 detailElement.classList.add('active');
+            }
+
+            // Update metro map for assertions
+            if (type === 'assertion' && detailElement) {
+                const branch = detailElement.dataset.branch || 'main';
+                updateMetroMap(id, branch);
             }
 
             // Mark assertion as selected in tree view
@@ -1345,6 +1404,68 @@ export function generateSpecExplorerHTML(specs, assertions) {
                     specHeader.classList.add('selected');
                 }
             }
+        }
+
+        function updateMetroMap(assertionId, branch) {
+            const container = document.getElementById('metro-map-container');
+            const branchNameEl = document.getElementById('metro-branch-name');
+            const emptyState = document.getElementById('metro-empty-state');
+
+            // Update branch name
+            branchNameEl.textContent = branch;
+
+            // Hide empty state
+            emptyState.style.display = 'none';
+
+            // Check if we need to switch branches
+            if (metroMapState.currentBranch !== branch) {
+                // Hide all branch maps
+                const allBranchMaps = container.querySelectorAll('.metro-map-branch');
+                allBranchMaps.forEach(map => {
+                    map.style.display = 'none';
+                });
+
+                // Show the map for this branch
+                const branchMap = document.getElementById('metro-map-' + branch);
+                if (branchMap) {
+                    branchMap.style.display = 'block';
+                    metroMapState.currentBranch = branch;
+
+                    // Restore pan state if exists
+                    const panState = metroMapState.panStates.get(branch);
+                    if (panState) {
+                        const svg = branchMap.querySelector('.metro-map');
+                        if (svg) {
+                            svg.style.transform = \`translate(\${panState.currentX}px, \${panState.currentY}px)\`;
+                        }
+                    }
+                }
+            }
+
+            // Update current station highlight without re-rendering
+            const visibleMap = document.getElementById('metro-map-' + branch);
+            if (!visibleMap) return;
+
+            const allStations = visibleMap.querySelectorAll('.metro-station');
+            allStations.forEach(station => {
+                const stationId = station.dataset.assertionId;
+                const circle = station.querySelector('circle');
+                const label = station.querySelector('.metro-label');
+
+                if (stationId === assertionId) {
+                    // Highlight current station
+                    circle.setAttribute('r', '10');
+                    circle.setAttribute('stroke-width', '4');
+                    circle.setAttribute('filter', 'drop-shadow(0 0 6px rgba(59, 130, 246, 0.6))');
+                    if (label) label.style.fontWeight = '700';
+                } else {
+                    // Reset other stations
+                    circle.setAttribute('r', '8');
+                    circle.setAttribute('stroke-width', '3');
+                    circle.removeAttribute('filter');
+                    if (label) label.style.fontWeight = '400';
+                }
+            });
         }
 
         // Metro station tooltip handling
@@ -1403,114 +1524,94 @@ export function generateSpecExplorerHTML(specs, assertions) {
                 }
             });
 
-            // Update tooltip position on scroll
-            document.querySelector('.detail-panel')?.addEventListener('scroll', function() {
+            // Update tooltip position on scroll in metro map panel
+            document.getElementById('metro-map-container')?.addEventListener('scroll', function() {
                 if (tooltip && tooltip.classList.contains('visible')) {
                     tooltip.classList.remove('visible');
                 }
             });
         })();
 
-        // Metro map pan and zoom functionality
+        // Metro map pan functionality
         (function() {
-            // Track pan state for each metro map
-            const panStates = new Map();
+            let isPanning = false;
+            let startX = 0;
+            let startY = 0;
 
-            function initPanForMap(mapContainer) {
-                const svg = mapContainer.querySelector('.metro-map');
+            const mapContainer = document.getElementById('metro-map-container');
+            if (!mapContainer) return;
+
+            // Mouse down - start panning
+            mapContainer.addEventListener('mousedown', function(e) {
+                // Don't pan if clicking a station
+                if (e.target.closest('.metro-station')) return;
+
+                const currentBranch = metroMapState.currentBranch;
+                if (!currentBranch) return;
+
+                const visibleMap = document.getElementById('metro-map-' + currentBranch);
+                const svg = visibleMap?.querySelector('.metro-map');
                 if (!svg) return;
 
-                const panState = {
-                    isPanning: false,
-                    startX: 0,
-                    startY: 0,
-                    currentX: 0,
-                    currentY: 0
-                };
-                panStates.set(mapContainer, panState);
+                isPanning = true;
 
-                // Calculate bounds to constrain panning
-                function calculateBounds() {
-                    const containerRect = mapContainer.getBoundingClientRect();
-                    const svgRect = svg.getBoundingClientRect();
-
-                    return {
-                        minX: Math.min(0, containerRect.width - svgRect.width),
-                        maxX: 0,
-                        minY: Math.min(0, containerRect.height - svgRect.height),
-                        maxY: 0
-                    };
+                // Get or initialize pan state for this branch
+                let panState = metroMapState.panStates.get(currentBranch);
+                if (!panState) {
+                    panState = { currentX: 0, currentY: 0 };
+                    metroMapState.panStates.set(currentBranch, panState);
                 }
 
-                // Mouse down - start panning
-                mapContainer.addEventListener('mousedown', function(e) {
-                    // Don't pan if clicking a station
-                    if (e.target.closest('.metro-station')) return;
-
-                    panState.isPanning = true;
-                    panState.startX = e.clientX - panState.currentX;
-                    panState.startY = e.clientY - panState.currentY;
-                    mapContainer.classList.add('panning');
-                });
-
-                // Mouse move - perform panning
-                document.addEventListener('mousemove', function(e) {
-                    if (!panState.isPanning) return;
-
-                    const newX = e.clientX - panState.startX;
-                    const newY = e.clientY - panState.startY;
-
-                    // Constrain to bounds
-                    const bounds = calculateBounds();
-                    panState.currentX = Math.max(bounds.minX, Math.min(bounds.maxX, newX));
-                    panState.currentY = Math.max(bounds.minY, Math.min(bounds.maxY, newY));
-
-                    svg.style.transform = \`translate(\${panState.currentX}px, \${panState.currentY}px)\`;
-                });
-
-                // Mouse up - stop panning
-                document.addEventListener('mouseup', function() {
-                    if (panState.isPanning) {
-                        panState.isPanning = false;
-                        mapContainer.classList.remove('panning');
-                    }
-                });
-
-                // Mouse leave - stop panning
-                document.addEventListener('mouseleave', function() {
-                    if (panState.isPanning) {
-                        panState.isPanning = false;
-                        mapContainer.classList.remove('panning');
-                    }
-                });
-            }
-
-            // Initialize panning for all metro maps on page load
-            document.addEventListener('DOMContentLoaded', function() {
-                const metroMapContainers = document.querySelectorAll('.metro-map-section');
-                metroMapContainers.forEach(initPanForMap);
+                startX = e.clientX - panState.currentX;
+                startY = e.clientY - panState.currentY;
+                mapContainer.classList.add('panning');
             });
 
-            // Re-initialize when detail panels change (in case new metro maps are shown)
-            const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === 1) { // Element node
-                            const metroMaps = node.querySelectorAll ? node.querySelectorAll('.metro-map-section') : [];
-                            metroMaps.forEach(initPanForMap);
-                        }
-                    });
-                });
+            // Mouse move - perform panning
+            document.addEventListener('mousemove', function(e) {
+                if (!isPanning) return;
+
+                const currentBranch = metroMapState.currentBranch;
+                if (!currentBranch) return;
+
+                const visibleMap = document.getElementById('metro-map-' + currentBranch);
+                const svg = visibleMap?.querySelector('.metro-map');
+                if (!svg) return;
+
+                const panState = metroMapState.panStates.get(currentBranch);
+                if (!panState) return;
+
+                const newX = e.clientX - startX;
+                const newY = e.clientY - startY;
+
+                // Calculate bounds to constrain panning
+                const containerRect = mapContainer.getBoundingClientRect();
+                const svgRect = svg.getBoundingClientRect();
+                const minX = Math.min(0, containerRect.width - svgRect.width);
+                const minY = Math.min(0, containerRect.height - svgRect.height);
+
+                // Constrain to bounds
+                panState.currentX = Math.max(minX, Math.min(0, newX));
+                panState.currentY = Math.max(minY, Math.min(0, newY));
+
+                svg.style.transform = \`translate(\${panState.currentX}px, \${panState.currentY}px)\`;
             });
 
-            // Observe the detail panel for changes
-            const detailPanel = document.querySelector('.detail-panel');
-            if (detailPanel) {
-                observer.observe(detailPanel, {
-                    childList: true,
-                    subtree: true
-                });
-            }
+            // Mouse up - stop panning
+            document.addEventListener('mouseup', function() {
+                if (isPanning) {
+                    isPanning = false;
+                    mapContainer.classList.remove('panning');
+                }
+            });
+
+            // Mouse leave - stop panning
+            document.addEventListener('mouseleave', function() {
+                if (isPanning) {
+                    isPanning = false;
+                    mapContainer.classList.remove('panning');
+                }
+            });
         })();
     </script>
 </body>

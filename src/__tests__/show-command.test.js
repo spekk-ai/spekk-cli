@@ -149,10 +149,11 @@ depends-on: assertion-a
 
       const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
 
-      // Metro map section should be present
-      assert.ok(htmlContent.includes('metro-map-section'), 'Should include metro map section');
+      // Metro map should be in dedicated third column panel
+      assert.ok(htmlContent.includes('metro-map-panel'), 'Should include metro map panel');
       assert.ok(htmlContent.includes('Branch Dependencies'), 'Should show Branch Dependencies title');
       assert.ok(htmlContent.includes('class="metro-map"'), 'Should include metro map SVG');
+      assert.ok(htmlContent.includes('metro-map-branch'), 'Should have branch-specific metro maps');
 
     } finally {
       cleanup();
@@ -646,11 +647,15 @@ branch: feature/test
 
       const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
 
-      // Should show metro map (not notice)
-      const assertionDetail = htmlContent.match(/id="detail-assertion-assertion-feature"[\s\S]*?<div class="detail-body">/);
-      assert.ok(assertionDetail, 'Should find assertion detail section');
-      assert.ok(assertionDetail[0].includes('class="metro-map"'), 'Should include metro map SVG');
-      assert.ok(!assertionDetail[0].includes('no-dependencies-notice'), 'Should not include notice');
+      // Should show metro map in dedicated panel (not notice)
+      assert.ok(htmlContent.includes('metro-map-panel'), 'Should have metro map panel');
+      assert.ok(htmlContent.includes('id="metro-map-feature/test"'), 'Should have metro map for feature/test branch');
+      assert.ok(htmlContent.includes('class="metro-map"'), 'Should include metro map SVG');
+
+      // Verify the branch map is generated
+      const branchMapMatch = htmlContent.match(/id="metro-map-feature\/test"[\s\S]*?<\/div>/);
+      assert.ok(branchMapMatch, 'Should find branch-specific metro map');
+      assert.ok(branchMapMatch[0].includes('svg'), 'Should contain SVG element');
 
     } finally {
       cleanup();
@@ -706,16 +711,17 @@ depends-on: assertion-a
 
       const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
 
-      // Should show metro map (not notice) for both assertions
-      const assertionADetail = htmlContent.match(/id="detail-assertion-assertion-a"[\s\S]*?<div class="detail-body">/);
-      const assertionBDetail = htmlContent.match(/id="detail-assertion-assertion-b"[\s\S]*?<div class="detail-body">/);
+      // Should show metro map in dedicated panel for main branch with dependencies
+      assert.ok(htmlContent.includes('metro-map-panel'), 'Should have metro map panel');
+      assert.ok(htmlContent.includes('id="metro-map-main"'), 'Should have metro map for main branch');
+      assert.ok(htmlContent.includes('class="metro-map"'), 'Should include metro map SVG');
 
-      assert.ok(assertionADetail, 'Should find assertion A detail section');
-      assert.ok(assertionBDetail, 'Should find assertion B detail section');
-      assert.ok(assertionADetail[0].includes('class="metro-map"'), 'Should include metro map SVG for A');
-      assert.ok(assertionBDetail[0].includes('class="metro-map"'), 'Should include metro map SVG for B');
-      assert.ok(!assertionADetail[0].includes('no-dependencies-notice'), 'Should not include notice for A');
-      assert.ok(!assertionBDetail[0].includes('no-dependencies-notice'), 'Should not include notice for B');
+      // Verify the main branch map is generated and shows both assertions
+      const mainBranchMapMatch = htmlContent.match(/id="metro-map-main"[\s\S]*?<\/div>/);
+      assert.ok(mainBranchMapMatch, 'Should find main branch metro map');
+      assert.ok(mainBranchMapMatch[0].includes('svg'), 'Should contain SVG element');
+      assert.ok(mainBranchMapMatch[0].includes('Station: assertion-a'), 'Should include assertion-a');
+      assert.ok(mainBranchMapMatch[0].includes('Station: assertion-b'), 'Should include assertion-b');
 
     } finally {
       cleanup();

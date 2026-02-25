@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { generateSpecExplorerHTML } from '../show/cli.js';
 
 describe('Metro Map Pan and Zoom Viewport', () => {
-  it('should have max-height constraint on metro-map-section', () => {
+  it('should have metro map in dedicated third column panel', () => {
     const specs = [{
       id: 'test-spec',
       title: 'Test Spec',
@@ -28,8 +28,9 @@ describe('Metro Map Pan and Zoom Viewport', () => {
 
     const html = generateSpecExplorerHTML(specs, assertions);
 
-    // Verify max-height is increased to 400px
-    assert.ok(html.includes('max-height: 400px'), 'Should have max-height: 400px');
+    // Verify metro map panel exists as third column
+    assert.ok(html.includes('metro-map-panel'), 'Should have metro-map-panel');
+    assert.ok(html.includes('width: 400px'), 'Should have 400px width for metro panel');
   });
 
   it('should have overflow hidden for panning', () => {
@@ -115,8 +116,8 @@ describe('Metro Map Pan and Zoom Viewport', () => {
 
     const html = generateSpecExplorerHTML(specs, assertions);
 
-    // Verify panning state styles
-    assert.ok(html.includes('.metro-map-section.panning'), 'Should have .panning class styles');
+    // Verify panning state styles for metro-map-container
+    assert.ok(html.includes('.metro-map-container.panning'), 'Should have .panning class styles');
     assert.ok(html.includes('cursor: grabbing'), 'Should have cursor: grabbing when panning');
     assert.ok(html.includes('user-select: none'), 'Should have user-select: none when panning');
   });
@@ -205,10 +206,9 @@ describe('Metro Map Pan and Zoom Viewport', () => {
     const html = generateSpecExplorerHTML(specs, assertions);
 
     // Verify pan JavaScript functionality is included
-    assert.ok(html.includes('Metro map pan and zoom functionality'), 'Should have pan JavaScript comment');
-    assert.ok(html.includes('panStates'), 'Should track pan state');
-    assert.ok(html.includes('initPanForMap'), 'Should have initPanForMap function');
-    assert.ok(html.includes('calculateBounds'), 'Should have bounds calculation');
+    assert.ok(html.includes('Metro map pan functionality'), 'Should have pan JavaScript comment');
+    assert.ok(html.includes('metroMapState.panStates'), 'Should track pan state in metroMapState');
+    assert.ok(html.includes('metro-map-container'), 'Should reference metro-map-container');
     assert.ok(html.includes('mousedown'), 'Should handle mousedown event');
     assert.ok(html.includes('mousemove'), 'Should handle mousemove event');
     assert.ok(html.includes('mouseup'), 'Should handle mouseup event');
