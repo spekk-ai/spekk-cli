@@ -3,7 +3,7 @@ id: branch-aware-next
 parent: coordinator-skill
 created: 2026-02-25T00:00:00Z
 priority: 1
-status: done
+status: failed
 depends-on: parser-depends-on-support
 ---
 
