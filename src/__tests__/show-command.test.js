@@ -149,8 +149,8 @@ depends-on: assertion-a
 
       const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
 
-      // Metro map should be in dedicated third column panel
-      assert.ok(htmlContent.includes('metro-map-panel'), 'Should include metro map panel');
+      // Metro map should be in detail panel as collapsible section
+      assert.ok(htmlContent.includes('metro-map-section'), 'Should include metro map section');
       assert.ok(htmlContent.includes('Branch Dependencies'), 'Should show Branch Dependencies title');
       assert.ok(htmlContent.includes('class="metro-map"'), 'Should include metro map SVG');
       assert.ok(htmlContent.includes('metro-map-branch'), 'Should have branch-specific metro maps');
@@ -647,8 +647,8 @@ branch: feature/test
 
       const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
 
-      // Should show metro map in dedicated panel (not notice)
-      assert.ok(htmlContent.includes('metro-map-panel'), 'Should have metro map panel');
+      // Should show metro map in detail panel section (not notice)
+      assert.ok(htmlContent.includes('metro-map-section'), 'Should have metro map section');
       assert.ok(htmlContent.includes('id="metro-map-feature/test"'), 'Should have metro map for feature/test branch');
       assert.ok(htmlContent.includes('class="metro-map"'), 'Should include metro map SVG');
 
@@ -711,8 +711,8 @@ depends-on: assertion-a
 
       const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
 
-      // Should show metro map in dedicated panel for main branch with dependencies
-      assert.ok(htmlContent.includes('metro-map-panel'), 'Should have metro map panel');
+      // Should show metro map in detail panel section for main branch with dependencies
+      assert.ok(htmlContent.includes('metro-map-section'), 'Should have metro map section');
       assert.ok(htmlContent.includes('id="metro-map-main"'), 'Should have metro map for main branch');
       assert.ok(htmlContent.includes('class="metro-map"'), 'Should include metro map SVG');
 

@@ -28,9 +28,10 @@ describe('Metro Map Pan and Zoom Viewport', () => {
 
     const html = generateSpecExplorerHTML(specs, assertions);
 
-    // Verify metro map panel exists as third column
-    assert.ok(html.includes('metro-map-panel'), 'Should have metro-map-panel');
-    assert.ok(html.includes('width: 400px'), 'Should have 400px width for metro panel');
+    // Verify metro map section exists inside detail panel
+    assert.ok(html.includes('metro-map-section'), 'Should have metro-map-section');
+    assert.ok(html.includes('detail-content-section'), 'Should have detail-content-section');
+    assert.ok(html.includes('width: 400px'), 'Should have 400px width for tree panel');
   });
 
   it('should have overflow hidden for panning', () => {

@@ -655,7 +655,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
         }
 
         .tree-panel {
-            width: 300px;
+            width: 400px;
             padding: 20px;
             border-right: 1px solid #e2e8f0;
             overflow-y: auto;
@@ -663,18 +663,86 @@ export function generateSpecExplorerHTML(specs, assertions) {
 
         .detail-panel {
             flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            border-right: 1px solid #e2e8f0;
-        }
-
-        .metro-map-panel {
-            width: 400px;
-            padding: 20px;
-            background: #f8fafc;
-            overflow: hidden;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+        }
+
+        .metro-map-section {
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            max-height: 340px;
+        }
+
+        .metro-map-section.collapsed {
+            max-height: 44px;
+        }
+
+        .metro-map-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: #f1f5f9;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .metro-map-header:hover {
+            background: #e2e8f0;
+        }
+
+        .metro-map-header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .metro-map-toggle-icon {
+            font-size: 12px;
+            color: #64748b;
+            transition: transform 0.2s;
+        }
+
+        .metro-map-section.collapsed .metro-map-toggle-icon {
+            transform: rotate(-90deg);
+        }
+
+        .metro-map-header-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .metro-map-header .branch-name {
+            font-size: 12px;
+            color: #64748b;
+            font-family: 'Courier New', monospace;
+        }
+
+        .metro-map-container {
+            max-height: 280px;
+            overflow: hidden;
+            position: relative;
+            cursor: grab;
+            background: #f8fafc;
+        }
+
+        .metro-map-container.panning {
+            cursor: grabbing;
+            user-select: none;
+        }
+
+        .metro-map-container .metro-map {
+            transition: transform 0.1s ease-out;
+        }
+
+        .detail-content-section {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
         }
         
         .header {
@@ -988,43 +1056,6 @@ export function generateSpecExplorerHTML(specs, assertions) {
             color: #374151;
         }
 
-        .metro-map-panel-header {
-            padding-bottom: 12px;
-            border-bottom: 1px solid #e2e8f0;
-            margin-bottom: 16px;
-        }
-
-        .metro-map-panel-header h2 {
-            font-size: 14px;
-            font-weight: 600;
-            color: #475569;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 4px;
-        }
-
-        .metro-map-panel-header .branch-name {
-            font-size: 12px;
-            color: #64748b;
-            font-family: 'Courier New', monospace;
-        }
-
-        .metro-map-container {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-            cursor: grab;
-        }
-
-        .metro-map-container.panning {
-            cursor: grabbing;
-            user-select: none;
-        }
-
-        .metro-map-container .metro-map {
-            transition: transform 0.1s ease-out;
-        }
-
         .metro-map-branch {
             width: 100%;
             height: 100%;
@@ -1175,58 +1206,62 @@ export function generateSpecExplorerHTML(specs, assertions) {
         </div>
         
         <div class="detail-panel">
-            <div class="empty-state" id="empty-state">
-                <h3>Spec Explorer</h3>
-                <p>Click on any spec or assertion to view details</p>
+            <!-- Metro Map Section: Collapsible, at top of detail panel -->
+            <div class="metro-map-section" id="metro-map-section" style="display: none;">
+                <div class="metro-map-header" id="metro-map-toggle">
+                    <div class="metro-map-header-left">
+                        <span class="metro-map-toggle-icon">▼</span>
+                        <span class="metro-map-header-title">Branch Dependencies</span>
+                        <span class="branch-name" id="metro-branch-name"></span>
+                    </div>
+                </div>
+                <div class="metro-map-container" id="metro-map-container">
+                    ${Array.from(branchMetroMaps.entries()).map(([branch, mapHTML]) => `
+                        <div class="metro-map-branch" id="metro-map-${escapeHTML(branch)}" data-branch="${escapeHTML(branch)}" style="display: none;">
+                            ${mapHTML}
+                        </div>
+                    `).join('')}
+                </div>
             </div>
-            
-            ${specHierarchy.map(spec => `
-                <div class="detail-content" id="detail-spec-${spec.id}">
-                    <div class="detail-header">
-                        <div class="detail-title">${escapeHTML(spec.title)}</div>
-                        <div class="detail-meta">
-                            <span class="meta-item">Status: ${generateDetailStatusBadge(spec.status)}</span>
-                            <span class="meta-item">Priority: ${generateDetailPriorityBadge(spec.priority)}</span>
-                            <span class="meta-item">File: <strong>${spec.file}</strong></span>
-                        </div>
-                    </div>
-                    <div class="detail-body">
-                        <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHTML(spec.content)}</pre>
-                    </div>
-                </div>
-            `).join('')}
-            
-            ${assertions.map(assertion => `
-                <div class="detail-content" id="detail-assertion-${assertion.id}" data-branch="${assertion.branch || 'main'}">
-                    <div class="detail-header">
-                        <div class="detail-title">${escapeHTML(assertion.title)}</div>
-                        <div class="detail-meta">
-                            <span class="meta-item">Status: ${generateDetailStatusBadge(assertion.status)}</span>
-                            <span class="meta-item">Priority: ${generateDetailPriorityBadge(assertion.priority)}</span>
-                            <span class="meta-item">Parent: <strong>${assertion.parent}</strong></span>
-                            ${assertion.branch ? `<span class="meta-item">Branch: <strong>${assertion.branch}</strong></span>` : ''}
-                            <span class="meta-item">File: <strong>${assertion.file}</strong></span>
-                        </div>
-                    </div>
-                    <div class="detail-body">
-                        <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHTML(assertion.content)}</pre>
-                    </div>
-                </div>
-            `).join('')}
-        </div>
 
-        <div class="metro-map-panel">
-            <div class="metro-map-panel-header">
-                <h2>Branch Dependencies</h2>
-                <div class="branch-name" id="metro-branch-name">Select an assertion</div>
-            </div>
-            <div class="metro-map-container" id="metro-map-container">
-                <div class="empty-state" id="metro-empty-state" style="margin-top: 60px;">
-                    <p>Click on an assertion to view its dependency map</p>
+            <!-- Detail Content Section: Scrollable assertion/spec content -->
+            <div class="detail-content-section">
+                <div class="empty-state" id="empty-state">
+                    <h3>Spec Explorer</h3>
+                    <p>Click on any spec or assertion to view details</p>
                 </div>
-                ${Array.from(branchMetroMaps.entries()).map(([branch, mapHTML]) => `
-                    <div class="metro-map-branch" id="metro-map-${escapeHTML(branch)}" data-branch="${escapeHTML(branch)}" style="display: none;">
-                        ${mapHTML}
+
+                ${specHierarchy.map(spec => `
+                    <div class="detail-content" id="detail-spec-${spec.id}">
+                        <div class="detail-header">
+                            <div class="detail-title">${escapeHTML(spec.title)}</div>
+                            <div class="detail-meta">
+                                <span class="meta-item">Status: ${generateDetailStatusBadge(spec.status)}</span>
+                                <span class="meta-item">Priority: ${generateDetailPriorityBadge(spec.priority)}</span>
+                                <span class="meta-item">File: <strong>${spec.file}</strong></span>
+                            </div>
+                        </div>
+                        <div class="detail-body">
+                            <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHTML(spec.content)}</pre>
+                        </div>
+                    </div>
+                `).join('')}
+
+                ${assertions.map(assertion => `
+                    <div class="detail-content" id="detail-assertion-${assertion.id}" data-branch="${assertion.branch || 'main'}">
+                        <div class="detail-header">
+                            <div class="detail-title">${escapeHTML(assertion.title)}</div>
+                            <div class="detail-meta">
+                                <span class="meta-item">Status: ${generateDetailStatusBadge(assertion.status)}</span>
+                                <span class="meta-item">Priority: ${generateDetailPriorityBadge(assertion.priority)}</span>
+                                <span class="meta-item">Parent: <strong>${assertion.parent}</strong></span>
+                                ${assertion.branch ? `<span class="meta-item">Branch: <strong>${assertion.branch}</strong></span>` : ''}
+                                <span class="meta-item">File: <strong>${assertion.file}</strong></span>
+                            </div>
+                        </div>
+                        <div class="detail-body">
+                            <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHTML(assertion.content)}</pre>
+                        </div>
                     </div>
                 `).join('')}
             </div>
@@ -1234,9 +1269,10 @@ export function generateSpecExplorerHTML(specs, assertions) {
     </div>
     
     <script>
-        // Initialize completed specs toggle on page load
+        // Initialize completed specs toggle and metro map collapse on page load
         document.addEventListener('DOMContentLoaded', function() {
             initializeCompletedSpecsToggle();
+            initializeMetroMapCollapse();
         });
 
         function initializeCompletedSpecsToggle() {
@@ -1290,6 +1326,25 @@ export function generateSpecExplorerHTML(specs, assertions) {
             } else {
                 hiddenCountElement.textContent = '';
             }
+        }
+
+        function initializeMetroMapCollapse() {
+            const metroMapSection = document.getElementById('metro-map-section');
+            const metroMapToggle = document.getElementById('metro-map-toggle');
+
+            // Load saved preference from localStorage (default: false = expanded)
+            const isCollapsed = localStorage.getItem('spekkMetroMapCollapsed') === 'true';
+
+            if (isCollapsed) {
+                metroMapSection.classList.add('collapsed');
+            }
+
+            // Handle toggle clicks
+            metroMapToggle.addEventListener('click', function() {
+                metroMapSection.classList.toggle('collapsed');
+                const collapsed = metroMapSection.classList.contains('collapsed');
+                localStorage.setItem('spekkMetroMapCollapsed', collapsed.toString());
+            });
         }
 
         // Event delegation for all clicks
@@ -1362,10 +1417,12 @@ export function generateSpecExplorerHTML(specs, assertions) {
                 detailElement.classList.add('active');
             }
 
-            // Update metro map for assertions
+            // Update metro map for assertions, hide for specs
             if (type === 'assertion' && detailElement) {
                 const branch = detailElement.dataset.branch || 'main';
                 updateMetroMap(id, branch);
+            } else {
+                hideMetroMap();
             }
 
             // Mark assertion as selected in tree view
@@ -1407,15 +1464,15 @@ export function generateSpecExplorerHTML(specs, assertions) {
         }
 
         function updateMetroMap(assertionId, branch) {
+            const metroMapSection = document.getElementById('metro-map-section');
             const container = document.getElementById('metro-map-container');
             const branchNameEl = document.getElementById('metro-branch-name');
-            const emptyState = document.getElementById('metro-empty-state');
+
+            // Show metro map section (for assertions)
+            metroMapSection.style.display = 'block';
 
             // Update branch name
             branchNameEl.textContent = branch;
-
-            // Hide empty state
-            emptyState.style.display = 'none';
 
             // Check if we need to switch branches
             if (metroMapState.currentBranch !== branch) {
@@ -1466,6 +1523,11 @@ export function generateSpecExplorerHTML(specs, assertions) {
                     if (label) label.style.fontWeight = '400';
                 }
             });
+        }
+
+        function hideMetroMap() {
+            const metroMapSection = document.getElementById('metro-map-section');
+            metroMapSection.style.display = 'none';
         }
 
         // Metro station tooltip handling
