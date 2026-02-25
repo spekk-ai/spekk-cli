@@ -3,7 +3,7 @@ id: coordinate-cli-command
 parent: coach-skills-system
 created: 2026-02-25T15:58:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Coach Accepts "coordinate" Subcommand

@@ -42,10 +42,10 @@ async function launchCoachAgent(cliArgs = null) {
       }
     }
 
-    // Handle coordinator subcommand
-    if (subcommand === 'coordinator') {
+    // Handle coordinate subcommand
+    if (subcommand === 'coordinate') {
       message += '\n\n---\n\n**Skill Activation: Work Coordination & Dependency Analysis**\n\n';
-      message += 'The user has launched you with the coordinator skill active via `spekk coach coordinator`.\n';
+      message += 'The user has launched you with the coordinator skill active via `spekk coach coordinate`.\n';
       message += 'Activate your coordinator skill immediately — do not wait for trigger detection.\n\n';
       message += '**Your Coordinator Workflow:**\n\n';
       message += '1. Analyze all draft and not_started assertions across specs/\n';
@@ -137,7 +137,7 @@ SUBCOMMANDS:
                    If a transcript file is provided, it will be processed immediately.
                    Without a file, the coach will prompt for a transcript.
 
-  coordinator      Launch coach with work coordination skill active
+  coordinate       Launch coach with work coordination skill active
                    Analyzes specs, builds dependency graphs, assigns branches.
 
 OPTIONS:
@@ -147,7 +147,7 @@ EXAMPLES:
   spekk coach                          # Launch interactive coach
   spekk coach meeting                  # Launch coach in meeting mode (prompts for transcript)
   spekk coach meeting notes.txt        # Process a transcript file
-  spekk coach coordinator              # Launch coach in coordinator mode
+  spekk coach coordinate               # Launch coach in coordinator mode
 `);
 }
 
