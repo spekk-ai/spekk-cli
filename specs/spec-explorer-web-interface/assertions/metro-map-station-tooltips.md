@@ -4,6 +4,7 @@ parent: spec-explorer-web-interface
 created: 2026-02-25T20:03:00Z
 priority: 2
 status: done
+depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
 

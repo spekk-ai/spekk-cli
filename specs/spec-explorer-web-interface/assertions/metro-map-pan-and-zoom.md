@@ -4,6 +4,7 @@ parent: spec-explorer-web-interface
 created: 2026-02-25T20:31:00Z
 priority: 1
 status: done
+depends-on: metro-map-scrollable-viewport
 branch: feature/dependency-visualization
 ---
 
