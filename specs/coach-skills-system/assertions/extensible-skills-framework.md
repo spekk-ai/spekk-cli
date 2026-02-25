@@ -3,34 +3,54 @@ id: extensible-skills-framework
 parent: coach-skills-system
 created: 2026-01-23T22:14:00Z
 priority: 3
-status: done
+status: not_started
 ---
 
 # Extensible Skills Framework
 
-Skills system supports adding future specialized coaching capabilities without major framework changes.
+Skills system supports adding new specialized coaching capabilities as markdown workflow files.
 
-## Success Criteria
+## What Must Be True
 
-- Framework design accommodates new skills easily
-- Skill detection patterns can be extended
-- Each skill follows consistent interface:
-  - Clear trigger conditions
-  - Structured questioning approach
-  - Standardized output format
-  - File management conventions
+### Skill Format
+- Skills are markdown files in `specs/coach-skills-system/`
+- Naming: `skillname-skill.md`
+- Required sections:
+  - `# Skill Name`
+  - `## Triggers` - List of trigger keywords
+  - `## Workflow` - Numbered steps
+  - `## Validation` - Success criteria
+- Optional: Context, Examples
 
-## Future Skills (Examples)
+### Coach Execution
+- Coach scans for skill markdown files
+- Detects triggers in user input
+- Reads workflow steps from markdown
+- Executes steps using its intelligence
+- Validates results (e.g., with parser)
+- No JavaScript classes needed
+- No API calls (coach IS the AI)
 
-Potential skills that should fit this framework:
-- `technical-architecture-validator` - Assess technical feasibility
-- `user-research-facilitator` - Guide user research planning
-- `market-analysis-conductor` - Systematic market assessment
-- `financial-model-reviewer` - Validate financial projections
+### Example Skill Structure
+```markdown
+# Coordinator Skill
 
-## Design Principles
+## Triggers
+- "plan the work"
+- "dependency graph"
 
-- Keep skills lean and focused
-- Consistent user experience across skills
-- Skills remain optional (user can decline)
-- Clear boundaries between skills and core coach behavior
+## Workflow
+1. Read draft assertions
+2. Analyze dependencies
+3. Show tree to user
+4. Update YAML
+5. Validate with parser
+6. Commit
+```
+
+## Validation
+
+- Skills can be created by writing markdown
+- Coach successfully executes workflow steps
+- New skills added without code changes
+- All skills follow consistent pattern

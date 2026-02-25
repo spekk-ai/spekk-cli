@@ -17,6 +17,23 @@ The coach agent should be able to:
 - Maintain a lean, extensible framework for adding new skills
 - Provide structured outputs when using skills
 
+## Architecture
+
+Skills are **markdown files with workflow instructions**, not JavaScript classes.
+
+**Rationale:**
+- Coach agent IS already Claude - skills shouldn't call Claude API
+- Skills should be instructions for the AI, not procedural code
+- Consistent with spec-driven architecture (everything else is markdown)
+- Easy to create (write markdown, not implement JS classes)
+
+**Structure:**
+- Skills live in `specs/coach-skills-system/` as markdown files
+- Each skill defines: triggers, workflow steps, validation
+- Coach reads and interprets workflows
+- Coach uses its own intelligence to execute steps
+- No JavaScript classes, no API calls
+
 ## Skills Available
 
 ### Business Model Validator
