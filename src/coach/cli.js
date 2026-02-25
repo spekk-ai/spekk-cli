@@ -13,6 +13,7 @@ const projectRoot = join(__dirname, '../..');
 // Mapping from subcommand name to skill filename in specs/coach-skills-system/
 const SKILL_MAP = {
   meeting: 'meeting-notes-to-specs-skill.md',
+  coordinate: 'coordinator-skill.md',
 };
 
 /**
@@ -165,6 +166,9 @@ SUBCOMMANDS:
                    If a transcript file is provided, it will be processed immediately.
                    Without a file, the coach will prompt for a transcript.
 
+  coordinate       Launch coach with work coordination skill active
+                   Analyzes specs, builds dependency graphs, assigns branches.
+
 OPTIONS:
   --help, -h       Show this help message
 
@@ -172,6 +176,7 @@ EXAMPLES:
   spekk coach                          # Launch interactive coach
   spekk coach meeting                  # Launch coach in meeting mode (prompts for transcript)
   spekk coach meeting notes.txt        # Process a transcript file
+  spekk coach coordinate               # Launch coach in coordinator mode
 `);
 }
 

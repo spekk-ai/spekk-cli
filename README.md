@@ -9,6 +9,13 @@ Spekk CLI enables spec-driven development by:
 - **Orchestrating** AI agents (Coach and Builder) to create and implement specs
 - **Automating** the development workflow loop
 
+## Documentation
+
+- **[Getting Started Guide](./docs/GETTING-STARTED.md)** - Quick introduction to Spekk
+- **[CLI Reference](./docs/CLI-REFERENCE.md)** - Complete command documentation
+- **[Coach Skills Guide](./docs/COACH-SKILLS.md)** - Detailed skill workflows
+- **[Release Notes](./docs/RELEASE-NOTES-1.1.0.md)** - Version history
+
 ## Installation
 
 ### 1. Get a GemFury Token
@@ -130,6 +137,26 @@ Describe what needs to exist/work for this to be complete.
 ```
 
 **Parent spec status is computed** — a parent spec's status automatically reflects its assertions' states (all done = done, any in-progress = in-progress, etc.).
+
+### Optional Fields
+
+**`depends-on`**: Single assertion ID that must be completed before this one.
+- Creates linear dependency chains
+- Parser validates reference exists
+- `spekk next` respects dependencies
+
+**`branch`**: Git branch where this assertion lives.
+- Defaults to `main` if omitted
+- `spekk next` filters to current branch by default
+- Use `spekk next --all-branches` to see all assertions
+
+```yaml
+---
+id: feature-x
+depends-on: prerequisite-y  # Must complete prerequisite-y first
+branch: feature/my-feature   # Lives on feature branch
+---
+```
 
 ### 3. The Parser
 

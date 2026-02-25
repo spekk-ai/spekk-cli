@@ -13,7 +13,11 @@ Group-level specification files follow consistent format with appropriate metada
 ## Success Criteria
 
 - [ ] Group specs use `type: group` in YAML frontmatter
-- [ ] Group specs include standard fields: id, created, priority, status, type
+- [ ] Group specs include standard fields: id, created, priority, type
+- [ ] Assertion specs include: id, parent, created, priority, status
+- [ ] Optional assertion fields: depends-on (single parent), branch (git branch)
+- [ ] Field `depends-on` is validated (must reference existing assertion)
+- [ ] Field `branch` is validated (must be valid git branch name)
 - [ ] Group specs contain purpose and scope documentation
 - [ ] Group specs can reference child spec dependencies
 - [ ] Group specs support coordination notes and shared context
