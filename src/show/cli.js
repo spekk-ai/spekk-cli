@@ -248,12 +248,31 @@ function minimizeCrossings(assertions, layers) {
     }
   });
 
+  // Sort layer 0 (root nodes) to put short tracks at bottom
+  layerGroups[0].sort((a, b) => {
+    const aIsTerminal = !assertions.some(child => child.dependsOn === a.id);
+    const bIsTerminal = !assertions.some(child => child.dependsOn === b.id);
+
+    // Terminal nodes (short tracks) go to bottom
+    if (aIsTerminal && !bIsTerminal) return 1;
+    if (!aIsTerminal && bIsTerminal) return -1;
+    return 0;
+  });
+
   // Multiple sweeps to minimize crossings (forward and backward passes)
   for (let sweep = 0; sweep < 4; sweep++) {
     if (sweep % 2 === 0) {
       // Forward pass: sort by parent position (left to right)
       for (let i = 1; i <= maxLayer; i++) {
         layerGroups[i].sort((a, b) => {
+          // Check if node is terminal (no children)
+          const aIsTerminal = !assertions.some(child => child.dependsOn === a.id);
+          const bIsTerminal = !assertions.some(child => child.dependsOn === b.id);
+
+          // Terminal nodes (short tracks) go to bottom to avoid crossing longer tracks
+          if (aIsTerminal && !bIsTerminal) return 1;
+          if (!aIsTerminal && bIsTerminal) return -1;
+
           const aParent = assertions.find(p => p.id === a.dependsOn);
           const bParent = assertions.find(p => p.id === b.dependsOn);
 
