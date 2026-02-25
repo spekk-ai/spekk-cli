@@ -30,9 +30,11 @@ Skills are **markdown files with workflow instructions**, not JavaScript classes
 **Structure:**
 - Skills live in `specs/coach-skills-system/` as markdown files
 - Each skill defines: triggers, workflow steps, validation
-- Coach reads and interprets workflows
-- Coach uses its own intelligence to execute steps
-- No JavaScript classes, no API calls
+- Coach prompt lists available skills (or directory location)
+- Coach reads markdown files directly
+- Coach executes workflows using its own intelligence
+- **Zero infrastructure needed** - Just markdown files + coach
+- No JavaScript classes, no loaders, no registries, no API calls
 
 ## Skills Available
 

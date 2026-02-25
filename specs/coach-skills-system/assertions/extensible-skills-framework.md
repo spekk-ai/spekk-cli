@@ -23,13 +23,14 @@ Skills system supports adding new specialized coaching capabilities as markdown 
 - Optional: Context, Examples
 
 ### Coach Execution
-- Coach scans for skill markdown files
-- Detects triggers in user input
-- Reads workflow steps from markdown
-- Executes steps using its intelligence
-- Validates results (e.g., with parser)
-- No JavaScript classes needed
-- No API calls (coach IS the AI)
+- Coach prompt lists available skills (or tells coach to scan directory)
+- Coach detects triggers in user input
+- Coach reads skill markdown file directly
+- Coach executes workflow steps using its intelligence
+- Coach validates results (e.g., with parser)
+- **No JavaScript loader/registry needed** - Coach reads files directly
+- **No skill classes needed** - Skills are instructions for the AI
+- **No API calls** - Coach IS the AI
 
 ### Example Skill Structure
 ```markdown
@@ -50,7 +51,19 @@ Skills system supports adding new specialized coaching capabilities as markdown 
 
 ## Validation
 
-- Skills can be created by writing markdown
-- Coach successfully executes workflow steps
-- New skills added without code changes
-- All skills follow consistent pattern
+### What Must Exist
+- Skill markdown files in `specs/coach-skills-system/`
+- Coach prompt updated to list skills or tell coach where to find them
+- Skills follow consistent format (triggers, workflow, validation)
+
+### What Must NOT Exist
+- ❌ No `markdown-skill-loader.js` or similar (coach reads files directly)
+- ❌ No JavaScript skill classes (deleted, including deprecated ones)
+- ❌ No skill registry infrastructure (coach knows where skills are)
+- ❌ No `IMPLEMENTATION_SUMMARY.md` (lives in PR/commits)
+
+### Testing
+- Coach successfully detects skill triggers
+- Coach reads and executes workflow steps
+- New skills added by just creating markdown file
+- No code changes needed for new skills
