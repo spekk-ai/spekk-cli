@@ -3,13 +3,14 @@ import assert from 'node:assert';
 import { execSync } from 'node:child_process';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { parseAllSpecs, findNextAssertion } from '../index.js';
 
 describe('Next Priority Identification', () => {
   describe('Priority Algorithm', () => {
     test('identifies highest priority incomplete assertion', () => {
-      const tempDir1 = path.join(process.cwd(), 'temp-priority-test-1');
-      const tempDir2 = path.join(process.cwd(), 'temp-priority-test-2');
+      const tempDir1 = path.join(os.tmpdir(), `spekk-test-priority-1-${Date.now()}`);
+      const tempDir2 = path.join(os.tmpdir(), `spekk-test-priority-2-${Date.now()}`);
       const assertionsDir1 = path.join(tempDir1, 'assertions');
       const assertionsDir2 = path.join(tempDir2, 'assertions');
       
@@ -92,18 +93,20 @@ This should be picked first.`;
           assert.equal(nextAssertion.priority, 1, 'Selected assertion should have priority 1');
           
         } finally {
-          fs.unlinkSync(originalSpecsPath1);
-          fs.unlinkSync(originalSpecsPath2);
+          // Clean up symlinks first
+          if (fs.existsSync(originalSpecsPath1)) fs.unlinkSync(originalSpecsPath1);
+          if (fs.existsSync(originalSpecsPath2)) fs.unlinkSync(originalSpecsPath2);
         }
         
       } finally {
-        if (fs.existsSync(tempDir1)) fs.rmSync(tempDir1, { recursive: true });
-        if (fs.existsSync(tempDir2)) fs.rmSync(tempDir2, { recursive: true });
+        // Clean up temp directories
+        if (fs.existsSync(tempDir1)) fs.rmSync(tempDir1, { recursive: true, force: true });
+        if (fs.existsSync(tempDir2)) fs.rmSync(tempDir2, { recursive: true, force: true });
       }
     });
 
     test('breaks ties by oldest created timestamp', () => {
-      const tempDir = path.join(process.cwd(), 'temp-tie-breaker-test');
+      const tempDir = path.join(os.tmpdir(), `spekk-test-tie-breaker-${Date.now()}`);
       const assertionsDir = path.join(tempDir, 'assertions');
       
       try {
@@ -164,16 +167,18 @@ This was created earlier and should be picked.`;
           assert.equal(nextAssertion.created, '2026-01-20T15:59:00Z', 'Selected assertion should be the older one');
           
         } finally {
-          fs.unlinkSync(originalSpecsPath);
+          // Clean up symlink first
+          if (fs.existsSync(originalSpecsPath)) fs.unlinkSync(originalSpecsPath);
         }
         
       } finally {
-        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
+        // Clean up temp directory
+        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
 
     test('filters out done assertions', () => {
-      const tempDir = path.join(process.cwd(), 'temp-done-filter-test');
+      const tempDir = path.join(os.tmpdir(), `spekk-test-done-filter-${Date.now()}`);
       const assertionsDir = path.join(tempDir, 'assertions');
       
       try {
@@ -235,16 +240,18 @@ This should be picked even though it has lower priority.`;
           assert.equal(nextAssertion.status, 'not_started', 'Selected assertion should be not_started');
           
         } finally {
-          fs.unlinkSync(originalSpecsPath);
+          // Clean up symlink first
+          if (fs.existsSync(originalSpecsPath)) fs.unlinkSync(originalSpecsPath);
         }
         
       } finally {
-        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
+        // Clean up temp directory
+        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
 
     test('includes in_progress assertions in incomplete filter', () => {
-      const tempDir = path.join(process.cwd(), 'temp-in-progress-test');
+      const tempDir = path.join(os.tmpdir(), `spekk-test-in-progress-${Date.now()}`);
       const assertionsDir = path.join(tempDir, 'assertions');
       
       try {
@@ -292,11 +299,13 @@ This is in progress and should be picked up.`;
           assert.equal(nextAssertion.status, 'in_progress', 'Selected assertion should be in_progress');
           
         } finally {
-          fs.unlinkSync(originalSpecsPath);
+          // Clean up symlink first
+          if (fs.existsSync(originalSpecsPath)) fs.unlinkSync(originalSpecsPath);
         }
         
       } finally {
-        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
+        // Clean up temp directory
+        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
 
@@ -348,8 +357,8 @@ This is in progress and should be picked up.`;
 
     test('CLI output matches priority algorithm', () => {
       // Create controlled test environment
-      const tempDir1 = path.join(process.cwd(), 'temp-cli-test-1');
-      const tempDir2 = path.join(process.cwd(), 'temp-cli-test-2');
+      const tempDir1 = path.join(os.tmpdir(), `spekk-test-cli-1-${Date.now()}`);
+      const tempDir2 = path.join(os.tmpdir(), `spekk-test-cli-2-${Date.now()}`);
       const assertionsDir1 = path.join(tempDir1, 'assertions');
       const assertionsDir2 = path.join(tempDir2, 'assertions');
       
@@ -431,13 +440,15 @@ status: not_started
           assert.equal(nextAssertion.id, 'cli-high-priority', 'Should pick priority 1 test assertion');
           
         } finally {
-          fs.unlinkSync(originalSpecsPath1);
-          fs.unlinkSync(originalSpecsPath2);
+          // Clean up symlinks first
+          if (fs.existsSync(originalSpecsPath1)) fs.unlinkSync(originalSpecsPath1);
+          if (fs.existsSync(originalSpecsPath2)) fs.unlinkSync(originalSpecsPath2);
         }
         
       } finally {
-        if (fs.existsSync(tempDir1)) fs.rmSync(tempDir1, { recursive: true });
-        if (fs.existsSync(tempDir2)) fs.rmSync(tempDir2, { recursive: true });
+        // Clean up temp directories
+        if (fs.existsSync(tempDir1)) fs.rmSync(tempDir1, { recursive: true, force: true });
+        if (fs.existsSync(tempDir2)) fs.rmSync(tempDir2, { recursive: true, force: true });
       }
     });
   });
