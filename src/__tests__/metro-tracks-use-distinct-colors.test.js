@@ -149,32 +149,28 @@ describe('Tree-Stacking Layout: Independent Trees Do Not Share Y-Space', () => {
   });
 });
 
-describe('Tree-Stacking Layout: Track Colors Are Distinct', () => {
-  it('should use distinct track colors from the palette on dependency lines', () => {
+describe('Uniform Gray Dependency Lines', () => {
+  it('should use uniform gray #94a3b8 on all dependency lines', () => {
     const html = generateSpecExplorerHTML(testSpecs, branchingAssertions);
     const colors = extractDependencyLineColors(html);
 
-    // Should have dependency lines with colors (not all gray)
-    assert.ok(colors.length > 0, 'Should have dependency line colors');
+    assert.ok(colors.length > 0, 'Should have dependency lines');
 
-    // At least some colors should be from the palette (not gray #94a3b8)
-    const paletteColors = ['#3b82f6', '#f97316', '#10b981', '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#ef4444'];
-    const hasTrackColor = colors.some(c => paletteColors.includes(c));
-    assert.ok(hasTrackColor, 'Dependency lines should use colors from the track palette');
+    // Every dependency line must be gray #94a3b8
+    colors.forEach(color => {
+      assert.strictEqual(color, '#94a3b8',
+        `All dependency lines should be gray #94a3b8, but found ${color}`);
+    });
   });
 
-  it('should assign different colors to different terminal tracks', () => {
-    const html = generateSpecExplorerHTML(testSpecs, branchingAssertions);
+  it('should not contain per-track color assignment logic', async () => {
+    const fs = await import('node:fs');
+    const source = fs.readFileSync(new URL('../show/cli.js', import.meta.url), 'utf8');
 
-    // Extract colors from the dependency lines for child-b and child-c
-    // They are different terminals so should get different colors
-    const childBLineMatch = html.match(/Dependency: root-a .* child-b[^>]*stroke="([^"]+)"/);
-    const childCLineMatch = html.match(/Dependency: root-a .* child-c[^>]*stroke="([^"]+)"/);
-
-    if (childBLineMatch && childCLineMatch) {
-      assert.notStrictEqual(childBLineMatch[1], childCLineMatch[1],
-        'Different terminal tracks should have different colors');
-    }
+    assert.ok(!source.includes('assertionToColor'), 'Should not contain assertionToColor map');
+    assert.ok(!source.includes('trackPalette'), 'Should not contain trackPalette array');
+    assert.ok(!source.includes('assignTrackColors'), 'Should not contain assignTrackColors function');
+    assert.ok(!source.includes('getBranchColor'), 'Should not contain getBranchColor function');
   });
 });
 
