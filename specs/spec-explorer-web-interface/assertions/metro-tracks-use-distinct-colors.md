@@ -21,50 +21,36 @@ Dependency tracks (lines connecting stations) use distinct colors AND are laid o
 - ✅ Color palette uses ordinal progression (e.g., subway line colors)
 - ✅ Dependencies leading to different endpoints use different colors
 - ✅ Colors are sufficient to trace paths without needing a legend
-- ⬜ **Hierarchical layout with nodes arranged in layers by dependency depth**
-- ⬜ **Edge crossings minimized using Sugiyama-style algorithm**
-- ⬜ **Nodes within each layer positioned to reduce edge crossing**
-- ⬜ **Layout scales gracefully with complex dependency graphs**
+- ✅ **Hierarchical layout with nodes arranged in layers by dependency depth**
+- ✅ **Edge crossings minimized using Sugiyama-style algorithm**
+- ✅ **Nodes within each layer positioned to reduce edge crossing**
+- ✅ **Layout scales gracefully with complex dependency graphs**
 
-## Current Issue
+## Solution
 
-**Problem (Phase 1 - SOLVED):**
-- Multiple dependency chains converge toward "Done"
-- When tracks overlapped, they were all the same color
-- Lines blended together making dependency chains unclear
-- ✅ **FIXED:** Each track now has distinct color
+Uses Sugiyama hierarchical graph layout algorithm to create clear, readable dependency visualizations:
 
-**Problem (Phase 2 - TRIED, FAILED):**
-- Even with distinct colors, too many parallel tracks overlap
-- Track-based horizontal lanes approach didn't solve the problem
-- The issue is more complex than simple lane assignment
-- Dependencies can be shared between multiple tracks
-- Simple lane assignment doesn't account for edge crossing minimization
-
-**Solution (Sugiyama Hierarchical Layout):**
-
-Use Sugiyama-style layered graph drawing algorithm:
-
-1. **Layer Assignment (Rank Assignment)**
-   - Assign each node to a layer based on longest path from source
+1. **Layer Assignment**
+   - Each node assigned to layer based on longest path from source
    - Layer 0: nodes with no dependencies
    - Layer i: nodes whose longest dependency path is i
 
 2. **Crossing Minimization**
-   - Within each layer, order nodes to minimize edge crossings
-   - Use barycenter heuristic or median heuristic
-   - Multiple passes (forward and backward) to optimize
+   - Multiple sweep approach: 4 passes (2 forward, 2 backward)
+   - Forward pass: sort nodes by parent position
+   - Backward pass: sort by barycenter of children positions
+   - Reduces visual complexity and makes paths easier to follow
 
-3. **Coordinate Assignment**
-   - Assign X coordinates based on layer
-   - Assign Y coordinates within layer to minimize edge length
-   - Apply spacing constraints for readability
+3. **Coordinate Assignment with Dynamic Spacing**
+   - Base node spacing: 80px (vertical, between nodes in same layer)
+   - Layer spacing: 150px (horizontal, between dependency levels)
+   - Fanout detection: adds 20px extra spacing when consecutive nodes share same parent
+   - Prevents visual crowding in high-fanout scenarios
 
-4. **Result:**
-   - Hierarchical left-to-right layout
-   - Minimized edge crossings
-   - Clear visual hierarchy
-   - Handles complex DAGs with shared dependencies
+4. **Track Coloring**
+   - Each dependency track has distinct color from 8-color palette
+   - Colors trace back from terminal assertions through dependency chain
+   - Makes individual paths visually distinct and easy to follow
 
 ## Color Palette
 
@@ -87,108 +73,36 @@ Use Sugiyama-style layered graph drawing algorithm:
 ## Implementation
 
 **Step 1: Layer Assignment (Longest Path)**
-```javascript
-function assignLayers(assertions) {
-  const layers = new Map(); // assertion.id -> layer number
+- Recursive function traverses dependency tree
+- Each node assigned to layer based on longest path from root
+- Layer 0: nodes with no dependencies
+- Layer n+1: nodes depending on layer n nodes
 
-  function getLongestPath(assertionId, visited = new Set()) {
-    if (visited.has(assertionId)) return 0; // Cycle detection
+**Step 2: Crossing Minimization (Multi-Sweep)**
+- Groups assertions by layer
+- 4-pass optimization:
+  - Pass 1 (forward): Sort by parent position
+  - Pass 2 (backward): Sort by barycenter of children
+  - Pass 3 (forward): Sort by parent position again
+  - Pass 4 (backward): Sort by barycenter of children again
+- Multiple passes improve layout quality
 
-    const layer = layers.get(assertionId);
-    if (layer !== undefined) return layer;
+**Step 3: Coordinate Assignment with Fanout Detection**
+- X coordinate: `startX + (layer * 150px)`
+- Y coordinate base: `startY + (nodeIndex * 80px)`
+- Fanout spacing: detects when consecutive nodes share parent, adds 20px
+- Prevents visual crowding when one parent has multiple children
 
-    const assertion = assertions.find(a => a.id === assertionId);
-    if (!assertion || !assertion.dependsOn) {
-      layers.set(assertionId, 0);
-      return 0;
-    }
+**Step 4: Track Coloring**
+- 8-color palette cycles through dependency chains
+- Colors assigned from terminal assertions backward
+- Each track maintains consistent color throughout path
+- Makes individual dependency chains visually traceable
 
-    visited.add(assertionId);
-    const parentLayer = getLongestPath(assertion.dependsOn, visited);
-    const myLayer = parentLayer + 1;
-    layers.set(assertionId, myLayer);
-    return myLayer;
-  }
+## Benefits
 
-  assertions.forEach(a => getLongestPath(a.id));
-  return layers;
-}
-```
-
-**Step 2: Minimize Crossings (Barycenter Heuristic)**
-```javascript
-function minimizeCrossings(assertions, layers) {
-  // Group assertions by layer
-  const maxLayer = Math.max(...layers.values());
-  const layerGroups = Array.from({ length: maxLayer + 1 }, () => []);
-
-  assertions.forEach(assertion => {
-    const layer = layers.get(assertion.id);
-    layerGroups[layer].push(assertion);
-  });
-
-  // Sort nodes within each layer by barycenter of neighbors
-  for (let i = 1; i <= maxLayer; i++) {
-    layerGroups[i].sort((a, b) => {
-      const aParent = assertions.find(p => p.id === a.dependsOn);
-      const bParent = assertions.find(p => p.id === b.dependsOn);
-
-      if (!aParent && !bParent) return 0;
-      if (!aParent) return -1;
-      if (!bParent) return 1;
-
-      // Sort by parent position (barycenter)
-      const aParentIndex = layerGroups[i-1].indexOf(aParent);
-      const bParentIndex = layerGroups[i-1].indexOf(bParent);
-      return aParentIndex - bParentIndex;
-    });
-  }
-
-  return layerGroups;
-}
-```
-
-**Step 3: Coordinate Assignment**
-```javascript
-function assignCoordinates(layerGroups, assertionToColor) {
-  const positions = new Map();
-  const layerSpacing = 150; // X spacing between layers
-  const nodeSpacing = 100; // Y spacing between nodes in same layer
-  const startX = 60;
-  const startY = 80;
-
-  layerGroups.forEach((layer, layerIndex) => {
-    const x = startX + (layerIndex * layerSpacing);
-
-    layer.forEach((assertion, nodeIndex) => {
-      const y = startY + (nodeIndex * nodeSpacing);
-      positions.set(assertion.id, { x, y });
-    });
-  });
-
-  return positions;
-}
-```
-
-**Step 4: Complete Layout Function**
-```javascript
-function layoutWithSugiyama(assertions, assertionToColor) {
-  // 1. Assign layers
-  const layers = assignLayers(assertions);
-
-  // 2. Minimize crossings
-  const layerGroups = minimizeCrossings(assertions, layers);
-
-  // 3. Assign coordinates
-  const positions = assignCoordinates(layerGroups, assertionToColor);
-
-  return positions;
-}
-```
-
-## Sugiyama Algorithm Benefits
-
-- **Handles Complex DAGs:** Works with shared dependencies between tracks
-- **Minimizes Crossings:** Uses heuristics to reduce visual complexity
-- **Hierarchical:** Clear left-to-right progression shows dependency flow
-- **Scalable:** Adapts to any graph structure
+- **Clear Hierarchy:** Left-to-right flow shows dependency progression
+- **Reduced Crossings:** Multi-sweep optimization minimizes visual complexity
+- **Adaptive Spacing:** Fanout detection prevents crowding
+- **Distinct Paths:** Color coding makes each dependency chain easy to follow
+- **Scalable:** Handles complex graphs with shared dependencies
