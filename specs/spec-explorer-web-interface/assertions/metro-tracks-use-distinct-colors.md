@@ -2,107 +2,46 @@
 id: metro-tracks-use-distinct-colors
 parent: spec-explorer-web-interface
 created: 2026-02-25T21:00:00Z
-priority: 2
-status: done
+priority: 1
+status: failed
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
 
-# Metro Tracks Use Distinct Colors with Hierarchical Layout
+# Metro Map Uses Tree-Stacking Layout with Distinct Track Colors
 
 ## What Must Be True
 
-Dependency tracks (lines connecting stations) use distinct colors AND are laid out using a hierarchical graph algorithm that minimizes edge crossings and visual complexity. The layout makes dependency chains clear and easy to follow even with many parallel paths.
+Independent dependency trees are laid out as complete, self-contained units stacked vertically. Each tree occupies its own vertical band — no two trees share Y-space, making visual overlap between trees structurally impossible. Within a tree that has internal branching (one parent with multiple children), branches fan out vertically with enough space allocated so they never collide with adjacent trees.
+
+Dependency tracks use distinct colors from an 8-color palette so individual paths are visually traceable.
 
 ## Success Criteria
 
-- ✅ Each dependency track/line gets a unique color (not all gray/same color)
-- ✅ Colors are visually distinct and accessible (sufficient contrast)
-- ✅ Color palette uses ordinal progression (e.g., subway line colors)
-- ✅ Dependencies leading to different endpoints use different colors
-- ✅ Colors are sufficient to trace paths without needing a legend
-- ✅ **Hierarchical layout with nodes arranged in layers by dependency depth**
-- ✅ **Edge crossings minimized using Sugiyama-style algorithm**
-- ✅ **Nodes within each layer positioned to reduce edge crossing**
-- ✅ **Layout scales gracefully with complex dependency graphs**
-
-## Solution
-
-Uses Sugiyama hierarchical graph layout algorithm to create clear, readable dependency visualizations:
-
-1. **Layer Assignment**
-   - Each node assigned to layer based on longest path from source
-   - Layer 0: nodes with no dependencies
-   - Layer i: nodes whose longest dependency path is i
-
-2. **Crossing Minimization**
-   - Multiple sweep approach: 4 passes (2 forward, 2 backward)
-   - Forward pass: sort nodes by parent position
-   - Backward pass: sort by barycenter of children positions
-   - Reduces visual complexity and makes paths easier to follow
-
-3. **Coordinate Assignment with Dynamic Spacing**
-   - Base node spacing: 80px (vertical, between nodes in same layer)
-   - Layer spacing: 150px (horizontal, between dependency levels)
-   - Fanout detection: adds 20px extra spacing when consecutive nodes share same parent
-   - Prevents visual crowding in high-fanout scenarios
-
-4. **Track Coloring**
-   - Each dependency track has distinct color from 8-color palette
-   - Colors trace back from terminal assertions through dependency chain
-   - Makes individual paths visually distinct and easy to follow
+- Independent trees are identified by their root nodes (assertions with no `dependsOn`)
+- Each independent tree is rendered as a complete unit before the next tree begins
+- Trees are stacked vertically — tree N's entire vertical extent is above tree N+1's start
+- Within a branching tree, children of a shared parent each get their own Y row
+- The shared parent node sits at the vertical center of its children's Y range
+- No two nodes from different trees ever occupy the same Y position
+- Horizontal position reflects dependency depth (left-to-right flow)
+- No dead/unused layout code exists in the codebase (e.g., unused Sugiyama functions)
+- Each dependency track/line gets a color from the 8-color palette
+- Colors are visually distinct and accessible (sufficient contrast)
+- Dependencies leading to different terminal assertions use different colors
 
 ## Color Palette
 
-**Track colors (accessible, distinct):**
-- Cycle through for each dependency track:
-  - Blue: `#3b82f6`
-  - Orange: `#f97316`
-  - Green: `#10b981`
-  - Purple: `#a855f7`
-  - Pink: `#ec4899`
-  - Teal: `#14b8a6`
-  - Yellow: `#eab308`
-  - Red: `#ef4444`
+Track colors (accessible, distinct):
+- Blue: `#3b82f6`
+- Orange: `#f97316`
+- Green: `#10b981`
+- Purple: `#a855f7`
+- Pink: `#ec4899`
+- Teal: `#14b8a6`
+- Yellow: `#eab308`
+- Red: `#ef4444`
 
-**Accessibility:**
-- All colors meet WCAG AA contrast on white background
-- Distinguishable for common color vision deficiencies
-- Consistent stroke-width (3px) for clarity
+## Failure Mode (Current Bug)
 
-## Implementation
-
-**Step 1: Layer Assignment (Longest Path)**
-- Recursive function traverses dependency tree
-- Each node assigned to layer based on longest path from root
-- Layer 0: nodes with no dependencies
-- Layer n+1: nodes depending on layer n nodes
-
-**Step 2: Crossing Minimization (Multi-Sweep)**
-- Groups assertions by layer
-- 4-pass optimization:
-  - Pass 1 (forward): Sort by parent position
-  - Pass 2 (backward): Sort by barycenter of children
-  - Pass 3 (forward): Sort by parent position again
-  - Pass 4 (backward): Sort by barycenter of children again
-- Multiple passes improve layout quality
-
-**Step 3: Coordinate Assignment with Fanout Detection**
-- X coordinate: `startX + (layer * 150px)`
-- Y coordinate base: `startY + (nodeIndex * 80px)`
-- Fanout spacing: detects when consecutive nodes share parent, adds 20px
-- Prevents visual crowding when one parent has multiple children
-
-**Step 4: Track Coloring**
-- 8-color palette cycles through dependency chains
-- Colors assigned from terminal assertions backward
-- Each track maintains consistent color throughout path
-- Makes individual dependency chains visually traceable
-
-## Benefits
-
-- **Clear Hierarchy:** Left-to-right flow shows dependency progression
-- **Reduced Crossings:** Multi-sweep optimization minimizes visual complexity
-- **Adaptive Spacing:** Fanout detection prevents crowding
-- **Distinct Paths:** Color coding makes each dependency chain easy to follow
-- **Scalable:** Handles complex graphs with shared dependencies
+The current layout traces each terminal assertion back to its root independently, placing all nodes in that chain at the same Y. When multiple terminals share a common ancestor (e.g., `parses-frontmatter` has 6 children that are each terminals or lead to terminals), `positions.set()` overwrites the shared node's position with whichever terminal processes it last. This causes streams to visually overlap because nodes end up at Y positions that don't match their connecting lines.
