@@ -376,40 +376,10 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   const currentStationRadius = 10;
   const terminusRadius = 12;
 
-  // Position each track independently in its own horizontal lane
-  const positions = new Map();
-  const layerSpacing = 150;
-  const trackSpacing = 70; // Vertical spacing between tracks
-  const startX = 60;
-  const startY = 80;
-
-  // For each terminal assertion, layout its entire dependency chain
-  terminalAssertions.forEach((terminal, trackIndex) => {
-    // Get all assertions in this track
-    const trackAssertions = branchAssertions.filter(a =>
-      assertionToTrack.get(a.id) === trackIndex
-    );
-
-    // Sort by dependency depth
-    trackAssertions.sort((a, b) => a.depth - b.depth);
-
-    // Position assertions left-to-right by depth, in this track's horizontal lane
-    trackAssertions.forEach(assertion => {
-      const x = startX + (assertion.depth * layerSpacing);
-      const y = startY + (trackIndex * trackSpacing);
-      positions.set(assertion.id, { x, y });
-    });
-  });
-
-  // Handle any assertions not assigned to a track (shouldn't happen, but be defensive)
-  branchAssertions.forEach(assertion => {
-    if (!positions.has(assertion.id)) {
-      const trackIndex = assertionToTrack.get(assertion.id) || 0;
-      const x = startX + (assertion.depth * layerSpacing);
-      const y = startY + (trackIndex * trackSpacing);
-      positions.set(assertion.id, { x, y });
-    }
-  });
+  // Use Sugiyama layout (handles shared dependencies properly)
+  const layers = assignLayers(branchAssertions);
+  const layerGroups = minimizeCrossings(branchAssertions, layers);
+  const positions = assignCoordinatesWithSugiyama(layerGroups, assertionToColor);
 
   // Determine if we need a "Done" terminus (2+ terminal assertions)
   const showTerminus = terminalAssertions.length > 1;
@@ -452,12 +422,12 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
           svg += `
   <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
   <path class="metro-dependency" d="M${parentPos.x},${parentPos.y} Q${midX},${parentPos.y} ${midX},${(parentPos.y + childPos.y) / 2} T${childPos.x},${childPos.y}"
-        fill="none" stroke="${trackColor}" stroke-width="3" opacity="0.6"/>`;
+        fill="none" stroke="${trackColor}" stroke-width="4" opacity="0.8"/>`;
         } else {
           svg += `
   <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
   <line class="metro-dependency" x1="${parentPos.x}" y1="${parentPos.y}" x2="${childPos.x}" y2="${childPos.y}"
-        stroke="${trackColor}" stroke-width="3" opacity="0.6"/>`;
+        stroke="${trackColor}" stroke-width="4" opacity="0.8"/>`;
         }
       }
     }
@@ -474,7 +444,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
         svg += `
   <!-- Convergence: ${escapeHTML(assertion.id)} → Done -->
   <path class="metro-dependency" d="M${terminalPos.x},${terminalPos.y} Q${midX},${terminalPos.y} ${midX},${(terminalPos.y + terminusPosition.y) / 2} T${terminusPosition.x},${terminusPosition.y}"
-        fill="none" stroke="${trackColor}" stroke-width="3" opacity="0.6"/>`;
+        fill="none" stroke="${trackColor}" stroke-width="4" opacity="0.8"/>`;
       }
     });
   }
@@ -486,7 +456,11 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
     const isCurrent = assertion.id === currentAssertion.id;
     const radius = isCurrent ? currentStationRadius : stationRadius;
-    const color = getStatusColor(assertion.status);
+    const trackColor = assertionToColor.get(assertion.id) || '#94a3b8';
+    const statusColor = getStatusColor(assertion.status);
+
+    // Use track color for fill, status color for border
+    const fillOpacity = assertion.status === 'done' ? 0.7 : 1.0;
     const strokeWidth = isCurrent ? 4 : 3;
     const glowFilter = isCurrent ? ' filter="drop-shadow(0 0 6px rgba(59, 130, 246, 0.6))"' : '';
 
@@ -500,7 +474,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   <!-- Station: ${escapeHTML(assertion.id)} -->
   <g class="metro-station" data-action="show-detail" data-assertion-id="${escapeHTML(assertion.id)}" data-type="assertion" transform="translate(${pos.x}, ${pos.y})">
     <title>${escapeHTML(assertion.title)}</title>
-    <circle r="${radius}" fill="${color}" stroke="#fff" stroke-width="${strokeWidth}"${glowFilter}/>
+    <circle r="${radius}" fill="${trackColor}" fill-opacity="${fillOpacity}" stroke="${statusColor}" stroke-width="${strokeWidth}"${glowFilter}/>
     <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: ${isCurrent ? '700' : '400'};">${escapeHTML(displayTitle)}</text>
   </g>`;
   });
