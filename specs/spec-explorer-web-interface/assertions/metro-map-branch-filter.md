@@ -3,7 +3,7 @@ id: metro-map-branch-filter
 parent: spec-explorer-web-interface
 created: 2026-02-25T18:32:00Z
 priority: 2
-status: draft
+status: not_started
 depends-on: metro-map-layout-algorithm
 branch: feature/dependency-visualization
 ---

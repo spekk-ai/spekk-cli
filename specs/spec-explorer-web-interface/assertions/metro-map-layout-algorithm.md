@@ -3,7 +3,7 @@ id: metro-map-layout-algorithm
 parent: spec-explorer-web-interface
 created: 2026-02-25T18:31:00Z
 priority: 1
-status: draft
+status: not_started
 depends-on: metro-map-dependency-view
 branch: feature/dependency-visualization
 ---
