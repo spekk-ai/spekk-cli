@@ -228,7 +228,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
     svg += `
   <!-- Station: ${escapeHTML(assertion.id)} -->
-  <g class="metro-station" transform="translate(${pos.x}, ${pos.y})">
+  <g class="metro-station" data-action="show-detail" data-assertion-id="${escapeHTML(assertion.id)}" data-type="assertion" transform="translate(${pos.x}, ${pos.y})">
     <circle r="${radius}" fill="${color}" stroke="#fff" stroke-width="${strokeWidth}"${glowFilter}/>
     <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: ${isCurrent ? '700' : '400'};">${escapeHTML(displayTitle)}</text>
   </g>`;
@@ -762,33 +762,47 @@ export function generateSpecExplorerHTML(specs, assertions) {
                 el.classList.remove('active');
             });
             document.getElementById('empty-state').style.display = 'none';
-            
+
             // Remove selection from all items
             document.querySelectorAll('.assertion-item').forEach(el => {
                 el.classList.remove('selected');
             });
-            
+
             // Show selected content
             const detailElement = document.getElementById('detail-' + type + '-' + id);
             if (detailElement) {
                 detailElement.classList.add('active');
             }
-            
-            // Mark assertion as selected
-            if (type === 'assertion' && event) {
-                const target = event.target.closest('.assertion-item');
-                if (target) {
-                    target.classList.add('selected');
+
+            // Mark assertion as selected in tree view
+            if (type === 'assertion') {
+                // Find the assertion item in tree view
+                const assertionItem = document.querySelector('.assertion-item[data-assertion-id="' + id + '"]');
+                if (assertionItem) {
+                    assertionItem.classList.add('selected');
+
+                    // Expand parent spec if collapsed
+                    const assertionsList = assertionItem.closest('.assertions-list');
+                    if (assertionsList && !assertionsList.classList.contains('expanded')) {
+                        const specId = assertionsList.id.replace('assertions-', '');
+                        const toggle = document.getElementById('toggle-' + specId);
+                        const header = toggle.parentElement;
+
+                        assertionsList.classList.add('expanded');
+                        toggle.classList.add('expanded');
+                        header.classList.add('expanded');
+                        toggle.textContent = '▼';
+                    }
                 }
             }
-            
+
             // Mark spec header as selected
             if (type === 'spec' && event) {
                 // Remove selection from all spec headers
                 document.querySelectorAll('.spec-header').forEach(el => {
                     el.classList.remove('selected');
                 });
-                
+
                 // Find and select the spec header
                 const toggleElement = document.getElementById('toggle-' + id);
                 if (toggleElement) {

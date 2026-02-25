@@ -3,7 +3,7 @@ id: clickable-metro-map-stations
 parent: spec-explorer-web-interface
 created: 2026-02-25T19:01:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
