@@ -233,8 +233,6 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   // Generate SVG
   let svg = `
 <svg class="metro-map" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
-  <!-- Main track -->
-  <line class="metro-track" x1="40" y1="${trackY}" x2="${maxX}" y2="${trackY}"/>
   `;
 
   // Add dependency lines
@@ -706,11 +704,19 @@ export function generateSpecExplorerHTML(specs, assertions) {
             background: #f8fafc;
             border-radius: 8px;
             border: 1px solid #e2e8f0;
-            max-height: 300px;
-            overflow-x: auto;
-            overflow-y: hidden;
+            max-height: 400px;
+            overflow: hidden;
             position: relative;
-            scroll-behavior: smooth;
+            cursor: grab;
+        }
+
+        .metro-map-section.panning {
+            cursor: grabbing;
+            user-select: none;
+        }
+
+        .metro-map-section .metro-map {
+            transition: transform 0.1s ease-out;
         }
 
         .metro-map-section::after {
@@ -1146,6 +1152,108 @@ export function generateSpecExplorerHTML(specs, assertions) {
                     tooltip.classList.remove('visible');
                 }
             });
+        })();
+
+        // Metro map pan and zoom functionality
+        (function() {
+            // Track pan state for each metro map
+            const panStates = new Map();
+
+            function initPanForMap(mapContainer) {
+                const svg = mapContainer.querySelector('.metro-map');
+                if (!svg) return;
+
+                const panState = {
+                    isPanning: false,
+                    startX: 0,
+                    startY: 0,
+                    currentX: 0,
+                    currentY: 0
+                };
+                panStates.set(mapContainer, panState);
+
+                // Calculate bounds to constrain panning
+                function calculateBounds() {
+                    const containerRect = mapContainer.getBoundingClientRect();
+                    const svgRect = svg.getBoundingClientRect();
+
+                    return {
+                        minX: Math.min(0, containerRect.width - svgRect.width),
+                        maxX: 0,
+                        minY: Math.min(0, containerRect.height - svgRect.height),
+                        maxY: 0
+                    };
+                }
+
+                // Mouse down - start panning
+                mapContainer.addEventListener('mousedown', function(e) {
+                    // Don't pan if clicking a station
+                    if (e.target.closest('.metro-station')) return;
+
+                    panState.isPanning = true;
+                    panState.startX = e.clientX - panState.currentX;
+                    panState.startY = e.clientY - panState.currentY;
+                    mapContainer.classList.add('panning');
+                });
+
+                // Mouse move - perform panning
+                document.addEventListener('mousemove', function(e) {
+                    if (!panState.isPanning) return;
+
+                    const newX = e.clientX - panState.startX;
+                    const newY = e.clientY - panState.startY;
+
+                    // Constrain to bounds
+                    const bounds = calculateBounds();
+                    panState.currentX = Math.max(bounds.minX, Math.min(bounds.maxX, newX));
+                    panState.currentY = Math.max(bounds.minY, Math.min(bounds.maxY, newY));
+
+                    svg.style.transform = \`translate(\${panState.currentX}px, \${panState.currentY}px)\`;
+                });
+
+                // Mouse up - stop panning
+                document.addEventListener('mouseup', function() {
+                    if (panState.isPanning) {
+                        panState.isPanning = false;
+                        mapContainer.classList.remove('panning');
+                    }
+                });
+
+                // Mouse leave - stop panning
+                document.addEventListener('mouseleave', function() {
+                    if (panState.isPanning) {
+                        panState.isPanning = false;
+                        mapContainer.classList.remove('panning');
+                    }
+                });
+            }
+
+            // Initialize panning for all metro maps on page load
+            document.addEventListener('DOMContentLoaded', function() {
+                const metroMapContainers = document.querySelectorAll('.metro-map-section');
+                metroMapContainers.forEach(initPanForMap);
+            });
+
+            // Re-initialize when detail panels change (in case new metro maps are shown)
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Element node
+                            const metroMaps = node.querySelectorAll ? node.querySelectorAll('.metro-map-section') : [];
+                            metroMaps.forEach(initPanForMap);
+                        }
+                    });
+                });
+            });
+
+            // Observe the detail panel for changes
+            const detailPanel = document.querySelector('.detail-panel');
+            if (detailPanel) {
+                observer.observe(detailPanel, {
+                    childList: true,
+                    subtree: true
+                });
+            }
         })();
     </script>
 </body>
