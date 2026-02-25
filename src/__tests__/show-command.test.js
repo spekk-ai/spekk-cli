@@ -345,4 +345,157 @@ depends-on: assertion-b
       cleanup();
     }
   });
+
+  test('metro map shows "Done" terminus when multiple terminal assertions exist', () => {
+    cleanup();
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      const specsDir = join(testDir, 'specs');
+      const specDir = join(specsDir, 'test-spec');
+      const assertionsDir = join(specDir, 'assertions');
+      mkdirSync(assertionsDir, { recursive: true });
+
+      writeFileSync(join(specDir, 'test-spec.md'), `---
+id: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+---
+
+# Test Spec`);
+
+      // Create a branch with parallel work that converges
+      // A (root)
+      // ├─ B (depends on A)
+      // └─ C (depends on A)
+      // Both B and C are terminals
+      writeFileSync(join(assertionsDir, 'assertion-a.md'), `---
+id: assertion-a
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: done
+branch: feature/parallel
+---
+
+# Assertion A`);
+
+      writeFileSync(join(assertionsDir, 'assertion-b.md'), `---
+id: assertion-b
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: in_progress
+branch: feature/parallel
+depends-on: assertion-a
+---
+
+# Assertion B`);
+
+      writeFileSync(join(assertionsDir, 'assertion-c.md'), `---
+id: assertion-c
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: not_started
+branch: feature/parallel
+depends-on: assertion-a
+---
+
+# Assertion C`);
+
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, {
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 5000,
+        env: { ...process.env, NODE_ENV: 'test' }
+      });
+
+      const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
+
+      // Should have "Done" terminus
+      assert.ok(htmlContent.includes('Done Terminus'), 'Should include Done terminus comment');
+      assert.ok(htmlContent.includes('class="metro-terminus"'), 'Should have metro-terminus class');
+      assert.ok(htmlContent.includes('>Done</text>'), 'Should have "Done" label');
+
+      // Should have convergence lines
+      assert.ok(htmlContent.includes('Convergence:'), 'Should have convergence line comments');
+
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('metro map does not show "Done" terminus when only one terminal assertion exists', () => {
+    cleanup();
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      const specsDir = join(testDir, 'specs');
+      const specDir = join(specsDir, 'test-spec');
+      const assertionsDir = join(specDir, 'assertions');
+      mkdirSync(assertionsDir, { recursive: true });
+
+      writeFileSync(join(specDir, 'test-spec.md'), `---
+id: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+---
+
+# Test Spec`);
+
+      // Create a simple linear chain: A -> B -> C
+      // Only C is terminal
+      writeFileSync(join(assertionsDir, 'assertion-a.md'), `---
+id: assertion-a
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: done
+branch: feature/linear
+---
+
+# Assertion A`);
+
+      writeFileSync(join(assertionsDir, 'assertion-b.md'), `---
+id: assertion-b
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: done
+branch: feature/linear
+depends-on: assertion-a
+---
+
+# Assertion B`);
+
+      writeFileSync(join(assertionsDir, 'assertion-c.md'), `---
+id: assertion-c
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: in_progress
+branch: feature/linear
+depends-on: assertion-b
+---
+
+# Assertion C`);
+
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, {
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 5000,
+        env: { ...process.env, NODE_ENV: 'test' }
+      });
+
+      const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
+
+      // Should NOT have "Done" terminus
+      assert.ok(!htmlContent.includes('Done Terminus'), 'Should not include Done terminus (only 1 terminal)');
+      assert.ok(!htmlContent.includes('class="metro-terminus"'), 'Should not have metro-terminus class');
+
+    } finally {
+      cleanup();
+    }
+  });
 });
