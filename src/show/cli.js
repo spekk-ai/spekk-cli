@@ -648,7 +648,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
         .container {
             display: flex;
             height: 100vh;
-            max-width: 1600px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -1090,6 +1090,14 @@ export function generateSpecExplorerHTML(specs, assertions) {
             fill: #2563eb;
         }
 
+        .metro-station-current circle {
+            filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.6));
+        }
+
+        .metro-station-current .metro-label {
+            font-weight: 700 !important;
+        }
+
         .metro-terminus {
             cursor: default;
             pointer-events: none;
@@ -1499,7 +1507,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
                 }
             }
 
-            // Update current station highlight without re-rendering
+            // Update current station highlight by toggling .metro-station-current class (no SVG re-render)
             const visibleMap = document.getElementById('metro-map-' + branch);
             if (!visibleMap) return;
 
@@ -1507,20 +1515,19 @@ export function generateSpecExplorerHTML(specs, assertions) {
             allStations.forEach(station => {
                 const stationId = station.dataset.assertionId;
                 const circle = station.querySelector('circle');
-                const label = station.querySelector('.metro-label');
-
                 if (stationId === assertionId) {
-                    // Highlight current station
-                    circle.setAttribute('r', '10');
-                    circle.setAttribute('stroke-width', '4');
-                    circle.setAttribute('filter', 'drop-shadow(0 0 6px rgba(59, 130, 246, 0.6))');
-                    if (label) label.style.fontWeight = '700';
+                    station.classList.add('metro-station-current');
+                    // Set SVG attributes for radius/stroke (CSS cannot reliably set SVG geometry attributes)
+                    if (circle) {
+                        circle.setAttribute('r', '10');
+                        circle.setAttribute('stroke-width', '4');
+                    }
                 } else {
-                    // Reset other stations
-                    circle.setAttribute('r', '8');
-                    circle.setAttribute('stroke-width', '3');
-                    circle.removeAttribute('filter');
-                    if (label) label.style.fontWeight = '400';
+                    station.classList.remove('metro-station-current');
+                    if (circle) {
+                        circle.setAttribute('r', '8');
+                        circle.setAttribute('stroke-width', '3');
+                    }
                 }
             });
         }
