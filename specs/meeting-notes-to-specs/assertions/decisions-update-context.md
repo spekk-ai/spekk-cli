@@ -3,12 +3,14 @@ id: decisions-update-context
 parent: meeting-notes-to-specs
 created: 2025-02-12T19:30:00Z
 priority: 2
-status: draft
+status: done
 ---
 
 # Decisions Update CONTEXT.md
 
 Architectural decisions and patterns discussed in meetings are extracted by the coach's meeting-processing skill and added to CONTEXT.md.
+
+**Tests:** src/coach/__tests__/decisions-update-context.test.js
 
 ## Success Criteria
 

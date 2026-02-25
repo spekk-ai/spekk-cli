@@ -285,4 +285,103 @@ export class MeetingNotesToSpecs extends Skill {
     if (num > 3) return 3;
     return num;
   }
+
+  /**
+   * Format decisions as markdown list items with date stamps
+   * @param {Array<{decision: string, context?: string}>} decisions
+   * @param {string} meetingDate - Date string like "2025-02-12"
+   * @returns {string} Formatted markdown
+   */
+  formatDecisions(decisions, meetingDate) {
+    if (!decisions || decisions.length === 0) return '';
+
+    return decisions.map(d => {
+      let entry = `- Decision from meeting ${meetingDate}: ${d.decision}`;
+      if (d.context) {
+        entry += `\n  - *Context: ${d.context}*`;
+      }
+      return entry;
+    }).join('\n') + '\n';
+  }
+
+  /**
+   * Generate updated CONTEXT.md content
+   * @param {Array<{decision: string, context?: string}>} decisions
+   * @param {string} meetingDate
+   * @param {string|null} existingContent - Current CONTEXT.md content or null
+   * @returns {string} Updated content (empty string if no decisions)
+   */
+  generateContextUpdate(decisions, meetingDate, existingContent) {
+    if (!decisions || decisions.length === 0) return '';
+
+    const formatted = this.formatDecisions(decisions, meetingDate);
+
+    if (!existingContent) {
+      return `# Project Context\n\n## Architectural Decisions\n\n${formatted}`;
+    }
+
+    // If existing content has an Architectural Decisions section, append there
+    const sectionHeader = '## Architectural Decisions';
+    const sectionIndex = existingContent.indexOf(sectionHeader);
+
+    if (sectionIndex === -1) {
+      // No section yet — append at end
+      return existingContent.trimEnd() + `\n\n${sectionHeader}\n\n${formatted}`;
+    }
+
+    // Find the end of the Architectural Decisions section (next ## heading or EOF)
+    const afterHeader = sectionIndex + sectionHeader.length;
+    const nextSectionMatch = existingContent.slice(afterHeader).search(/\n## /);
+
+    if (nextSectionMatch === -1) {
+      // No next section — append at end
+      return existingContent.trimEnd() + '\n' + formatted;
+    }
+
+    // Insert before next section
+    const insertPoint = afterHeader + nextSectionMatch;
+    const before = existingContent.slice(0, insertPoint).trimEnd();
+    const after = existingContent.slice(insertPoint);
+    return before + '\n' + formatted + after;
+  }
+
+  /**
+   * Generate a simple diff showing changes to CONTEXT.md
+   * @param {string|null} oldContent
+   * @param {string} newContent
+   * @returns {string} Human-readable diff
+   */
+  generateContextDiff(oldContent, newContent) {
+    if (!oldContent) {
+      const lines = newContent.split('\n').map(l => `+ ${l}`).join('\n');
+      return `CONTEXT.md (new file)\n${lines}`;
+    }
+
+    const oldLines = oldContent.split('\n');
+    const newLines = newContent.split('\n');
+    const oldSet = new Set(oldLines);
+    const additions = newLines.filter(l => !oldSet.has(l));
+
+    return `CONTEXT.md (updated)\n${additions.map(l => `+ ${l}`).join('\n')}`;
+  }
+
+  /**
+   * Read CONTEXT.md from a directory
+   * @param {string} baseDir
+   * @returns {string|null} File content or null if not found
+   */
+  readContextFile(baseDir = process.cwd()) {
+    const filePath = path.join(baseDir, 'CONTEXT.md');
+    if (!fs.existsSync(filePath)) return null;
+    return fs.readFileSync(filePath, 'utf8');
+  }
+
+  /**
+   * Write CONTEXT.md to a directory
+   * @param {string} content
+   * @param {string} baseDir
+   */
+  writeContextFile(content, baseDir = process.cwd()) {
+    fs.writeFileSync(path.join(baseDir, 'CONTEXT.md'), content, 'utf8');
+  }
 }
