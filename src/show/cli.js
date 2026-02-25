@@ -409,26 +409,55 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   const currentStationRadius = 10;
   const terminusRadius = 12;
 
-  // Use Sugiyama layout (handles shared dependencies properly)
-  const layers = assignLayers(branchAssertions);
-  const layerGroups = minimizeCrossings(branchAssertions, layers);
-  const positions = assignCoordinatesWithSugiyama(layerGroups, assertionToColor);
+  // Layout each tree independently, stacking vertically
+  const positions = new Map();
+  const layerSpacing = 150;
+  const treeSpacing = 100; // Vertical spacing between trees
+  const startX = 60;
+  let currentTreeY = 80;
 
-  // Determine if we need a "Done" terminus (2+ terminal assertions)
+  terminalAssertions.forEach((terminal, treeIndex) => {
+    // Get all nodes in this tree (terminal and its ancestors)
+    const treeNodes = [];
+    let currentNode = terminal;
+    while (currentNode) {
+      treeNodes.push(currentNode);
+      const parent = branchAssertions.find(a => a.id === currentNode.dependsOn);
+      currentNode = parent;
+    }
+
+    // Reverse to go from root to terminal
+    treeNodes.reverse();
+
+    // Position nodes left-to-right
+    treeNodes.forEach((node, depth) => {
+      const x = startX + (depth * layerSpacing);
+      const y = currentTreeY;
+      positions.set(node.id, { x, y });
+    });
+
+    // Move down for next tree
+    currentTreeY += treeSpacing;
+  });
+
+  // Give each terminal assertion its own "Done" node (only if multiple terminals)
   const showTerminus = terminalAssertions.length > 1;
-  let terminusPosition = null;
+  const terminusPositions = new Map(); // terminal.id -> {x, y}
 
   if (showTerminus) {
     const maxX = Math.max(...Array.from(positions.values()).map(p => p.x));
-    const terminusX = maxX + 150; // layerSpacing
+    const terminusX = maxX + 150;
 
-    // Position terminus at the vertical center of terminal assertions
-    const terminalYPositions = terminalAssertions.map(a => positions.get(a.id).y);
-    const minY = Math.min(...terminalYPositions);
-    const maxTerminalY = Math.max(...terminalYPositions);
-    const terminusY = (minY + maxTerminalY) / 2;
-
-    terminusPosition = { x: terminusX, y: terminusY };
+    // Each terminal gets its own Done node at the same Y position
+    terminalAssertions.forEach(terminal => {
+      const terminalPos = positions.get(terminal.id);
+      if (terminalPos) {
+        terminusPositions.set(terminal.id, {
+          x: terminusX,
+          y: terminalPos.y
+        });
+      }
+    });
   }
 
   const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + (showTerminus ? 200 : 150);
@@ -466,18 +495,18 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     }
   });
 
-  // Add lines from terminal assertions to "Done" terminus
-  if (showTerminus && terminusPosition) {
+  // Add lines from terminal assertions to their individual "Done" nodes
+  if (showTerminus) {
     terminalAssertions.forEach(assertion => {
       const terminalPos = positions.get(assertion.id);
-      if (terminalPos) {
+      const donePos = terminusPositions.get(assertion.id);
+
+      if (terminalPos && donePos) {
         const trackColor = assertionToColor.get(assertion.id) || '#94a3b8';
-        // Draw curved line to terminus
-        const midX = (terminalPos.x + terminusPosition.x) / 2;
         svg += `
   <!-- Convergence: ${escapeHTML(assertion.id)} → Done -->
-  <path class="metro-dependency" d="M${terminalPos.x},${terminalPos.y} Q${midX},${terminalPos.y} ${midX},${(terminalPos.y + terminusPosition.y) / 2} T${terminusPosition.x},${terminusPosition.y}"
-        fill="none" stroke="${trackColor}" stroke-width="4" opacity="0.8"/>`;
+  <line class="metro-dependency" x1="${terminalPos.x}" y1="${terminalPos.y}" x2="${donePos.x}" y2="${donePos.y}"
+        stroke="${trackColor}" stroke-width="4" opacity="0.8"/>`;
       }
     });
   }
@@ -512,15 +541,21 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   </g>`;
   });
 
-  // Add "Done" terminus if there are multiple terminal assertions
-  if (showTerminus && terminusPosition) {
-    svg += `
+  // Add "Done" nodes - one for each terminal assertion
+  if (showTerminus) {
+    terminalAssertions.forEach(assertion => {
+      const donePos = terminusPositions.get(assertion.id);
+      if (donePos) {
+        const trackColor = assertionToColor.get(assertion.id) || '#94a3b8';
+        svg += `
   <!-- Done Terminus -->
-  <g class="metro-terminus" transform="translate(${terminusPosition.x}, ${terminusPosition.y})">
-    <circle r="${terminusRadius}" fill="#10b981" stroke="#fff" stroke-width="4"/>
+  <g class="metro-terminus" transform="translate(${donePos.x}, ${donePos.y})">
+    <circle r="${terminusRadius}" fill="${trackColor}" stroke="#fff" stroke-width="4"/>
     <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
     <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
   </g>`;
+      }
+    });
   }
 
   svg += `
