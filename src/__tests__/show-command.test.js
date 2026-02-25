@@ -498,4 +498,59 @@ depends-on: assertion-b
       cleanup();
     }
   });
+
+  test('includes completed specs toggle checkbox and JavaScript', () => {
+    cleanup();
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      const specsDir = join(testDir, 'specs');
+      const specDir = join(specsDir, 'test-spec');
+      const assertionsDir = join(specDir, 'assertions');
+      mkdirSync(assertionsDir, { recursive: true });
+
+      writeFileSync(join(specDir, 'test-spec.md'), `---
+id: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+---
+
+# Test Spec`);
+
+      writeFileSync(join(assertionsDir, 'test-assertion.md'), `---
+id: test-assertion
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: not_started
+---
+
+# Test Assertion`);
+
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, {
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 5000,
+        env: { ...process.env, NODE_ENV: 'test' }
+      });
+
+      const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
+
+      // Verify toggle checkbox is present
+      assert.ok(htmlContent.includes('id="toggle-completed-specs"'), 'Should include toggle checkbox');
+      assert.ok(htmlContent.includes('Show completed specs'), 'Should include toggle label');
+
+      // Verify CSS for hiding completed specs
+      assert.ok(htmlContent.includes('.spec-item.completed'), 'Should include CSS for completed specs');
+      assert.ok(htmlContent.includes('.show-completed'), 'Should include CSS for show-completed class');
+
+      // Verify JavaScript functions are present
+      assert.ok(htmlContent.includes('initializeCompletedSpecsToggle'), 'Should include initialization function');
+      assert.ok(htmlContent.includes('updateHiddenCount'), 'Should include updateHiddenCount function');
+      assert.ok(htmlContent.includes('localStorage.getItem'), 'Should include localStorage functionality');
+
+    } finally {
+      cleanup();
+    }
+  });
 });

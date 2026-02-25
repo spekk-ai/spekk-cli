@@ -383,7 +383,48 @@ export function generateSpecExplorerHTML(specs, assertions) {
         .spec-item {
             margin-bottom: 12px;
         }
-        
+
+        /* Hide completed specs by default */
+        .spec-item.completed {
+            display: none;
+        }
+
+        /* Show completed specs when toggle is checked */
+        .spec-tree.show-completed .spec-item.completed {
+            display: block;
+        }
+
+        .toggle-container {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .toggle-container label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 14px;
+            color: #475569;
+            user-select: none;
+        }
+
+        .toggle-container input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .header .stats {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .header .hidden-count {
+            color: #94a3b8;
+            font-size: 13px;
+            font-style: italic;
+        }
+
         .spec-header {
             display: flex;
             align-items: center;
@@ -691,7 +732,15 @@ export function generateSpecExplorerHTML(specs, assertions) {
         <div class="tree-panel">
             <div class="header">
                 <h1>Spec Tree - ${projectName}</h1>
-                <p>${specs.length} specs, ${assertions.length} assertions</p>
+                <p class="stats">${specs.length} specs, ${assertions.length} assertions</p>
+                <p class="hidden-count" id="hidden-count"></p>
+
+                <div class="toggle-container">
+                    <label>
+                        <input type="checkbox" id="toggle-completed-specs">
+                        Show completed specs
+                    </label>
+                </div>
             </div>
             
             <ul class="spec-tree">
@@ -767,6 +816,64 @@ export function generateSpecExplorerHTML(specs, assertions) {
     </div>
     
     <script>
+        // Initialize completed specs toggle on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCompletedSpecsToggle();
+        });
+
+        function initializeCompletedSpecsToggle() {
+            const specTree = document.querySelector('.spec-tree');
+            const toggleCheckbox = document.getElementById('toggle-completed-specs');
+            const hiddenCountElement = document.getElementById('hidden-count');
+
+            // Mark all completed specs with the 'completed' class
+            const specItems = document.querySelectorAll('.spec-item');
+            specItems.forEach(specItem => {
+                const statusBadge = specItem.querySelector('.spec-header .status-badge');
+                if (statusBadge && statusBadge.classList.contains('status-done')) {
+                    specItem.classList.add('completed');
+                }
+            });
+
+            // Load saved preference from localStorage (default: false = hidden)
+            const showCompleted = localStorage.getItem('spekkShowCompleted') === 'true';
+            toggleCheckbox.checked = showCompleted;
+            if (showCompleted) {
+                specTree.classList.add('show-completed');
+            }
+
+            // Update hidden count
+            updateHiddenCount();
+
+            // Handle toggle changes
+            toggleCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                localStorage.setItem('spekkShowCompleted', isChecked.toString());
+
+                if (isChecked) {
+                    specTree.classList.add('show-completed');
+                } else {
+                    specTree.classList.remove('show-completed');
+                }
+
+                updateHiddenCount();
+            });
+        }
+
+        function updateHiddenCount() {
+            const hiddenCountElement = document.getElementById('hidden-count');
+            const completedSpecs = document.querySelectorAll('.spec-item.completed');
+            const isShowing = document.querySelector('.spec-tree').classList.contains('show-completed');
+
+            const completedCount = completedSpecs.length;
+
+            if (completedCount > 0 && !isShowing) {
+                hiddenCountElement.textContent = \`(\${completedCount} completed \${completedCount === 1 ? 'spec' : 'specs'} hidden)\`;
+            } else {
+                hiddenCountElement.textContent = '';
+            }
+        }
+
         // Event delegation for all clicks
         document.addEventListener('click', function(event) {
             const action = event.target.closest('[data-action]')?.dataset.action;

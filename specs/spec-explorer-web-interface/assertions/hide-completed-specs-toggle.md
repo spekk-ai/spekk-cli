@@ -3,7 +3,7 @@ id: hide-completed-specs-toggle
 parent: spec-explorer-web-interface
 created: 2026-02-25T19:10:00Z
 priority: 2
-status: not_started
+status: done
 branch: feature/dependency-visualization
 ---
 
