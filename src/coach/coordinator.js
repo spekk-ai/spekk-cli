@@ -348,6 +348,126 @@ export class Coordinator extends Skill {
   }
 
   /**
+   * Update YAML frontmatter with depends-on and branch fields
+   * @param {string} filePath - Path to assertion file
+   * @param {Object} updates - { depends-on: string|null, branch: string }
+   */
+  updateAssertionFrontmatter(filePath, updates) {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.split('\n');
+    
+    // Find frontmatter boundaries
+    let frontmatterStart = -1;
+    let frontmatterEnd = -1;
+    
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i] === '---') {
+        if (frontmatterStart === -1) {
+          frontmatterStart = i;
+        } else {
+          frontmatterEnd = i;
+          break;
+        }
+      }
+    }
+    
+    if (frontmatterStart === -1 || frontmatterEnd === -1) {
+      throw new Error(`Invalid frontmatter in ${filePath}`);
+    }
+    
+    // Find existing field indices
+    let dependsOnLineIndex = -1;
+    let branchLineIndex = -1;
+    let statusLineIndex = -1;
+    
+    for (let i = frontmatterStart + 1; i < frontmatterEnd; i++) {
+      if (lines[i].startsWith('depends-on:')) {
+        dependsOnLineIndex = i;
+      } else if (lines[i].startsWith('branch:')) {
+        branchLineIndex = i;
+      } else if (lines[i].startsWith('status:')) {
+        statusLineIndex = i;
+      }
+    }
+    
+    // Determine insertion point (after status field)
+    let insertionPoint = frontmatterEnd;
+    if (statusLineIndex !== -1) {
+      insertionPoint = statusLineIndex + 1;
+    }
+    
+    // Track how many lines we've added/removed
+    let linesAdded = 0;
+    
+    // Update depends-on field (only if provided in updates)
+    if ('depends-on' in updates) {
+      const dependsOn = updates['depends-on'];
+      
+      if (dependsOn) {
+        // Add or update depends-on field
+        const dependsOnLine = `depends-on: ${dependsOn}`;
+        
+        if (dependsOnLineIndex !== -1) {
+          // Update existing field
+          lines[dependsOnLineIndex] = dependsOnLine;
+        } else {
+          // Insert new field at insertion point
+          lines.splice(insertionPoint, 0, dependsOnLine);
+          linesAdded++;
+          frontmatterEnd++;
+          
+          // Update branchLineIndex if it's after the insertion
+          if (branchLineIndex !== -1 && branchLineIndex >= insertionPoint) {
+            branchLineIndex++;
+          }
+        }
+      } else {
+        // Remove depends-on field if it exists
+        if (dependsOnLineIndex !== -1) {
+          lines.splice(dependsOnLineIndex, 1);
+          linesAdded--;
+          frontmatterEnd--;
+          
+          // Update indices that are after the removed line
+          if (branchLineIndex !== -1 && branchLineIndex > dependsOnLineIndex) {
+            branchLineIndex--;
+          }
+          if (insertionPoint > dependsOnLineIndex) {
+            insertionPoint--;
+          }
+        }
+      }
+    }
+    
+    // Update branch field
+    if ('branch' in updates) {
+      const branchLine = `branch: ${updates.branch}`;
+      
+      if (branchLineIndex !== -1) {
+        // Update existing field
+        lines[branchLineIndex] = branchLine;
+      } else {
+        // Insert new field after depends-on (if exists) or at insertion point
+        let branchInsertPoint = insertionPoint;
+        
+        // If we just added depends-on, insert branch right after it
+        if ('depends-on' in updates && updates['depends-on']) {
+          if (dependsOnLineIndex !== -1) {
+            branchInsertPoint = dependsOnLineIndex + 1;
+          } else {
+            branchInsertPoint = insertionPoint + linesAdded;
+          }
+        }
+        
+        lines.splice(branchInsertPoint, 0, branchLine);
+        frontmatterEnd++;
+      }
+    }
+    
+    fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
+  }
+
+  /**
    * Update all assertion files with dependency information
    * @param {Object} dependencies - Map of assertion-id -> { depends-on, reasoning }
    * @param {Array<Object>} assertions - Array of assertion objects
@@ -360,6 +480,36 @@ export class Coordinator extends Skill {
       const dep = dependencies[assertion.id];
       if (dep) {
         this.updateDependsOnField(assertion.filePath, dep['depends-on']);
+        updatedFiles.push(assertion.filePath);
+      }
+    }
+    
+    return updatedFiles;
+  }
+
+  /**
+   * Update all assertion files with dependency and branch metadata
+   * @param {Array<Object>} branchAssignments - Array of { branch, assertions }
+   * @param {Object} dependencies - Map of assertion-id -> { depends-on, reasoning }
+   * @param {string} baseDir - Project root directory
+   * @returns {Array<string>} Array of updated file paths
+   */
+  updateAssertionFilesWithBranchMetadata(branchAssignments, dependencies, baseDir = process.cwd()) {
+    const updatedFiles = [];
+    
+    for (const assignment of branchAssignments) {
+      for (const assertion of assignment.assertions) {
+        const updates = {
+          branch: assignment.branch
+        };
+        
+        // Add depends-on field only if dependency exists
+        const dep = dependencies[assertion.id];
+        if (dep && dep['depends-on']) {
+          updates['depends-on'] = dep['depends-on'];
+        }
+        
+        this.updateAssertionFrontmatter(assertion.filePath, updates);
         updatedFiles.push(assertion.filePath);
       }
     }
@@ -388,6 +538,135 @@ export class Coordinator extends Skill {
     
     // Commit
     const message = `coordinator: Analyze and update assertion dependencies\n\nUpdated ${filePaths.length} assertion(s) with dependency metadata`;
+    const msgFile = path.join(baseDir, '.git', 'COORDINATOR_COMMIT_MSG');
+    fs.writeFileSync(msgFile, message, 'utf8');
+    
+    try {
+      execSync(`git commit -F "${msgFile}"`, execOpts);
+    } finally {
+      if (fs.existsSync(msgFile)) {
+        fs.unlinkSync(msgFile);
+      }
+    }
+    
+    const commitHash = execSync('git rev-parse --short HEAD', execOpts).trim();
+    
+    return { success: true, commitHash };
+  }
+
+  /**
+   * Format dependency tree for a branch assignment
+   * @param {Array<Object>} assertions - Array of assertions in this branch
+   * @param {Object} dependencies - Map of assertion-id -> { depends-on, reasoning }
+   * @returns {string} Formatted tree representation
+   */
+  formatBranchDependencyTree(assertions, dependencies) {
+    // Build adjacency lists
+    const dependents = {};
+    const roots = [];
+    
+    for (const assertion of assertions) {
+      dependents[assertion.id] = [];
+    }
+    
+    for (const assertion of assertions) {
+      const dep = dependencies[assertion.id];
+      if (dep && dep['depends-on']) {
+        if (dependents[dep['depends-on']]) {
+          dependents[dep['depends-on']].push(assertion.id);
+        }
+      } else {
+        roots.push(assertion.id);
+      }
+    }
+    
+    // Build tree string recursively
+    const visited = new Set();
+    
+    const buildTree = (assertionId, prefix = '  - ') => {
+      if (visited.has(assertionId)) {
+        return '';
+      }
+      visited.add(assertionId);
+      
+      let tree = `${prefix}${assertionId}`;
+      const children = dependents[assertionId] || [];
+      
+      if (children.length > 0) {
+        tree += ' → ' + children.join(' → ');
+      }
+      
+      return tree + '\n';
+    };
+    
+    let output = '';
+    for (const root of roots) {
+      output += buildTree(root);
+    }
+    
+    return output;
+  }
+
+  /**
+   * Build comprehensive commit message for YAML frontmatter updates
+   * @param {Array<Object>} branchAssignments - Array of { branch, assertions }
+   * @param {Object} dependencies - Map of assertion-id -> { depends-on, reasoning }
+   * @param {number} fileCount - Number of files updated
+   * @returns {string} Commit message
+   */
+  buildCommitMessage(branchAssignments, dependencies, fileCount) {
+    let message = 'Add coordinator dependency and branch metadata\n\n';
+    message += 'Applied coordinator skill to organize work:\n\n';
+    
+    // Sort assignments: feature branches first, then main
+    const sorted = branchAssignments.sort((a, b) => {
+      if (a.branch === 'main') return 1;
+      if (b.branch === 'main') return -1;
+      return a.branch.localeCompare(b.branch);
+    });
+    
+    for (const assignment of sorted) {
+      const count = assignment.assertions.length;
+      const label = assignment.branch === 'main' ?
+        `${assignment.branch} (${count} assertion${count !== 1 ? 's' : ''})` :
+        `${assignment.branch} (${count} assertion${count !== 1 ? 's' : ''})`;
+      
+      message += `${label}:\n`;
+      message += this.formatBranchDependencyTree(assignment.assertions, dependencies);
+      message += '\n';
+    }
+    
+    message += 'Changes:\n';
+    message += '- Added depends-on field where dependencies exist\n';
+    message += '- Added branch field to all assertions\n';
+    message += '- No changes to spec content or existing metadata';
+    
+    return message;
+  }
+
+  /**
+   * Commit YAML frontmatter updates with comprehensive message
+   * @param {Array<string>} filePaths - Array of file paths to commit
+   * @param {Array<Object>} branchAssignments - Array of { branch, assertions }
+   * @param {Object} dependencies - Map of assertion-id -> { depends-on, reasoning }
+   * @param {string} baseDir - Working directory
+   * @returns {Object} Commit result
+   */
+  commitYAMLFrontmatterUpdates(filePaths, branchAssignments, dependencies, baseDir = process.cwd()) {
+    if (!filePaths || filePaths.length === 0) {
+      throw new Error('No files to commit');
+    }
+    
+    const execOpts = { cwd: baseDir, stdio: 'pipe', encoding: 'utf8' };
+    
+    // Stage files
+    for (const filePath of filePaths) {
+      const relativePath = path.relative(baseDir, filePath);
+      execSync(`git add "${relativePath}"`, execOpts);
+    }
+    
+    // Build comprehensive commit message
+    const message = this.buildCommitMessage(branchAssignments, dependencies, filePaths.length);
     const msgFile = path.join(baseDir, '.git', 'COORDINATOR_COMMIT_MSG');
     fs.writeFileSync(msgFile, message, 'utf8');
     
@@ -651,7 +930,67 @@ export class Coordinator extends Skill {
       assertionCount: assertions.length,
       clusterCount: clusters.length,
       branchAssignments: branchAssignments,
+      dependencies: dependencies,
       output: output,
+      warnings: warnings
+    };
+  }
+
+  /**
+   * Main orchestration method for YAML frontmatter updates
+   * Analyzes dependencies, assigns branches, and updates all assertion files
+   * @param {string} baseDir - Project root directory
+   * @param {Object} options - Options { dryRun: boolean }
+   * @returns {Object} Update result
+   */
+  async runYAMLFrontmatterUpdates(baseDir = process.cwd(), options = {}) {
+    // 1. Run branch assignment to get dependencies and branch assignments
+    const branchResult = await this.runBranchAssignment(baseDir);
+    
+    if (branchResult.assertionCount === 0) {
+      return {
+        success: true,
+        message: 'No draft or not_started assertions found',
+        assertionCount: 0
+      };
+    }
+    
+    const { branchAssignments, dependencies, warnings } = branchResult;
+    
+    // 2. Preview changes
+    const preview = this.buildCommitMessage(branchAssignments, dependencies, branchResult.assertionCount);
+    
+    if (options.dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        assertionCount: branchResult.assertionCount,
+        preview: preview,
+        warnings: warnings
+      };
+    }
+    
+    // 3. Update all assertion files
+    const updatedFiles = this.updateAssertionFilesWithBranchMetadata(
+      branchAssignments,
+      dependencies,
+      baseDir
+    );
+    
+    // 4. Commit changes
+    const commitResult = this.commitYAMLFrontmatterUpdates(
+      updatedFiles,
+      branchAssignments,
+      dependencies,
+      baseDir
+    );
+    
+    return {
+      success: true,
+      assertionCount: branchResult.assertionCount,
+      filesUpdated: updatedFiles.length,
+      commitHash: commitResult.commitHash,
+      branchAssignments: branchAssignments,
       warnings: warnings
     };
   }

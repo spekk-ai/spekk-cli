@@ -655,6 +655,225 @@ status: not_started
     });
   });
 
+  describe('Update Assertion Frontmatter', () => {
+    let assertionFile;
+
+    beforeEach(() => {
+      assertionFile = path.join(testDir, 'test-assertion.md');
+      fs.writeFileSync(
+        assertionFile,
+        `---
+id: test-assertion
+parent: test-spec
+created: 2026-02-01T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Test Assertion
+
+Content here.
+`
+      );
+    });
+
+    it('should add both depends-on and branch fields', () => {
+      coordinator.updateAssertionFrontmatter(assertionFile, {
+        'depends-on': 'parent-assertion',
+        branch: 'feature/test-spec'
+      });
+      
+      const content = fs.readFileSync(assertionFile, 'utf8');
+      assert.ok(content.includes('depends-on: parent-assertion'));
+      assert.ok(content.includes('branch: feature/test-spec'));
+    });
+
+    it('should add only branch field when depends-on is not provided', () => {
+      coordinator.updateAssertionFrontmatter(assertionFile, {
+        branch: 'feature/test-spec'
+      });
+      
+      const content = fs.readFileSync(assertionFile, 'utf8');
+      assert.ok(!content.includes('depends-on:'));
+      assert.ok(content.includes('branch: feature/test-spec'));
+    });
+
+    it('should update existing fields', () => {
+      // First add fields
+      coordinator.updateAssertionFrontmatter(assertionFile, {
+        'depends-on': 'first-parent',
+        branch: 'feature/old'
+      });
+      
+      // Then update them
+      coordinator.updateAssertionFrontmatter(assertionFile, {
+        'depends-on': 'second-parent',
+        branch: 'feature/new'
+      });
+      
+      const content = fs.readFileSync(assertionFile, 'utf8');
+      assert.ok(content.includes('depends-on: second-parent'));
+      assert.ok(content.includes('branch: feature/new'));
+      assert.ok(!content.includes('first-parent'));
+      assert.ok(!content.includes('feature/old'));
+    });
+
+    it('should preserve existing frontmatter fields', () => {
+      coordinator.updateAssertionFrontmatter(assertionFile, {
+        branch: 'feature/test'
+      });
+      
+      const content = fs.readFileSync(assertionFile, 'utf8');
+      assert.ok(content.includes('id: test-assertion'));
+      assert.ok(content.includes('parent: test-spec'));
+      assert.ok(content.includes('status: not_started'));
+      assert.ok(content.includes('priority: 1'));
+    });
+
+    it('should preserve markdown content', () => {
+      coordinator.updateAssertionFrontmatter(assertionFile, {
+        branch: 'feature/test'
+      });
+      
+      const content = fs.readFileSync(assertionFile, 'utf8');
+      assert.ok(content.includes('# Test Assertion'));
+      assert.ok(content.includes('Content here.'));
+    });
+  });
+
+  describe('Update Assertion Files with Branch Metadata', () => {
+    beforeEach(() => {
+      const specsDir = path.join(testDir, 'specs');
+      const testSpec = path.join(specsDir, 'test-spec');
+      const assertionsDir = path.join(testSpec, 'assertions');
+      
+      fs.mkdirSync(assertionsDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(assertionsDir, 'assertion-a.md'),
+        `---
+id: assertion-a
+parent: test-spec
+created: 2026-02-01T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Assertion A
+`
+      );
+
+      fs.writeFileSync(
+        path.join(assertionsDir, 'assertion-b.md'),
+        `---
+id: assertion-b
+parent: test-spec
+created: 2026-02-01T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Assertion B
+`
+      );
+    });
+
+    it('should update multiple files with branch and dependency metadata', () => {
+      const branchAssignments = [
+        {
+          branch: 'feature/test-spec',
+          assertions: [
+            { id: 'assertion-a', filePath: path.join(testDir, 'specs/test-spec/assertions/assertion-a.md') },
+            { id: 'assertion-b', filePath: path.join(testDir, 'specs/test-spec/assertions/assertion-b.md') }
+          ]
+        }
+      ];
+      
+      const dependencies = {
+        'assertion-a': { 'depends-on': null },
+        'assertion-b': { 'depends-on': 'assertion-a' }
+      };
+
+      const updatedFiles = coordinator.updateAssertionFilesWithBranchMetadata(
+        branchAssignments,
+        dependencies,
+        testDir
+      );
+      
+      assert.strictEqual(updatedFiles.length, 2);
+      
+      const contentA = fs.readFileSync(branchAssignments[0].assertions[0].filePath, 'utf8');
+      const contentB = fs.readFileSync(branchAssignments[0].assertions[1].filePath, 'utf8');
+      
+      assert.ok(contentA.includes('branch: feature/test-spec'));
+      assert.ok(!contentA.includes('depends-on:'));
+      
+      assert.ok(contentB.includes('branch: feature/test-spec'));
+      assert.ok(contentB.includes('depends-on: assertion-a'));
+    });
+  });
+
+  describe('Format Branch Dependency Tree', () => {
+    it('should format simple dependency chain', () => {
+      const assertions = [
+        { id: 'assertion-a' },
+        { id: 'assertion-b' }
+      ];
+      const dependencies = {
+        'assertion-a': { 'depends-on': null },
+        'assertion-b': { 'depends-on': 'assertion-a' }
+      };
+
+      const tree = coordinator.formatBranchDependencyTree(assertions, dependencies);
+      
+      assert.ok(tree.includes('assertion-a → assertion-b'));
+    });
+
+    it('should format multiple independent assertions', () => {
+      const assertions = [
+        { id: 'assertion-a' },
+        { id: 'assertion-b' }
+      ];
+      const dependencies = {
+        'assertion-a': { 'depends-on': null },
+        'assertion-b': { 'depends-on': null }
+      };
+
+      const tree = coordinator.formatBranchDependencyTree(assertions, dependencies);
+      
+      assert.ok(tree.includes('assertion-a'));
+      assert.ok(tree.includes('assertion-b'));
+      assert.ok(!tree.includes('→'));
+    });
+  });
+
+  describe('Build Commit Message', () => {
+    it('should build comprehensive commit message', () => {
+      const branchAssignments = [
+        {
+          branch: 'feature/test-spec',
+          assertions: [
+            { id: 'assertion-a' },
+            { id: 'assertion-b' }
+          ]
+        }
+      ];
+      const dependencies = {
+        'assertion-a': { 'depends-on': null },
+        'assertion-b': { 'depends-on': 'assertion-a' }
+      };
+
+      const message = coordinator.buildCommitMessage(branchAssignments, dependencies, 2);
+      
+      assert.ok(message.includes('Add coordinator dependency and branch metadata'));
+      assert.ok(message.includes('feature/test-spec'));
+      assert.ok(message.includes('assertion-a'));
+      assert.ok(message.includes('assertion-b'));
+      assert.ok(message.includes('Added depends-on field where dependencies exist'));
+      assert.ok(message.includes('Added branch field to all assertions'));
+    });
+  });
+
   describe('Run Branch Assignment', () => {
     beforeEach(() => {
       // Create test spec structure with multiple specs
@@ -773,6 +992,152 @@ status: not_started
       fs.mkdirSync(specsDir, { recursive: true });
 
       const result = await coordinator.runBranchAssignment(testDir);
+      
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.assertionCount, 0);
+    });
+  });
+
+  describe('Run YAML Frontmatter Updates', () => {
+    beforeEach(() => {
+      // Create test spec structure
+      const specsDir = path.join(testDir, 'specs');
+      
+      // Spec 1 with connected assertions
+      const spec1 = path.join(specsDir, 'spec-1');
+      const assertions1 = path.join(spec1, 'assertions');
+      fs.mkdirSync(assertions1, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(spec1, 'spec-1.md'),
+        `---
+id: spec-1
+created: 2026-02-01T00:00:00Z
+priority: 1
+---
+
+# Spec 1
+`
+      );
+
+      fs.writeFileSync(
+        path.join(assertions1, 'assertion-a.md'),
+        `---
+id: assertion-a
+parent: spec-1
+created: 2026-02-01T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Assertion A
+`
+      );
+
+      fs.writeFileSync(
+        path.join(assertions1, 'assertion-b.md'),
+        `---
+id: assertion-b
+parent: spec-1
+created: 2026-02-01T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Assertion B depends on assertion-a
+`
+      );
+
+      // Spec 2 with isolated assertion
+      const spec2 = path.join(specsDir, 'spec-2');
+      const assertions2 = path.join(spec2, 'assertions');
+      fs.mkdirSync(assertions2, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(spec2, 'spec-2.md'),
+        `---
+id: spec-2
+created: 2026-02-01T00:00:00Z
+priority: 1
+---
+
+# Spec 2
+`
+      );
+
+      fs.writeFileSync(
+        path.join(assertions2, 'isolated.md'),
+        `---
+id: isolated
+parent: spec-2
+created: 2026-02-01T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Isolated Assertion
+`
+      );
+    });
+
+    it('should update all assertions with dependency and branch metadata', async () => {
+      const result = await coordinator.runYAMLFrontmatterUpdates(testDir);
+      
+      assert.strictEqual(result.success, true);
+      assert.ok(result.assertionCount > 0);
+      assert.ok(result.filesUpdated > 0);
+      assert.ok(result.commitHash);
+      
+      // Verify files were updated
+      const contentA = fs.readFileSync(
+        path.join(testDir, 'specs/spec-1/assertions/assertion-a.md'),
+        'utf8'
+      );
+      const contentB = fs.readFileSync(
+        path.join(testDir, 'specs/spec-1/assertions/assertion-b.md'),
+        'utf8'
+      );
+      const contentIsolated = fs.readFileSync(
+        path.join(testDir, 'specs/spec-2/assertions/isolated.md'),
+        'utf8'
+      );
+      
+      // Check assertion-a
+      assert.ok(contentA.includes('branch: feature/spec-1'));
+      assert.ok(!contentA.includes('depends-on:'));
+      
+      // Check assertion-b
+      assert.ok(contentB.includes('branch: feature/spec-1'));
+      assert.ok(contentB.includes('depends-on: assertion-a'));
+      
+      // Check isolated assertion
+      assert.ok(contentIsolated.includes('branch: main'));
+      assert.ok(!contentIsolated.includes('depends-on:'));
+    });
+
+    it('should support dry-run mode', async () => {
+      const result = await coordinator.runYAMLFrontmatterUpdates(testDir, { dryRun: true });
+      
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.dryRun, true);
+      assert.ok(result.preview);
+      
+      // Verify files were NOT updated
+      const contentA = fs.readFileSync(
+        path.join(testDir, 'specs/spec-1/assertions/assertion-a.md'),
+        'utf8'
+      );
+      
+      assert.ok(!contentA.includes('branch:'));
+    });
+
+    it('should handle no assertions gracefully', async () => {
+      // Remove all assertions
+      const specsDir = path.join(testDir, 'specs');
+      fs.rmSync(specsDir, { recursive: true, force: true });
+      fs.mkdirSync(specsDir, { recursive: true });
+
+      const result = await coordinator.runYAMLFrontmatterUpdates(testDir);
       
       assert.strictEqual(result.success, true);
       assert.strictEqual(result.assertionCount, 0);
