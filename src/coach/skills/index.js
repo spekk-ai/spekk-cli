@@ -5,17 +5,15 @@
 
 import { skillRegistry } from '../skill-registry.js';
 import { BusinessModelValidator } from '../business-model-validator.js';
+import { MeetingNotesToSpecs } from '../meeting-notes-to-specs.js';
 
 // Register all available skills
 export function registerAllSkills() {
   // Business Model Validator
   skillRegistry.register(new BusinessModelValidator());
-  
-  // Future skills can be added here:
-  // skillRegistry.register(new TechnicalArchitectureValidator());
-  // skillRegistry.register(new UserResearchFacilitator());
-  // skillRegistry.register(new MarketAnalysisConductor());
-  // skillRegistry.register(new FinancialModelReviewer());
+
+  // Meeting Notes to Specs
+  skillRegistry.register(new MeetingNotesToSpecs());
 }
 
 // Initialize skills on module load

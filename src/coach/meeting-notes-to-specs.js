@@ -1,0 +1,288 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { Skill } from './skill-interface.js';
+
+/**
+ * Meeting Notes to Specs skill
+ * Processes meeting transcripts and converts feature discussions into proper spec files.
+ * This is a coach skill - it extends the coach's capabilities to handle meeting transcripts.
+ */
+export class MeetingNotesToSpecs extends Skill {
+  constructor() {
+    super();
+    this.triggerKeywords = [
+      'meeting notes', 'meeting transcript', 'meeting summary',
+      'process meeting', 'from our meeting', 'discussed in meeting',
+      'meeting action items', 'meeting outcomes', 'standup notes',
+      'retro notes', 'planning notes', 'kickoff notes'
+    ];
+  }
+
+  getId() {
+    return 'meeting-notes-to-specs';
+  }
+
+  getName() {
+    return 'Meeting Notes to Specs';
+  }
+
+  getDescription() {
+    return 'Processes meeting transcripts and converts feature discussions into proper spec files with assertions, todos, and context updates.';
+  }
+
+  shouldTrigger(userInput, context = {}) {
+    const lowerInput = userInput.toLowerCase();
+    return this.triggerKeywords.some(keyword => lowerInput.includes(keyword));
+  }
+
+  getQuestions() {
+    return [
+      {
+        id: 'transcript',
+        text: 'Please provide the meeting transcript or notes:',
+        type: 'text'
+      }
+    ];
+  }
+
+  processResponses(responses) {
+    const transcript = responses.transcript || '';
+
+    return {
+      summary: 'Meeting transcript received. Features should be extracted and converted to specs.',
+      recommendations: [
+        'Extract feature discussions and convert to spec files',
+        'Separate todos from features from decisions',
+        'Propose spec structure before creating files'
+      ],
+      data: {
+        transcript,
+        outputTypes: ['specs', 'todos', 'context']
+      }
+    };
+  }
+
+  getOutputFormat() {
+    return {
+      filePattern: 'specs/{spec-id}/{spec-id}.md',
+      format: 'markdown',
+      sections: ['specs', 'todos', 'context']
+    };
+  }
+
+  /**
+   * Convert a feature description into a spec structure
+   * @param {Object} feature - Feature object with id, title, description, priority, assertions
+   * @returns {Object} Spec structure with parent and assertion files
+   */
+  featureToSpec(feature) {
+    if (!feature.id || !feature.title) {
+      throw new Error('Feature must have id and title');
+    }
+
+    const specId = this.toKebabCase(feature.id);
+    const priority = this.validatePriority(feature.priority || 2);
+    const created = feature.created || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+    const parentSpec = this.generateParentSpec({
+      id: specId,
+      title: feature.title,
+      description: feature.description || '',
+      created,
+      priority,
+      successCriteria: feature.successCriteria || []
+    });
+
+    const assertions = (feature.assertions || []).map(assertion => {
+      const assertionId = this.toKebabCase(assertion.id);
+      return this.generateAssertion({
+        id: assertionId,
+        parent: specId,
+        title: assertion.title,
+        description: assertion.description || '',
+        created,
+        priority: this.validatePriority(assertion.priority || priority),
+        successCriteria: assertion.successCriteria || []
+      });
+    });
+
+    return {
+      specId,
+      parentSpec,
+      assertions,
+      directory: `specs/${specId}`,
+      files: [
+        { path: `specs/${specId}/${specId}.md`, content: parentSpec },
+        ...assertions.map(a => ({
+          path: `specs/${specId}/assertions/${a.id}.md`,
+          content: a.content
+        }))
+      ]
+    };
+  }
+
+  /**
+   * Convert multiple features into multiple separate specs
+   * @param {Array<Object>} features - Array of feature objects
+   * @returns {Array<Object>} Array of spec structures
+   */
+  featuresToSpecs(features) {
+    if (!Array.isArray(features) || features.length === 0) {
+      throw new Error('Features must be a non-empty array');
+    }
+
+    return features.map(feature => this.featureToSpec(feature));
+  }
+
+  /**
+   * Generate a proposal summary for user approval
+   * @param {Array<Object>} specs - Array of spec structures from featuresToSpecs
+   * @returns {string} Formatted proposal text
+   */
+  formatProposal(specs) {
+    let proposal = 'Proposed Specs from Meeting\n\n';
+
+    specs.forEach((spec, index) => {
+      const parentLines = spec.parentSpec.split('\n');
+      const titleLine = parentLines.find(l => l.startsWith('# ')) || `# ${spec.specId}`;
+      const title = titleLine.replace('# ', '');
+
+      // Extract priority from parent spec frontmatter
+      const priorityMatch = spec.parentSpec.match(/priority:\s*(\d)/);
+      const priority = priorityMatch ? priorityMatch[1] : '2';
+
+      proposal += `Spec ${index + 1}: ${title}\n`;
+      proposal += `  Priority: ${priority}\n`;
+      proposal += `  Assertions:\n`;
+
+      spec.assertions.forEach(assertion => {
+        const assertionPriorityMatch = assertion.content.match(/priority:\s*(\d)/);
+        const assertionPriority = assertionPriorityMatch ? assertionPriorityMatch[1] : '2';
+
+        proposal += `    - ${assertion.title} (priority ${assertionPriority})\n`;
+
+        if (assertion.successCriteria && assertion.successCriteria.length > 0) {
+          proposal += `      Success: ${assertion.successCriteria[0]}\n`;
+        }
+      });
+
+      proposal += '\n';
+    });
+
+    proposal += 'Shall I create these spec files?';
+    return proposal;
+  }
+
+  /**
+   * Generate parent spec markdown content
+   * @param {Object} params - Spec parameters
+   * @returns {string} Markdown content for parent spec
+   */
+  generateParentSpec({ id, title, description, created, priority, successCriteria }) {
+    let content = '---\n';
+    content += `id: ${id}\n`;
+    content += `created: ${created}\n`;
+    content += `priority: ${priority}\n`;
+    content += '---\n\n';
+    content += `# ${title}\n\n`;
+
+    if (description) {
+      content += `${description}\n\n`;
+    }
+
+    if (successCriteria && successCriteria.length > 0) {
+      content += '## Success Criteria\n\n';
+      successCriteria.forEach(criterion => {
+        content += `- ${criterion}\n`;
+      });
+    }
+
+    return content;
+  }
+
+  /**
+   * Generate assertion markdown content
+   * @param {Object} params - Assertion parameters
+   * @returns {Object} Assertion object with id, title, content, and successCriteria
+   */
+  generateAssertion({ id, parent, title, description, created, priority, successCriteria }) {
+    let content = '---\n';
+    content += `id: ${id}\n`;
+    content += `parent: ${parent}\n`;
+    content += `created: ${created}\n`;
+    content += `priority: ${priority}\n`;
+    content += 'status: not_started\n';
+    content += '---\n\n';
+    content += `# ${title}\n\n`;
+
+    if (description) {
+      content += `${description}\n\n`;
+    }
+
+    if (successCriteria && successCriteria.length > 0) {
+      content += '## Success Criteria\n\n';
+      successCriteria.forEach(criterion => {
+        content += `- ${criterion}\n`;
+      });
+    }
+
+    return { id, title, content, successCriteria };
+  }
+
+  /**
+   * Write spec files to disk
+   * @param {Object} spec - Spec structure from featureToSpec
+   * @param {string} baseDir - Base directory (defaults to cwd)
+   * @returns {Array<string>} Array of created file paths
+   */
+  writeSpecFiles(spec, baseDir = process.cwd()) {
+    const createdFiles = [];
+
+    // Create spec directory
+    const specDir = path.join(baseDir, spec.directory);
+    const assertionsDir = path.join(specDir, 'assertions');
+
+    if (!fs.existsSync(specDir)) {
+      fs.mkdirSync(specDir, { recursive: true });
+    }
+    if (!fs.existsSync(assertionsDir)) {
+      fs.mkdirSync(assertionsDir, { recursive: true });
+    }
+
+    // Write all files
+    for (const file of spec.files) {
+      const filePath = path.join(baseDir, file.path);
+      fs.writeFileSync(filePath, file.content, 'utf8');
+      createdFiles.push(file.path);
+    }
+
+    return createdFiles;
+  }
+
+  /**
+   * Convert a string to kebab-case
+   * @param {string} str - Input string
+   * @returns {string} Kebab-case string
+   */
+  toKebabCase(str) {
+    return str
+      .replace(/([a-z])([A-Z])/g, '$1-$2')
+      .replace(/[\s_]+/g, '-')
+      .replace(/[^a-zA-Z0-9-]/g, '')
+      .toLowerCase()
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  /**
+   * Validate and coerce priority to valid range (1-3)
+   * @param {number} priority - Priority value
+   * @returns {number} Valid priority (1, 2, or 3)
+   */
+  validatePriority(priority) {
+    const num = parseInt(priority, 10);
+    if (isNaN(num) || num < 1) return 1;
+    if (num > 3) return 3;
+    return num;
+  }
+}

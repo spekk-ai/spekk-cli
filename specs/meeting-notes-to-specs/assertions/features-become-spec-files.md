@@ -3,7 +3,7 @@ id: features-become-spec-files
 parent: meeting-notes-to-specs
 created: 2025-02-12T19:30:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # Features Become Proper Spec Files
@@ -21,3 +21,5 @@ Feature discussions from meetings are converted into proper spec files in the sp
 - Coach proposes specs structure, waits for user approval before creating files
 - Specs created in `specs/{spec-id}/` directory with assertion files in `assertions/` subdirectory
 - Multiple features from one meeting → multiple separate specs (not combined)
+
+**Tests:** src/coach/__tests__/meeting-notes-to-specs.test.js
