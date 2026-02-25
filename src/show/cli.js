@@ -237,26 +237,66 @@ function minimizeCrossings(assertions, layers) {
     layerGroups[layer].push(assertion);
   });
 
-  // Sort nodes within each layer by barycenter of parent position
-  for (let i = 1; i <= maxLayer; i++) {
-    layerGroups[i].sort((a, b) => {
-      const aParent = assertions.find(p => p.id === a.dependsOn);
-      const bParent = assertions.find(p => p.id === b.dependsOn);
+  // Build adjacency information
+  const children = new Map(); // parent.id -> [child assertions]
+  assertions.forEach(assertion => {
+    if (assertion.dependsOn) {
+      if (!children.has(assertion.dependsOn)) {
+        children.set(assertion.dependsOn, []);
+      }
+      children.get(assertion.dependsOn).push(assertion);
+    }
+  });
 
-      if (!aParent && !bParent) return 0;
-      if (!aParent) return -1;
-      if (!bParent) return 1;
+  // Multiple sweeps to minimize crossings (forward and backward passes)
+  for (let sweep = 0; sweep < 4; sweep++) {
+    if (sweep % 2 === 0) {
+      // Forward pass: sort by parent position (left to right)
+      for (let i = 1; i <= maxLayer; i++) {
+        layerGroups[i].sort((a, b) => {
+          const aParent = assertions.find(p => p.id === a.dependsOn);
+          const bParent = assertions.find(p => p.id === b.dependsOn);
 
-      // Sort by parent position in previous layer
-      const aParentIndex = layerGroups[i-1].findIndex(n => n.id === aParent.id);
-      const bParentIndex = layerGroups[i-1].findIndex(n => n.id === bParent.id);
+          if (!aParent && !bParent) return 0;
+          if (!aParent) return -1;
+          if (!bParent) return 1;
 
-      if (aParentIndex === -1 && bParentIndex === -1) return 0;
-      if (aParentIndex === -1) return 1;
-      if (bParentIndex === -1) return -1;
+          const aParentIndex = layerGroups[i-1].findIndex(n => n.id === aParent.id);
+          const bParentIndex = layerGroups[i-1].findIndex(n => n.id === bParent.id);
 
-      return aParentIndex - bParentIndex;
-    });
+          if (aParentIndex === -1 && bParentIndex === -1) return 0;
+          if (aParentIndex === -1) return 1;
+          if (bParentIndex === -1) return -1;
+
+          return aParentIndex - bParentIndex;
+        });
+      }
+    } else {
+      // Backward pass: sort by children positions (right to left)
+      for (let i = maxLayer - 1; i >= 0; i--) {
+        layerGroups[i].sort((a, b) => {
+          const aChildren = children.get(a.id) || [];
+          const bChildren = children.get(b.id) || [];
+
+          if (aChildren.length === 0 && bChildren.length === 0) return 0;
+          if (aChildren.length === 0) return 1;
+          if (bChildren.length === 0) return -1;
+
+          // Calculate barycenter (average position) of children in next layer
+          const aBarycenter = aChildren.reduce((sum, child) => {
+            const childIndex = layerGroups[i+1].findIndex(n => n.id === child.id);
+            return sum + (childIndex === -1 ? 0 : childIndex);
+          }, 0) / aChildren.length;
+
+          const bBarycenter = bChildren.reduce((sum, child) => {
+            const childIndex = layerGroups[i+1].findIndex(n => n.id === child.id);
+            return sum + (childIndex === -1 ? 0 : childIndex);
+          }, 0) / bChildren.length;
+
+          return aBarycenter - bBarycenter;
+        });
+      }
+    }
   }
 
   return layerGroups;
