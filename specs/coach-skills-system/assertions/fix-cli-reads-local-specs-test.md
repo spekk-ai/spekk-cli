@@ -3,7 +3,7 @@ id: fix-cli-reads-local-specs-test
 parent: coach-skills-system
 created: 2026-02-25T16:08:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Fix Failing cli-reads-local-specs Test
