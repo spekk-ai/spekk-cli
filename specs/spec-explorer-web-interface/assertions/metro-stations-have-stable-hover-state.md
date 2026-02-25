@@ -3,7 +3,7 @@ id: metro-stations-have-stable-hover-state
 parent: spec-explorer-web-interface
 created: 2026-02-25T20:30:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---

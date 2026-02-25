@@ -760,13 +760,14 @@ export function generateSpecExplorerHTML(specs, assertions) {
 
         .metro-station {
             cursor: pointer;
-            transition: transform 0.15s;
-            transform-origin: center;
-            transform-box: fill-box;
         }
 
-        .metro-station:hover {
-            transform: scale(1.15);
+        .metro-station circle {
+            transition: fill 0.15s;
+        }
+
+        .metro-station:hover circle {
+            fill: #2563eb;
         }
 
         .metro-terminus {
