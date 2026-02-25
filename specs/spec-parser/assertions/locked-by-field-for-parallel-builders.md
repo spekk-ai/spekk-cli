@@ -4,7 +4,8 @@ parent: spec-parser
 created: 2026-02-25T19:30:00Z
 priority: 1
 status: done
-branch: feature/dependency-visualization
+depends-on: identifies-next-priority
+branch: feature/spec-parser
 ---
 
 # Locked-By Field for Parallel Builders

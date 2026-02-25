@@ -4,6 +4,7 @@ parent: spec-parser
 created: 2026-01-20T18:50:00Z
 priority: 1
 status: done
+branch: feature/spec-parser
 ---
 
 # All Code Lives in src/
