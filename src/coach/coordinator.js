@@ -435,4 +435,224 @@ export class Coordinator extends Skill {
       assertions: assertions
     };
   }
+
+  /**
+   * Identify connected components (clusters) in the dependency graph
+   * Assertions that share dependencies or are in a dependency chain belong to the same cluster
+   * @param {Array<Object>} assertions - Array of assertion objects
+   * @param {Object} dependencies - Map of assertion-id -> { depends-on, reasoning }
+   * @returns {Array<Array<Object>>} Array of clusters (each cluster is an array of assertions)
+   */
+  identifyDependencyClusters(assertions, dependencies) {
+    const visited = new Set();
+    const clusters = [];
+    
+    // Build adjacency lists for both directions (depends-on and dependents)
+    const dependents = {}; // Map of assertion-id -> assertions that depend on it
+    for (const assertion of assertions) {
+      dependents[assertion.id] = [];
+    }
+    for (const assertion of assertions) {
+      const dep = dependencies[assertion.id];
+      if (dep && dep['depends-on']) {
+        if (dependents[dep['depends-on']]) {
+          dependents[dep['depends-on']].push(assertion);
+        }
+      }
+    }
+    
+    // DFS to find connected component
+    const dfs = (assertionId, cluster) => {
+      if (visited.has(assertionId)) return;
+      visited.add(assertionId);
+      
+      const assertion = assertions.find(a => a.id === assertionId);
+      if (!assertion) return;
+      
+      cluster.push(assertion);
+      
+      // Visit dependency (parent)
+      const dep = dependencies[assertion.id];
+      if (dep && dep['depends-on']) {
+        dfs(dep['depends-on'], cluster);
+      }
+      
+      // Visit dependents (children)
+      if (dependents[assertionId]) {
+        for (const dependent of dependents[assertionId]) {
+          dfs(dependent.id, cluster);
+        }
+      }
+    };
+    
+    // Find all connected components
+    for (const assertion of assertions) {
+      if (!visited.has(assertion.id)) {
+        const cluster = [];
+        dfs(assertion.id, cluster);
+        clusters.push(cluster);
+      }
+    }
+    
+    return clusters;
+  }
+
+  /**
+   * Generate a semantic branch name for a cluster of assertions
+   * @param {Array<Object>} cluster - Array of assertion objects
+   * @returns {string} Branch name in format feature/<name>
+   */
+  generateBranchName(cluster) {
+    // Try parent spec ID first (if all assertions share same parent)
+    const parentSpecs = [...new Set(cluster.map(a => a.parent))];
+    
+    if (parentSpecs.length === 1) {
+      return `feature/${parentSpecs[0]}`;
+    }
+    
+    // Multiple parent specs - use the most common one
+    const parentCounts = {};
+    for (const assertion of cluster) {
+      parentCounts[assertion.parent] = (parentCounts[assertion.parent] || 0) + 1;
+    }
+    
+    const mostCommon = Object.entries(parentCounts)
+      .sort((a, b) => b[1] - a[1])[0][0];
+    
+    return `feature/${mostCommon}`;
+  }
+
+  /**
+   * Assign branch names to clusters
+   * @param {Array<Array<Object>>} clusters - Array of clusters
+   * @returns {Array<Object>} Array of { branch, assertions, isIsolated }
+   */
+  assignBranchesToClusters(clusters) {
+    const branchAssignments = [];
+    
+    for (const cluster of clusters) {
+      const isIsolated = cluster.length === 1;
+      const branchName = isIsolated ? 'main' : this.generateBranchName(cluster);
+      
+      branchAssignments.push({
+        branch: branchName,
+        assertions: cluster,
+        isIsolated: isIsolated
+      });
+    }
+    
+    // Merge all isolated assertions into a single "main" group
+    const isolated = branchAssignments.filter(b => b.isIsolated);
+    const nonIsolated = branchAssignments.filter(b => !b.isIsolated);
+    
+    if (isolated.length > 0) {
+      const mainAssertions = isolated.flatMap(b => b.assertions);
+      nonIsolated.push({
+        branch: 'main',
+        assertions: mainAssertions,
+        isIsolated: false
+      });
+    }
+    
+    return nonIsolated;
+  }
+
+  /**
+   * Format branch assignments for display
+   * @param {Array<Object>} branchAssignments - Array of { branch, assertions, isIsolated }
+   * @returns {string} Formatted output
+   */
+  formatBranchAssignments(branchAssignments) {
+    let output = 'Branch Assignments\n';
+    output += '==================\n\n';
+    
+    // Sort by branch name (feature branches first, then main)
+    const sorted = branchAssignments.sort((a, b) => {
+      if (a.branch === 'main') return 1;
+      if (b.branch === 'main') return -1;
+      return a.branch.localeCompare(b.branch);
+    });
+    
+    for (const assignment of sorted) {
+      const count = assignment.assertions.length;
+      const label = assignment.branch === 'main' ? 
+        `${assignment.branch} (${count} isolated assertion${count !== 1 ? 's' : ''})` :
+        `${assignment.branch} (${count} assertion${count !== 1 ? 's' : ''})`;
+      
+      output += `${label}:\n`;
+      
+      for (const assertion of assignment.assertions) {
+        output += `  - ${assertion.id}\n`;
+      }
+      
+      output += '\n';
+    }
+    
+    return output;
+  }
+
+  /**
+   * Check if a branch name conflicts with existing git branches
+   * @param {string} branchName - Branch name to check
+   * @param {string} baseDir - Project root directory
+   * @returns {boolean} True if branch exists
+   */
+  branchExists(branchName, baseDir = process.cwd()) {
+    const execOpts = { cwd: baseDir, stdio: 'pipe', encoding: 'utf8' };
+    
+    try {
+      const branches = execSync('git branch -a', execOpts).toString();
+      const branchPattern = new RegExp(`\\b${branchName}\\b`);
+      return branchPattern.test(branches);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Main orchestration method for branch assignment
+   * @param {string} baseDir - Project root directory
+   * @returns {Object} Branch assignment result
+   */
+  async runBranchAssignment(baseDir = process.cwd()) {
+    // 1. Read all draft/not_started assertions
+    const assertions = this.readDraftAssertions(baseDir);
+    
+    if (assertions.length === 0) {
+      return {
+        success: true,
+        message: 'No draft or not_started assertions found',
+        assertionCount: 0
+      };
+    }
+    
+    // 2. Analyze dependencies (if not already done)
+    const dependencies = this.analyzeDependencies(assertions);
+    
+    // 3. Identify clusters
+    const clusters = this.identifyDependencyClusters(assertions, dependencies);
+    
+    // 4. Assign branches to clusters
+    const branchAssignments = this.assignBranchesToClusters(clusters);
+    
+    // 5. Check for existing branches and warn
+    const warnings = [];
+    for (const assignment of branchAssignments) {
+      if (assignment.branch !== 'main' && this.branchExists(assignment.branch, baseDir)) {
+        warnings.push(`Branch '${assignment.branch}' already exists`);
+      }
+    }
+    
+    // 6. Format output
+    const output = this.formatBranchAssignments(branchAssignments);
+    
+    return {
+      success: true,
+      assertionCount: assertions.length,
+      clusterCount: clusters.length,
+      branchAssignments: branchAssignments,
+      output: output,
+      warnings: warnings
+    };
+  }
 }

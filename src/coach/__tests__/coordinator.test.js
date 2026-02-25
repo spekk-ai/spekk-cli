@@ -19,6 +19,18 @@ describe('Coordinator Skill', () => {
     execSync('git init', { cwd: testDir, stdio: 'pipe' });
     execSync('git config user.email "test@example.com"', { cwd: testDir, stdio: 'pipe' });
     execSync('git config user.name "Test User"', { cwd: testDir, stdio: 'pipe' });
+    
+    // Create initial commit so we have a proper branch
+    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test\n');
+    execSync('git add README.md', { cwd: testDir, stdio: 'pipe' });
+    execSync('git commit -m "Initial commit"', { cwd: testDir, stdio: 'pipe' });
+    
+    // Ensure we're on main branch (git init might create main or master)
+    try {
+      execSync('git branch -M main', { cwd: testDir, stdio: 'pipe' });
+    } catch (e) {
+      // Branch already named main
+    }
   });
 
   afterEach(() => {
@@ -444,6 +456,323 @@ status: not_started
       fs.mkdirSync(assertionsDir, { recursive: true });
 
       const result = await coordinator.runDependencyAnalysis(testDir);
+      
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.assertionCount, 0);
+    });
+  });
+
+  describe('Identify Dependency Clusters', () => {
+    it('should identify single cluster for connected assertions', () => {
+      const assertions = [
+        { id: 'assertion-a', parent: 'test-spec' },
+        { id: 'assertion-b', parent: 'test-spec' },
+        { id: 'assertion-c', parent: 'test-spec' }
+      ];
+      const dependencies = {
+        'assertion-a': { 'depends-on': null },
+        'assertion-b': { 'depends-on': 'assertion-a' },
+        'assertion-c': { 'depends-on': 'assertion-b' }
+      };
+
+      const clusters = coordinator.identifyDependencyClusters(assertions, dependencies);
+      
+      assert.strictEqual(clusters.length, 1);
+      assert.strictEqual(clusters[0].length, 3);
+    });
+
+    it('should identify multiple clusters for independent assertions', () => {
+      const assertions = [
+        { id: 'assertion-a', parent: 'spec-1' },
+        { id: 'assertion-b', parent: 'spec-1' },
+        { id: 'assertion-c', parent: 'spec-2' },
+        { id: 'assertion-d', parent: 'spec-2' }
+      ];
+      const dependencies = {
+        'assertion-a': { 'depends-on': null },
+        'assertion-b': { 'depends-on': 'assertion-a' },
+        'assertion-c': { 'depends-on': null },
+        'assertion-d': { 'depends-on': 'assertion-c' }
+      };
+
+      const clusters = coordinator.identifyDependencyClusters(assertions, dependencies);
+      
+      assert.strictEqual(clusters.length, 2);
+    });
+
+    it('should handle isolated assertions', () => {
+      const assertions = [
+        { id: 'assertion-a', parent: 'test-spec' },
+        { id: 'assertion-b', parent: 'test-spec' }
+      ];
+      const dependencies = {
+        'assertion-a': { 'depends-on': null },
+        'assertion-b': { 'depends-on': null }
+      };
+
+      const clusters = coordinator.identifyDependencyClusters(assertions, dependencies);
+      
+      assert.strictEqual(clusters.length, 2);
+      assert.strictEqual(clusters[0].length, 1);
+      assert.strictEqual(clusters[1].length, 1);
+    });
+  });
+
+  describe('Generate Branch Name', () => {
+    it('should use parent spec ID for single-parent cluster', () => {
+      const cluster = [
+        { id: 'assertion-a', parent: 'test-spec' },
+        { id: 'assertion-b', parent: 'test-spec' }
+      ];
+
+      const branchName = coordinator.generateBranchName(cluster);
+      
+      assert.strictEqual(branchName, 'feature/test-spec');
+    });
+
+    it('should use most common parent for multi-parent cluster', () => {
+      const cluster = [
+        { id: 'assertion-a', parent: 'spec-1' },
+        { id: 'assertion-b', parent: 'spec-1' },
+        { id: 'assertion-c', parent: 'spec-2' }
+      ];
+
+      const branchName = coordinator.generateBranchName(cluster);
+      
+      assert.strictEqual(branchName, 'feature/spec-1');
+    });
+  });
+
+  describe('Assign Branches to Clusters', () => {
+    it('should assign feature branches to connected clusters', () => {
+      const clusters = [
+        [
+          { id: 'assertion-a', parent: 'spec-1' },
+          { id: 'assertion-b', parent: 'spec-1' }
+        ],
+        [
+          { id: 'assertion-c', parent: 'spec-2' },
+          { id: 'assertion-d', parent: 'spec-2' }
+        ]
+      ];
+
+      const assignments = coordinator.assignBranchesToClusters(clusters);
+      
+      assert.ok(assignments.some(a => a.branch === 'feature/spec-1'));
+      assert.ok(assignments.some(a => a.branch === 'feature/spec-2'));
+    });
+
+    it('should assign isolated assertions to main branch', () => {
+      const clusters = [
+        [{ id: 'isolated-1', parent: 'spec-1' }],
+        [{ id: 'isolated-2', parent: 'spec-2' }]
+      ];
+
+      const assignments = coordinator.assignBranchesToClusters(clusters);
+      
+      const mainBranch = assignments.find(a => a.branch === 'main');
+      assert.ok(mainBranch);
+      assert.strictEqual(mainBranch.assertions.length, 2);
+    });
+
+    it('should combine all isolated assertions into single main group', () => {
+      const clusters = [
+        [{ id: 'isolated-1', parent: 'spec-1' }],
+        [{ id: 'isolated-2', parent: 'spec-2' }],
+        [{ id: 'isolated-3', parent: 'spec-3' }]
+      ];
+
+      const assignments = coordinator.assignBranchesToClusters(clusters);
+      
+      assert.strictEqual(assignments.length, 1);
+      assert.strictEqual(assignments[0].branch, 'main');
+      assert.strictEqual(assignments[0].assertions.length, 3);
+    });
+  });
+
+  describe('Format Branch Assignments', () => {
+    it('should format branch assignments with counts', () => {
+      const assignments = [
+        {
+          branch: 'feature/spec-1',
+          assertions: [
+            { id: 'assertion-a' },
+            { id: 'assertion-b' }
+          ],
+          isIsolated: false
+        },
+        {
+          branch: 'main',
+          assertions: [
+            { id: 'isolated-1' }
+          ],
+          isIsolated: false
+        }
+      ];
+
+      const output = coordinator.formatBranchAssignments(assignments);
+      
+      assert.ok(output.includes('Branch Assignments'));
+      assert.ok(output.includes('feature/spec-1 (2 assertions)'));
+      assert.ok(output.includes('assertion-a'));
+      assert.ok(output.includes('assertion-b'));
+      assert.ok(output.includes('main (1 isolated assertion)'));
+    });
+
+    it('should sort with feature branches first, main last', () => {
+      const assignments = [
+        { branch: 'main', assertions: [{ id: 'isolated' }], isIsolated: false },
+        { branch: 'feature/spec-b', assertions: [{ id: 'b1' }], isIsolated: false },
+        { branch: 'feature/spec-a', assertions: [{ id: 'a1' }], isIsolated: false }
+      ];
+
+      const output = coordinator.formatBranchAssignments(assignments);
+      
+      const mainPos = output.indexOf('main');
+      const specAPos = output.indexOf('feature/spec-a');
+      const specBPos = output.indexOf('feature/spec-b');
+      
+      assert.ok(specAPos < mainPos);
+      assert.ok(specBPos < mainPos);
+    });
+  });
+
+  describe('Branch Exists', () => {
+    beforeEach(() => {
+      // Create a test branch
+      execSync('git checkout -b test-branch', { cwd: testDir, stdio: 'pipe' });
+      execSync('git checkout main', { cwd: testDir, stdio: 'pipe' });
+    });
+
+    it('should detect existing branch', () => {
+      const exists = coordinator.branchExists('test-branch', testDir);
+      assert.strictEqual(exists, true);
+    });
+
+    it('should return false for non-existent branch', () => {
+      const exists = coordinator.branchExists('non-existent-branch', testDir);
+      assert.strictEqual(exists, false);
+    });
+  });
+
+  describe('Run Branch Assignment', () => {
+    beforeEach(() => {
+      // Create test spec structure with multiple specs
+      const specsDir = path.join(testDir, 'specs');
+      
+      // Spec 1
+      const spec1 = path.join(specsDir, 'spec-1');
+      const assertions1 = path.join(spec1, 'assertions');
+      fs.mkdirSync(assertions1, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(spec1, 'spec-1.md'),
+        `---
+id: spec-1
+created: 2026-02-01T00:00:00Z
+priority: 1
+---
+
+# Spec 1
+`
+      );
+
+      fs.writeFileSync(
+        path.join(assertions1, 'assertion-a.md'),
+        `---
+id: assertion-a
+parent: spec-1
+created: 2026-02-01T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Assertion A
+`
+      );
+
+      fs.writeFileSync(
+        path.join(assertions1, 'assertion-b.md'),
+        `---
+id: assertion-b
+parent: spec-1
+created: 2026-02-01T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Assertion B depends on assertion-a
+`
+      );
+
+      // Spec 2 (isolated assertion)
+      const spec2 = path.join(specsDir, 'spec-2');
+      const assertions2 = path.join(spec2, 'assertions');
+      fs.mkdirSync(assertions2, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(spec2, 'spec-2.md'),
+        `---
+id: spec-2
+created: 2026-02-01T00:00:00Z
+priority: 1
+---
+
+# Spec 2
+`
+      );
+
+      fs.writeFileSync(
+        path.join(assertions2, 'isolated.md'),
+        `---
+id: isolated
+parent: spec-2
+created: 2026-02-01T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Isolated Assertion
+`
+      );
+    });
+
+    it('should run full branch assignment', async () => {
+      const result = await coordinator.runBranchAssignment(testDir);
+      
+      assert.strictEqual(result.success, true);
+      assert.ok(result.assertionCount > 0);
+      assert.ok(result.clusterCount > 0);
+      assert.ok('branchAssignments' in result);
+      assert.ok('output' in result);
+    });
+
+    it('should identify feature and main branches', async () => {
+      const result = await coordinator.runBranchAssignment(testDir);
+      
+      const branches = result.branchAssignments.map(a => a.branch);
+      assert.ok(branches.includes('feature/spec-1'));
+      assert.ok(branches.includes('main'));
+    });
+
+    it('should warn about existing branches', async () => {
+      // Create a branch that conflicts
+      execSync('git checkout -b feature/spec-1', { cwd: testDir, stdio: 'pipe' });
+      execSync('git checkout main', { cwd: testDir, stdio: 'pipe' });
+
+      const result = await coordinator.runBranchAssignment(testDir);
+      
+      assert.ok(result.warnings.length > 0);
+      assert.ok(result.warnings.some(w => w.includes('feature/spec-1')));
+    });
+
+    it('should handle no assertions gracefully', async () => {
+      // Remove all assertions
+      const specsDir = path.join(testDir, 'specs');
+      fs.rmSync(specsDir, { recursive: true, force: true });
+      fs.mkdirSync(specsDir, { recursive: true });
+
+      const result = await coordinator.runBranchAssignment(testDir);
       
       assert.strictEqual(result.success, true);
       assert.strictEqual(result.assertionCount, 0);

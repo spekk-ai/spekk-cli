@@ -6,9 +6,10 @@ export const run = parserRun;
 
 // Parser-specific flag definitions
 const parserFlagDefs = {
-  all:       { flags: ['--all'],              type: 'boolean' },
-  spec:      { flags: ['--spec', '-s'],       type: 'string'  },
-  assertion: { flags: ['--assertion'],        type: 'string'  },
+  all:          { flags: ['--all'],              type: 'boolean' },
+  allBranches:  { flags: ['--all-branches'],     type: 'boolean' },
+  spec:         { flags: ['--spec', '-s'],       type: 'string'  },
+  assertion:    { flags: ['--assertion'],        type: 'string'  },
 };
 
 // Direct invocation support

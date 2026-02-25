@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,6 +10,26 @@ const __dirname = path.dirname(__filename);
 function getSpekkInstallationDirectory() {
   // From parser/index.js, go up to project root: ../../
   return path.join(__dirname, '../..');
+}
+
+// Get current git branch
+function getCurrentGitBranch() {
+  try {
+    const branch = execSync('git branch --show-current', { 
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']  // Suppress stderr
+    }).trim();
+    
+    if (!branch) {
+      console.warn('Warning: Not in a git repository. Defaulting to main.');
+      return 'main';
+    }
+    
+    return branch;
+  } catch (error) {
+    console.warn('Warning: Could not detect git branch. Defaulting to main.');
+    return 'main';
+  }
 }
 
 // Simple YAML frontmatter parser (since we don't have gray-matter)
@@ -627,6 +648,17 @@ function findNextAssertion(assertions, specs = [], options = {}) {
     return true;
   });
 
+  // Filter by branch (unless --all-branches is specified)
+  if (!options.allBranches) {
+    const currentBranch = getCurrentGitBranch();
+    
+    // Filter to assertions with matching branch OR no branch field (for backwards compatibility)
+    const branchFiltered = incomplete.filter(a => !a.branch || a.branch === currentBranch);
+    
+    // Use filtered results
+    incomplete = branchFiltered;
+  }
+
   // Filter by spec if specified
   if (options.spec) {
     const specExists = specs.some(s => s.id === options.spec);
@@ -635,6 +667,14 @@ function findNextAssertion(assertions, specs = [], options = {}) {
     }
     incomplete = incomplete.filter(a => a.parent === options.spec);
   }
+
+  // Filter by dependency satisfaction
+  incomplete = incomplete.filter(a => {
+    if (!a.dependsOn) return true;  // No dependency
+    
+    const dependency = assertions.find(d => d.id === a.dependsOn);
+    return dependency && dependency.status === 'done';
+  });
 
   if (incomplete.length === 0) {
     return null;
@@ -709,7 +749,8 @@ export function run(options = {}) {
     
     const nextAssertion = findNextAssertion(assertions, specs, {
       spec: options.spec,
-      assertion: options.assertion
+      assertion: options.assertion,
+      allBranches: options.allBranches
     });
 
     // Handle error from findNextAssertion
