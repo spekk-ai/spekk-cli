@@ -432,6 +432,95 @@ export class MeetingNotesToSpecs extends Skill {
   }
 
   /**
+   * Format a single todo item for TODOS.md
+   * @param {Object} todo - Todo object with description, owner (optional), context (optional)
+   * @param {string} meetingDate - Date string like "2025-02-12"
+   * @returns {string} Formatted todo line
+   */
+  formatTodo(todo, meetingDate) {
+    if (!todo || !todo.description) {
+      throw new Error('Todo must have a description');
+    }
+
+    let line = `- [ ] ${todo.description}`;
+    if (todo.owner) {
+      line += ` (@${todo.owner})`;
+    }
+    line += ` - from meeting ${meetingDate}`;
+    return line;
+  }
+
+  /**
+   * Format multiple todos as markdown lines
+   * @param {Array<{description: string, owner?: string, context?: string}>} todos
+   * @param {string} meetingDate - Date string like "2025-02-12"
+   * @returns {string} Formatted markdown (empty string if no todos)
+   */
+  formatTodos(todos, meetingDate) {
+    if (!todos || todos.length === 0) return '';
+
+    return todos.map(t => this.formatTodo(t, meetingDate)).join('\n') + '\n';
+  }
+
+  /**
+   * Generate updated TODOS.md content
+   * @param {Array<{description: string, owner?: string, context?: string}>} todos
+   * @param {string} meetingDate
+   * @param {string|null} existingContent - Current TODOS.md content or null
+   * @returns {string} Updated content (empty string if no todos)
+   */
+  generateTodosUpdate(todos, meetingDate, existingContent) {
+    if (!todos || todos.length === 0) return '';
+
+    const formatted = this.formatTodos(todos, meetingDate);
+
+    if (!existingContent) {
+      return `# Todos\n\n${formatted}`;
+    }
+
+    // Append to existing content
+    return existingContent.trimEnd() + '\n' + formatted;
+  }
+
+  /**
+   * Generate a simple diff showing changes to TODOS.md
+   * @param {string|null} oldContent
+   * @param {string} newContent
+   * @returns {string} Human-readable diff
+   */
+  generateTodosDiff(oldContent, newContent) {
+    if (!oldContent) {
+      const lines = newContent.split('\n').map(l => `+ ${l}`).join('\n');
+      return `TODOS.md (new file)\n${lines}`;
+    }
+
+    const oldLines = new Set(oldContent.split('\n'));
+    const additions = newContent.split('\n').filter(l => !oldLines.has(l));
+
+    return `TODOS.md (updated)\n${additions.map(l => `+ ${l}`).join('\n')}`;
+  }
+
+  /**
+   * Read TODOS.md from a directory
+   * @param {string} baseDir
+   * @returns {string|null} File content or null if not found
+   */
+  readTodosFile(baseDir = process.cwd()) {
+    const filePath = path.join(baseDir, 'TODOS.md');
+    if (!fs.existsSync(filePath)) return null;
+    return fs.readFileSync(filePath, 'utf8');
+  }
+
+  /**
+   * Write TODOS.md to a directory
+   * @param {string} content
+   * @param {string} baseDir
+   */
+  writeTodosFile(content, baseDir = process.cwd()) {
+    fs.writeFileSync(path.join(baseDir, 'TODOS.md'), content, 'utf8');
+  }
+
+  /**
    * Build a commit message for meeting outputs.
    * Format: "Process meeting: {date} - {summary}" with categorized body.
    * @param {Object} params
