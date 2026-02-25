@@ -248,52 +248,66 @@ function minimizeCrossings(assertions, layers) {
     }
   });
 
-  // Sort layer 0 (root nodes) to put short tracks at bottom
-  layerGroups[0].sort((a, b) => {
-    const aIsTerminal = !assertions.some(child => child.dependsOn === a.id);
-    const bIsTerminal = !assertions.some(child => child.dependsOn === b.id);
+  // Helper: Calculate depth of longest chain starting from this node
+  const getChainDepth = (nodeId, memo = new Map()) => {
+    if (memo.has(nodeId)) return memo.get(nodeId);
 
-    // Terminal nodes (short tracks) go to bottom
-    if (aIsTerminal && !bIsTerminal) return 1;
-    if (!aIsTerminal && bIsTerminal) return -1;
-    return 0;
-  });
+    const nodeChildren = children.get(nodeId) || [];
+    if (nodeChildren.length === 0) {
+      memo.set(nodeId, 0);
+      return 0;
+    }
+
+    const maxChildDepth = Math.max(...nodeChildren.map(child => getChainDepth(child.id, memo)));
+    const depth = 1 + maxChildDepth;
+    memo.set(nodeId, depth);
+    return depth;
+  };
 
   // Multiple sweeps to minimize crossings (forward and backward passes)
   for (let sweep = 0; sweep < 4; sweep++) {
     if (sweep % 2 === 0) {
-      // Forward pass: sort by parent position (left to right)
-      for (let i = 1; i <= maxLayer; i++) {
+      // Forward pass: sort by parent position and chain depth
+      for (let i = 0; i <= maxLayer; i++) {
         layerGroups[i].sort((a, b) => {
-          // Check if node is terminal (no children)
-          const aIsTerminal = !assertions.some(child => child.dependsOn === a.id);
-          const bIsTerminal = !assertions.some(child => child.dependsOn === b.id);
+          // Calculate chain depth (how many more layers this track continues)
+          const aDepth = getChainDepth(a.id);
+          const bDepth = getChainDepth(b.id);
 
-          // Terminal nodes (short tracks) go to bottom to avoid crossing longer tracks
-          if (aIsTerminal && !bIsTerminal) return 1;
-          if (!aIsTerminal && bIsTerminal) return -1;
+          // Longer chains (more depth) go to top, shorter chains to bottom
+          if (aDepth !== bDepth) return bDepth - aDepth;
 
-          const aParent = assertions.find(p => p.id === a.dependsOn);
-          const bParent = assertions.find(p => p.id === b.dependsOn);
+          // For non-root layers, sort by parent position as secondary key
+          if (i > 0) {
+            const aParent = assertions.find(p => p.id === a.dependsOn);
+            const bParent = assertions.find(p => p.id === b.dependsOn);
 
-          if (!aParent && !bParent) return 0;
-          if (!aParent) return -1;
-          if (!bParent) return 1;
+            if (!aParent && !bParent) return 0;
+            if (!aParent) return -1;
+            if (!bParent) return 1;
 
-          const aParentIndex = layerGroups[i-1].findIndex(n => n.id === aParent.id);
-          const bParentIndex = layerGroups[i-1].findIndex(n => n.id === bParent.id);
+            const aParentIndex = layerGroups[i-1].findIndex(n => n.id === aParent.id);
+            const bParentIndex = layerGroups[i-1].findIndex(n => n.id === bParent.id);
 
-          if (aParentIndex === -1 && bParentIndex === -1) return 0;
-          if (aParentIndex === -1) return 1;
-          if (bParentIndex === -1) return -1;
+            if (aParentIndex === -1 && bParentIndex === -1) return 0;
+            if (aParentIndex === -1) return 1;
+            if (bParentIndex === -1) return -1;
 
-          return aParentIndex - bParentIndex;
+            return aParentIndex - bParentIndex;
+          }
+
+          return 0;
         });
       }
     } else {
-      // Backward pass: sort by children positions (right to left)
+      // Backward pass: sort by children positions and chain depth
       for (let i = maxLayer - 1; i >= 0; i--) {
         layerGroups[i].sort((a, b) => {
+          // Calculate chain depth - longer chains go to top
+          const aDepth = getChainDepth(a.id);
+          const bDepth = getChainDepth(b.id);
+          if (aDepth !== bDepth) return bDepth - aDepth;
+
           const aChildren = children.get(a.id) || [];
           const bChildren = children.get(b.id) || [];
 
