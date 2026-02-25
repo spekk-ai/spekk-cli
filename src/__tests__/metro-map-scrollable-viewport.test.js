@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { generateSpecExplorerHTML } from '../show/cli.js';
 
-describe('Metro Map Scrollable Viewport', () => {
+describe('Metro Map Pan and Zoom Viewport', () => {
   it('should have max-height constraint on metro-map-section', () => {
     const specs = [{
       id: 'test-spec',
@@ -28,11 +28,11 @@ describe('Metro Map Scrollable Viewport', () => {
 
     const html = generateSpecExplorerHTML(specs, assertions);
 
-    // Verify max-height is set
-    assert.ok(html.includes('max-height: 300px'), 'Should have max-height: 300px');
+    // Verify max-height is increased to 400px
+    assert.ok(html.includes('max-height: 400px'), 'Should have max-height: 400px');
   });
 
-  it('should have horizontal overflow scrolling', () => {
+  it('should have overflow hidden for panning', () => {
     const specs = [{
       id: 'test-spec',
       title: 'Test Spec',
@@ -57,11 +57,11 @@ describe('Metro Map Scrollable Viewport', () => {
 
     const html = generateSpecExplorerHTML(specs, assertions);
 
-    // Verify overflow-x is auto for horizontal scrolling
-    assert.ok(html.includes('overflow-x: auto'), 'Should have overflow-x: auto');
+    // Verify overflow is hidden (replaced scrolling with panning)
+    assert.ok(html.includes('overflow: hidden'), 'Should have overflow: hidden');
   });
 
-  it('should have vertical overflow hidden', () => {
+  it('should have grab cursor for pan interaction', () => {
     const specs = [{
       id: 'test-spec',
       title: 'Test Spec',
@@ -86,11 +86,11 @@ describe('Metro Map Scrollable Viewport', () => {
 
     const html = generateSpecExplorerHTML(specs, assertions);
 
-    // Verify overflow-y is hidden
-    assert.ok(html.includes('overflow-y: hidden'), 'Should have overflow-y: hidden');
+    // Verify cursor: grab is set for pan interaction
+    assert.ok(html.includes('cursor: grab'), 'Should have cursor: grab');
   });
 
-  it('should have smooth scroll behavior', () => {
+  it('should have panning state styles', () => {
     const specs = [{
       id: 'test-spec',
       title: 'Test Spec',
@@ -115,11 +115,13 @@ describe('Metro Map Scrollable Viewport', () => {
 
     const html = generateSpecExplorerHTML(specs, assertions);
 
-    // Verify smooth scroll behavior
-    assert.ok(html.includes('scroll-behavior: smooth'), 'Should have scroll-behavior: smooth');
+    // Verify panning state styles
+    assert.ok(html.includes('.metro-map-section.panning'), 'Should have .panning class styles');
+    assert.ok(html.includes('cursor: grabbing'), 'Should have cursor: grabbing when panning');
+    assert.ok(html.includes('user-select: none'), 'Should have user-select: none when panning');
   });
 
-  it('should have visual fade edge indicator', () => {
+  it('should position metro-map-section relatively for panning', () => {
     const specs = [{
       id: 'test-spec',
       title: 'Test Spec',
@@ -144,38 +146,72 @@ describe('Metro Map Scrollable Viewport', () => {
 
     const html = generateSpecExplorerHTML(specs, assertions);
 
-    // Verify ::after pseudo-element for fade edge
-    assert.ok(html.includes('.metro-map-section::after'), 'Should have ::after pseudo-element');
-    assert.ok(html.includes('linear-gradient(to right, transparent, #f8fafc)'), 'Should have fade gradient');
-    assert.ok(html.includes('pointer-events: none'), 'Fade edge should not block pointer events');
-  });
-
-  it('should position metro-map-section relatively for fade edge', () => {
-    const specs = [{
-      id: 'test-spec',
-      title: 'Test Spec',
-      priority: 1,
-      status: 'in_progress',
-      created: '2026-01-01T00:00:00Z',
-      file: 'specs/test-spec/test-spec.md',
-      content: 'Test content'
-    }];
-
-    const assertions = [{
-      id: 'test-assertion',
-      title: 'Test Assertion',
-      parent: 'test-spec',
-      priority: 1,
-      status: 'not_started',
-      created: '2026-01-01T00:00:00Z',
-      file: 'specs/test-spec/assertions/test-assertion.md',
-      content: 'Test assertion content',
-      branch: 'feature/test'
-    }];
-
-    const html = generateSpecExplorerHTML(specs, assertions);
-
-    // Verify position: relative is set for containing the ::after pseudo-element
+    // Verify position: relative is set for panning context
     assert.ok(html.includes('position: relative'), 'Should have position: relative');
+  });
+
+  it('should have smooth transition for SVG transform', () => {
+    const specs = [{
+      id: 'test-spec',
+      title: 'Test Spec',
+      priority: 1,
+      status: 'in_progress',
+      created: '2026-01-01T00:00:00Z',
+      file: 'specs/test-spec/test-spec.md',
+      content: 'Test content'
+    }];
+
+    const assertions = [{
+      id: 'test-assertion',
+      title: 'Test Assertion',
+      parent: 'test-spec',
+      priority: 1,
+      status: 'not_started',
+      created: '2026-01-01T00:00:00Z',
+      file: 'specs/test-spec/assertions/test-assertion.md',
+      content: 'Test assertion content',
+      branch: 'feature/test'
+    }];
+
+    const html = generateSpecExplorerHTML(specs, assertions);
+
+    // Verify smooth transition for transform during panning
+    assert.ok(html.includes('transition: transform'), 'Should have transition: transform');
+  });
+
+  it('should have pan JavaScript functionality', () => {
+    const specs = [{
+      id: 'test-spec',
+      title: 'Test Spec',
+      priority: 1,
+      status: 'in_progress',
+      created: '2026-01-01T00:00:00Z',
+      file: 'specs/test-spec/test-spec.md',
+      content: 'Test content'
+    }];
+
+    const assertions = [{
+      id: 'test-assertion',
+      title: 'Test Assertion',
+      parent: 'test-spec',
+      priority: 1,
+      status: 'not_started',
+      created: '2026-01-01T00:00:00Z',
+      file: 'specs/test-spec/assertions/test-assertion.md',
+      content: 'Test assertion content',
+      branch: 'feature/test'
+    }];
+
+    const html = generateSpecExplorerHTML(specs, assertions);
+
+    // Verify pan JavaScript functionality is included
+    assert.ok(html.includes('Metro map pan and zoom functionality'), 'Should have pan JavaScript comment');
+    assert.ok(html.includes('panStates'), 'Should track pan state');
+    assert.ok(html.includes('initPanForMap'), 'Should have initPanForMap function');
+    assert.ok(html.includes('calculateBounds'), 'Should have bounds calculation');
+    assert.ok(html.includes('mousedown'), 'Should handle mousedown event');
+    assert.ok(html.includes('mousemove'), 'Should handle mousemove event');
+    assert.ok(html.includes('mouseup'), 'Should handle mouseup event');
+    assert.ok(html.includes('.metro-station'), 'Should check for station clicks');
   });
 });
