@@ -2,7 +2,6 @@
 id: meeting-notes-to-specs
 created: 2025-02-12T19:30:00Z
 priority: 2
-status: not_started
 ---
 
 # Meeting Notes to Specs
