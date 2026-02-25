@@ -414,10 +414,17 @@ depends-on: assertion-a
 
       const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
 
-      // Should have "Done" terminus
+      // Should have "Done" terminus (small dot, no text)
       assert.ok(htmlContent.includes('Done Terminus'), 'Should include Done terminus comment');
       assert.ok(htmlContent.includes('class="metro-terminus"'), 'Should have metro-terminus class');
-      assert.ok(htmlContent.includes('>Done</text>'), 'Should have "Done" label');
+      // Done nodes should NOT have text labels (they are small quiet dots)
+      assert.ok(!htmlContent.includes('>Done</text>'), 'Should not have "Done" text label');
+
+      // Done nodes should have small radius (r=5) and thin stroke (stroke-width=2)
+      const terminusMatch = htmlContent.match(/class="metro-terminus"[\s\S]*?<circle[^>]*r="5"/);
+      assert.ok(terminusMatch, 'Done node should have r=5');
+      const strokeMatch = htmlContent.match(/class="metro-terminus"[\s\S]*?stroke-width="2"/);
+      assert.ok(strokeMatch, 'Done node should have stroke-width=2');
 
       // Should have convergence lines
       assert.ok(htmlContent.includes('Convergence:'), 'Should have convergence line comments');

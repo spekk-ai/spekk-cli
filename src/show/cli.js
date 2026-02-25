@@ -407,7 +407,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
 
   const stationRadius = 8;
   const currentStationRadius = 10;
-  const terminusRadius = 12;
+  const terminusRadius = 5;
 
   // Layout each tree independently, stacking vertically
   const positions = new Map();
@@ -559,9 +559,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
         svg += `
   <!-- Done Terminus -->
   <g class="metro-terminus" transform="translate(${donePos.x}, ${donePos.y})">
-    <circle r="${terminusRadius}" fill="${doneColor}" stroke="#fff" stroke-width="4"/>
-    <text style="font-size: 16px; fill: #fff; text-anchor: middle; dominant-baseline: middle; font-weight: 700;">✓</text>
-    <text class="metro-label" y="32" style="font-size: 11px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Done</text>
+    <circle r="${terminusRadius}" fill="${doneColor}" stroke="#fff" stroke-width="2"/>
   </g>`;
       }
     });
@@ -669,15 +667,26 @@ export function generateSpecExplorerHTML(specs, assertions) {
         }
 
         .metro-map-section {
-            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
             background: #f8fafc;
             overflow: hidden;
-            transition: max-height 0.3s ease;
-            max-height: 340px;
+            position: relative;
+            transition: height 0.3s ease;
+            height: 300px;
+            min-height: 100px;
+            max-height: 600px;
         }
 
         .metro-map-section.collapsed {
-            max-height: 44px;
+            height: 36px !important;
+            min-height: 36px !important;
+            cursor: default;
+            overflow: hidden;
+        }
+
+        .metro-map-section.no-transition {
+            transition: none !important;
         }
 
         .metro-map-header {
@@ -723,7 +732,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
         }
 
         .metro-map-container {
-            max-height: 280px;
+            flex: 1;
             overflow: hidden;
             position: relative;
             cursor: grab;
@@ -737,6 +746,37 @@ export function generateSpecExplorerHTML(specs, assertions) {
 
         .metro-map-container .metro-map {
             transition: transform 0.1s ease-out;
+        }
+
+        .metro-map-resize-handle {
+            height: 6px;
+            cursor: ns-resize;
+            background: #e2e8f0;
+            border-bottom: 1px solid #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .metro-map-resize-handle:hover {
+            background: #cbd5e1;
+        }
+
+        .metro-map-resize-handle .grip-dots {
+            display: flex;
+            gap: 3px;
+        }
+
+        .metro-map-resize-handle .grip-dots span {
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: #94a3b8;
+        }
+
+        .metro-map-section.collapsed .metro-map-resize-handle {
+            display: none;
         }
 
         .detail-content-section {
@@ -1229,6 +1269,9 @@ export function generateSpecExplorerHTML(specs, assertions) {
                             ${mapHTML}
                         </div>
                     `).join('')}
+                </div>
+                <div class="metro-map-resize-handle" id="metro-map-resize-handle">
+                    <div class="grip-dots"><span></span><span></span><span></span></div>
                 </div>
             </div>
 

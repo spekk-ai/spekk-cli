@@ -3,7 +3,7 @@ id: show-convergence-terminal
 parent: spec-explorer-web-interface
 created: 2026-02-25T19:21:00Z
 priority: 2
-status: in_progress
+status: done
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
