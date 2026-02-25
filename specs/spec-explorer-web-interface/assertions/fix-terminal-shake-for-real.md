@@ -3,7 +3,7 @@ id: fix-terminal-shake-for-real
 parent: spec-explorer-web-interface
 created: 2026-02-25T20:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/dependency-visualization
 ---
 
@@ -78,3 +78,21 @@ If shake persists after removing transforms, the problem is likely:
 - Use browser DevTools to record what's changing
 - May need to restructure SVG hierarchy
 - Consider that the shake might be browser-specific
+
+## Implementation (Completed)
+
+**Solution Applied:** Nuclear Option A - Complete transform removal
+
+Changed `.spekk/index.html`:
+- Removed `transition: transform 0.15s`, `transform-origin: center`, and `transform-box: fill-box` from `.metro-station`
+- Removed `transform: scale(1.15)` from `.metro-station:hover`
+- Added simple color transition: `.metro-station circle { transition: fill 0.15s; }`
+- Added hover color change: `.metro-station:hover circle { fill: #2563eb; }`
+
+**Why this fixes it:**
+- No coordinate transformations = no SVG recalculation
+- No filters or shadows = no reflow
+- Pure CSS color property change = stable rendering
+- Targets only circle element = no parent boundary changes
+
+The shake was caused by the scale transform forcing SVG coordinate system recalculation on every hover.
