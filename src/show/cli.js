@@ -199,6 +199,88 @@ function calculateDependencyDepth(assertion, assertions) {
   return 1 + calculateDependencyDepth(parent, assertions);
 }
 
+// Sugiyama layout algorithm functions
+function assignLayers(assertions) {
+  const layers = new Map(); // assertion.id -> layer number
+
+  function getLongestPath(assertionId, visited = new Set()) {
+    if (visited.has(assertionId)) return 0; // Cycle detection
+
+    const layer = layers.get(assertionId);
+    if (layer !== undefined) return layer;
+
+    const assertion = assertions.find(a => a.id === assertionId);
+    if (!assertion || !assertion.dependsOn) {
+      layers.set(assertionId, 0);
+      return 0;
+    }
+
+    visited.add(assertionId);
+    const parentLayer = getLongestPath(assertion.dependsOn, visited);
+    const myLayer = parentLayer + 1;
+    layers.set(assertionId, myLayer);
+    visited.delete(assertionId);
+    return myLayer;
+  }
+
+  assertions.forEach(a => getLongestPath(a.id));
+  return layers;
+}
+
+function minimizeCrossings(assertions, layers) {
+  // Group assertions by layer
+  const maxLayer = Math.max(...layers.values());
+  const layerGroups = Array.from({ length: maxLayer + 1 }, () => []);
+
+  assertions.forEach(assertion => {
+    const layer = layers.get(assertion.id);
+    layerGroups[layer].push(assertion);
+  });
+
+  // Sort nodes within each layer by barycenter of parent position
+  for (let i = 1; i <= maxLayer; i++) {
+    layerGroups[i].sort((a, b) => {
+      const aParent = assertions.find(p => p.id === a.dependsOn);
+      const bParent = assertions.find(p => p.id === b.dependsOn);
+
+      if (!aParent && !bParent) return 0;
+      if (!aParent) return -1;
+      if (!bParent) return 1;
+
+      // Sort by parent position in previous layer
+      const aParentIndex = layerGroups[i-1].findIndex(n => n.id === aParent.id);
+      const bParentIndex = layerGroups[i-1].findIndex(n => n.id === bParent.id);
+
+      if (aParentIndex === -1 && bParentIndex === -1) return 0;
+      if (aParentIndex === -1) return 1;
+      if (bParentIndex === -1) return -1;
+
+      return aParentIndex - bParentIndex;
+    });
+  }
+
+  return layerGroups;
+}
+
+function assignCoordinatesWithSugiyama(layerGroups, assertionToColor) {
+  const positions = new Map();
+  const layerSpacing = 150; // X spacing between layers
+  const nodeSpacing = 100; // Y spacing between nodes in same layer
+  const startX = 60;
+  const startY = 80;
+
+  layerGroups.forEach((layer, layerIndex) => {
+    const x = startX + (layerIndex * layerSpacing);
+
+    layer.forEach((assertion, nodeIndex) => {
+      const y = startY + (nodeIndex * nodeSpacing);
+      positions.set(assertion.id, { x, y });
+    });
+  });
+
+  return positions;
+}
+
 function shouldShowMetroMap(assertion, allAssertions) {
   const assertionBranch = assertion.branch || 'main';
 
@@ -244,43 +326,29 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     });
 
   // Assign track colors based on dependency lines
-  const { assertionToTrack, assertionToColor, terminalAssertions } = assignTrackColors(branchAssertions);
+  const { assertionToColor, terminalAssertions } = assignTrackColors(branchAssertions);
 
   if (branchAssertions.length === 0) {
     return '';
   }
 
-  const stationSpacing = 110;
-  const startX = 60;
-  const startY = 80;
   const stationRadius = 8;
   const currentStationRadius = 10;
-  const laneHeight = 100; // Vertical spacing between track lanes
   const terminusRadius = 12;
 
-  // Calculate positions using track-based horizontal lanes
-  const positions = new Map();
-
-  branchAssertions.forEach((assertion) => {
-    const depth = assertion.depth;
-    const trackIndex = assertionToTrack.get(assertion.id) || 0;
-
-    // X position based on dependency depth (horizontal progression)
-    const x = startX + (depth * stationSpacing);
-
-    // Y position based on track lane (each track gets its own horizontal lane)
-    const y = startY + (trackIndex * laneHeight);
-
-    positions.set(assertion.id, { x, y });
-  });
+  // Use Sugiyama layout algorithm for positioning
+  const layers = assignLayers(branchAssertions);
+  const layerGroups = minimizeCrossings(branchAssertions, layers);
+  const positions = assignCoordinatesWithSugiyama(layerGroups, assertionToColor);
 
   // Determine if we need a "Done" terminus (2+ terminal assertions)
   const showTerminus = terminalAssertions.length > 1;
   let terminusPosition = null;
+  const layerSpacing = 150; // Same as in assignCoordinatesWithSugiyama
 
   if (showTerminus) {
     const maxX = Math.max(...Array.from(positions.values()).map(p => p.x));
-    const terminusX = maxX + stationSpacing;
+    const terminusX = maxX + layerSpacing;
 
     // Position terminus at the vertical center of terminal assertions
     const terminalYPositions = terminalAssertions.map(a => positions.get(a.id).y);
@@ -291,7 +359,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     terminusPosition = { x: terminusX, y: terminusY };
   }
 
-  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + (showTerminus ? stationSpacing + 50 : 100);
+  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + (showTerminus ? layerSpacing + 50 : 150);
   const maxY = Math.max(...Array.from(positions.values()).map(p => p.y)) + 50;
   const svgWidth = Math.max(maxX, 800);
   const svgHeight = Math.max(maxY, 200);
