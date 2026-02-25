@@ -174,13 +174,31 @@ spekk status
 
 ### `spekk show`
 
-Launch interactive web-based spec explorer.
+Launch interactive web-based spec explorer with dependency visualization.
 
 ```bash
 spekk show
 ```
 
-Opens browser with navigable spec tree.
+**What it does:**
+- Generates `.spekk/index.html` with a navigable spec tree
+- Opens the explorer in your default browser
+- Shows a collapsible **metro map** of branch dependency trees
+
+**Metro map features:**
+- Dependency trees rendered per-branch using a tree-stacking layout
+- Independent trees stacked vertically (no overlap)
+- Branching nodes fan children out with the parent centered
+- Click stations to navigate to assertion details
+- Drag to pan, scroll to navigate, resize the map panel
+- Tooltips show full assertion titles on hover
+- Collapse/expand the map to focus on content
+
+**Spec tree features:**
+- Expandable spec/assertion hierarchy
+- Status and priority badges
+- Completed specs hidden by default (toggle to show)
+- Click any item to view full details
 
 ---
 

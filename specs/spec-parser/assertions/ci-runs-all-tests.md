@@ -4,6 +4,8 @@ parent: spec-parser
 created: 2026-01-20T19:45:00Z
 priority: 2
 status: done
+depends-on: assertions-have-tests
+branch: feature/spec-parser
 ---
 
 # CI Runs All Tests

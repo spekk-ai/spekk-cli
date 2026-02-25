@@ -4,6 +4,8 @@ parent: spec-parser
 created: 2026-01-22T20:00:00Z
 priority: 1
 status: done
+depends-on: validates-status-values
+branch: feature/spec-parser
 ---
 
 # Parser Must Synchronize Parent Spec Status with Child Assertions

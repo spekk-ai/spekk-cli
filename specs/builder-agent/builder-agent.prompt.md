@@ -110,23 +110,50 @@ All tests must pass before marking `done`.
 **If assertion is manual:**
 Verify success criteria are met through inspection.
 
-### 5. Update Status
+### 5. Update Status and Release Lock
 
-Edit the assertion file's frontmatter to update status:
+Edit the assertion file's frontmatter to update status.
+
+**When starting work (claiming the assertion):**
 ```yaml
-status: done
+status: in_progress
+locked-by: builder-{hostname}-{pid}-{timestamp}
 ```
 
+**When completing work:**
+```yaml
+status: done
+# CRITICAL: Remove locked-by field completely
+```
+
+**Lock format:** `builder-{hostname}-{pid}-{timestamp}`
+- Example: `builder-macbook-pro-12345-1706210400`
+- Hostname: identifies your machine (use `hostname` command)
+- PID: process ID for uniqueness (use `$$` in bash)
+- Timestamp: Unix time for stale lock detection (use `date +%s`)
+
+**Why locking matters:**
+- Prevents parallel builders from working on the same assertion
+- Enables true parallel work across multiple builders/machines
+- Git commits provide atomic claim mechanism
+
 **Available Status Values:**
-- `not_started` - Haven't begun work on this assertion
-- `in_progress` - Currently working on this assertion 
-- `done` - All success criteria met and tests pass
-- `failed` - Implementation has confirmed issues that need fixing
-- `draft` - Planning/placeholder status (excluded from work queue)
+- `not_started` - Haven't begun work on this assertion (no lock)
+- `in_progress` - Currently working on this assertion (must have `locked-by`)
+- `done` - All success criteria met and tests pass (no lock)
+- `failed` - Implementation has confirmed issues that need fixing (no lock)
+- `draft` - Planning/placeholder status (excluded from work queue, no lock)
+
+**CRITICAL LOCK RULES:**
+1. When marking `in_progress` → ADD `locked-by` field
+2. When marking `done` or `failed` → REMOVE `locked-by` field completely
+3. Commit lock changes immediately (before starting work)
+4. Pull after committing lock to detect conflicts
+5. If conflict (someone else claimed it), pick next assertion
 
 **Important:** Parent spec status is automatically computed from child assertions:
 - If ANY child is `failed` → parent becomes `failed`
-- If ALL children are `done` → parent becomes `done`  
+- If ALL children are `done` → parent becomes `done`
 - If any child is incomplete → parent becomes `in_progress`
 - Never manually set parent spec status - it's computed automatically
 

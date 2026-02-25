@@ -4,6 +4,8 @@ parent: spec-parser
 created: 2026-01-20T16:25:00Z
 priority: 1
 status: done
+depends-on: parser-script-exists
+branch: feature/spec-parser
 ---
 
 # Parser Must Parse YAML Frontmatter

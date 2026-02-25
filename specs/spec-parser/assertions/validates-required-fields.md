@@ -4,6 +4,8 @@ parent: spec-parser
 created: 2026-01-20T16:10:00Z
 priority: 2
 status: done
+depends-on: parses-frontmatter
+branch: feature/spec-parser
 ---
 
 # Parser Must Validate Required Fields

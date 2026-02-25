@@ -84,7 +84,8 @@ function parseFrontmatter(content) {
       // If we were in an array, save it
       if (inArray && currentKey) {
         // Convert kebab-case keys to camelCase for JavaScript
-        const jsKey = currentKey === 'depends-on' ? 'dependsOn' : currentKey;
+        const jsKey = currentKey === 'depends-on' ? 'dependsOn' :
+                     currentKey === 'locked-by' ? 'lockedBy' : currentKey;
         frontmatter[jsKey] = arrayValues;
         arrayValues = [];
         inArray = false;
@@ -113,7 +114,8 @@ function parseFrontmatter(content) {
           }
           
           // Convert kebab-case keys to camelCase for JavaScript
-          const jsKey = key === 'depends-on' ? 'dependsOn' : key;
+          const jsKey = key === 'depends-on' ? 'dependsOn' :
+                       key === 'locked-by' ? 'lockedBy' : key;
           frontmatter[jsKey] = value;
           currentKey = null; // Reset if we got a value
         }
@@ -124,7 +126,8 @@ function parseFrontmatter(content) {
   // Handle any remaining array
   if (inArray && currentKey) {
     // Convert kebab-case keys to camelCase for JavaScript
-    const jsKey = currentKey === 'depends-on' ? 'dependsOn' : currentKey;
+    const jsKey = currentKey === 'depends-on' ? 'dependsOn' :
+                 currentKey === 'locked-by' ? 'lockedBy' : currentKey;
     frontmatter[jsKey] = arrayValues;
   }
   
@@ -625,6 +628,26 @@ function computeParentStatus(parentId, assertions) {
   return 'not_started';
 }
 
+// Check if a lock is stale (>2 hours old)
+function isLockStale(lockedBy) {
+  if (!lockedBy) return true; // No lock means it's available
+
+  // Extract timestamp from lock format: builder-{hostname}-{pid}-{timestamp}
+  const parts = lockedBy.split('-');
+  const timestamp = parseInt(parts[parts.length - 1]);
+
+  if (isNaN(timestamp)) {
+    // Invalid timestamp format, treat as stale
+    return true;
+  }
+
+  const currentTime = Math.floor(Date.now() / 1000);
+  const lockAge = currentTime - timestamp;
+
+  // Stale if older than 2 hours (7200 seconds)
+  return lockAge > 7200;
+}
+
 // Find next priority assertion
 function findNextAssertion(assertions, specs = [], options = {}) {
   // If specific assertion is requested, return it directly
@@ -672,9 +695,22 @@ function findNextAssertion(assertions, specs = [], options = {}) {
   // Filter by dependency satisfaction
   incomplete = incomplete.filter(a => {
     if (!a.dependsOn) return true;  // No dependency
-    
+
     const dependency = assertions.find(d => d.id === a.dependsOn);
     return dependency && dependency.status === 'done';
+  });
+
+  // Filter by lock status
+  // Skip assertions that are in_progress AND have a fresh (non-stale) lock
+  incomplete = incomplete.filter(a => {
+    // If not in_progress, no lock filtering needed
+    if (a.status !== 'in_progress') return true;
+
+    // If in_progress but no lock, include it (backwards compatible)
+    if (!a.lockedBy) return true;
+
+    // If in_progress with a lock, check if lock is stale
+    return isLockStale(a.lockedBy);
   });
 
   if (incomplete.length === 0) {
@@ -787,6 +823,7 @@ export function run(options = {}) {
       branch: nextAssertion.branch,
       created: nextAssertion.created,
       dependsOn: nextAssertion.dependsOn,
+      lockedBy: nextAssertion.lockedBy,
       title: nextAssertion.title,
       content: nextAssertion.content,
       spec: parentSpec ? {
@@ -806,4 +843,4 @@ export function run(options = {}) {
 }
 
 // Export the parser functions for testing
-export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields, validateDependsOn, detectCircularDependencies, getCurrentGitBranch };
+export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields, validateDependsOn, detectCircularDependencies, getCurrentGitBranch, isLockStale };

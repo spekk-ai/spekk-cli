@@ -4,6 +4,8 @@ parent: spec-parser
 created: 2026-01-20T19:35:00Z
 priority: 1
 status: done
+depends-on: enforces-folder-structure
+branch: feature/spec-parser
 ---
 
 # Sidecar Test Runner Exists
