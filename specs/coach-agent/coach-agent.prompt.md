@@ -407,7 +407,36 @@ EOF
 - This creates an audit trail of spec evolution
 - Helps track when requirements changed
 
-### 8. Confirm
+### 8. Re-coordinate (if on feature branch)
+
+After updating assertions on a feature branch, re-run the coordinator skill to refresh the dependency tree and work plan:
+
+**When to re-coordinate:**
+- Adding new assertions to a feature branch
+- Changing assertion priorities or dependencies
+- Marking assertions as failed (requires re-work)
+- Major changes to branch structure
+
+**How to re-coordinate:**
+1. Read coordinator skill: `specs/coach-skills-system/coordinator-skill.md`
+2. Follow the workflow to analyze current branch state
+3. Show updated dependency tree to user
+4. Validate with parser
+5. Update frontmatter if dependencies changed
+6. Commit any coordination updates
+
+**Why this matters:**
+- Keeps dependency tree accurate
+- Helps builders understand work order
+- Identifies newly-unlocked parallel work
+- Prevents conflicts from stale dependencies
+
+**Skip re-coordination if:**
+- Changes are only to spec content (not status/priority/dependencies)
+- Working on main branch with isolated assertions
+- No new assertions added
+
+### 9. Confirm
 
 Tell user:
 ```
