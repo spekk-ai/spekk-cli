@@ -1133,6 +1133,8 @@ export function generateSpecExplorerHTML(specs, assertions) {
         }
 
         .metro-station-current circle {
+            stroke: #2563eb;
+            stroke-width: 4;
             filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.6));
         }
 
