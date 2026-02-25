@@ -3,7 +3,7 @@ id: fix-terminal-shake-properly
 parent: spec-explorer-web-interface
 created: 2026-02-25T20:02:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/dependency-visualization
 ---
 
