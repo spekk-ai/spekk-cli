@@ -80,10 +80,6 @@ function getStatusIcon(status) {
   }
 }
 
-function getPriorityIcon(priority) {
-  return '';
-}
-
 function generateDetailStatusBadge(status) {
   const icon = getStatusIcon(status);
   return `<span class="detail-status-badge">${icon}</span>`;
@@ -91,11 +87,6 @@ function generateDetailStatusBadge(status) {
 
 function generateDetailPriorityBadge(priority) {
   return `<span class="detail-priority-badge">${priority}</span>`;
-}
-
-function escapeForJS(str) {
-  // Use JSON.stringify for proper JavaScript string escaping
-  return JSON.stringify(str);
 }
 
 function escapeHTML(str) {
