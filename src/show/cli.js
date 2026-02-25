@@ -1083,6 +1083,70 @@ export function generateSpecExplorerHTML(specs, assertions) {
                 }
             }
         }
+
+        // Metro station tooltip handling
+        (function() {
+            let tooltip = null;
+
+            // Create tooltip element
+            function createTooltip() {
+                if (!tooltip) {
+                    tooltip = document.createElement('div');
+                    tooltip.className = 'metro-station-tooltip';
+                    document.body.appendChild(tooltip);
+                }
+                return tooltip;
+            }
+
+            // Position tooltip above the station
+            function positionTooltip(element, tooltipEl) {
+                const rect = element.getBoundingClientRect();
+                const tooltipRect = tooltipEl.getBoundingClientRect();
+
+                // Position above the station, centered
+                const left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+                const top = rect.top - tooltipRect.height - 10;
+
+                tooltipEl.style.left = left + 'px';
+                tooltipEl.style.top = top + 'px';
+            }
+
+            // Handle mouse events on metro stations
+            document.addEventListener('mouseover', function(event) {
+                const station = event.target.closest('.metro-station');
+                if (station && station.classList.contains('metro-station')) {
+                    // Get the title from the <title> element inside the station
+                    const titleElement = station.querySelector('title');
+                    if (titleElement) {
+                        const titleText = titleElement.textContent;
+                        const tooltipEl = createTooltip();
+                        tooltipEl.textContent = titleText;
+
+                        // Position and show tooltip
+                        setTimeout(() => {
+                            positionTooltip(station, tooltipEl);
+                            tooltipEl.classList.add('visible');
+                        }, 0);
+                    }
+                }
+            });
+
+            document.addEventListener('mouseout', function(event) {
+                const station = event.target.closest('.metro-station');
+                if (station && station.classList.contains('metro-station')) {
+                    if (tooltip) {
+                        tooltip.classList.remove('visible');
+                    }
+                }
+            });
+
+            // Update tooltip position on scroll
+            document.querySelector('.detail-panel')?.addEventListener('scroll', function() {
+                if (tooltip && tooltip.classList.contains('visible')) {
+                    tooltip.classList.remove('visible');
+                }
+            });
+        })();
     </script>
 </body>
 </html>`;
