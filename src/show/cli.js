@@ -377,7 +377,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     });
 
   // Assign track colors based on dependency lines
-  const { assertionToColor, terminalAssertions } = assignTrackColors(branchAssertions);
+  const { assertionToTrack, assertionToColor, terminalAssertions } = assignTrackColors(branchAssertions);
 
   if (branchAssertions.length === 0) {
     return '';
@@ -387,15 +387,29 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
   const currentStationRadius = 10;
   const terminusRadius = 12;
 
-  // Use Sugiyama layout algorithm for positioning
+  // Use hybrid approach: Sugiyama for X (depth), track assignment for Y (lane)
   const layers = assignLayers(branchAssertions);
-  const layerGroups = minimizeCrossings(branchAssertions, layers);
-  const positions = assignCoordinatesWithSugiyama(layerGroups, assertionToColor);
+
+  // Position nodes: X by layer (depth), Y by track (dependency chain)
+  const positions = new Map();
+  const layerSpacing = 150;
+  const trackSpacing = 80; // Vertical spacing between tracks
+  const startX = 60;
+  const startY = 80;
+
+  branchAssertions.forEach(assertion => {
+    const layer = layers.get(assertion.id) || 0;
+    const trackIndex = assertionToTrack.get(assertion.id) || 0;
+
+    const x = startX + (layer * layerSpacing);
+    const y = startY + (trackIndex * trackSpacing);
+
+    positions.set(assertion.id, { x, y });
+  });
 
   // Determine if we need a "Done" terminus (2+ terminal assertions)
   const showTerminus = terminalAssertions.length > 1;
   let terminusPosition = null;
-  const layerSpacing = 150; // Same as in assignCoordinatesWithSugiyama
 
   if (showTerminus) {
     const maxX = Math.max(...Array.from(positions.values()).map(p => p.x));
