@@ -3,7 +3,7 @@ id: locked-by-field-for-parallel-builders
 parent: spec-parser
 created: 2026-02-25T19:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/dependency-visualization
 ---
 
@@ -84,3 +84,5 @@ If current time - lock timestamp > 2 hours (7200 seconds):
   - Remove lock on completion
   - Handle git conflicts gracefully
 - Backwards compatible: assertions without `locked-by` work as before
+
+**Tests:** `src/parser/__tests__/locked-by-field.test.js`
