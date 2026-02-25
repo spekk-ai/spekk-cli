@@ -1,5 +1,5 @@
 ---
-id: show-convergence-terminal
+id: subtle-track-terminus-dots
 parent: spec-explorer-web-interface
 created: 2026-02-25T19:21:00Z
 priority: 2
