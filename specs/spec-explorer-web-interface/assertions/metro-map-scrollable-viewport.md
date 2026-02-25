@@ -3,11 +3,13 @@ id: metro-map-scrollable-viewport
 parent: spec-explorer-web-interface
 created: 2026-02-25T20:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/dependency-visualization
 ---
 
 # Metro Map Scrollable Viewport
+
+**Tests:** src/__tests__/metro-map-scrollable-viewport.test.js
 
 ## What Must Be True
 

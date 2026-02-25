@@ -774,23 +774,20 @@ export function generateSpecExplorerHTML(specs, assertions) {
         }
 
         .metro-station-tooltip {
-            position: absolute;
-            bottom: calc(100% + 10px);
-            left: 50%;
-            transform: translateX(-50%);
+            position: fixed;
             background: #1e293b;
             color: white;
             padding: 6px 12px;
             border-radius: 6px;
             font-size: 11px;
             white-space: nowrap;
-            opacity: 0;
             pointer-events: none;
+            z-index: 1000;
+            opacity: 0;
             transition: opacity 0.2s;
-            z-index: 100;
         }
 
-        .metro-station:hover .metro-station-tooltip {
+        .metro-station-tooltip.visible {
             opacity: 1;
         }
 
