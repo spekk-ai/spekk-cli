@@ -3,7 +3,7 @@ id: show-convergence-terminal
 parent: spec-explorer-web-interface
 created: 2026-02-25T19:21:00Z
 priority: 2
-status: done
+status: in_progress
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
@@ -12,48 +12,41 @@ branch: feature/dependency-visualization
 
 ## What Must Be True
 
-The metro map shows a final "done" terminal station where parallel workstreams converge, making it clear how parallel work relates to completion.
+Terminal assertions (no children) have a small, subtle endpoint dot that indicates chain completion status. Done nodes are visually quiet — they mark endpoints without drawing attention away from the assertion stations themselves.
 
 ## Success Criteria
 
-- ✅ If branch has multiple terminal assertions (no children), add a visual "Done" terminus
-- ✅ Terminal assertions connect to the "Done" terminus with track lines
-- ✅ "Done" terminus styled distinctly (e.g., larger dot, different color, checkmark icon)
-- ✅ If branch has only one terminal assertion, no "Done" terminus needed (already clear)
-- ✅ Label shows "Done" or "✓ Complete" below terminus station
-- ✅ Clicking "Done" terminus shows branch summary or does nothing (not a real assertion)
+- Each terminal assertion gets its own Done endpoint node
+- Done nodes are small: r=5 (compared to r=8 for assertion stations)
+- No text label underneath Done nodes (no "Done" text, no "✓ Complete")
+- Done node fill is green (#10b981) when the entire upstream chain is done
+- Done node fill is gray (#94a3b8) when any upstream assertion is not done
+- Done nodes have white stroke border (stroke-width: 2) for visibility
+- Done nodes are non-interactive (no click handler, `pointer-events: none`)
+- If branch has only one terminal assertion, no Done endpoint needed
+- Convergence line from terminal assertion to its Done node uses same gray (#94a3b8) at low opacity
 
 ## Visual Example
 
-**Before (unclear convergence):**
+**Done nodes are subtle endpoints:**
 ```
-A ──── B ──── C
-       └──── D
+○───○───○───●    (● = small green dot, whole chain done)
+     └──○───◦    (◦ = small gray dot, chain not fully done)
 ```
-Are C and D both endpoints? Unclear.
 
-**After (clear convergence):**
-```
-A ──── B ──── C ─────┐
-       └──── D ──────┤──── ✓ Done
-```
-Both C and D converge to completion.
+## When to Show Done Nodes
 
-## When to Show Terminus
-
-**Show terminus when:**
+**Show when:**
 - Branch has 2+ terminal assertions (parallel endpoints)
-- Makes convergence clear
 
-**Don't show terminus when:**
+**Don't show when:**
 - Branch has 1 terminal assertion (already clear endpoint)
-- All assertions in branch are done (redundant)
 
 ## Implementation Notes
 
-- Detect terminal assertions: `assertions.filter(a => !assertions.some(child => child.dependsOn === a.id))`
-- If `terminalAssertions.length > 1`, add virtual "Done" node
-- Position "Done" node at `x = maxX + spacing`
-- Draw curved connectors from each terminal to "Done"
-- Style: larger circle (12px radius), success color (#10b981), checkmark icon
-- Make non-interactive (no click handler, or show branch summary)
+- Detect terminal assertions: assertions with no children depending on them
+- Done node position: `x = terminalPos.x + 120`, `y = terminalPos.y`
+- Check upstream chain: walk `dependsOn` links back to root, check if all are `status: done`
+- `allDone ? '#10b981' : '#94a3b8'` for fill color
+- No `<text>` elements on Done nodes
+- CSS: `.metro-terminus { cursor: default; pointer-events: none; }`

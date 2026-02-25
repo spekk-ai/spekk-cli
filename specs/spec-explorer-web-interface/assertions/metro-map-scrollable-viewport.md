@@ -3,64 +3,61 @@ id: metro-map-scrollable-viewport
 parent: spec-explorer-web-interface
 created: 2026-02-25T20:00:00Z
 priority: 1
-status: done
+status: in_progress
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
 
-# Metro Map Scrollable Viewport
+# Metro Map Column Viewport
 
 **Tests:** src/__tests__/metro-map-scrollable-viewport.test.js
 
 ## What Must Be True
 
-The metro map has a limited height with horizontal scrolling/panning for branches with many assertions.
+The metro map occupies a dedicated right column that takes the full viewport height. Navigation is handled by pan-and-zoom (no scrollbars).
 
 ## Success Criteria
 
-- ✅ Metro map container has max-height (e.g., 300px)
-- ✅ Horizontal overflow scrolls/pans when content exceeds viewport width
-- ✅ Vertical overflow hidden (no vertical scroll)
-- ✅ Visual indicators show when more content exists off-screen (fade edges or scroll hints)
-- ✅ Smooth scroll behavior
-- ✅ Compact branches fit without scrolling
-- ✅ Wide branches (many assertions) scroll horizontally
+- Metro map column takes full viewport height (100vh)
+- `overflow: hidden` — no scrollbars visible
+- Pan-and-zoom handles all navigation (see metro-map-pan-and-zoom)
+- Background: `#f8fafc` with left border separator
+- Column width: ~400px fixed
+- "Branch Dependencies" header at top showing branch name
+- Column collapses or shows notice when metro map is not applicable
 
 ## Visual Structure
 
 ```
-╔══════════════════════════════════╗
-║ Branch Dependencies:        [→]  ║ ← Scroll hint
-║ ┌────────────────────────────┐   ║
-║ │ ○───○───○───○───○───○───○ │   ║ ← Scrollable
-║ └────────────────────────────┘   ║
-╠══════════════════════════════════╣
+╔══════════════════════════════╗
+║ Branch Dependencies          ║
+║ feature/dependency-visual... ║
+╠══════════════════════════════╣
+║                              ║
+║  [pan-and-zoom SVG canvas]   ║
+║                              ║
+║  ○───○───◉───○───●           ║
+║       └──○───○───●           ║
+║  ○───○───●                   ║
+║                              ║
+╚══════════════════════════════╝
 ```
 
 ## Implementation Notes
 
-CSS:
-```css
-.metro-map-container {
-  max-height: 300px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  position: relative;
-}
-
-.metro-map-container::after {
-  /* Fade edge to indicate more content */
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 0;
-  height: 100%;
-  width: 40px;
-  background: linear-gradient(to right, transparent, white);
-  pointer-events: none;
-}
-```
-
-- SVG should have dynamic width based on assertion count
-- Container scrolls horizontally when SVG width > viewport width
-- Consider adding pan/drag interaction (optional enhancement)
+- CSS for metro map column:
+  ```css
+  .metro-map-panel {
+    width: 400px;
+    height: 100vh;
+    overflow: hidden;
+    background: #f8fafc;
+    border-left: 1px solid #e2e8f0;
+    position: relative;
+    cursor: grab;
+  }
+  ```
+- SVG has dynamic width/height based on tree layout dimensions
+- Pan-and-zoom handlers attached to `.metro-map-panel`
+- When branch changes, replace SVG content and reset pan position
+- Column visibility controlled by `shouldShowMetroMap()` logic
