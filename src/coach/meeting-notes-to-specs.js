@@ -4,6 +4,13 @@ import { execSync } from 'node:child_process';
 import { Skill } from './skill-interface.js';
 
 /**
+ * DEPRECATED: This JavaScript skill class is kept for backwards compatibility and testing.
+ * New coach implementation uses markdown-based skills from specs/coach-skills-system/
+ * See: specs/coach-skills-system/meeting-notes-to-specs-skill.md
+ * 
+ * This class contains utility methods that can still be called by the coach,
+ * but skill registration now happens through markdown files.
+ * 
  * Meeting Notes to Specs skill
  * Processes meeting transcripts and converts feature discussions into proper spec files.
  * This is a coach skill - it extends the coach's capabilities to handle meeting transcripts.

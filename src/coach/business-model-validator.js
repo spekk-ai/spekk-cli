@@ -2,6 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Skill } from './skill-interface.js';
 
+/**
+ * DEPRECATED: This JavaScript skill class is kept for backwards compatibility and testing.
+ * New coach implementation uses markdown-based skills from specs/coach-skills-system/
+ * See: specs/coach-skills-system/business-model-validator-skill.md
+ * 
+ * This class contains utility methods that can still be called by the coach,
+ * but skill registration now happens through markdown files.
+ */
 export class BusinessModelValidator extends Skill {
   constructor() {
     super();

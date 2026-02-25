@@ -1,19 +1,28 @@
 /**
  * Coach Skills Framework
  * Central module for managing all coach skills
+ * Now uses markdown-based skills instead of JavaScript classes
  */
 
 import { skillRegistry } from '../skill-registry.js';
-import { BusinessModelValidator } from '../business-model-validator.js';
-import { MeetingNotesToSpecs } from '../meeting-notes-to-specs.js';
+import { MarkdownSkillLoader } from '../markdown-skill-loader.js';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
-// Register all available skills
+// Get project root directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const projectRoot = resolve(__dirname, '../../..');
+
+// Register all available skills from markdown files
 export function registerAllSkills() {
-  // Business Model Validator
-  skillRegistry.register(new BusinessModelValidator());
-
-  // Meeting Notes to Specs
-  skillRegistry.register(new MeetingNotesToSpecs());
+  const skills = MarkdownSkillLoader.loadAllSkills(projectRoot);
+  
+  skills.forEach(skill => {
+    skillRegistry.register(skill);
+  });
+  
+  console.log(`Loaded ${skills.length} markdown skill(s) from specs/coach-skills-system/`);
 }
 
 // Initialize skills on module load
@@ -23,6 +32,7 @@ registerAllSkills();
 export { skillRegistry };
 export { Skill } from '../skill-interface.js';
 export { SkillSession } from '../skill-registry.js';
+export { MarkdownSkillLoader, MarkdownSkill } from '../markdown-skill-loader.js';
 
 /**
  * Helper function to detect and suggest skills based on user input
@@ -53,4 +63,27 @@ export function listAvailableSkills() {
     name: skill.getName(),
     description: skill.getDescription()
   }));
+}
+
+/**
+ * Helper function to get workflow execution data for a skill
+ * Useful for coach agents to understand how to execute the skill
+ * @param {string} skillId - The skill ID
+ * @returns {Object|null} Execution data or null if skill not found
+ */
+export function getSkillWorkflow(skillId) {
+  const skill = skillRegistry.getSkill(skillId);
+  if (!skill) return null;
+  
+  // If it's a markdown skill, get execution data
+  if (skill.getExecutionData) {
+    return skill.getExecutionData();
+  }
+  
+  // Fallback for non-markdown skills
+  return {
+    skillId: skill.getId(),
+    skillName: skill.getName(),
+    description: skill.getDescription()
+  };
 }
