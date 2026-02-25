@@ -3,7 +3,7 @@ id: cli-routes-through-coach
 parent: meeting-notes-to-specs
 created: 2026-02-24T23:59:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # CLI Routes Through Coach
