@@ -3,16 +3,16 @@ id: metro-tracks-use-distinct-colors
 parent: spec-explorer-web-interface
 created: 2026-02-25T21:00:00Z
 priority: 2
-status: done
+status: in_progress
 depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
 
-# Metro Tracks Use Distinct Colors and Horizontal Lanes
+# Metro Tracks Use Distinct Colors with Hierarchical Layout
 
 ## What Must Be True
 
-Dependency tracks (lines connecting stations) use distinct colors AND are laid out in separate horizontal lanes to eliminate overlapping paths. Each dependency chain gets its own color and horizontal lane, similar to how subway lines have both distinct colors and separate tracks.
+Dependency tracks (lines connecting stations) use distinct colors AND are laid out using a hierarchical graph algorithm that minimizes edge crossings and visual complexity. The layout makes dependency chains clear and easy to follow even with many parallel paths.
 
 ## Success Criteria
 
@@ -21,9 +21,10 @@ Dependency tracks (lines connecting stations) use distinct colors AND are laid o
 - ✅ Color palette uses ordinal progression (e.g., subway line colors)
 - ✅ Dependencies leading to different endpoints use different colors
 - ✅ Colors are sufficient to trace paths without needing a legend
-- ⬜ **Each dependency track gets its own horizontal lane (no overlapping tracks)**
-- ⬜ **Tracks are visually separated so individual chains are easy to follow**
-- ⬜ **Layout scales gracefully with many parallel dependency chains**
+- ⬜ **Hierarchical layout with nodes arranged in layers by dependency depth**
+- ⬜ **Edge crossings minimized using Sugiyama-style algorithm**
+- ⬜ **Nodes within each layer positioned to reduce edge crossing**
+- ⬜ **Layout scales gracefully with complex dependency graphs**
 
 ## Current Issue
 
@@ -33,37 +34,37 @@ Dependency tracks (lines connecting stations) use distinct colors AND are laid o
 - Lines blended together making dependency chains unclear
 - ✅ **FIXED:** Each track now has distinct color
 
-**Problem (Phase 2 - CURRENT):**
-- Even with distinct colors, too many parallel tracks overlap vertically
-- Creates visual "spaghetti" that's confusing to follow
-- Many independent dependency chains shown in same view
-- Current layout places assertions at same depth level vertically, causing overlap
-- Example: 10+ parallel tracks crossing over each other
+**Problem (Phase 2 - TRIED, FAILED):**
+- Even with distinct colors, too many parallel tracks overlap
+- Track-based horizontal lanes approach didn't solve the problem
+- The issue is more complex than simple lane assignment
+- Dependencies can be shared between multiple tracks
+- Simple lane assignment doesn't account for edge crossing minimization
 
-**Solution (Track-Based Horizontal Lanes):**
-1. **Assign each dependency track to a horizontal lane**
-   - Track 0 (blue) → Lane 0 → Y = 80px
-   - Track 1 (orange) → Lane 1 → Y = 180px
-   - Track 2 (green) → Lane 2 → Y = 280px
-   - Etc.
+**Solution (Sugiyama Hierarchical Layout):**
 
-2. **Within each lane, position assertions by dependency depth**
-   - Root assertions (no dependencies) → X = 60px
-   - Depth 1 assertions → X = 170px
-   - Depth 2 assertions → X = 280px
-   - Etc.
+Use Sugiyama-style layered graph drawing algorithm:
 
-3. **Result:**
-   - Each colored track occupies its own horizontal lane
-   - No vertical overlap between different dependency chains
-   - Easy to trace individual tracks from start to end
-   - Scales to many parallel chains (just adds more lanes)
+1. **Layer Assignment (Rank Assignment)**
+   - Assign each node to a layer based on longest path from source
+   - Layer 0: nodes with no dependencies
+   - Layer i: nodes whose longest dependency path is i
 
-**Fallback (Hierarchical Graph Layout):**
-If track-based lanes don't work well (e.g., shared dependencies between tracks), implement a proper DAG layout algorithm:
-- Use Sugiyama layered graph drawing
-- Minimize edge crossings
-- Proper hierarchical layout that handles complex dependency graphs
+2. **Crossing Minimization**
+   - Within each layer, order nodes to minimize edge crossings
+   - Use barycenter heuristic or median heuristic
+   - Multiple passes (forward and backward) to optimize
+
+3. **Coordinate Assignment**
+   - Assign X coordinates based on layer
+   - Assign Y coordinates within layer to minimize edge length
+   - Apply spacing constraints for readability
+
+4. **Result:**
+   - Hierarchical left-to-right layout
+   - Minimized edge crossings
+   - Clear visual hierarchy
+   - Handles complex DAGs with shared dependencies
 
 ## Color Palette
 
@@ -85,95 +86,109 @@ If track-based lanes don't work well (e.g., shared dependencies between tracks),
 
 ## Implementation
 
-**Step 1: Assign tracks and colors**
+**Step 1: Layer Assignment (Longest Path)**
 ```javascript
-function assignTracksAndColors(assertions) {
-  // Find terminal assertions (endpoints with no children)
-  const terminalAssertions = assertions.filter(assertion =>
-    !assertions.some(child => child.dependsOn === assertion.id)
-  );
+function assignLayers(assertions) {
+  const layers = new Map(); // assertion.id -> layer number
 
-  // Assign track number and color to each terminal
-  const assertionToTrack = new Map();
-  const assertionToColor = new Map();
+  function getLongestPath(assertionId, visited = new Set()) {
+    if (visited.has(assertionId)) return 0; // Cycle detection
 
-  terminalAssertions.forEach((terminal, index) => {
-    const trackIndex = index;
-    const color = trackPalette[index % trackPalette.length];
+    const layer = layers.get(assertionId);
+    if (layer !== undefined) return layer;
 
-    // Trace back and assign all ancestors to this track
-    function assignTrack(assertionId) {
-      if (assertionToTrack.has(assertionId)) return;
-
-      assertionToTrack.set(assertionId, trackIndex);
-      assertionToColor.set(assertionId, color);
-
-      const assertion = assertions.find(a => a.id === assertionId);
-      if (assertion?.dependsOn) {
-        assignTrack(assertion.dependsOn);
-      }
+    const assertion = assertions.find(a => a.id === assertionId);
+    if (!assertion || !assertion.dependsOn) {
+      layers.set(assertionId, 0);
+      return 0;
     }
 
-    assignTrack(terminal.id);
-  });
+    visited.add(assertionId);
+    const parentLayer = getLongestPath(assertion.dependsOn, visited);
+    const myLayer = parentLayer + 1;
+    layers.set(assertionId, myLayer);
+    return myLayer;
+  }
 
-  return { assertionToTrack, assertionToColor, terminalAssertions };
+  assertions.forEach(a => getLongestPath(a.id));
+  return layers;
 }
 ```
 
-**Step 2: Layout with horizontal lanes**
+**Step 2: Minimize Crossings (Barycenter Heuristic)**
 ```javascript
-function layoutAssertions(assertions, assertionToTrack) {
+function minimizeCrossings(assertions, layers) {
+  // Group assertions by layer
+  const maxLayer = Math.max(...layers.values());
+  const layerGroups = Array.from({ length: maxLayer + 1 }, () => []);
+
+  assertions.forEach(assertion => {
+    const layer = layers.get(assertion.id);
+    layerGroups[layer].push(assertion);
+  });
+
+  // Sort nodes within each layer by barycenter of neighbors
+  for (let i = 1; i <= maxLayer; i++) {
+    layerGroups[i].sort((a, b) => {
+      const aParent = assertions.find(p => p.id === a.dependsOn);
+      const bParent = assertions.find(p => p.id === b.dependsOn);
+
+      if (!aParent && !bParent) return 0;
+      if (!aParent) return -1;
+      if (!bParent) return 1;
+
+      // Sort by parent position (barycenter)
+      const aParentIndex = layerGroups[i-1].indexOf(aParent);
+      const bParentIndex = layerGroups[i-1].indexOf(bParent);
+      return aParentIndex - bParentIndex;
+    });
+  }
+
+  return layerGroups;
+}
+```
+
+**Step 3: Coordinate Assignment**
+```javascript
+function assignCoordinates(layerGroups, assertionToColor) {
   const positions = new Map();
-  const laneHeight = 100; // Vertical spacing between lanes
-  const depthSpacing = 110; // Horizontal spacing between depth levels
+  const layerSpacing = 150; // X spacing between layers
+  const nodeSpacing = 100; // Y spacing between nodes in same layer
   const startX = 60;
   const startY = 80;
 
-  assertions.forEach(assertion => {
-    const trackIndex = assertionToTrack.get(assertion.id) || 0;
-    const depth = calculateDependencyDepth(assertion, assertions);
+  layerGroups.forEach((layer, layerIndex) => {
+    const x = startX + (layerIndex * layerSpacing);
 
-    const x = startX + (depth * depthSpacing);
-    const y = startY + (trackIndex * laneHeight);
-
-    positions.set(assertion.id, { x, y });
+    layer.forEach((assertion, nodeIndex) => {
+      const y = startY + (nodeIndex * nodeSpacing);
+      positions.set(assertion.id, { x, y });
+    });
   });
 
   return positions;
 }
 ```
 
-**Step 3: Render tracks with colors and positions**
+**Step 4: Complete Layout Function**
 ```javascript
-// Generate SVG with track-based layout
-const { assertionToTrack, assertionToColor } = assignTracksAndColors(assertions);
-const positions = layoutAssertions(assertions, assertionToTrack);
+function layoutWithSugiyama(assertions, assertionToColor) {
+  // 1. Assign layers
+  const layers = assignLayers(assertions);
 
-// Draw dependency lines
-assertions.forEach(assertion => {
-  if (assertion.dependsOn) {
-    const fromPos = positions.get(assertion.dependsOn);
-    const toPos = positions.get(assertion.id);
-    const color = assertionToColor.get(assertion.id);
+  // 2. Minimize crossings
+  const layerGroups = minimizeCrossings(assertions, layers);
 
-    // Draw line from fromPos to toPos with color
-  }
-});
+  // 3. Assign coordinates
+  const positions = assignCoordinates(layerGroups, assertionToColor);
+
+  return positions;
+}
 ```
 
-## Layout Example
+## Sugiyama Algorithm Benefits
 
-Given 3 terminal assertions (A, B, C) with dependencies:
-- Track 0 (Blue): D → A
-- Track 1 (Orange): E → F → B
-- Track 2 (Green): G → C
-
-Layout:
-```
-Lane 0 (Blue):   [D]────[A]
-Lane 1 (Orange): [E]────[F]────[B]
-Lane 2 (Green):  [G]────[C]
-```
-
-No overlapping tracks, easy to follow each chain horizontally.
+- **Handles Complex DAGs:** Works with shared dependencies between tracks
+- **Minimizes Crossings:** Uses heuristics to reduce visual complexity
+- **Hierarchical:** Clear left-to-right progression shows dependency flow
+- **Scalable:** Adapts to any graph structure
