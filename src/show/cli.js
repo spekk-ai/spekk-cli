@@ -305,15 +305,26 @@ function minimizeCrossings(assertions, layers) {
 function assignCoordinatesWithSugiyama(layerGroups, assertionToColor) {
   const positions = new Map();
   const layerSpacing = 150; // X spacing between layers
-  const nodeSpacing = 100; // Y spacing between nodes in same layer
+  const baseNodeSpacing = 80; // Base Y spacing between nodes in same layer (reduced for compactness)
   const startX = 60;
   const startY = 80;
 
   layerGroups.forEach((layer, layerIndex) => {
     const x = startX + (layerIndex * layerSpacing);
 
+    // Calculate dynamic spacing based on fanout to prevent overlapping parallel tracks
     layer.forEach((assertion, nodeIndex) => {
-      const y = startY + (nodeIndex * nodeSpacing);
+      // Check if previous nodes in this layer share the same parent
+      let extraSpacing = 0;
+      if (nodeIndex > 0 && assertion.dependsOn) {
+        const prevAssertion = layer[nodeIndex - 1];
+        if (prevAssertion.dependsOn === assertion.dependsOn) {
+          // Same parent - add extra spacing to fan out the parallel tracks
+          extraSpacing = 20;
+        }
+      }
+
+      const y = startY + (nodeIndex * baseNodeSpacing) + extraSpacing;
       positions.set(assertion.id, { x, y });
     });
   });
