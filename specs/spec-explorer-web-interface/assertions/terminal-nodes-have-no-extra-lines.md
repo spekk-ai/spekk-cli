@@ -1,5 +1,5 @@
 ---
-id: fix-erroneous-terminal-lines
+id: terminal-nodes-have-no-extra-lines
 parent: spec-explorer-web-interface
 created: 2026-02-25T20:32:00Z
 priority: 2
@@ -7,93 +7,31 @@ status: done
 branch: feature/dependency-visualization
 ---
 
-# Fix Erroneous Terminal Lines
+# Terminal Nodes Have No Extra Lines
 
 ## What Must Be True
 
-No erroneous lines appear to the right of topmost terminal nodes in the metro map.
+Terminal nodes (assertions with no children) have clean visual presentation with no erroneous lines extending beyond them.
 
 ## Success Criteria
 
 - ✅ Terminal nodes have no extra lines extending to their right
-- ✅ Track lines only connect assertions with actual dependencies
-- ✅ "Done" convergence terminal is properly connected
-- ✅ Visual is clean with no stray lines
+- ✅ Track lines only appear between assertions with actual `depends-on` relationships
+- ✅ "Done" convergence terminal connections are clean and intentional
+- ✅ No stray horizontal lines across the metro map
 
-## Problem Description
+## Implementation
 
-User reports: "There's an erroneous extra line to the right of the topmost terminals - not sure why"
+**Root cause:** A main track line was being drawn horizontally across the entire metro map width, extending beyond all terminal nodes.
 
-This likely means:
-- Terminal assertions (those with no children) have lines extending beyond them
-- The "Done" convergence terminal might have extra connection lines
-- Track generation logic is drawing lines when it shouldn't
+**Solution:** Removed the main track line generation. Metro map now only displays:
+- Dependency lines between connected assertions (parent → child via `depends-on`)
+- Convergence paths from multiple terminal nodes to the "Done" terminus
 
-## Investigation Steps
-
-1. Check track line generation in `generateMetroMap()` function
-2. Look for line drawing between:
-   - Terminal assertions and non-existent children
-   - Convergence terminal and assertions
-3. Check if "Done" terminal connector logic has bugs
-4. Verify `dependsOn` relationships are correctly identified
-
-## Likely Causes
-
-**Cause A: Track line extends beyond terminal**
+**Code removed:**
 ```javascript
-// Bug: Drawing line even when no child exists
-const lineX2 = assertionX + spacing; // Wrong: extends past terminal
+// Removed this line that extended across entire map
+<line class="metro-track" x1="40" y1="${trackY}" x2="${maxX}" y2="${trackY}"/>
 ```
 
-**Cause B: Convergence terminal connection issue**
-```javascript
-// Bug: Drawing lines TO convergence terminal incorrectly
-terminals.forEach(terminal => {
-  drawLine(terminal.x, convergenceX); // May be drawing extra line
-});
-```
-
-**Cause C: Done terminal appears when it shouldn't**
-```javascript
-// Bug: Showing convergence when only 1 terminal exists
-if (terminals.length >= 1) { // Should be > 1
-  showConvergenceTerminal();
-}
-```
-
-## Solution Approach
-
-1. **Identify terminal assertions:**
-   ```javascript
-   const terminals = assertions.filter(a =>
-     !assertions.some(child => child.dependsOn === a.id)
-   );
-   ```
-
-2. **Don't draw lines beyond terminals:**
-   ```javascript
-   // Only draw lines between assertions with dependencies
-   assertions.forEach(assertion => {
-     if (assertion.dependsOn) {
-       const parent = findAssertion(assertion.dependsOn);
-       drawLine(parent.x, parent.y, assertion.x, assertion.y);
-     }
-   });
-   ```
-
-3. **Check convergence terminal logic:**
-   ```javascript
-   // Only show if multiple terminals exist
-   if (terminals.length > 1) {
-     showConvergenceTerminal();
-     terminals.forEach(t => drawLine(t, convergence));
-   }
-   ```
-
-## Implementation Notes
-
-- Review SVG generation carefully
-- Check both track lines and convergence connectors
-- May need to debug by adding console.logs to track generation
-- Consider visual debugging: color code different line types
+The metro map visual is now clean with only meaningful dependency connections visible.
