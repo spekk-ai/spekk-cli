@@ -506,23 +506,41 @@ function computeParentStatus(parentId, assertions) {
 }
 
 // Find next priority assertion
-function findNextAssertion(assertions, specs = []) {
+function findNextAssertion(assertions, specs = [], options = {}) {
+  // If specific assertion is requested, return it directly
+  if (options.assertion) {
+    const targetAssertion = assertions.find(a => a.id === options.assertion);
+    if (!targetAssertion) {
+      return { error: true, message: `Assertion '${options.assertion}' not found` };
+    }
+    return targetAssertion;
+  }
+
   // Filter to incomplete items, excluding:
-  // - Assertions with status 'done' or 'draft'  
+  // - Assertions with status 'done' or 'draft'
   // - Assertions whose parent spec has status 'draft'
-  const incomplete = assertions.filter(a => {
+  let incomplete = assertions.filter(a => {
     if (['done', 'draft'].includes(a.status)) return false;
-    
+
     const parentSpec = specs.find(s => s.id === a.parent);
     if (parentSpec?.status === 'draft') return false;
-    
+
     return true;
   });
-  
+
+  // Filter by spec if specified
+  if (options.spec) {
+    const specExists = specs.some(s => s.id === options.spec);
+    if (!specExists) {
+      return { error: true, message: `Spec '${options.spec}' not found` };
+    }
+    incomplete = incomplete.filter(a => a.parent === options.spec);
+  }
+
   if (incomplete.length === 0) {
     return null;
   }
-  
+
   // Sort by priority (1 highest), then by created date (oldest first), then by id
   incomplete.sort((a, b) => {
     if (a.priority !== b.priority) {
@@ -533,7 +551,7 @@ function findNextAssertion(assertions, specs = []) {
     }
     return a.id.localeCompare(b.id);
   });
-  
+
   return incomplete[0];
 }
 
@@ -590,8 +608,21 @@ export function run(options = {}) {
       return;
     }
     
-    const nextAssertion = findNextAssertion(assertions, specs);
-    
+    const nextAssertion = findNextAssertion(assertions, specs, {
+      spec: options.spec,
+      assertion: options.assertion
+    });
+
+    // Handle error from findNextAssertion
+    if (nextAssertion && nextAssertion.error) {
+      console.log(JSON.stringify({
+        type: 'error',
+        message: nextAssertion.message
+      }, null, 2));
+      process.exit(1);
+      return;
+    }
+
     if (!nextAssertion) {
       console.log(JSON.stringify({
         type: 'complete',

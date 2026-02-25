@@ -48,7 +48,7 @@ COMMANDS:
     break;
   
   case 'builder':
-    await launchBuilderAgent();
+    await launchBuilderAgent(args.slice(1));
     break;
   
   case 'observer':
@@ -88,11 +88,22 @@ DEFAULT:
     break;
   
   default:
-    // Default behavior: run the parser
-    const allFlag = args.includes('--all');
-    if (allFlag) {
-      run({ all: true });
-    } else {
-      run();
+    // Default behavior: run the parser with flags
+    const options = {};
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      switch (arg) {
+        case '--all':
+          options.all = true;
+          break;
+        case '--spec':
+        case '-s':
+          options.spec = args[++i];
+          break;
+        case '--assertion':
+          options.assertion = args[++i];
+          break;
+      }
     }
+    run(options);
 }
