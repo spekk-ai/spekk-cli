@@ -1,7 +1,8 @@
-import { test } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { execSync } from 'child_process';
-import { run } from '../index.js';
+import * as parserModule from '../index.js';
+
+const { run } = parserModule;
 
 describe('Branch-aware spekk next', () => {
   let originalLog;
@@ -24,22 +25,17 @@ describe('Branch-aware spekk next', () => {
   });
 
   describe('Branch filtering', () => {
-    test('returns assertion matching current git branch', () => {
-      // Get actual current branch
-      const currentBranch = execSync('git branch --show-current', { 
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'ignore']
-      }).trim();
+    test('returns assertion matching current git branch', (t) => {
+      // Mock getCurrentGitBranch to return a controlled value
+      t.mock.method(parserModule, 'getCurrentGitBranch', () => 'feature/chat-system');
 
       run({ specsDirectory: 'src/parser/__tests__/fixtures/branch-aware' });
 
       const output = JSON.parse(logOutput[0]);
       
-      // Should return an assertion for the current branch or one without branch field
+      // Should return an assertion for the mocked branch
       assert.strictEqual(output.type, 'assertion');
-      if (output.branch) {
-        assert.strictEqual(output.branch, currentBranch);
-      }
+      assert.strictEqual(output.branch, 'feature/chat-system');
     });
 
     test('--all-branches returns assertions from all branches', () => {

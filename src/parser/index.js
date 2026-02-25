@@ -801,4 +801,4 @@ export function run(options = {}) {
 }
 
 // Export the parser functions for testing
-export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields, validateDependsOn, detectCircularDependencies };
+export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields, validateDependsOn, detectCircularDependencies, getCurrentGitBranch };

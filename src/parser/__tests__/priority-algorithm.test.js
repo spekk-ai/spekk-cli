@@ -85,7 +85,7 @@ This should be picked first.`;
           const { assertions } = parseAllSpecs();
           // Filter to only test assertions to avoid interference from real specs
           const testAssertions = assertions.filter(a => a.parent.startsWith('temp-priority-test-'));
-          const nextAssertion = findNextAssertion(testAssertions);
+          const nextAssertion = findNextAssertion(testAssertions, [], { allBranches: true });
           
           assert.ok(nextAssertion, 'Should find a next assertion');
           assert.equal(nextAssertion.id, 'high-priority-assertion', 'Should pick priority 1 assertion over priority 2');
@@ -157,7 +157,7 @@ This was created earlier and should be picked.`;
           const { assertions } = parseAllSpecs();
           // Filter to only test assertions to avoid interference from real specs
           const testAssertions = assertions.filter(a => a.parent === 'temp-tie-breaker-test');
-          const nextAssertion = findNextAssertion(testAssertions);
+          const nextAssertion = findNextAssertion(testAssertions, [], { allBranches: true });
           
           assert.ok(nextAssertion, 'Should find a next assertion');
           assert.equal(nextAssertion.id, 'older-assertion', 'Should pick older assertion when priorities are equal');
@@ -228,7 +228,7 @@ This should be picked even though it has lower priority.`;
           const { assertions } = parseAllSpecs();
           // Filter to only test assertions to avoid interference from real specs
           const testAssertions = assertions.filter(a => a.parent === 'temp-done-filter-test');
-          const nextAssertion = findNextAssertion(testAssertions);
+          const nextAssertion = findNextAssertion(testAssertions, [], { allBranches: true });
           
           assert.ok(nextAssertion, 'Should find a next assertion');
           assert.equal(nextAssertion.id, 'not-started-assertion', 'Should pick incomplete assertion over done ones');
@@ -285,7 +285,7 @@ This is in progress and should be picked up.`;
           const { assertions } = parseAllSpecs();
           // Filter to only test assertions to avoid interference from real specs
           const testAssertions = assertions.filter(a => a.parent === 'temp-in-progress-test');
-          const nextAssertion = findNextAssertion(testAssertions);
+          const nextAssertion = findNextAssertion(testAssertions, [], { allBranches: true });
           
           assert.ok(nextAssertion, 'Should find a next assertion');
           assert.equal(nextAssertion.id, 'in-progress-assertion', 'Should pick in_progress assertion');
@@ -319,7 +319,7 @@ This is in progress and should be picked up.`;
         }
       ];
       
-      const nextAssertion = findNextAssertion(testAssertions);
+      const nextAssertion = findNextAssertion(testAssertions, [], { allBranches: true });
       assert.equal(nextAssertion, null, 'Should return null when all assertions are done');
     });
   });
@@ -414,7 +414,7 @@ status: not_started
           // Test direct function call with filtered test data
           const { assertions } = parseAllSpecs();
           const testAssertions = assertions.filter(a => a.parent.startsWith('temp-cli-test-'));
-          const nextAssertion = findNextAssertion(testAssertions);
+          const nextAssertion = findNextAssertion(testAssertions, [], { allBranches: true });
           
           // Test CLI output (uses all real specs, so we can't guarantee it matches test data)
           const result = execSync('node src/parser/cli.js', { encoding: 'utf8' });

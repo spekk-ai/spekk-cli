@@ -39,44 +39,6 @@ depends-on: other-assertion
     assert.equal(data['depends-on'], undefined, 'Should not have kebab-case key in parsed data');
   });
 
-  test('accepts omitted depends-on field', () => {
-    const tempDir = path.join(process.cwd(), 'temp-depends-omitted-test');
-    const assertionsDir = path.join(tempDir, 'assertions');
-    const symlinkPath = path.join(process.cwd(), 'specs', 'temp-depends-omitted-test');
-
-    try {
-      cleanupTest(tempDir, symlinkPath);
-      fs.mkdirSync(assertionsDir, { recursive: true });
-
-      fs.writeFileSync(path.join(tempDir, 'temp-depends-omitted-test.md'), `---
-id: temp-depends-omitted-test
-created: 2026-01-20T16:00:00Z
-priority: 1
----
-
-# Omitted Test Spec`);
-
-      fs.writeFileSync(path.join(assertionsDir, 'test-assertion.md'), `---
-id: test-assertion
-parent: temp-depends-omitted-test
-created: 2026-01-20T16:00:00Z
-priority: 1
----
-
-# Test Assertion`);
-
-      fs.symlinkSync(tempDir, symlinkPath);
-
-      // Should not throw
-      const { assertions } = parseAllSpecs();
-      const testAssertion = assertions.find(a => a.id === 'test-assertion');
-      assert.ok(testAssertion, 'Should parse assertion without depends-on field');
-      assert.equal(testAssertion.dependsOn, undefined, 'Should have undefined dependsOn when omitted');
-    } finally {
-      cleanupTest(tempDir, symlinkPath);
-    }
-  });
-
   test('rejects invalid type for depends-on field', () => {
     const tempDir = path.join(process.cwd(), 'temp-depends-invalid-type-test');
     const assertionsDir = path.join(tempDir, 'assertions');

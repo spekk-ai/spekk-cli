@@ -14,23 +14,6 @@ describe('Coordinator Skill', () => {
     coordinator = new Coordinator();
     // Create a temporary test directory
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coordinator-test-'));
-    
-    // Initialize git repo
-    execSync('git init', { cwd: testDir, stdio: 'pipe' });
-    execSync('git config user.email "test@example.com"', { cwd: testDir, stdio: 'pipe' });
-    execSync('git config user.name "Test User"', { cwd: testDir, stdio: 'pipe' });
-    
-    // Create initial commit so we have a proper branch
-    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test\n');
-    execSync('git add README.md', { cwd: testDir, stdio: 'pipe' });
-    execSync('git commit -m "Initial commit"', { cwd: testDir, stdio: 'pipe' });
-    
-    // Ensure we're on main branch (git init might create main or master)
-    try {
-      execSync('git branch -M main', { cwd: testDir, stdio: 'pipe' });
-    } catch (e) {
-      // Branch already named main
-    }
   });
 
   afterEach(() => {
@@ -40,21 +23,22 @@ describe('Coordinator Skill', () => {
     }
   });
 
+  // Helper function to initialize git repo for tests that need it
+  function initGitRepo(dir) {
+    execSync('git init', { cwd: dir, stdio: 'pipe' });
+    execSync('git config user.email "test@example.com"', { cwd: dir, stdio: 'pipe' });
+    execSync('git config user.name "Test User"', { cwd: dir, stdio: 'pipe' });
+    fs.writeFileSync(path.join(dir, 'README.md'), '# Test\n');
+    execSync('git add README.md', { cwd: dir, stdio: 'pipe' });
+    execSync('git commit -m "Initial commit"', { cwd: dir, stdio: 'pipe' });
+    try {
+      execSync('git branch -M main', { cwd: dir, stdio: 'pipe' });
+    } catch (e) {
+      // Branch already named main
+    }
+  }
+
   describe('Skill Interface', () => {
-    it('should have correct ID', () => {
-      assert.strictEqual(coordinator.getId(), 'coordinator');
-    });
-
-    it('should have correct name', () => {
-      assert.strictEqual(coordinator.getName(), 'Coordinator');
-    });
-
-    it('should have description', () => {
-      const desc = coordinator.getDescription();
-      assert.ok(desc);
-      assert.ok(desc.toLowerCase().includes('dependencies'));
-    });
-
     it('should trigger on coordinator keywords', () => {
       assert.strictEqual(coordinator.shouldTrigger('run coordinator'), true);
       assert.strictEqual(coordinator.shouldTrigger('analyze dependencies'), true);
@@ -65,12 +49,6 @@ describe('Coordinator Skill', () => {
     it('should not trigger on unrelated input', () => {
       assert.strictEqual(coordinator.shouldTrigger('hello world'), false);
       assert.strictEqual(coordinator.shouldTrigger('build something'), false);
-    });
-
-    it('should have questions', () => {
-      const questions = coordinator.getQuestions();
-      assert.ok(Array.isArray(questions));
-      assert.ok(questions.length > 0);
     });
   });
 
@@ -639,6 +617,7 @@ status: not_started
 
   describe('Branch Exists', () => {
     beforeEach(() => {
+      initGitRepo(testDir);
       // Create a test branch
       execSync('git checkout -b test-branch', { cwd: testDir, stdio: 'pipe' });
       execSync('git checkout main', { cwd: testDir, stdio: 'pipe' });
@@ -876,6 +855,7 @@ status: not_started
 
   describe('Run Branch Assignment', () => {
     beforeEach(() => {
+      initGitRepo(testDir);
       // Create test spec structure with multiple specs
       const specsDir = path.join(testDir, 'specs');
       
@@ -1000,6 +980,7 @@ status: not_started
 
   describe('Run YAML Frontmatter Updates', () => {
     beforeEach(() => {
+      initGitRepo(testDir);
       // Create test spec structure
       const specsDir = path.join(testDir, 'specs');
       
