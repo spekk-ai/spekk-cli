@@ -3,7 +3,7 @@ id: hide-metro-map-for-ungrouped-assertions
 parent: spec-explorer-web-interface
 created: 2026-02-25T20:01:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/dependency-visualization
 ---
 

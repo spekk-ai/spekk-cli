@@ -132,6 +132,35 @@ function calculateDependencyDepth(assertion, assertions) {
   return 1 + calculateDependencyDepth(parent, assertions);
 }
 
+function shouldShowMetroMap(assertion, allAssertions) {
+  const assertionBranch = assertion.branch || 'main';
+
+  // Always show for feature branches
+  if (assertionBranch !== 'main') {
+    return true;
+  }
+
+  // For main branch, only show if there are dependencies
+  const branchAssertions = allAssertions.filter(a => (a.branch || 'main') === assertionBranch);
+  const hasDependencies = branchAssertions.some(a => a.dependsOn);
+  return hasDependencies;
+}
+
+function generateNoDependenciesNotice() {
+  return `
+    <div class="no-dependencies-notice">
+      <div class="notice-icon">ℹ️</div>
+      <div class="notice-content">
+        <div class="notice-title">No branch dependencies to visualize</div>
+        <div class="notice-text">
+          This assertion is on the main branch with no related dependencies.
+          Branch dependencies are shown for feature branches and main branch assertions with dependency chains.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function generateMetroMapSVG(currentAssertion, allAssertions) {
   // Filter assertions in the same branch
   const assertionBranch = currentAssertion.branch || 'main';
@@ -267,6 +296,7 @@ function generateMetroMapSVG(currentAssertion, allAssertions) {
     svg += `
   <!-- Station: ${escapeHTML(assertion.id)} -->
   <g class="metro-station" data-action="show-detail" data-assertion-id="${escapeHTML(assertion.id)}" data-type="assertion" transform="translate(${pos.x}, ${pos.y})">
+    <title>${escapeHTML(assertion.title)}</title>
     <circle r="${radius}" fill="${color}" stroke="#fff" stroke-width="${strokeWidth}"${glowFilter}/>
     <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: ${isCurrent ? '700' : '400'};">${escapeHTML(displayTitle)}</text>
   </g>`;
@@ -676,7 +706,24 @@ export function generateSpecExplorerHTML(specs, assertions) {
             background: #f8fafc;
             border-radius: 8px;
             border: 1px solid #e2e8f0;
+            max-height: 300px;
             overflow-x: auto;
+            overflow-y: hidden;
+            position: relative;
+            scroll-behavior: smooth;
+        }
+
+        .metro-map-section::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 0;
+            height: 100%;
+            width: 40px;
+            background: linear-gradient(to right, transparent, #f8fafc);
+            pointer-events: none;
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
         }
 
         .metro-map-title {
@@ -724,6 +771,71 @@ export function generateSpecExplorerHTML(specs, assertions) {
         .metro-label {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             pointer-events: none;
+        }
+
+        .metro-station-tooltip {
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 100;
+        }
+
+        .metro-station:hover .metro-station-tooltip {
+            opacity: 1;
+        }
+
+        .metro-station-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: #1e293b;
+        }
+
+        .no-dependencies-notice {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            color: #1e40af;
+        }
+
+        .notice-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .notice-content {
+            flex: 1;
+        }
+
+        .notice-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #1e40af;
+        }
+
+        .notice-text {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #1e40af;
         }
     </style>
 </head>
@@ -805,7 +917,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
                     </div>
                     <div class="metro-map-section">
                         <h3 class="metro-map-title">Branch Dependencies</h3>
-                        ${generateMetroMapSVG(assertion, assertions)}
+                        ${shouldShowMetroMap(assertion, assertions) ? generateMetroMapSVG(assertion, assertions) : generateNoDependenciesNotice()}
                     </div>
                     <div class="detail-body">
                         <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHTML(assertion.content)}</pre>

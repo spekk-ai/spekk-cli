@@ -553,4 +553,172 @@ status: not_started
       cleanup();
     }
   });
+
+  test('hides metro map for main branch assertions without dependencies', () => {
+    cleanup();
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      const specsDir = join(testDir, 'specs');
+      const specDir = join(specsDir, 'test-spec');
+      const assertionsDir = join(specDir, 'assertions');
+      mkdirSync(assertionsDir, { recursive: true });
+
+      writeFileSync(join(specDir, 'test-spec.md'), `---
+id: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+---
+
+# Test Spec`);
+
+      // Main branch assertion with no dependencies - should show notice
+      writeFileSync(join(assertionsDir, 'assertion-main.md'), `---
+id: assertion-main
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: done
+---
+
+# Assertion Main`);
+
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, {
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 5000,
+        env: { ...process.env, NODE_ENV: 'test' }
+      });
+
+      const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
+
+      // Should show notice instead of metro map
+      assert.ok(htmlContent.includes('no-dependencies-notice'), 'Should include no-dependencies notice');
+      assert.ok(htmlContent.includes('No branch dependencies to visualize'), 'Should include notice title');
+      assert.ok(htmlContent.includes('This assertion is on the main branch'), 'Should include notice text');
+
+      // Should not include metro map SVG for this assertion
+      const assertionDetail = htmlContent.match(/id="detail-assertion-assertion-main"[\s\S]*?<div class="detail-body">/);
+      assert.ok(assertionDetail, 'Should find assertion detail section');
+      assert.ok(!assertionDetail[0].includes('class="metro-map"'), 'Should not include metro map SVG');
+
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('shows metro map for feature branch assertions even without dependencies', () => {
+    cleanup();
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      const specsDir = join(testDir, 'specs');
+      const specDir = join(specsDir, 'test-spec');
+      const assertionsDir = join(specDir, 'assertions');
+      mkdirSync(assertionsDir, { recursive: true });
+
+      writeFileSync(join(specDir, 'test-spec.md'), `---
+id: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+---
+
+# Test Spec`);
+
+      // Feature branch assertion with no dependencies - should show metro map
+      writeFileSync(join(assertionsDir, 'assertion-feature.md'), `---
+id: assertion-feature
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: in_progress
+branch: feature/test
+---
+
+# Assertion Feature`);
+
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, {
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 5000,
+        env: { ...process.env, NODE_ENV: 'test' }
+      });
+
+      const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
+
+      // Should show metro map (not notice)
+      const assertionDetail = htmlContent.match(/id="detail-assertion-assertion-feature"[\s\S]*?<div class="detail-body">/);
+      assert.ok(assertionDetail, 'Should find assertion detail section');
+      assert.ok(assertionDetail[0].includes('class="metro-map"'), 'Should include metro map SVG');
+      assert.ok(!assertionDetail[0].includes('no-dependencies-notice'), 'Should not include notice');
+
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('shows metro map for main branch assertions with dependencies', () => {
+    cleanup();
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      const specsDir = join(testDir, 'specs');
+      const specDir = join(specsDir, 'test-spec');
+      const assertionsDir = join(specDir, 'assertions');
+      mkdirSync(assertionsDir, { recursive: true });
+
+      writeFileSync(join(specDir, 'test-spec.md'), `---
+id: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+---
+
+# Test Spec`);
+
+      // Main branch assertions with dependencies - should show metro map
+      writeFileSync(join(assertionsDir, 'assertion-a.md'), `---
+id: assertion-a
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: done
+---
+
+# Assertion A`);
+
+      writeFileSync(join(assertionsDir, 'assertion-b.md'), `---
+id: assertion-b
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: in_progress
+depends-on: assertion-a
+---
+
+# Assertion B`);
+
+      execSync(`node "${join(projectRoot, 'bin/spekk.js')}" show`, {
+        encoding: 'utf8',
+        cwd: testDir,
+        timeout: 5000,
+        env: { ...process.env, NODE_ENV: 'test' }
+      });
+
+      const htmlContent = readFileSync(join(testDir, '.spekk', 'index.html'), 'utf8');
+
+      // Should show metro map (not notice) for both assertions
+      const assertionADetail = htmlContent.match(/id="detail-assertion-assertion-a"[\s\S]*?<div class="detail-body">/);
+      const assertionBDetail = htmlContent.match(/id="detail-assertion-assertion-b"[\s\S]*?<div class="detail-body">/);
+
+      assert.ok(assertionADetail, 'Should find assertion A detail section');
+      assert.ok(assertionBDetail, 'Should find assertion B detail section');
+      assert.ok(assertionADetail[0].includes('class="metro-map"'), 'Should include metro map SVG for A');
+      assert.ok(assertionBDetail[0].includes('class="metro-map"'), 'Should include metro map SVG for B');
+      assert.ok(!assertionADetail[0].includes('no-dependencies-notice'), 'Should not include notice for A');
+      assert.ok(!assertionBDetail[0].includes('no-dependencies-notice'), 'Should not include notice for B');
+
+    } finally {
+      cleanup();
+    }
+  });
 });
