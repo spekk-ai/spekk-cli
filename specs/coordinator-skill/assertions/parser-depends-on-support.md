@@ -3,7 +3,7 @@ id: parser-depends-on-support
 parent: coordinator-skill
 created: 2026-02-25T00:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Parser Validates and Parses depends-on Field
@@ -154,7 +154,15 @@ if (key === 'depends-on') {
 - Circular dependencies detected and rejected
 - Error messages are actionable
 
-**Tests:** 
-- `src/parser/__tests__/depends-on-validation.test.js`
-- Test valid cases (string, null, omitted)
-- Test invalid cases (array, wrong format, missing ref, circular)
+**Tests:** `src/parser/__tests__/depends-on-validation.test.js`
+
+All tests passing:
+- Parses `depends-on` field and converts to camelCase ✓
+- Accepts omitted depends-on field ✓
+- Rejects invalid type (arrays) ✓
+- Rejects invalid format (non-kebab-case) ✓
+- Rejects non-existent assertion references ✓
+- Rejects self-references ✓
+- Detects circular dependencies ✓
+- Accepts valid dependency chains without cycles ✓
+- Unit tests for validateDependsOn and detectCircularDependencies ✓

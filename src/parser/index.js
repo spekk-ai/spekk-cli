@@ -62,7 +62,9 @@ function parseFrontmatter(content) {
     } else {
       // If we were in an array, save it
       if (inArray && currentKey) {
-        frontmatter[currentKey] = arrayValues;
+        // Convert kebab-case keys to camelCase for JavaScript
+        const jsKey = currentKey === 'depends-on' ? 'dependsOn' : currentKey;
+        frontmatter[jsKey] = arrayValues;
         arrayValues = [];
         inArray = false;
       }
@@ -100,7 +102,9 @@ function parseFrontmatter(content) {
   
   // Handle any remaining array
   if (inArray && currentKey) {
-    frontmatter[currentKey] = arrayValues;
+    // Convert kebab-case keys to camelCase for JavaScript
+    const jsKey = currentKey === 'depends-on' ? 'dependsOn' : currentKey;
+    frontmatter[jsKey] = arrayValues;
   }
   
   return { data: frontmatter, content: markdownContent };
@@ -148,6 +152,33 @@ function validateFields(data, filePath, isAssertion = false) {
   
   if (data.updated && !timestampPattern.test(data.updated)) {
     throw new Error(`Invalid ISO 8601 timestamp in 'updated' field: '${data.updated}' in ${filePath}`);
+  }
+  
+  // Validate branch field
+  if (data.branch !== undefined && data.branch !== null) {
+    const branch = data.branch;
+    
+    // Type check
+    if (typeof branch !== 'string') {
+      throw new Error(`Field 'branch' must be a string in ${filePath}`);
+    }
+    
+    // Format check (valid git branch name)
+    const validBranchPattern = /^[a-zA-Z0-9][a-zA-Z0-9/_-]*$/;
+    if (!validBranchPattern.test(branch)) {
+      throw new Error(`Field 'branch' contains invalid characters in ${filePath}\nFound: "${branch}"\nGit branch names can only contain letters, numbers, slashes, hyphens, and underscores.`);
+    }
+    
+    // Cannot start or end with /
+    if (branch.startsWith('/') || branch.endsWith('/')) {
+      throw new Error(`Field 'branch' cannot start or end with '/' in ${filePath}`);
+    }
+    
+    // Warning for non-standard patterns (don't throw, just warn)
+    const standardPatterns = /^(main|master|develop|feature\/|bugfix\/|hotfix\/|release\/)/;
+    if (!standardPatterns.test(branch)) {
+      console.warn(`Warning: Field 'branch' uses non-standard pattern in ${filePath}\nFound: "${branch}"\nConsider using standard patterns: main, feature/<name>, bugfix/<name>, hotfix/<name>`);
+    }
   }
 }
 
@@ -429,6 +460,7 @@ function parseAllSpecs(specsDirectory = null) {
         specs.push({
           ...data,
           status: data.status || 'not_started',
+          branch: data.branch || 'main',
           file: `specs/${specDir}/${specDir}.md`,
           title: extractTitle(markdownContent),
           content: content
@@ -469,6 +501,7 @@ function parseAllSpecs(specsDirectory = null) {
           assertions.push({
             ...data,
             status: data.status || 'not_started',
+            branch: data.branch || 'main',
             file: `specs/${specDir}/assertions/${assertionFile}`,
             title: extractTitle(markdownContent),
             content: content
