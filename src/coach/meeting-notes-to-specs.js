@@ -260,6 +260,51 @@ export class MeetingNotesToSpecs extends Skill {
   }
 
   /**
+   * Extract and validate three categories from meeting data.
+   * Separates todos, features, and decisions into distinct outputs
+   * for further processing by the coach.
+   * @param {Object} meetingData - Categorized meeting data
+   * @param {Array} meetingData.todos - Action items, follow-ups, assignments
+   * @param {Array} meetingData.features - Product changes, new functionality
+   * @param {Array} meetingData.decisions - Architectural decisions, patterns established
+   * @returns {Object} Validated categories with summary
+   */
+  extractCategories(meetingData) {
+    if (!meetingData || typeof meetingData !== 'object' || Array.isArray(meetingData)) {
+      throw new Error('meetingData must be an object');
+    }
+
+    const { todos, features, decisions } = meetingData;
+
+    // Validate category types when explicitly provided
+    if (todos !== undefined && !Array.isArray(todos)) {
+      throw new Error('todos must be an array');
+    }
+    if (features !== undefined && !Array.isArray(features)) {
+      throw new Error('features must be an array');
+    }
+    if (decisions !== undefined && !Array.isArray(decisions)) {
+      throw new Error('decisions must be an array');
+    }
+
+    const validTodos = todos || [];
+    const validFeatures = features || [];
+    const validDecisions = decisions || [];
+
+    return {
+      todos: validTodos,
+      features: validFeatures,
+      decisions: validDecisions,
+      summary: {
+        todoCount: validTodos.length,
+        featureCount: validFeatures.length,
+        decisionCount: validDecisions.length,
+        totalItems: validTodos.length + validFeatures.length + validDecisions.length
+      }
+    };
+  }
+
+  /**
    * Convert a string to kebab-case
    * @param {string} str - Input string
    * @returns {string} Kebab-case string

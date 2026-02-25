@@ -3,12 +3,14 @@ id: extract-three-categories
 parent: meeting-notes-to-specs
 created: 2025-02-12T19:30:00Z
 priority: 2
-status: draft
+status: done
 ---
 
 # Extract Three Categories from Transcript
 
 The coach's meeting-processing skill identifies and separates todos, features/specs, and decisions/context from meeting transcripts.
+
+**Tests:** src/coach/__tests__/extract-three-categories.test.js
 
 ## Success Criteria
 
