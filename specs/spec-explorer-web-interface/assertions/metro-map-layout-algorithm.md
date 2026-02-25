@@ -5,6 +5,7 @@ created: 2026-02-25T18:31:00Z
 priority: 1
 status: draft
 depends-on: metro-map-dependency-view
+branch: feature/dependency-visualization
 ---
 
 # Metro Map Layout Algorithm

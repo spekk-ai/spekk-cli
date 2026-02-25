@@ -4,6 +4,7 @@ parent: spec-explorer-web-interface
 created: 2026-02-25T18:30:00Z
 priority: 1
 status: draft
+branch: feature/dependency-visualization
 ---
 
 # Metro Map Dependency View

@@ -5,6 +5,7 @@ created: 2026-02-25T18:33:00Z
 priority: 2
 status: draft
 depends-on: metro-map-layout-algorithm
+branch: feature/dependency-visualization
 ---
 
 # Metro Map Spec Filter
