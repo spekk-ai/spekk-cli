@@ -14,7 +14,7 @@ Spekk CLI enables spec-driven development by:
 - **[Getting Started Guide](./docs/GETTING-STARTED.md)** - Quick introduction to Spekk
 - **[CLI Reference](./docs/CLI-REFERENCE.md)** - Complete command documentation
 - **[Coach Skills Guide](./docs/COACH-SKILLS.md)** - Detailed skill workflows
-- **[Release Notes](./docs/RELEASE-NOTES-1.1.0.md)** - Version history
+- **[Release Notes](./docs/RELEASE-NOTES-1.2.0.md)** - Version history
 
 ## Installation
 
@@ -468,28 +468,26 @@ The spec system follows a **lean testing philosophy**:
 
 The specs are the source of truth. Code is the implementation of specs. Tests prove specs are satisfied.
 
-## What's New in 1.1.0
+## What's New in 1.2.0
 
-### Builder CLI Flags
-- Builder now loops continuously by default (use `--once` to stop after one)
-- New flags: `--dry-run`, `--spec`, `--assertion`, `--confirm`, `--interactive`
-- Parser supports `--spec` and `--assertion` filtering
+### Coordinator Skill 🎯
+- **`spekk coach coordinate`** — Dependency-aware work planning with branch assignments
+- Analyzes draft assertions and identifies prerequisite relationships
+- Groups related work into feature branches
+- Adds `depends-on` and `branch` fields to assertion YAML
+- Builder respects git branches (use `--all-branches` to see all work)
 
-### Meeting Processing
-- `spekk coach meeting [file]` extracts todos/specs/context from transcripts
-- Single-commit workflow with approval step
-- Auto-detects meeting keywords in regular coach sessions
+### Skills Architecture Overhaul
+- Skills are now **markdown files** (no more JS classes)
+- Easier to create, read, and extend
+- All existing skills converted to markdown format
+- Location: `specs/coach-skills-system/`
 
-### Lean Testing
-- Builder enforces lean testing philosophy
-- 186 tests → 116 tests (suite runs in ~300ms, was ~830ms)
-- Focus on meaningful behavior validation
+### CLI Fixes
+- Fixed subcommands properly inlining skill markdown content
+- Coordinator and meeting skills work reliably via CLI
 
-### Other Improvements
-- Parent spec status automatically computed from assertions
-- Browser suppression during tests for cleaner output
-
-See `docs/RELEASE-NOTES-1.1.0.md` for full details.
+See `docs/RELEASE-NOTES-1.2.0.md` for full details.
 
 ## More Information
 
