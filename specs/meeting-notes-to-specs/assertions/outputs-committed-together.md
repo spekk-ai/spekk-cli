@@ -3,10 +3,12 @@ id: outputs-committed-together
 parent: meeting-notes-to-specs
 created: 2025-02-12T19:30:00Z
 priority: 2
-status: draft
+status: done
 ---
 
 # All Outputs Committed Together
+
+**Tests:** src/coach/__tests__/outputs-committed-together.test.js
 
 After the coach's meeting-processing skill finishes, all outputs (todos, specs, context) are committed in a single commit with clear categorization.
 

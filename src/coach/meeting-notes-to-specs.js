@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { Skill } from './skill-interface.js';
 
 /**
@@ -428,5 +429,87 @@ export class MeetingNotesToSpecs extends Skill {
    */
   writeContextFile(content, baseDir = process.cwd()) {
     fs.writeFileSync(path.join(baseDir, 'CONTEXT.md'), content, 'utf8');
+  }
+
+  /**
+   * Build a commit message for meeting outputs.
+   * Format: "Process meeting: {date} - {summary}" with categorized body.
+   * @param {Object} params
+   * @param {string} params.meetingDate - Date string like "2025-02-12"
+   * @param {string} params.summary - Brief summary of meeting outcomes
+   * @param {Array<string>} params.todos - Todo descriptions
+   * @param {Array<string>} params.specIds - IDs of specs created
+   * @param {Array<string>} params.decisions - Decision descriptions
+   * @returns {string} Formatted commit message
+   */
+  buildCommitMessage({ meetingDate, summary, todos = [], specIds = [], decisions = [] }) {
+    if (!meetingDate) throw new Error('meetingDate is required');
+    if (!summary) throw new Error('summary is required');
+
+    let message = `Process meeting: ${meetingDate} - ${summary}`;
+
+    const sections = [];
+
+    if (todos.length > 0) {
+      sections.push('Todos:\n' + todos.map(t => `- ${t}`).join('\n'));
+    }
+
+    if (specIds.length > 0) {
+      sections.push('Specs created:\n' + specIds.map(s => `- ${s}`).join('\n'));
+    }
+
+    if (decisions.length > 0) {
+      sections.push('Context updates:\n' + decisions.map(d => `- ${d}`).join('\n'));
+    }
+
+    if (sections.length > 0) {
+      message += '\n\n' + sections.join('\n\n');
+    }
+
+    return message;
+  }
+
+  /**
+   * Stage and commit all meeting outputs in a single git commit.
+   * @param {Object} params
+   * @param {string} params.meetingDate - Date string like "2025-02-12"
+   * @param {string} params.summary - Brief summary of meeting outcomes
+   * @param {Array<string>} params.todos - Todo descriptions
+   * @param {Array<string>} params.specIds - IDs of specs created
+   * @param {Array<string>} params.decisions - Decision descriptions
+   * @param {Array<string>} params.filePaths - Relative file paths to stage
+   * @param {string} [params.baseDir] - Working directory (defaults to cwd)
+   * @returns {{ success: boolean, commitHash: string }} Result
+   */
+  commitAllOutputs({ meetingDate, summary, todos = [], specIds = [], decisions = [], filePaths, baseDir = process.cwd() }) {
+    if (!filePaths || filePaths.length === 0) {
+      throw new Error('filePaths must be a non-empty array');
+    }
+
+    const commitMessage = this.buildCommitMessage({ meetingDate, summary, todos, specIds, decisions });
+    const execOpts = { cwd: baseDir, stdio: 'pipe', encoding: 'utf8' };
+
+    // Stage specific files
+    for (const filePath of filePaths) {
+      execSync(`git add "${filePath}"`, execOpts);
+    }
+
+    // Write commit message to a temp file to avoid shell escaping issues
+    const msgFile = path.join(baseDir, '.git', 'MEETING_COMMIT_MSG');
+    fs.writeFileSync(msgFile, commitMessage, 'utf8');
+
+    try {
+      execSync(`git commit -F "${msgFile}"`, execOpts);
+    } finally {
+      // Clean up temp message file
+      if (fs.existsSync(msgFile)) {
+        fs.unlinkSync(msgFile);
+      }
+    }
+
+    // Get the commit hash
+    const commitHash = execSync('git rev-parse --short HEAD', execOpts).trim();
+
+    return { success: true, commitHash };
   }
 }
