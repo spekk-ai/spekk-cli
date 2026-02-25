@@ -10,69 +10,33 @@ status: done
 
 Tests follow lean testing principles: one test per meaningful behavior, no redundant coverage, no tests for trivial code.
 
-## Problem
+## What Must Be True
 
-Current test suite has 1,870 lines of test code with significant bloat:
+### Test Quality
+- ✅ One test per meaningful behavior
+- ✅ Tests validate behavior, not implementation details
+- ✅ No tests for trivial code (getters, simple pass-throughs)
+- ✅ No redundant test coverage
+- ✅ Test setup only runs where needed
 
-1. **Trivial getter tests** (~30 lines) - Testing constants
-2. **Redundant integration tests** (~100 lines) - Already covered by unit tests
-3. **Over-detailed error message tests** (~50 lines) - Testing implementation details
-4. **Excessive edge case coverage** (~100 lines) - Redundant validation tests
-5. **Unnecessary setup/teardown** - Full git repo for tests that don't need it
+### Specific Removals
+- ❌ Trivial getter tests (IDs, names, simple properties)
+- ❌ Redundant integration tests (already covered by unit tests)
+- ❌ Over-detailed error message tests
+- ❌ Excessive edge case coverage
+- ❌ Unnecessary global setup/teardown
 
-See `TEST-ISSUES.md` for detailed analysis.
-
-## Success Criteria
-
-### Remove Low-Value Tests
-
-**From src/coach/__tests__/coordinator.test.js:**
-- ❌ Remove: `should have correct ID` (trivial getter)
-- ❌ Remove: `should have correct name` (trivial getter)
-- ❌ Remove: `should have description` (trivial check)
-- ❌ Remove: `should have questions` (trivial check)
-- ✅ Keep: `should trigger on coordinator keywords` (actual logic)
-
-**From src/parser/__tests__/depends-on-validation.test.js:**
-- ❌ Remove: Integration test for "accepts omitted depends-on" (redundant with unit test)
-- ❌ Consolidate: 5 error message tests → 1 error message quality test
-- ✅ Keep: Behavior tests (rejects invalid type, format, references, etc.)
-
-**From src/parser/__tests__/branch-validation.test.js:**
-- ❌ Consolidate: 14 tests → 5 tests
-  - Valid branches (multiple examples in one test)
-  - Invalid characters rejected (one test, multiple examples)
-  - Warnings for non-standard
-  - Defaults to main
-  - Integration test
-
-### Optimize Test Setup
-
-**From src/coach/__tests__/coordinator.test.js:**
-- Move git setup from global `beforeEach()` to only tests that need it
-- Use mocks for tests that just need branch name
-- Reduces test execution time
-
-### Expected Reduction
-
-- **Before:** 1,870 lines of test code
-- **After:** ~1,590 lines of test code
-- **Removed:** ~280 lines of low-value tests
-- **Result:** Faster tests, same behavior coverage
-
-## Lean Testing Principles (from builder prompt)
-
-✅ **Tests validate behavior, not implementation details**  
-✅ **One test per meaningful behavior**  
-✅ **Deletes redundant or low-value tests**  
-✅ **No tests for trivial code** (getters, simple pass-throughs)  
-✅ **Prefers integration tests over unit when appropriate** (but not redundantly)  
+### Expected Results
+- Test suite reduced by ~280 lines (~15%)
+- All meaningful behaviors still tested
+- Tests run faster
+- Test suite remains trustworthy
 
 ## Validation
 
-- All meaningful behaviors still tested
+- All meaningful behaviors still covered
 - No test failures
-- Tests run faster (less unnecessary setup)
-- Test suite remains trustworthy
+- Tests execute faster than before
+- Test suite size: ~1,590 lines (from 1,870)
 
-**Tests:** Review and refactor existing test files
+**Tests:** src/coach/__tests__/coordinator.test.js, src/parser/__tests__/depends-on-validation.test.js, src/parser/__tests__/branch-validation.test.js
