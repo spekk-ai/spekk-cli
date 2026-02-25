@@ -25,11 +25,13 @@ export async function showSpekk() {
   
   console.log('Generated spec explorer at .spekk/index.html');
   
-  // Open the HTML file in the default browser
-  openInBrowser(htmlFilePath);
+  // Open the HTML file in the default browser (skip in test/CI environments)
+  if (process.env.NODE_ENV !== 'test' && !process.env.CI) {
+    openInBrowser(htmlFilePath);
+  }
 }
 
-function openInBrowser(htmlFilePath) {
+export function openInBrowser(htmlFilePath) {
   // Convert to file:// URL for proper browser handling
   const fileUrl = `file://${htmlFilePath}`;
   
@@ -106,7 +108,7 @@ function escapeHTML(str) {
     .replace(/`/g, '&#96;');
 }
 
-function generateSpecExplorerHTML(specs, assertions) {
+export function generateSpecExplorerHTML(specs, assertions) {
   // Get project name from current working directory
   const projectName = basename(process.cwd());
   
