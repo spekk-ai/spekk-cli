@@ -7,6 +7,8 @@ created: 2026-02-25T15:36:00Z
 
 Analyzes draft/not_started assertions and creates a dependency-aware work plan with branch assignments.
 
+**CLI Command:** `spekk coach coordinate`
+
 ## Triggers
 
 - "plan the work"
