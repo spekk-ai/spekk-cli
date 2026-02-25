@@ -16,25 +16,29 @@ The test `src/parser/__tests__/cli-reads-local-specs.test.js` is failing, causin
 - Test properly validates CLI reads specs from working directory
 - Test doesn't have environment dependencies
 
-## Investigation Needed
+## Root Cause
 
-Run the test to identify the specific assertion failures:
+The test passes in isolation but fails in the full suite - **test interference**.
+
+**Evidence:**
 ```bash
+# Running alone:
 npm test src/parser/__tests__/cli-reads-local-specs.test.js
+# Result: 123/123 pass ✅
+
+# Running in full suite:
+npm test
+# Result: 122/123 pass, cli-reads-local-specs fails ❌
 ```
 
-Look for:
-- Assertion errors
-- Expected vs actual values
-- Any environment-specific issues
+**Issue:** Another test is leaving the environment in a state that breaks this test.
 
-## Common Issues
+## Fix Required
 
-Possible causes:
-- Test assumes certain specs exist in working directory
-- Working directory changed during test cleanup
-- Race condition in temp directory cleanup
-- Git branch detection issues with new branch-aware parser
+1. **Isolate test environment** - Ensure test doesn't depend on global state
+2. **Add proper cleanup** - Reset working directory, clear temp files
+3. **Fix test ordering** - Make test resilient to execution order
+4. **Check beforeEach/afterEach** - Verify proper setup/teardown
 
 ## Validation
 
