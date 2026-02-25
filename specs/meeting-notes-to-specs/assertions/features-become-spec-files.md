@@ -3,7 +3,7 @@ id: features-become-spec-files
 parent: meeting-notes-to-specs
 created: 2025-02-12T19:30:00Z
 priority: 1
-status: not_started
+status: draft
 ---
 
 # Features Become Proper Spec Files
