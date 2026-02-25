@@ -8,7 +8,7 @@ status: draft
 
 # Decisions Update CONTEXT.md
 
-Architectural decisions and patterns discussed in meetings are extracted and added to CONTEXT.md.
+Architectural decisions and patterns discussed in meetings are extracted by the coach's meeting-processing skill and added to CONTEXT.md.
 
 ## Success Criteria
 

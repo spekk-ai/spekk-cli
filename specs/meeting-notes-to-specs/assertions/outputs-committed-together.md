@@ -8,7 +8,7 @@ status: draft
 
 # All Outputs Committed Together
 
-After processing, all outputs (todos, specs, context) are committed in a single commit with clear categorization.
+After the coach's meeting-processing skill finishes, all outputs (todos, specs, context) are committed in a single commit with clear categorization.
 
 ## Success Criteria
 

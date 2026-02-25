@@ -8,11 +8,11 @@ status: draft
 
 # Extract Three Categories from Transcript
 
-Meeting processor agent identifies and separates todos, features/specs, and decisions/context from meeting transcripts.
+The coach's meeting-processing skill identifies and separates todos, features/specs, and decisions/context from meeting transcripts.
 
 ## Success Criteria
 
-- Agent reads meeting transcript file (markdown, text, or copied transcript)
+- Coach reads meeting transcript file (markdown, text, or copied transcript)
 - Identifies and separates three distinct categories:
   - Todos (action items, follow-ups, assignments)
   - Features/specs (product changes, new functionality)

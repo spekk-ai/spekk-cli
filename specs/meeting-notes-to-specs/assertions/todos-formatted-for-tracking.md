@@ -8,7 +8,7 @@ status: draft
 
 # Todos Formatted for Action Tracking
 
-Todo items extracted from meetings are formatted and output to TODOS.md for tracking.
+Todo items extracted from meetings by the coach's meeting-processing skill are formatted and output to TODOS.md for tracking.
 
 ## Success Criteria
 

@@ -30,6 +30,14 @@ Helps validate startup/business models through structured questioning and scorin
 
 Produces quantitative health score and actionable recommendations.
 
+### Meeting Notes to Specs
+Processes meeting transcripts and extracts actionable outcomes. Activated via `spekk coach meeting`. Categorizes content into:
+- **Todos** - action items and follow-ups → TODOS.md
+- **Specs** - features and product changes → spec files in specs/
+- **Context** - architectural decisions → CONTEXT.md
+
+See `specs/meeting-notes-to-specs/` for full spec.
+
 ## Success Criteria
 
 - Coach automatically suggests skills when appropriate contexts arise
