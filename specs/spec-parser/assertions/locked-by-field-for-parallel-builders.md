@@ -19,7 +19,8 @@ Assertions support a `locked-by` field that enables parallel builders to claim w
 - ✅ `spekk next` skips assertions where `status: in_progress` AND `locked-by` is set
 - ✅ `spekk next` includes assertions where `status: in_progress` but no `locked-by` (backwards compatible)
 - ✅ Builder sets `locked-by` field when marking assertion `in_progress`
-- ✅ Builder removes `locked-by` field when marking assertion `done` or `failed`
+- ✅ **Builder MUST remove `locked-by` field when marking assertion `done` or `failed`**
+- ✅ Builder validates `locked-by` was removed before committing completion
 - ✅ Lock format: `locked-by: builder-{hostname}-{pid}-{timestamp}`
 - ✅ Stale locks (>2 hours old) are ignored by `spekk next`
 
@@ -37,13 +38,14 @@ Assertions support a `locked-by` field that enables parallel builders to claim w
 5. If conflict (someone else claimed it), resolve and pick next assertion
 
 **Builder releases lock:**
-1. Work completes
+1. Work completes (status → done/failed)
 2. Update YAML frontmatter:
    ```yaml
    status: done
-   # locked-by field removed
+   # locked-by field MUST be removed
    ```
-3. Commit
+3. Commit immediately
+4. **CRITICAL:** Builders MUST remove `locked-by` when done, otherwise assertion stays locked forever
 
 **Parallel safety:**
 - Builder A claims assertion-1
