@@ -3,7 +3,7 @@ id: spec-format-documentation
 parent: coordinator-skill
 created: 2026-02-25T00:00:00Z
 priority: 3
-status: not_started
+status: done
 ---
 
 # Spec Format Documentation Updated with New Fields

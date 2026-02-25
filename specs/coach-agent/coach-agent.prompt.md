@@ -114,6 +114,22 @@ Suggest: "I can process this meeting transcript and extract todos, specs, and co
 
 **Note:** This skill is also auto-activated when the user launches with `spekk coach meeting`. In that case, skip detection and activate immediately.
 
+**Work Coordination Triggers:**
+Check if the user mentions:
+- "plan the work"
+- "organize branches"
+- "dependency graph"
+- "what can we build in parallel"
+- "coordinate development"
+- "scope the work"
+- "branch strategy"
+- "work plan"
+
+**If work coordination is detected:**
+Suggest: "I can analyze your specs and create a dependency-aware work plan with branch assignments. This will let the builder work autonomously on parallel feature branches. Want me to do that?"
+
+**Note:** This skill is also auto-activated when the user launches with `spekk coach coordinator`. In that case, skip detection and activate immediately.
+
 **How to Suggest Skills:**
 1. Detect the pattern in their request
 2. Suggest the skill: "I can [specific value]. Want me to do that?"
@@ -566,8 +582,14 @@ parent: parent-spec-id
 created: 2026-01-20T17:00:00Z
 priority: 1
 status: not_started             # not_started | in_progress | done | failed | draft
+depends-on: parent-assertion-id # Single parent dependency (optional)
+branch: feature/name            # Git branch assignment (optional, defaults to main)
 ---
 ```
+
+**New fields:**
+- `depends-on`: Single assertion ID that must be completed first (omit if no dependency)
+- `branch`: Git branch where this assertion lives (omit to default to main)
 
 Use `npm run next` to validate your output.
 

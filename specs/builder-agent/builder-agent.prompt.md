@@ -27,6 +27,15 @@ spekk next
 - Start with priority 1, oldest `created` timestamp first
 - Build the parser so we can use `spekk next` and be fully spec-driven
 
+## Dependency-Aware Building
+
+Before starting work on an assertion:
+1. Check if `depends-on` field exists
+2. If yes, verify the referenced assertion has `status: done`
+3. If dependency is not done, skip this assertion (blocked)
+
+The parser handles this automatically - `spekk next` only returns ready assertions.
+
 ### 2. Read the Assertion
 
 The parser returns JSON with the assertion file to work on. Read it to understand:

@@ -131,6 +131,26 @@ Describe what needs to exist/work for this to be complete.
 
 **Parent spec status is computed** — a parent spec's status automatically reflects its assertions' states (all done = done, any in-progress = in-progress, etc.).
 
+### Optional Fields
+
+**`depends-on`**: Single assertion ID that must be completed before this one.
+- Creates linear dependency chains
+- Parser validates reference exists
+- `spekk next` respects dependencies
+
+**`branch`**: Git branch where this assertion lives.
+- Defaults to `main` if omitted
+- `spekk next` filters to current branch by default
+- Use `spekk next --all-branches` to see all assertions
+
+```yaml
+---
+id: feature-x
+depends-on: prerequisite-y  # Must complete prerequisite-y first
+branch: feature/my-feature   # Lives on feature branch
+---
+```
+
 ### 3. The Parser
 
 The spec parser (`src/parser/`) reads all specs and identifies the next priority work item:
