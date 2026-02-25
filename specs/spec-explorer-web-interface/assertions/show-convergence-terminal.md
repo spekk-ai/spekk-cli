@@ -8,7 +8,7 @@ depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
 
-# Show Convergence Terminal
+# Subtle Track Terminus Dots
 
 ## What Must Be True
 
@@ -24,7 +24,7 @@ Terminal assertions (no children) have a small, subtle endpoint dot that indicat
 - Done nodes have white stroke border (stroke-width: 2) for visibility
 - Done nodes are non-interactive (no click handler, `pointer-events: none`)
 - If branch has only one terminal assertion, no Done endpoint needed
-- Convergence line from terminal assertion to its Done node uses same gray (#94a3b8) at low opacity
+- Line from terminal assertion to its Done node uses same gray (#94a3b8) at low opacity
 
 ## Visual Example
 
