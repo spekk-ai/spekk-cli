@@ -12,6 +12,7 @@ Skills are markdown files located in `specs/coach-skills-system/`:
 
 - **business-model-validator-skill.md** - Systematically assess startup/business ideas through structured questions and provide quantitative health scores
 - **meeting-notes-to-specs-skill.md** - Process meeting transcripts and extract todos, specs, and context updates
+- **coordinator-skill.md** - Analyze assertions and create dependency-aware work plan with branch assignments
 
 **To use a skill:**
 1. Read the markdown file directly from `specs/coach-skills-system/`
