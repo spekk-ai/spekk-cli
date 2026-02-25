@@ -4,7 +4,6 @@ import { run } from '../src/parser/cli.js';
 import { launchCoachAgent } from '../src/coach/cli.js';
 import { launchBuilderAgent } from '../src/builder/cli.js';
 import { launchObserverAgent } from '../src/observer/cli.js';
-import { launchMeetingProcessorAgent } from '../src/meeting-processor/cli.js';
 import { runBuilderLoop, runCoachLoop } from '../src/loops/index.js';
 import { showStatus } from '../src/status/cli.js';
 import { showSpekk } from '../src/show/cli.js';
@@ -45,7 +44,7 @@ COMMANDS:
     break;
 
   case 'coach':
-    await launchCoachAgent();
+    await launchCoachAgent(args.slice(1));
     break;
   
   case 'builder':
@@ -54,11 +53,6 @@ COMMANDS:
   
   case 'observer':
     await launchObserverAgent(args.slice(1));
-    break;
-
-  case 'meeting':
-  case 'meeting-processor':
-    await launchMeetingProcessorAgent();
     break;
 
   case 'status':
@@ -82,9 +76,9 @@ COMMANDS:
   show      Generate and display spec explorer web interface
   status    Show comprehensive overview of all specs and assertions
   coach     Launch the Coach Agent to create and refine specs
+              Use "spekk coach meeting [file]" for meeting transcript processing
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
-  meeting   Launch the Meeting Processor Agent to extract specs from transcripts
   loop      Run orchestration workflows (builder/coach loops)
   help      Show this help message
 
