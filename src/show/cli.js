@@ -108,6 +108,138 @@ function escapeHTML(str) {
     .replace(/`/g, '&#96;');
 }
 
+function getStatusColor(status) {
+  switch (status) {
+    case 'not_started': return '#64748b';
+    case 'in_progress': return '#f59e0b';
+    case 'done': return '#10b981';
+    case 'failed': return '#ef4444';
+    case 'draft': return '#94a3b8';
+    default: return '#64748b';
+  }
+}
+
+function calculateDependencyDepth(assertion, assertions) {
+  if (!assertion.dependsOn) {
+    return 0;
+  }
+
+  const parent = assertions.find(a => a.id === assertion.dependsOn);
+  if (!parent) {
+    return 0;
+  }
+
+  return 1 + calculateDependencyDepth(parent, assertions);
+}
+
+function generateMetroMapSVG(currentAssertion, allAssertions) {
+  // Filter assertions in the same branch
+  const assertionBranch = currentAssertion.branch || 'main';
+  const branchAssertions = allAssertions
+    .filter(a => (a.branch || 'main') === assertionBranch)
+    .map(a => ({
+      ...a,
+      depth: calculateDependencyDepth(a, allAssertions)
+    }))
+    .sort((a, b) => {
+      // Sort by depth first, then by created date
+      if (a.depth !== b.depth) return a.depth - b.depth;
+      return a.created.localeCompare(b.created);
+    });
+
+  if (branchAssertions.length === 0) {
+    return '';
+  }
+
+  const stationSpacing = 110;
+  const startX = 60;
+  const trackY = 80;
+  const stationRadius = 8;
+  const currentStationRadius = 10;
+  const verticalSpacing = 50;
+
+  // Calculate positions - handle multiple assertions at same depth
+  const positions = new Map();
+  const depthCounts = new Map();
+
+  branchAssertions.forEach((assertion) => {
+    const depth = assertion.depth;
+    const countAtDepth = depthCounts.get(depth) || 0;
+    depthCounts.set(depth, countAtDepth + 1);
+
+    const x = startX + (depth * stationSpacing);
+    const y = trackY + (countAtDepth * verticalSpacing);
+
+    positions.set(assertion.id, { x, y });
+  });
+
+  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + 100;
+  const maxY = Math.max(...Array.from(positions.values()).map(p => p.y)) + 50;
+  const svgWidth = Math.max(maxX, 800);
+  const svgHeight = Math.max(maxY, 200);
+
+  // Generate SVG
+  let svg = `
+<svg class="metro-map" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
+  <!-- Main track -->
+  <line class="metro-track" x1="40" y1="${trackY}" x2="${maxX}" y2="${trackY}"/>
+  `;
+
+  // Add dependency lines
+  branchAssertions.forEach(assertion => {
+    if (assertion.dependsOn) {
+      const parentPos = positions.get(assertion.dependsOn);
+      const childPos = positions.get(assertion.id);
+
+      if (parentPos && childPos) {
+        // Draw curved line if y positions differ, otherwise straight line
+        if (parentPos.y !== childPos.y) {
+          const midX = (parentPos.x + childPos.x) / 2;
+          svg += `
+  <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
+  <path class="metro-dependency" d="M${parentPos.x},${parentPos.y} Q${midX},${parentPos.y} ${midX},${(parentPos.y + childPos.y) / 2} T${childPos.x},${childPos.y}"
+        fill="none" stroke="${getStatusColor(assertion.status)}" stroke-width="3" opacity="0.4"/>`;
+        } else {
+          svg += `
+  <!-- Dependency: ${escapeHTML(assertion.dependsOn)} → ${escapeHTML(assertion.id)} -->
+  <line class="metro-dependency" x1="${parentPos.x}" y1="${parentPos.y}" x2="${childPos.x}" y2="${childPos.y}"
+        stroke="${getStatusColor(assertion.status)}" stroke-width="4" opacity="0.3"/>`;
+        }
+      }
+    }
+  });
+
+  // Add stations
+  branchAssertions.forEach(assertion => {
+    const pos = positions.get(assertion.id);
+    if (!pos) return;
+
+    const isCurrent = assertion.id === currentAssertion.id;
+    const radius = isCurrent ? currentStationRadius : stationRadius;
+    const color = getStatusColor(assertion.status);
+    const strokeWidth = isCurrent ? 4 : 3;
+    const glowFilter = isCurrent ? ' filter="drop-shadow(0 0 6px rgba(59, 130, 246, 0.6))"' : '';
+
+    // Truncate long titles
+    let displayTitle = assertion.title;
+    if (displayTitle.length > 20) {
+      displayTitle = displayTitle.substring(0, 17) + '...';
+    }
+
+    svg += `
+  <!-- Station: ${escapeHTML(assertion.id)} -->
+  <g class="metro-station" transform="translate(${pos.x}, ${pos.y})">
+    <circle r="${radius}" fill="${color}" stroke="#fff" stroke-width="${strokeWidth}"${glowFilter}/>
+    <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: ${isCurrent ? '700' : '400'};">${escapeHTML(displayTitle)}</text>
+  </g>`;
+  });
+
+  svg += `
+</svg>`;
+
+  return svg;
+}
+
 export function generateSpecExplorerHTML(specs, assertions) {
   // Get project name from current working directory
   const projectName = basename(process.cwd());
@@ -447,6 +579,55 @@ export function generateSpecExplorerHTML(specs, assertions) {
             margin-bottom: 8px;
             color: #374151;
         }
+
+        .metro-map-section {
+            margin: 20px 0;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            overflow-x: auto;
+        }
+
+        .metro-map-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metro-map {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .metro-track {
+            fill: none;
+            stroke: #cbd5e1;
+            stroke-width: 6;
+            stroke-linecap: round;
+        }
+
+        .metro-dependency {
+            fill: none;
+            stroke-linecap: round;
+        }
+
+        .metro-station {
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+
+        .metro-station:hover {
+            transform: scale(1.15);
+        }
+
+        .metro-label {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -513,8 +694,13 @@ export function generateSpecExplorerHTML(specs, assertions) {
                             <span class="meta-item">Status: ${generateDetailStatusBadge(assertion.status)}</span>
                             <span class="meta-item">Priority: ${generateDetailPriorityBadge(assertion.priority)}</span>
                             <span class="meta-item">Parent: <strong>${assertion.parent}</strong></span>
+                            ${assertion.branch ? `<span class="meta-item">Branch: <strong>${assertion.branch}</strong></span>` : ''}
                             <span class="meta-item">File: <strong>${assertion.file}</strong></span>
                         </div>
+                    </div>
+                    <div class="metro-map-section">
+                        <h3 class="metro-map-title">Branch Dependencies</h3>
+                        ${generateMetroMapSVG(assertion, assertions)}
                     </div>
                     <div class="detail-body">
                         <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHTML(assertion.content)}</pre>

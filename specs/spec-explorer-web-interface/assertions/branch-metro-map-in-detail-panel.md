@@ -3,7 +3,7 @@ id: branch-metro-map-in-detail-panel
 parent: spec-explorer-web-interface
 created: 2026-02-25T19:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/dependency-visualization
 ---
 
