@@ -3,41 +3,210 @@ import { join, basename } from 'node:path';
 import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
 import { parseAllSpecs } from '../parser/index.js';
+import { startWatchServer } from './server.js';
+import { watchSpecs } from './watcher.js';
 
-export async function showSpekk() {
+const SSE_CLIENT_SCRIPT = `
+<script>
+(function() {
+  // --- Restore UI state from sessionStorage after a watch-mode reload ---
+  function restoreWatchState() {
+    var raw = sessionStorage.getItem('spekkWatchState');
+    if (!raw) return;
+    sessionStorage.removeItem('spekkWatchState');
+
+    try {
+      var state = JSON.parse(raw);
+    } catch (e) {
+      return;
+    }
+
+    // Re-expand saved specs
+    if (state.expandedSpecs && state.expandedSpecs.length) {
+      state.expandedSpecs.forEach(function(specId) {
+        var assertions = document.getElementById('assertions-' + specId);
+        var toggle = document.getElementById('toggle-' + specId);
+        if (assertions && toggle) {
+          assertions.classList.add('expanded');
+          toggle.classList.add('expanded');
+          toggle.parentElement.classList.add('expanded');
+          toggle.textContent = '\\u25BC';
+        }
+      });
+    }
+
+    // Re-activate the saved detail panel
+    if (state.activeDetailId) {
+      var detailEl = document.getElementById(state.activeDetailId);
+      if (detailEl) {
+        // Hide all detail panels first
+        document.querySelectorAll('.detail-content').forEach(function(el) {
+          el.classList.remove('active');
+        });
+        detailEl.classList.add('active');
+
+        // Hide empty state
+        var emptyState = document.getElementById('empty-state');
+        if (emptyState) {
+          emptyState.style.display = 'none';
+        }
+
+        // Mark corresponding tree item as selected
+        // Extract type and id from detail panel id (e.g. "detail-assertion-foo" or "detail-spec-bar")
+        var match = state.activeDetailId.match(/^detail-(assertion|spec)-(.+)$/);
+        if (match) {
+          var type = match[1];
+          var id = match[2];
+          if (type === 'assertion') {
+            var item = document.querySelector('.assertion-item[data-assertion-id="' + id + '"]');
+            if (item) item.classList.add('selected');
+          } else if (type === 'spec') {
+            var toggleEl = document.getElementById('toggle-' + id);
+            if (toggleEl) toggleEl.parentElement.classList.add('selected');
+          }
+        }
+      }
+    }
+
+    // Restore sidebar scroll position
+    if (typeof state.scrollTop === 'number') {
+      var treePanel = document.querySelector('.tree-panel');
+      if (treePanel) {
+        requestAnimationFrame(function() {
+          treePanel.scrollTop = state.scrollTop;
+        });
+      }
+    }
+  }
+
+  // Run restore after DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', restoreWatchState);
+  } else {
+    restoreWatchState();
+  }
+
+  // --- SSE client: save state before reload ---
+  var es = new EventSource('/events');
+  es.addEventListener('reload', function() {
+    // Collect expanded spec IDs
+    var expandedSpecs = [];
+    document.querySelectorAll('[id^="assertions-"].expanded').forEach(function(el) {
+      expandedSpecs.push(el.id.replace('assertions-', ''));
+    });
+
+    // Collect active detail panel ID
+    var activeDetail = document.querySelector('.detail-content.active');
+    var activeDetailId = activeDetail ? activeDetail.id : null;
+
+    // Collect sidebar scroll position
+    var treePanel = document.querySelector('.tree-panel');
+    var scrollTop = treePanel ? treePanel.scrollTop : 0;
+
+    sessionStorage.setItem('spekkWatchState', JSON.stringify({
+      expandedSpecs: expandedSpecs,
+      activeDetailId: activeDetailId,
+      scrollTop: scrollTop
+    }));
+
+    location.reload();
+  });
+})();
+</script>`;
+
+export async function showSpekk(options = {}) {
+  const { watch = false } = options;
+
+  if (watch) {
+    return showSpekkWatch();
+  }
+
+  // --- Non-watch path (unchanged) ---
   // Create .spekk directory if it doesn't exist
   const spekkDir = join(process.cwd(), '.spekk');
-  
+
   if (!existsSync(spekkDir)) {
     mkdirSync(spekkDir, { recursive: true });
     console.log('Created .spekk directory');
   }
-  
+
   // Parse all specs and assertions
   const { specs, assertions } = parseAllSpecs();
-  
+
   // Generate HTML content
   const htmlContent = generateSpecExplorerHTML(specs, assertions);
-  
+
   // Write HTML file (overwrite if exists)
   const htmlFilePath = join(spekkDir, 'index.html');
   writeFileSync(htmlFilePath, htmlContent, 'utf8');
-  
+
   console.log('Generated spec explorer at .spekk/index.html');
-  
+
   // Open the HTML file in the default browser (skip in test/CI environments)
   if (process.env.NODE_ENV !== 'test' && !process.env.CI) {
     openInBrowser(htmlFilePath);
   }
 }
 
+async function showSpekkWatch() {
+  const specsDir = join(process.cwd(), 'specs');
+
+  let dirty = false;
+
+  function getHTML() {
+    dirty = false; // Reset when fresh HTML is served
+    const { specs, assertions } = parseAllSpecs();
+    const html = generateSpecExplorerHTML(specs, assertions);
+    // Inject SSE client script before </body>
+    return html.replace('</body>', SSE_CLIENT_SCRIPT + '\n</body>');
+  }
+
+  const { port, notifyClients, close: closeServer } = await startWatchServer({
+    getHTML,
+    isDirty: () => dirty,
+  });
+
+  const stopWatcher = watchSpecs(specsDir, () => {
+    dirty = true;
+    notifyClients();
+  });
+
+  // Open browser (skip in test/CI environments)
+  if (process.env.NODE_ENV !== 'test' && !process.env.CI) {
+    openInBrowser(`http://localhost:${port}`);
+  }
+
+  console.log('Watching specs/ for changes... (press Ctrl+C to stop)');
+
+  // Graceful shutdown on SIGINT
+  process.on('SIGINT', () => {
+    stopWatcher();
+    closeServer();
+    process.exit(0);
+  });
+
+  // Keep the process alive by returning a promise that never resolves
+  return new Promise(() => {});
+}
+
+/**
+ * Resolve a path-or-URL string to the URL that should be handed to the OS
+ * open command.  HTTP(S) URLs are returned as-is; anything else gets a
+ * file:// prefix.
+ */
+export function resolveOpenUrl(pathOrUrl) {
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+    return pathOrUrl;
+  }
+  return `file://${pathOrUrl}`;
+}
+
 export function openInBrowser(htmlFilePath) {
-  // Convert to file:// URL for proper browser handling
-  const fileUrl = `file://${htmlFilePath}`;
-  
+  const url = resolveOpenUrl(htmlFilePath);
+
   // Determine the correct command based on the operating system
   let command;
-  let args = [fileUrl];
+  let args = [url];
   
   switch (platform()) {
     case 'darwin': // macOS
@@ -45,7 +214,7 @@ export function openInBrowser(htmlFilePath) {
       break;
     case 'win32': // Windows
       command = 'start';
-      args = ['', fileUrl]; // start command requires empty string as first arg
+      args = ['', url]; // start command requires empty string as first arg
       break;
     default: // Linux and other Unix-like systems
       command = 'xdg-open';
@@ -1247,6 +1416,8 @@ export function generateSpecExplorerHTML(specs, assertions) {
             const specTree = document.querySelector('.spec-tree');
             if (!searchInput || !specTree) return;
 
+            var searchExpandedSpecs = new Set();
+
             searchInput.addEventListener('input', function() {
                 const query = this.value.trim().toLowerCase();
                 const specItems = specTree.querySelectorAll('.spec-item');
@@ -1259,6 +1430,16 @@ export function generateSpecExplorerHTML(specs, assertions) {
                         var assertions = specItem.querySelectorAll('.assertion-item');
                         assertions.forEach(function(a) { a.classList.remove('search-hidden'); });
                     });
+                    // Collapse specs that were auto-expanded by search
+                    searchExpandedSpecs.forEach(function(specItem) {
+                        var assertionsList = specItem.querySelector('.assertions-list');
+                        var toggle = specItem.querySelector('.toggle-icon');
+                        var header = specItem.querySelector('.spec-header');
+                        if (assertionsList) { assertionsList.classList.remove('expanded'); }
+                        if (toggle) { toggle.classList.remove('expanded'); toggle.textContent = '\u25B6'; }
+                        if (header) { header.classList.remove('expanded'); }
+                    });
+                    searchExpandedSpecs.clear();
                     // Restore completed specs toggle behavior
                     updateHiddenCount();
                     return;
@@ -1294,6 +1475,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
                             var toggle = specItem.querySelector('.toggle-icon');
                             var header = specItem.querySelector('.spec-header');
                             if (assertionsList && !assertionsList.classList.contains('expanded')) {
+                                searchExpandedSpecs.add(specItem);
                                 assertionsList.classList.add('expanded');
                                 if (toggle) { toggle.classList.add('expanded'); toggle.textContent = '\\u25BC'; }
                                 if (header) { header.classList.add('expanded'); }

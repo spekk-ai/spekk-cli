@@ -7,6 +7,7 @@ import { launchObserverAgent } from '../src/observer/cli.js';
 import { runBuilderLoop, runCoachLoop } from '../src/loops/index.js';
 import { showStatus } from '../src/status/cli.js';
 import { showSpekk } from '../src/show/cli.js';
+import { parseFlags } from '../src/cli/parse-flags.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -59,9 +60,13 @@ COMMANDS:
     await showStatus();
     break;
   
-  case 'show':
-    await showSpekk();
+  case 'show': {
+    const showFlags = parseFlags(args.slice(1), {
+      watch: { flags: ['--watch', '-w'], type: 'boolean' },
+    });
+    await showSpekk(showFlags);
     break;
+  }
   
   case '--help':
   case '-h':
@@ -73,7 +78,7 @@ USAGE:
   spekk [COMMAND]
 
 COMMANDS:
-  show      Generate and display spec explorer web interface
+  show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
   coach     Launch the Coach Agent to create and refine specs
               Use "spekk coach meeting [file]" for meeting transcript processing

@@ -127,6 +127,55 @@ status: not_started
     }
   });
 
+  test('search clear collapses auto-expanded specs but not manually expanded ones', () => {
+    try {
+      const html = setupProject({
+        'test-assertion.md': `---
+id: test-assertion
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: not_started
+---
+
+# Test Assertion`
+      });
+
+      // searchExpandedSpecs Set is declared to track auto-expanded specs
+      assert.ok(
+        html.includes('searchExpandedSpecs = new Set()'),
+        'Should declare searchExpandedSpecs Set to track auto-expanded specs'
+      );
+
+      // Before expanding, the spec is added to the tracking Set
+      assert.ok(
+        html.includes('searchExpandedSpecs.add(specItem)'),
+        'Should add spec to searchExpandedSpecs before expanding it'
+      );
+
+      // On search clear, auto-expanded specs are collapsed (expanded class removed)
+      assert.ok(
+        html.includes('searchExpandedSpecs.forEach'),
+        'Should iterate searchExpandedSpecs on clear to collapse them'
+      );
+
+      // The Set is cleared after collapsing
+      assert.ok(
+        html.includes('searchExpandedSpecs.clear()'),
+        'Should clear the searchExpandedSpecs Set after collapsing'
+      );
+
+      // Collapse logic removes expanded class and resets toggle text to right-pointing triangle
+      assert.ok(
+        html.includes("toggle.textContent = '\\u25B6'") || html.includes("toggle.textContent = '\u25B6'"),
+        'Should reset toggle text to collapsed arrow on search clear'
+      );
+
+    } finally {
+      cleanup();
+    }
+  });
+
   test('search-match class overrides completed spec hiding', () => {
     try {
       const html = setupProject({
