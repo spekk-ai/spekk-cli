@@ -3,7 +3,7 @@ id: watch-mode-integrated
 parent: spekk-show-watch
 created: 2026-02-26T18:00:00Z
 priority: 1
-status: done
+status: in_progress
 depends-on: file-watcher-module-exists
 branch: feature/spekk-show-watch
 ---
@@ -43,8 +43,26 @@ The `--watch` flag is parsed, all modules are wired together, and `spekk show --
 
 Note: only one `depends-on` in frontmatter (the watcher). The server is also required but the coordinator chains them appropriately.
 
-## Bug: Browser open fails in watch mode
+## Bug (fixed): Browser open fails in watch mode
 
-`openInBrowser()` in `src/show/cli.js` unconditionally wraps its argument with `file://` prefix (line 89). The non-watch path passes a file path so this is correct. But the watch path passes `http://localhost:{port}` — resulting in `file://http://localhost:3117` which is invalid.
+Resolved — `resolveOpenUrl()` now detects HTTP URLs and skips `file://` prefix.
 
-**Fix:** `openInBrowser()` should detect when the input is already a URL (starts with `http://` or `https://`) and pass it directly to the OS open command without the `file://` prefix.
+## Enhancement: Preserve UI state across live reloads
+
+`location.reload()` resets all interactive UI state. The SSE client script should save and restore state via localStorage around each reload.
+
+**State to preserve:**
+1. **Expanded specs** — which spec dropdowns are open (IDs of elements with `.expanded` class under `[id^="assertions-"]`)
+2. **Selected detail panel** — which assertion/spec detail is active (ID of the `.detail-content.active` element)
+3. **Sidebar scroll position** — `scrollTop` of the sidebar `.spec-list` container
+
+**Implementation (all changes within the SSE client `<script>` block in `src/show/cli.js`):**
+- Before `location.reload()`: save expanded spec IDs, active detail ID, and scroll position to `sessionStorage` under a `spekkWatchState` key
+- On page load (in watch mode only): read `spekkWatchState` from sessionStorage, re-expand saved specs, re-activate the saved detail panel, restore scroll position, then clear the stored state
+- Use `sessionStorage` (not `localStorage`) since this state is ephemeral to the watch session
+- Restore scroll position via `requestAnimationFrame` to ensure DOM is rendered first
+
+**What's already persisted (no changes needed):**
+- Completed specs toggle — uses `localStorage.getItem('spekkShowCompleted')`
+- Metro map height — uses `localStorage.getItem('spekkMetroMapHeight')`
+- Metro map collapsed — uses `localStorage.getItem('spekkMetroMapCollapsed')`
