@@ -3,7 +3,7 @@ id: builder-locks-and-unlocks-assertions
 parent: builder-agent
 created: 2026-02-25T20:10:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: locked-by-field-for-parallel-builders
 ---
 
