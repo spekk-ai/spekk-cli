@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import http from 'node:http';
 import { startWatchServer } from '../show/server.js';
 import { watchSpecs } from '../show/watcher.js';
+import { resolveOpenUrl } from '../show/cli.js';
 
 function fetch(url) {
   return new Promise((resolve, reject) => {
@@ -123,5 +124,21 @@ A test assertion.`);
     }
 
     cleanup();
+  });
+});
+
+describe('resolveOpenUrl', () => {
+  test('wraps file paths with file:// prefix', () => {
+    assert.strictEqual(resolveOpenUrl('/home/user/.spekk/index.html'), 'file:///home/user/.spekk/index.html');
+    assert.strictEqual(resolveOpenUrl('/tmp/test.html'), 'file:///tmp/test.html');
+  });
+
+  test('passes http:// URLs through unchanged', () => {
+    assert.strictEqual(resolveOpenUrl('http://localhost:3117'), 'http://localhost:3117');
+    assert.strictEqual(resolveOpenUrl('http://localhost:0/'), 'http://localhost:0/');
+  });
+
+  test('passes https:// URLs through unchanged', () => {
+    assert.strictEqual(resolveOpenUrl('https://example.com'), 'https://example.com');
   });
 });

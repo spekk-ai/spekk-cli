@@ -84,13 +84,24 @@ async function showSpekkWatch() {
   return new Promise(() => {});
 }
 
+/**
+ * Resolve a path-or-URL string to the URL that should be handed to the OS
+ * open command.  HTTP(S) URLs are returned as-is; anything else gets a
+ * file:// prefix.
+ */
+export function resolveOpenUrl(pathOrUrl) {
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+    return pathOrUrl;
+  }
+  return `file://${pathOrUrl}`;
+}
+
 export function openInBrowser(htmlFilePath) {
-  // Convert to file:// URL for proper browser handling
-  const fileUrl = `file://${htmlFilePath}`;
-  
+  const url = resolveOpenUrl(htmlFilePath);
+
   // Determine the correct command based on the operating system
   let command;
-  let args = [fileUrl];
+  let args = [url];
   
   switch (platform()) {
     case 'darwin': // macOS
@@ -98,7 +109,7 @@ export function openInBrowser(htmlFilePath) {
       break;
     case 'win32': // Windows
       command = 'start';
-      args = ['', fileUrl]; // start command requires empty string as first arg
+      args = ['', url]; // start command requires empty string as first arg
       break;
     default: // Linux and other Unix-like systems
       command = 'xdg-open';
