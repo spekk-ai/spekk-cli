@@ -1416,6 +1416,8 @@ export function generateSpecExplorerHTML(specs, assertions) {
             const specTree = document.querySelector('.spec-tree');
             if (!searchInput || !specTree) return;
 
+            var searchExpandedSpecs = new Set();
+
             searchInput.addEventListener('input', function() {
                 const query = this.value.trim().toLowerCase();
                 const specItems = specTree.querySelectorAll('.spec-item');
@@ -1428,6 +1430,16 @@ export function generateSpecExplorerHTML(specs, assertions) {
                         var assertions = specItem.querySelectorAll('.assertion-item');
                         assertions.forEach(function(a) { a.classList.remove('search-hidden'); });
                     });
+                    // Collapse specs that were auto-expanded by search
+                    searchExpandedSpecs.forEach(function(specItem) {
+                        var assertionsList = specItem.querySelector('.assertions-list');
+                        var toggle = specItem.querySelector('.toggle-icon');
+                        var header = specItem.querySelector('.spec-header');
+                        if (assertionsList) { assertionsList.classList.remove('expanded'); }
+                        if (toggle) { toggle.classList.remove('expanded'); toggle.textContent = '\u25B6'; }
+                        if (header) { header.classList.remove('expanded'); }
+                    });
+                    searchExpandedSpecs.clear();
                     // Restore completed specs toggle behavior
                     updateHiddenCount();
                     return;
@@ -1463,6 +1475,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
                             var toggle = specItem.querySelector('.toggle-icon');
                             var header = specItem.querySelector('.spec-header');
                             if (assertionsList && !assertionsList.classList.contains('expanded')) {
+                                searchExpandedSpecs.add(specItem);
                                 assertionsList.classList.add('expanded');
                                 if (toggle) { toggle.classList.add('expanded'); toggle.textContent = '\\u25BC'; }
                                 if (header) { header.classList.add('expanded'); }

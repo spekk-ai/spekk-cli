@@ -3,7 +3,7 @@ id: searchbar-filters-spec-tree
 parent: spec-explorer-web-interface
 created: 2026-02-26T20:00:00Z
 priority: 2
-status: in_progress
+status: done
 branch: feature/spec-searchbar
 ---
 
