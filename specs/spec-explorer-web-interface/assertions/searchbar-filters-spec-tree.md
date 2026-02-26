@@ -3,11 +3,13 @@ id: searchbar-filters-spec-tree
 parent: spec-explorer-web-interface
 created: 2026-02-26T20:00:00Z
 priority: 2
-status: not_started
+status: done
 branch: feature/spec-searchbar
 ---
 
 # Searchbar Filters Spec Tree
+
+**Tests:** src/__tests__/searchbar-filters-spec-tree.test.js
 
 ## What Must Be True
 

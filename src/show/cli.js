@@ -1020,6 +1020,47 @@ export function generateSpecExplorerHTML(specs, assertions) {
             line-height: 1.5;
             color: #1e40af;
         }
+
+        .search-container {
+            margin-top: 12px;
+            position: relative;
+        }
+
+        .search-container input {
+            width: 100%;
+            padding: 8px 12px 8px 32px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #1e293b;
+            background: #f8fafc;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .search-container input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+            background: white;
+        }
+
+        .search-container .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            color: #94a3b8;
+            pointer-events: none;
+        }
+
+        .spec-item.search-hidden {
+            display: none !important;
+        }
+
+        .assertion-item.search-hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -1036,11 +1077,16 @@ export function generateSpecExplorerHTML(specs, assertions) {
                         Show completed specs
                     </label>
                 </div>
+
+                <div class="search-container">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="spec-search" placeholder="Search specs..." autocomplete="off">
+                </div>
             </div>
-            
+
             <ul class="spec-tree">
                 ${specHierarchy.map(spec => `
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="${escapeHTML((spec.id + ' ' + spec.title + ' ' + spec.status + ' ' + spec.priority).toLowerCase())}">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="${escapeHTML(spec.id)}" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-${spec.id}">▶</span>
                             <span class="priority-badge priority-${spec.priority}">${spec.priority}</span>
@@ -1050,7 +1096,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
                         
                         <ul class="assertions-list" id="assertions-${spec.id}">
                             ${spec.assertions.map(assertion => `
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="${escapeHTML(assertion.id)}" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="${escapeHTML(assertion.id)}" data-type="assertion" data-search-text="${escapeHTML((assertion.id + ' ' + assertion.title + ' ' + assertion.status + ' ' + assertion.priority).toLowerCase())}">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-${assertion.priority}">${assertion.priority}</span>
                                         <span class="status-badge status-${assertion.status}"></span>
@@ -1131,10 +1177,11 @@ export function generateSpecExplorerHTML(specs, assertions) {
     </div>
     
     <script>
-        // Initialize completed specs toggle and metro map collapse on page load
+        // Initialize completed specs toggle, metro map collapse, and search on page load
         document.addEventListener('DOMContentLoaded', function() {
             initializeCompletedSpecsToggle();
             initializeMetroMapCollapse();
+            initializeSearch();
         });
 
         function initializeCompletedSpecsToggle() {
@@ -1188,6 +1235,73 @@ export function generateSpecExplorerHTML(specs, assertions) {
             } else {
                 hiddenCountElement.textContent = '';
             }
+        }
+
+        function initializeSearch() {
+            const searchInput = document.getElementById('spec-search');
+            const specTree = document.querySelector('.spec-tree');
+            if (!searchInput || !specTree) return;
+
+            searchInput.addEventListener('input', function() {
+                const query = this.value.trim().toLowerCase();
+                const specItems = specTree.querySelectorAll('.spec-item');
+
+                if (!query) {
+                    // Clear search: remove all search-hidden classes, restore toggle behavior
+                    specItems.forEach(function(specItem) {
+                        specItem.classList.remove('search-hidden');
+                        var assertions = specItem.querySelectorAll('.assertion-item');
+                        assertions.forEach(function(a) { a.classList.remove('search-hidden'); });
+                    });
+                    // Restore completed specs toggle behavior
+                    updateHiddenCount();
+                    return;
+                }
+
+                // Active search: filter specs and assertions
+                specItems.forEach(function(specItem) {
+                    var specSearchText = specItem.dataset.searchText || '';
+                    var specMatches = specSearchText.indexOf(query) !== -1;
+                    var assertionItems = specItem.querySelectorAll('.assertion-item');
+                    var anyAssertionMatches = false;
+
+                    assertionItems.forEach(function(assertionItem) {
+                        var assertionSearchText = assertionItem.dataset.searchText || '';
+                        var assertionMatches = assertionSearchText.indexOf(query) !== -1;
+
+                        if (assertionMatches) {
+                            assertionItem.classList.remove('search-hidden');
+                            anyAssertionMatches = true;
+                        } else {
+                            assertionItem.classList.add('search-hidden');
+                        }
+                    });
+
+                    if (specMatches || anyAssertionMatches) {
+                        // Show the spec (override completed toggle)
+                        specItem.classList.remove('search-hidden');
+
+                        // If an assertion matched, expand the spec to reveal it
+                        if (anyAssertionMatches) {
+                            var assertionsList = specItem.querySelector('.assertions-list');
+                            var toggle = specItem.querySelector('.toggle-icon');
+                            var header = specItem.querySelector('.spec-header');
+                            if (assertionsList && !assertionsList.classList.contains('expanded')) {
+                                assertionsList.classList.add('expanded');
+                                if (toggle) { toggle.classList.add('expanded'); toggle.textContent = '\\u25BC'; }
+                                if (header) { header.classList.add('expanded'); }
+                            }
+                        }
+
+                        // If only spec name matches (no assertions matched), show all assertions
+                        if (specMatches && !anyAssertionMatches) {
+                            assertionItems.forEach(function(a) { a.classList.remove('search-hidden'); });
+                        }
+                    } else {
+                        specItem.classList.add('search-hidden');
+                    }
+                });
+            });
         }
 
         function initializeMetroMapCollapse() {
