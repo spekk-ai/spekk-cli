@@ -18,6 +18,7 @@
   ],
   "scripts": {
     "next": "node src/parser/cli.js",
+    "show": "node bin/spekk.js show",
     "status": "node bin/spekk.js status",
     "coach": "node src/coach/cli.js",
     "builder": "node src/builder/cli.js",
