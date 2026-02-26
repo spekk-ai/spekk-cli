@@ -47,6 +47,16 @@ Note: only one `depends-on` in frontmatter (the watcher). The server is also req
 
 Resolved — `resolveOpenUrl()` now detects HTTP URLs and skips `file://` prefix.
 
+## Bug: Missed reloads during rapid edits
+
+When a file change fires while the browser is mid-reload (old SSE connection closed, new one not yet connected), `notifyClients()` writes to zero clients and the change is silently lost. The browser loads stale HTML and never gets another event until the *next* file change.
+
+**Fix in `src/show/cli.js` `showSpekkWatch()`:** Track a `dirty` flag. When the watcher fires, set `dirty = true` AND call `notifyClients()`. In the server (`src/show/server.js`), when a new SSE client connects, if `dirty` is true, immediately send a `reload` event and reset the flag. This way, if the browser reconnects after missing an event, it gets an immediate reload.
+
+Concretely:
+- `startWatchServer` should accept an optional `isDirty` callback and call it when a new SSE client connects. If `isDirty()` returns true, immediately write a `reload` event to that client.
+- In `showSpekkWatch()`, maintain `let dirty = false`. Watcher sets `dirty = true` then calls `notifyClients()`. The `GET /` handler resets `dirty = false` (since the HTML was just freshly served). Pass `isDirty: () => dirty` to `startWatchServer`.
+
 ## Enhancement: Preserve UI state across live reloads
 
 `location.reload()` resets all interactive UI state. The SSE client script should save and restore state via localStorage around each reload.
