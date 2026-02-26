@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spec Explorer - spekk-cli-dependency-visualization</title>
+    <title>Spec Explorer - spekk-cli-spec-searchbar</title>
     <style>
         * {
             margin: 0;
@@ -588,14 +588,55 @@
             line-height: 1.5;
             color: #1e40af;
         }
+
+        .search-container {
+            margin-top: 12px;
+            position: relative;
+        }
+
+        .search-container input {
+            width: 100%;
+            padding: 8px 12px 8px 32px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #1e293b;
+            background: #f8fafc;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .search-container input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+            background: white;
+        }
+
+        .search-container .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            color: #94a3b8;
+            pointer-events: none;
+        }
+
+        .spec-item.search-hidden {
+            display: none !important;
+        }
+
+        .assertion-item.search-hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="tree-panel">
             <div class="header">
-                <h1>Spec Tree - spekk-cli-dependency-visualization</h1>
-                <p class="stats">23 specs, 131 assertions</p>
+                <h1>Spec Tree - spekk-cli-spec-searchbar</h1>
+                <p class="stats">23 specs, 132 assertions</p>
                 <p class="hidden-count" id="hidden-count"></p>
 
                 <div class="toggle-container">
@@ -604,11 +645,16 @@
                         Show completed specs
                     </label>
                 </div>
+
+                <div class="search-container">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="spec-search" placeholder="Search specs..." autocomplete="off">
+                </div>
             </div>
-            
+
             <ul class="spec-tree">
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="spec-parser spec parser done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="spec-parser" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-spec-parser">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -618,7 +664,7 @@
                         
                         <ul class="assertions-list" id="assertions-spec-parser">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="enforces-folder-structure" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="enforces-folder-structure" data-type="assertion" data-search-text="enforces-folder-structure parser must enforce folder structure done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -626,7 +672,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parser-script-exists" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parser-script-exists" data-type="assertion" data-search-text="parser-script-exists parser module must exist and work done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -634,7 +680,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parses-frontmatter" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parses-frontmatter" data-type="assertion" data-search-text="parses-frontmatter parser must parse yaml frontmatter done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -642,7 +688,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="no-implementation-outside-app" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="no-implementation-outside-app" data-type="assertion" data-search-text="no-implementation-outside-app all code lives in src/ done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -650,7 +696,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="sidecar-test-runner" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="sidecar-test-runner" data-type="assertion" data-search-text="sidecar-test-runner sidecar test runner exists done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -658,7 +704,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="target-directory-structure" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="target-directory-structure" data-type="assertion" data-search-text="target-directory-structure cli directory structure done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -666,7 +712,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="tests-in-correct-location" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="tests-in-correct-location" data-type="assertion" data-search-text="tests-in-correct-location tests must be in correct location done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -674,7 +720,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parent-status-synchronization" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parent-status-synchronization" data-type="assertion" data-search-text="parent-status-synchronization parser must synchronize parent spec status with child assertions done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -682,7 +728,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="locked-by-field-for-parallel-builders" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="locked-by-field-for-parallel-builders" data-type="assertion" data-search-text="locked-by-field-for-parallel-builders locked-by field for parallel builders done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -690,7 +736,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="validates-required-fields" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="validates-required-fields" data-type="assertion" data-search-text="validates-required-fields parser must validate required fields done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -698,7 +744,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="identifies-next-priority" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="identifies-next-priority" data-type="assertion" data-search-text="identifies-next-priority parser must identify next priority item done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -706,7 +752,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="outputs-valid-json" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="outputs-valid-json" data-type="assertion" data-search-text="outputs-valid-json parser must output valid json done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -714,7 +760,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="assertions-have-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="assertions-have-tests" data-type="assertion" data-search-text="assertions-have-tests assertions must have automated tests when possible done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -722,7 +768,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="validates-timestamps" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="validates-timestamps" data-type="assertion" data-search-text="validates-timestamps parser must validate timestamp formats done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -730,7 +776,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="validates-status-values" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="validates-status-values" data-type="assertion" data-search-text="validates-status-values parser must validate status values done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -738,7 +784,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="detects-duplicate-ids" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="detects-duplicate-ids" data-type="assertion" data-search-text="detects-duplicate-ids parser must detect duplicate ids done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -746,7 +792,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="ci-runs-all-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="ci-runs-all-tests" data-type="assertion" data-search-text="ci-runs-all-tests ci runs all tests done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -757,7 +803,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="builder-agent builder agent in_progress 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="builder-agent" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-builder-agent">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -767,7 +813,7 @@
                         
                         <ul class="assertions-list" id="assertions-builder-agent">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="prompt-exists" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="prompt-exists" data-type="assertion" data-search-text="prompt-exists builder agent prompt must exist done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -775,7 +821,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="builder-runner-exists" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="builder-runner-exists" data-type="assertion" data-search-text="builder-runner-exists builder runner script exists done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -783,7 +829,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="reads-complete-specs" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="reads-complete-specs" data-type="assertion" data-search-text="reads-complete-specs builder must read complete specification files done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -791,7 +837,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="builder-uses-global-cli" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="builder-uses-global-cli" data-type="assertion" data-search-text="builder-uses-global-cli builder uses global cli commands done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -799,7 +845,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="lean-test-philosophy" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="lean-test-philosophy" data-type="assertion" data-search-text="lean-test-philosophy builder follows lean testing philosophy done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -807,7 +853,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="builder-locks-and-unlocks-assertions" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="builder-locks-and-unlocks-assertions" data-type="assertion" data-search-text="builder-locks-and-unlocks-assertions builder locks and unlocks assertions not_started 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-not_started"></span>
@@ -815,7 +861,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="creates-detailed-pr-descriptions" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="creates-detailed-pr-descriptions" data-type="assertion" data-search-text="creates-detailed-pr-descriptions builder creates detailed pr descriptions done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -826,7 +872,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="test-file-organization parser test file organization done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="test-file-organization" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-test-file-organization">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -836,7 +882,7 @@
                         
                         <ul class="assertions-list" id="assertions-test-file-organization">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-parser-basic-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-parser-basic-tests" data-type="assertion" data-search-text="create-parser-basic-tests parser basic tests file done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -844,7 +890,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-frontmatter-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-frontmatter-tests" data-type="assertion" data-search-text="create-frontmatter-tests frontmatter parsing tests file done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -852,7 +898,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-field-validation-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-field-validation-tests" data-type="assertion" data-search-text="create-field-validation-tests field validation tests file done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -860,7 +906,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-json-output-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-json-output-tests" data-type="assertion" data-search-text="create-json-output-tests json output tests file done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -868,7 +914,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-priority-algorithm-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="create-priority-algorithm-tests" data-type="assertion" data-search-text="create-priority-algorithm-tests priority algorithm tests file done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -876,7 +922,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="remove-old-test-files" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="remove-old-test-files" data-type="assertion" data-search-text="remove-old-test-files remove old test files done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -887,7 +933,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="fix-hardcoded-paths-in-tests fix hardcoded paths in tests done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="fix-hardcoded-paths-in-tests" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-fix-hardcoded-paths-in-tests">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -897,7 +943,7 @@
                         
                         <ul class="assertions-list" id="assertions-fix-hardcoded-paths-in-tests">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="update-test-files-to-use-relative-paths" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="update-test-files-to-use-relative-paths" data-type="assertion" data-search-text="update-test-files-to-use-relative-paths update test files to use relative paths done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -908,7 +954,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="fix-ci-workflow-hanging fix ci workflow hanging done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="fix-ci-workflow-hanging" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-fix-ci-workflow-hanging">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -918,7 +964,7 @@
                         
                         <ul class="assertions-list" id="assertions-fix-ci-workflow-hanging">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="remove-extra-ci-steps" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="remove-extra-ci-steps" data-type="assertion" data-search-text="remove-extra-ci-steps remove extra ci steps done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -929,7 +975,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="coach-skills-system coach skills system done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="coach-skills-system" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-coach-skills-system">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -939,7 +985,7 @@
                         
                         <ul class="assertions-list" id="assertions-coach-skills-system">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="auto-detect-skills" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="auto-detect-skills" data-type="assertion" data-search-text="auto-detect-skills auto-detect skills done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -947,7 +993,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="business-model-validator-skill" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="business-model-validator-skill" data-type="assertion" data-search-text="business-model-validator-skill business model validator skill done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -955,7 +1001,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="coordinate-cli-command" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="coordinate-cli-command" data-type="assertion" data-search-text="coordinate-cli-command coach accepts &quot;coordinate&quot; subcommand done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -963,7 +1009,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="fix-cli-reads-local-specs-test" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="fix-cli-reads-local-specs-test" data-type="assertion" data-search-text="fix-cli-reads-local-specs-test fix failing cli-reads-local-specs test done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -971,7 +1017,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-subcommands-inline-skill-content" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-subcommands-inline-skill-content" data-type="assertion" data-search-text="cli-subcommands-inline-skill-content cli subcommands inline skill content from markdown files done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -979,7 +1025,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="structured-assessment-report" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="structured-assessment-report" data-type="assertion" data-search-text="structured-assessment-report structured assessment report done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -987,7 +1033,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="extensible-skills-framework" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="extensible-skills-framework" data-type="assertion" data-search-text="extensible-skills-framework extensible skills framework done 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -998,7 +1044,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="cli-prompt-resolution cli agent prompt resolution done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="cli-prompt-resolution" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-cli-prompt-resolution">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1008,7 +1054,7 @@
                         
                         <ul class="assertions-list" id="assertions-cli-prompt-resolution">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="agent-prompts-accessible-anywhere" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="agent-prompts-accessible-anywhere" data-type="assertion" data-search-text="agent-prompts-accessible-anywhere agent prompts accessible anywhere done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1016,7 +1062,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="claude-code-runs-in-user-directory" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="claude-code-runs-in-user-directory" data-type="assertion" data-search-text="claude-code-runs-in-user-directory claude code runs in user directory done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1024,7 +1070,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-works-from-any-directory" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-works-from-any-directory" data-type="assertion" data-search-text="cli-works-from-any-directory cli works from any directory done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1032,7 +1078,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="integration-test-external-directory" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="integration-test-external-directory" data-type="assertion" data-search-text="integration-test-external-directory integration test external directory done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1040,7 +1086,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="verify-claude-working-directory" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="verify-claude-working-directory" data-type="assertion" data-search-text="verify-claude-working-directory verify claude working directory done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1048,7 +1094,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="verify-prompt-file-accessible" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="verify-prompt-file-accessible" data-type="assertion" data-search-text="verify-prompt-file-accessible verify prompt file accessible done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1056,7 +1102,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="remove-copying-implementation" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="remove-copying-implementation" data-type="assertion" data-search-text="remove-copying-implementation remove copying implementation done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1064,7 +1110,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="spec-parser-works-externally" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="spec-parser-works-externally" data-type="assertion" data-search-text="spec-parser-works-externally spec parser works externally done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1075,7 +1121,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="fix-parser-syntax-error fix parser syntax error done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="fix-parser-syntax-error" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-fix-parser-syntax-error">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1085,7 +1131,7 @@
                         
                         <ul class="assertions-list" id="assertions-fix-parser-syntax-error">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parser-runs-without-syntax-errors" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parser-runs-without-syntax-errors" data-type="assertion" data-search-text="parser-runs-without-syntax-errors parser runs without syntax errors done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1096,7 +1142,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="cleanup-repository clean up repository done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="cleanup-repository" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-cleanup-repository">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1106,7 +1152,7 @@
                         
                         <ul class="assertions-list" id="assertions-cleanup-repository">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="gitignore-updated" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="gitignore-updated" data-type="assertion" data-search-text="gitignore-updated gitignore updated done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1114,7 +1160,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="no-debug-files-in-root" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="no-debug-files-in-root" data-type="assertion" data-search-text="no-debug-files-in-root no debug files in root done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1122,7 +1168,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="tmp-directory-established" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="tmp-directory-established" data-type="assertion" data-search-text="tmp-directory-established tmp directory established done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1130,7 +1176,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observations-directory-cleaned" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observations-directory-cleaned" data-type="assertion" data-search-text="observations-directory-cleaned observations directory cleaned done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1141,7 +1187,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="fix-cli-context-bug fix cli context bug done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="fix-cli-context-bug" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-fix-cli-context-bug">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1151,7 +1197,7 @@
                         
                         <ul class="assertions-list" id="assertions-fix-cli-context-bug">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-reads-local-specs" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-reads-local-specs" data-type="assertion" data-search-text="cli-reads-local-specs cli reads local specs done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1162,7 +1208,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="optimize-test-performance optimize test performance done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="optimize-test-performance" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-optimize-test-performance">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1172,7 +1218,7 @@
                         
                         <ul class="assertions-list" id="assertions-optimize-test-performance">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="mock-external-processes" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="mock-external-processes" data-type="assertion" data-search-text="mock-external-processes mock external processes done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1180,7 +1226,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="tests-complete-under-30-seconds" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="tests-complete-under-30-seconds" data-type="assertion" data-search-text="tests-complete-under-30-seconds tests complete under 30 seconds done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1188,7 +1234,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="enable-parallel-test-execution" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="enable-parallel-test-execution" data-type="assertion" data-search-text="enable-parallel-test-execution enable parallel test execution done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1199,7 +1245,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="bootstrap-system-recovery bootstrap system recovery done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="bootstrap-system-recovery" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-bootstrap-system-recovery">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1209,7 +1255,7 @@
                         
                         <ul class="assertions-list" id="assertions-bootstrap-system-recovery">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="manual-parser-syntax-fix" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="manual-parser-syntax-fix" data-type="assertion" data-search-text="manual-parser-syntax-fix manual parser syntax fix done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1220,7 +1266,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="robust-error-handling robust error handling done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="robust-error-handling" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-robust-error-handling">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1230,7 +1276,7 @@
                         
                         <ul class="assertions-list" id="assertions-robust-error-handling">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parser-handles-malformed-files" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parser-handles-malformed-files" data-type="assertion" data-search-text="parser-handles-malformed-files parser handles malformed files done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1241,7 +1287,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="fix-builder-test-validation fix builder test validation done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="fix-builder-test-validation" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-fix-builder-test-validation">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1251,7 +1297,7 @@
                         
                         <ul class="assertions-list" id="assertions-fix-builder-test-validation">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="builder-uses-npm-test-commands" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="builder-uses-npm-test-commands" data-type="assertion" data-search-text="builder-uses-npm-test-commands builder uses npm test commands done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1262,7 +1308,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="gemfury-package-management gemfury package management done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="gemfury-package-management" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-gemfury-package-management">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1272,7 +1318,7 @@
                         
                         <ul class="assertions-list" id="assertions-gemfury-package-management">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="contributing-documents-publish-process" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="contributing-documents-publish-process" data-type="assertion" data-search-text="contributing-documents-publish-process contributing.md documents publish process done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1280,7 +1326,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="readme-contains-installation-instructions" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="readme-contains-installation-instructions" data-type="assertion" data-search-text="readme-contains-installation-instructions readme contains gemfury installation instructions done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1288,7 +1334,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="github-action-publishes-to-gemfury" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="github-action-publishes-to-gemfury" data-type="assertion" data-search-text="github-action-publishes-to-gemfury github action publishes to gemfury done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1296,7 +1342,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="publish-workflow-fails-on-error" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="publish-workflow-fails-on-error" data-type="assertion" data-search-text="publish-workflow-fails-on-error publish workflow fails on error done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1307,7 +1353,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="builder-cli-flags builder cli flags done 1">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="builder-cli-flags" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-builder-cli-flags">▶</span>
                             <span class="priority-badge priority-1">1</span>
@@ -1317,7 +1363,7 @@
                         
                         <ul class="assertions-list" id="assertions-builder-cli-flags">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="all-flag" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="all-flag" data-type="assertion" data-search-text="all-flag --all flag is removed (looping is default) done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1325,7 +1371,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="assertion-flag" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="assertion-flag" data-type="assertion" data-search-text="assertion-flag --assertion flag targets specific assertion done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1333,7 +1379,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="confirm-flag" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="confirm-flag" data-type="assertion" data-search-text="confirm-flag --confirm flag asks before building done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1341,7 +1387,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="dry-run-flag" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="dry-run-flag" data-type="assertion" data-search-text="dry-run-flag --dry-run flag shows what would be built done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1349,7 +1395,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="once-flag" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="once-flag" data-type="assertion" data-search-text="once-flag --once flag builds single assertion then exits done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1357,7 +1403,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="spec-flag" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="spec-flag" data-type="assertion" data-search-text="spec-flag --spec flag filters to specific spec done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1365,7 +1411,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="consistent-spekk-command" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="consistent-spekk-command" data-type="assertion" data-search-text="consistent-spekk-command consistent use of local spekk command done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1373,7 +1419,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="deduplicate-parse-flags" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="deduplicate-parse-flags" data-type="assertion" data-search-text="deduplicate-parse-flags deduplicate parseflags into shared utility done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1381,7 +1427,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="interactive-flag" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="interactive-flag" data-type="assertion" data-search-text="interactive-flag --interactive flag runs claude in non-headless mode done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1392,7 +1438,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="meeting-notes-to-specs meeting notes to specs done 2">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="meeting-notes-to-specs" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-meeting-notes-to-specs">▶</span>
                             <span class="priority-badge priority-2">2</span>
@@ -1402,7 +1448,7 @@
                         
                         <ul class="assertions-list" id="assertions-meeting-notes-to-specs">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="features-become-spec-files" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="features-become-spec-files" data-type="assertion" data-search-text="features-become-spec-files features become proper spec files done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1410,7 +1456,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-routes-through-coach" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-routes-through-coach" data-type="assertion" data-search-text="cli-routes-through-coach cli routes through coach done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1418,7 +1464,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="reuses-coach-prompt-as-base" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="reuses-coach-prompt-as-base" data-type="assertion" data-search-text="reuses-coach-prompt-as-base reuses coach prompt as base done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1426,7 +1472,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="decisions-update-context" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="decisions-update-context" data-type="assertion" data-search-text="decisions-update-context decisions update context.md done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1434,7 +1480,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="extract-three-categories" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="extract-three-categories" data-type="assertion" data-search-text="extract-three-categories extract three categories from transcript done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1442,7 +1488,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="outputs-committed-together" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="outputs-committed-together" data-type="assertion" data-search-text="outputs-committed-together all outputs committed together done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1450,7 +1496,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="todos-formatted-for-tracking" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="todos-formatted-for-tracking" data-type="assertion" data-search-text="todos-formatted-for-tracking todos formatted for action tracking done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1461,7 +1507,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="spekk-cli spekk cli done 2">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="spekk-cli" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-spekk-cli">▶</span>
                             <span class="priority-badge priority-2">2</span>
@@ -1471,7 +1517,7 @@
                         
                         <ul class="assertions-list" id="assertions-spekk-cli">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="orchestration-loops-exist" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="orchestration-loops-exist" data-type="assertion" data-search-text="orchestration-loops-exist orchestration loops exist done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1479,7 +1525,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="npm-scripts-launch-agents" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="npm-scripts-launch-agents" data-type="assertion" data-search-text="npm-scripts-launch-agents npm scripts launch agents done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1487,7 +1533,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="status-command-exists" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="status-command-exists" data-type="assertion" data-search-text="status-command-exists status command exists done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1498,7 +1544,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="observer-agent observer agent done 2">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="observer-agent" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-observer-agent">▶</span>
                             <span class="priority-badge priority-2">2</span>
@@ -1508,7 +1554,7 @@
                         
                         <ul class="assertions-list" id="assertions-observer-agent">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-is-claude-agent" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-is-claude-agent" data-type="assertion" data-search-text="observer-is-claude-agent observer is claude agent done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1516,7 +1562,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-command-launches-observer-loop" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-command-launches-observer-loop" data-type="assertion" data-search-text="cli-command-launches-observer-loop cli command launches observer in continuous loop done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1524,7 +1570,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observations-use-markdown-yaml-format" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observations-use-markdown-yaml-format" data-type="assertion" data-search-text="observations-use-markdown-yaml-format observations use markdown + yaml frontmatter format done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1532,7 +1578,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-catches-spec-conflicts" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-catches-spec-conflicts" data-type="assertion" data-search-text="observer-catches-spec-conflicts observer catches spec conflicts done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1540,7 +1586,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-creates-observations-directory" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-creates-observations-directory" data-type="assertion" data-search-text="observer-creates-observations-directory observer creates observations in observations/ directory done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1548,7 +1594,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-detects-code-spec-misalignment" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-detects-code-spec-misalignment" data-type="assertion" data-search-text="observer-detects-code-spec-misalignment observer detects code-spec misalignment done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1556,7 +1602,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-prompt-defines-drift-detection" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-prompt-defines-drift-detection" data-type="assertion" data-search-text="observer-prompt-defines-drift-detection observer prompt defines drift detection behavior done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1564,7 +1610,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-finds-compression-opportunities" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-finds-compression-opportunities" data-type="assertion" data-search-text="observer-finds-compression-opportunities observer finds spec compression opportunities done 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -1572,7 +1618,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-identifies-outdated-specs" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="observer-identifies-outdated-specs" data-type="assertion" data-search-text="observer-identifies-outdated-specs observer identifies outdated specs done 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -1580,7 +1626,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="spec-parser-handles-observations" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="spec-parser-handles-observations" data-type="assertion" data-search-text="spec-parser-handles-observations spec parser handles observation files done 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -1591,7 +1637,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="spec-explorer-web-interface spec explorer web interface done 2">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="spec-explorer-web-interface" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-spec-explorer-web-interface">▶</span>
                             <span class="priority-badge priority-2">2</span>
@@ -1601,7 +1647,7 @@
                         
                         <ul class="assertions-list" id="assertions-spec-explorer-web-interface">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="creates-spekk-directory-automatically" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="creates-spekk-directory-automatically" data-type="assertion" data-search-text="creates-spekk-directory-automatically creates .spekk directory automatically done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1609,7 +1655,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="generates-index-html-file" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="generates-index-html-file" data-type="assertion" data-search-text="generates-index-html-file generates index.html file done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1617,7 +1663,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="spekk-show-command-exists" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="spekk-show-command-exists" data-type="assertion" data-search-text="spekk-show-command-exists spekk show command exists done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1625,7 +1671,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="no-browser-in-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="no-browser-in-tests" data-type="assertion" data-search-text="no-browser-in-tests tests never open the browser done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1633,7 +1679,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="branch-metro-map-in-detail-panel" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="branch-metro-map-in-detail-panel" data-type="assertion" data-search-text="branch-metro-map-in-detail-panel persistent collapsible metro map in detail panel done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1641,7 +1687,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-map-scrollable-viewport" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-map-scrollable-viewport" data-type="assertion" data-search-text="metro-map-scrollable-viewport metro map collapsible &amp; resizable viewport done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1649,7 +1695,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="hide-metro-map-for-ungrouped-assertions" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="hide-metro-map-for-ungrouped-assertions" data-type="assertion" data-search-text="hide-metro-map-for-ungrouped-assertions hide metro map for ungrouped assertions done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1657,7 +1703,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-stations-have-stable-hover-state" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-stations-have-stable-hover-state" data-type="assertion" data-search-text="metro-stations-have-stable-hover-state metro stations have stable hover state done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1665,7 +1711,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-map-pan-and-zoom" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-map-pan-and-zoom" data-type="assertion" data-search-text="metro-map-pan-and-zoom metro map pan and zoom done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1673,15 +1719,15 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-tracks-use-distinct-colors" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-tracks-use-distinct-colors" data-type="assertion" data-search-text="metro-tracks-use-distinct-colors metro map uses tree-stacking layout with uniform gray lines done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
-                                        <span>Metro Map Uses Tree-Stacking Layout with Distinct Track Colors</span>
+                                        <span>Metro Map Uses Tree-Stacking Layout with Uniform Gray Lines</span>
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="assertions-appear-as-subitems" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="assertions-appear-as-subitems" data-type="assertion" data-search-text="assertions-appear-as-subitems assertions appear as sub-items done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1689,7 +1735,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="clicking-shows-details-panel" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="clicking-shows-details-panel" data-type="assertion" data-search-text="clicking-shows-details-panel clicking shows details panel done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1697,7 +1743,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="displays-spec-tree-with-dropdowns" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="displays-spec-tree-with-dropdowns" data-type="assertion" data-search-text="displays-spec-tree-with-dropdowns displays spec tree with expandable dropdowns done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1705,7 +1751,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="emphasizes-status-and-priority-visually" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="emphasizes-status-and-priority-visually" data-type="assertion" data-search-text="emphasizes-status-and-priority-visually emphasizes status and priority visually done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1713,7 +1759,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="status-icons-display-correctly" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="status-icons-display-correctly" data-type="assertion" data-search-text="status-icons-display-correctly status icons display correctly done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1721,7 +1767,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="clickable-metro-map-stations" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="clickable-metro-map-stations" data-type="assertion" data-search-text="clickable-metro-map-stations clickable metro map stations done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1729,7 +1775,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="hide-completed-specs-toggle" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="hide-completed-specs-toggle" data-type="assertion" data-search-text="hide-completed-specs-toggle hide completed specs toggle done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1737,7 +1783,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="subtle-track-terminus-dots" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="subtle-track-terminus-dots" data-type="assertion" data-search-text="subtle-track-terminus-dots subtle track terminus dots done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1745,7 +1791,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-map-station-tooltips" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="metro-map-station-tooltips" data-type="assertion" data-search-text="metro-map-station-tooltips metro map station tooltips done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1753,7 +1799,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="terminal-nodes-have-no-extra-lines" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="terminal-nodes-have-no-extra-lines" data-type="assertion" data-search-text="terminal-nodes-have-no-extra-lines terminal nodes have no extra lines done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1761,7 +1807,15 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="opens-html-in-default-browser" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="searchbar-filters-spec-tree" data-type="assertion" data-search-text="searchbar-filters-spec-tree searchbar filters spec tree done 2">
+                                    <div style="display: flex; align-items: center;">
+                                        <span class="priority-badge priority-2">2</span>
+                                        <span class="status-badge status-done"></span>
+                                        <span>Searchbar Filters Spec Tree</span>
+                                    </div>
+                                </li>
+                            
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="opens-html-in-default-browser" data-type="assertion" data-search-text="opens-html-in-default-browser opens html in default browser done 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -1772,7 +1826,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="simplified-display-formatting simplified display formatting done 2">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="simplified-display-formatting" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-simplified-display-formatting">▶</span>
                             <span class="priority-badge priority-2">2</span>
@@ -1782,7 +1836,7 @@
                         
                         <ul class="assertions-list" id="assertions-simplified-display-formatting">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="update-failing-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="update-failing-tests" data-type="assertion" data-search-text="update-failing-tests update failing tests for simplified format done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1790,7 +1844,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="ignore-readme-files" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="ignore-readme-files" data-type="assertion" data-search-text="ignore-readme-files ignore markdown files without frontmatter done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1798,7 +1852,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="fix-all-failing-tests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="fix-all-failing-tests" data-type="assertion" data-search-text="fix-all-failing-tests fix all failing tests for simplified format done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1806,7 +1860,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="skip-assertions-in-draft-specs" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="skip-assertions-in-draft-specs" data-type="assertion" data-search-text="skip-assertions-in-draft-specs skip assertions in draft specs done 1">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-1">1</span>
                                         <span class="status-badge status-done"></span>
@@ -1814,7 +1868,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="console-status-format" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="console-status-format" data-type="assertion" data-search-text="console-status-format console status display format done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1822,7 +1876,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="web-tree-display-format" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="web-tree-display-format" data-type="assertion" data-search-text="web-tree-display-format web interface tree display format done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1830,7 +1884,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="web-detail-badges-format" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="web-detail-badges-format" data-type="assertion" data-search-text="web-detail-badges-format web interface detail badges format done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1838,7 +1892,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="remove-priority-colors" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="remove-priority-colors" data-type="assertion" data-search-text="remove-priority-colors remove priority number color coding done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1846,7 +1900,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="highlight-active-states" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="highlight-active-states" data-type="assertion" data-search-text="highlight-active-states highlight active status states done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1854,7 +1908,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="fixed-width-markdown-font" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="fixed-width-markdown-font" data-type="assertion" data-search-text="fixed-width-markdown-font fixed-width font for markdown content done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1862,7 +1916,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="project-name-in-title" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="project-name-in-title" data-type="assertion" data-search-text="project-name-in-title include project name in page title done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1870,7 +1924,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="fix-javascript-template-errors" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="fix-javascript-template-errors" data-type="assertion" data-search-text="fix-javascript-template-errors fix javascript template generation errors done 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-done"></span>
@@ -1881,7 +1935,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="coach-agent coach agent done 3">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="coach-agent" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-coach-agent">▶</span>
                             <span class="priority-badge priority-3">3</span>
@@ -1891,7 +1945,7 @@
                         
                         <ul class="assertions-list" id="assertions-coach-agent">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="receives-user-requests" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="receives-user-requests" data-type="assertion" data-search-text="receives-user-requests coach must receive and parse user requests done 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -1899,7 +1953,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="asks-clarifying-questions" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="asks-clarifying-questions" data-type="assertion" data-search-text="asks-clarifying-questions coach must ask clarifying questions done 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -1907,7 +1961,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="creates-spec-files" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="creates-spec-files" data-type="assertion" data-search-text="creates-spec-files coach must create well-formed spec files done 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-done"></span>
@@ -1918,7 +1972,7 @@
                         </ul>
                     </li>
                 
-                    <li class="spec-item">
+                    <li class="spec-item" data-search-text="nested-spec-organization nested spec organization draft 3">
                         <div class="spec-header" data-action="toggle-spec" data-spec-id="nested-spec-organization" data-show-detail="true" data-type="spec">
                             <span class="toggle-icon" id="toggle-nested-spec-organization">▶</span>
                             <span class="priority-badge priority-3">3</span>
@@ -1928,7 +1982,7 @@
                         
                         <ul class="assertions-list" id="assertions-nested-spec-organization">
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parser-supports-nested-folders" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="parser-supports-nested-folders" data-type="assertion" data-search-text="parser-supports-nested-folders parser supports nested folder structures draft 2">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-2">2</span>
                                         <span class="status-badge status-draft"></span>
@@ -1936,7 +1990,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-supports-group-navigation" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="cli-supports-group-navigation" data-type="assertion" data-search-text="cli-supports-group-navigation cli supports group navigation and filtering draft 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-draft"></span>
@@ -1944,7 +1998,7 @@
                                     </div>
                                 </li>
                             
-                                <li class="assertion-item" data-action="show-detail" data-assertion-id="group-specs-have-metadata" data-type="assertion">
+                                <li class="assertion-item" data-action="show-detail" data-assertion-id="group-specs-have-metadata" data-type="assertion" data-search-text="group-specs-have-metadata group specs have proper metadata format draft 3">
                                     <div style="display: flex; align-items: center;">
                                         <span class="priority-badge priority-3">3</span>
                                         <span class="status-badge status-draft"></span>
@@ -1976,313 +2030,313 @@
   
   <!-- Convergence: manual-parser-syntax-fix → Done -->
   <line class="metro-dependency" x1="60" y1="7190" x2="180" y2="7190"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: builder-locks-and-unlocks-assertions → Done -->
   <line class="metro-dependency" x1="60" y1="9170" x2="180" y2="9170"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: builder-runner-exists → Done -->
   <line class="metro-dependency" x1="60" y1="890" x2="180" y2="890"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: builder-uses-global-cli → Done -->
   <line class="metro-dependency" x1="60" y1="6290" x2="180" y2="6290"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: creates-detailed-pr-descriptions → Done -->
   <line class="metro-dependency" x1="60" y1="2960" x2="180" y2="2960"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: lean-test-philosophy → Done -->
   <line class="metro-dependency" x1="60" y1="8810" x2="180" y2="8810"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: prompt-exists → Done -->
   <line class="metro-dependency" x1="60" y1="800" x2="180" y2="800"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: reads-complete-specs → Done -->
   <line class="metro-dependency" x1="60" y1="980" x2="180" y2="980"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: all-flag → Done -->
   <line class="metro-dependency" x1="60" y1="7820" x2="180" y2="7820"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: assertion-flag → Done -->
   <line class="metro-dependency" x1="60" y1="7910" x2="180" y2="7910"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: confirm-flag → Done -->
   <line class="metro-dependency" x1="60" y1="8000" x2="180" y2="8000"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: consistent-spekk-command → Done -->
   <line class="metro-dependency" x1="60" y1="8540" x2="180" y2="8540"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: deduplicate-parse-flags → Done -->
   <line class="metro-dependency" x1="60" y1="8630" x2="180" y2="8630"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: dry-run-flag → Done -->
   <line class="metro-dependency" x1="60" y1="8090" x2="180" y2="8090"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: interactive-flag → Done -->
   <line class="metro-dependency" x1="60" y1="8720" x2="180" y2="8720"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: once-flag → Done -->
   <line class="metro-dependency" x1="60" y1="8180" x2="180" y2="8180"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: spec-flag → Done -->
   <line class="metro-dependency" x1="60" y1="8270" x2="180" y2="8270"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: gitignore-updated → Done -->
   <line class="metro-dependency" x1="60" y1="6470" x2="180" y2="6470"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: no-debug-files-in-root → Done -->
   <line class="metro-dependency" x1="60" y1="6560" x2="180" y2="6560"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: observations-directory-cleaned → Done -->
   <line class="metro-dependency" x1="60" y1="6650" x2="180" y2="6650"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: tmp-directory-established → Done -->
   <line class="metro-dependency" x1="60" y1="6740" x2="180" y2="6740"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: agent-prompts-accessible-anywhere → Done -->
   <line class="metro-dependency" x1="60" y1="5570" x2="180" y2="5570"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: claude-code-runs-in-user-directory → Done -->
   <line class="metro-dependency" x1="60" y1="5660" x2="180" y2="5660"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: cli-works-from-any-directory → Done -->
   <line class="metro-dependency" x1="60" y1="5750" x2="180" y2="5750"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: integration-test-external-directory → Done -->
   <line class="metro-dependency" x1="60" y1="5840" x2="180" y2="5840"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: remove-copying-implementation → Done -->
   <line class="metro-dependency" x1="60" y1="6110" x2="180" y2="6110"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: spec-parser-works-externally → Done -->
   <line class="metro-dependency" x1="60" y1="6200" x2="180" y2="6200"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: verify-claude-working-directory → Done -->
   <line class="metro-dependency" x1="60" y1="5930" x2="180" y2="5930"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: verify-prompt-file-accessible → Done -->
   <line class="metro-dependency" x1="60" y1="6020" x2="180" y2="6020"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: asks-clarifying-questions → Done -->
   <line class="metro-dependency" x1="60" y1="620" x2="180" y2="620"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: creates-spec-files → Done -->
   <line class="metro-dependency" x1="60" y1="710" x2="180" y2="710"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: receives-user-requests → Done -->
   <line class="metro-dependency" x1="60" y1="530" x2="180" y2="530"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: auto-detect-skills → Done -->
   <line class="metro-dependency" x1="60" y1="5210" x2="180" y2="5210"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: business-model-validator-skill → Done -->
   <line class="metro-dependency" x1="60" y1="5300" x2="180" y2="5300"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: cli-subcommands-inline-skill-content → Done -->
   <line class="metro-dependency" x1="60" y1="9260" x2="180" y2="9260"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: coordinate-cli-command → Done -->
   <line class="metro-dependency" x1="60" y1="8990" x2="180" y2="8990"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: extensible-skills-framework → Done -->
   <line class="metro-dependency" x1="60" y1="5390" x2="180" y2="5390"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: fix-cli-reads-local-specs-test → Done -->
   <line class="metro-dependency" x1="60" y1="9080" x2="180" y2="9080"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: structured-assessment-report → Done -->
   <line class="metro-dependency" x1="60" y1="5480" x2="180" y2="5480"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: builder-uses-npm-test-commands → Done -->
   <line class="metro-dependency" x1="60" y1="7370" x2="180" y2="7370"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: remove-extra-ci-steps → Done -->
   <line class="metro-dependency" x1="60" y1="3950" x2="180" y2="3950"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: cli-reads-local-specs → Done -->
   <line class="metro-dependency" x1="60" y1="6830" x2="180" y2="6830"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: update-test-files-to-use-relative-paths → Done -->
   <line class="metro-dependency" x1="60" y1="3140" x2="180" y2="3140"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: parser-runs-without-syntax-errors → Done -->
   <line class="metro-dependency" x1="60" y1="6380" x2="180" y2="6380"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: contributing-documents-publish-process → Done -->
   <line class="metro-dependency" x1="60" y1="7460" x2="180" y2="7460"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: github-action-publishes-to-gemfury → Done -->
   <line class="metro-dependency" x1="60" y1="7640" x2="180" y2="7640"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: publish-workflow-fails-on-error → Done -->
   <line class="metro-dependency" x1="60" y1="7730" x2="180" y2="7730"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: readme-contains-installation-instructions → Done -->
   <line class="metro-dependency" x1="60" y1="7550" x2="180" y2="7550"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: cli-routes-through-coach → Done -->
   <line class="metro-dependency" x1="60" y1="8360" x2="180" y2="8360"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: decisions-update-context → Done -->
   <line class="metro-dependency" x1="60" y1="80" x2="180" y2="80"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: extract-three-categories → Done -->
   <line class="metro-dependency" x1="60" y1="170" x2="180" y2="170"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: features-become-spec-files → Done -->
   <line class="metro-dependency" x1="60" y1="260" x2="180" y2="260"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: outputs-committed-together → Done -->
   <line class="metro-dependency" x1="60" y1="350" x2="180" y2="350"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: reuses-coach-prompt-as-base → Done -->
   <line class="metro-dependency" x1="60" y1="8450" x2="180" y2="8450"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: todos-formatted-for-tracking → Done -->
   <line class="metro-dependency" x1="60" y1="440" x2="180" y2="440"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: cli-supports-group-navigation → Done -->
   <line class="metro-dependency" x1="60" y1="2690" x2="180" y2="2690"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: group-specs-have-metadata → Done -->
   <line class="metro-dependency" x1="60" y1="2780" x2="180" y2="2780"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: parser-supports-nested-folders → Done -->
   <line class="metro-dependency" x1="60" y1="2870" x2="180" y2="2870"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: cli-command-launches-observer-loop → Done -->
   <line class="metro-dependency" x1="60" y1="1880" x2="180" y2="1880"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: observations-use-markdown-yaml-format → Done -->
   <line class="metro-dependency" x1="60" y1="1970" x2="180" y2="1970"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: observer-catches-spec-conflicts → Done -->
   <line class="metro-dependency" x1="60" y1="2060" x2="180" y2="2060"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: observer-creates-observations-directory → Done -->
   <line class="metro-dependency" x1="60" y1="2150" x2="180" y2="2150"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: observer-detects-code-spec-misalignment → Done -->
   <line class="metro-dependency" x1="60" y1="2240" x2="180" y2="2240"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: observer-finds-compression-opportunities → Done -->
   <line class="metro-dependency" x1="60" y1="2330" x2="180" y2="2330"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: observer-identifies-outdated-specs → Done -->
   <line class="metro-dependency" x1="60" y1="2420" x2="180" y2="2420"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: observer-is-claude-agent → Done -->
   <line class="metro-dependency" x1="60" y1="3050" x2="180" y2="3050"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: observer-prompt-defines-drift-detection → Done -->
   <line class="metro-dependency" x1="60" y1="2510" x2="180" y2="2510"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: spec-parser-handles-observations → Done -->
   <line class="metro-dependency" x1="60" y1="2600" x2="180" y2="2600"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: enable-parallel-test-execution → Done -->
   <line class="metro-dependency" x1="60" y1="6920" x2="180" y2="6920"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: mock-external-processes → Done -->
   <line class="metro-dependency" x1="60" y1="7010" x2="180" y2="7010"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: tests-complete-under-30-seconds → Done -->
   <line class="metro-dependency" x1="60" y1="7100" x2="180" y2="7100"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: parser-handles-malformed-files → Done -->
   <line class="metro-dependency" x1="60" y1="7280" x2="180" y2="7280"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: console-status-format → Done -->
   <line class="metro-dependency" x1="60" y1="4130" x2="180" y2="4130"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: fix-all-failing-tests → Done -->
   <line class="metro-dependency" x1="60" y1="5030" x2="180" y2="5030"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: fix-javascript-template-errors → Done -->
   <line class="metro-dependency" x1="60" y1="4940" x2="180" y2="4940"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: fixed-width-markdown-font → Done -->
   <line class="metro-dependency" x1="60" y1="4760" x2="180" y2="4760"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: highlight-active-states → Done -->
   <line class="metro-dependency" x1="60" y1="4490" x2="180" y2="4490"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: ignore-readme-files → Done -->
   <line class="metro-dependency" x1="60" y1="4670" x2="180" y2="4670"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: project-name-in-title → Done -->
   <line class="metro-dependency" x1="60" y1="4850" x2="180" y2="4850"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: remove-priority-colors → Done -->
   <line class="metro-dependency" x1="60" y1="4400" x2="180" y2="4400"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: skip-assertions-in-draft-specs → Done -->
   <line class="metro-dependency" x1="60" y1="5120" x2="180" y2="5120"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: update-failing-tests → Done -->
   <line class="metro-dependency" x1="60" y1="4580" x2="180" y2="4580"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: web-detail-badges-format → Done -->
   <line class="metro-dependency" x1="60" y1="4310" x2="180" y2="4310"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: web-tree-display-format → Done -->
   <line class="metro-dependency" x1="60" y1="4220" x2="180" y2="4220"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: assertions-appear-as-subitems → Done -->
   <line class="metro-dependency" x1="60" y1="3230" x2="180" y2="3230"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: clicking-shows-details-panel → Done -->
   <line class="metro-dependency" x1="60" y1="3320" x2="180" y2="3320"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: creates-spekk-directory-automatically → Done -->
   <line class="metro-dependency" x1="60" y1="3410" x2="180" y2="3410"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: displays-spec-tree-with-dropdowns → Done -->
   <line class="metro-dependency" x1="60" y1="3500" x2="180" y2="3500"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: emphasizes-status-and-priority-visually → Done -->
   <line class="metro-dependency" x1="60" y1="3590" x2="180" y2="3590"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: generates-index-html-file → Done -->
   <line class="metro-dependency" x1="60" y1="3680" x2="180" y2="3680"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: no-browser-in-tests → Done -->
   <line class="metro-dependency" x1="60" y1="8900" x2="180" y2="8900"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: opens-html-in-default-browser → Done -->
   <line class="metro-dependency" x1="60" y1="3770" x2="180" y2="3770"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: spekk-show-command-exists → Done -->
   <line class="metro-dependency" x1="60" y1="3860" x2="180" y2="3860"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: status-icons-display-correctly → Done -->
   <line class="metro-dependency" x1="60" y1="4040" x2="180" y2="4040"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: npm-scripts-launch-agents → Done -->
   <line class="metro-dependency" x1="60" y1="1250" x2="180" y2="1250"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: orchestration-loops-exist → Done -->
   <line class="metro-dependency" x1="60" y1="1160" x2="180" y2="1160"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: status-command-exists → Done -->
   <line class="metro-dependency" x1="60" y1="1070" x2="180" y2="1070"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: create-field-validation-tests → Done -->
   <line class="metro-dependency" x1="60" y1="1520" x2="180" y2="1520"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: create-frontmatter-tests → Done -->
   <line class="metro-dependency" x1="60" y1="1430" x2="180" y2="1430"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: create-json-output-tests → Done -->
   <line class="metro-dependency" x1="60" y1="1610" x2="180" y2="1610"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: create-parser-basic-tests → Done -->
   <line class="metro-dependency" x1="60" y1="1340" x2="180" y2="1340"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: create-priority-algorithm-tests → Done -->
   <line class="metro-dependency" x1="60" y1="1700" x2="180" y2="1700"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: remove-old-test-files → Done -->
   <line class="metro-dependency" x1="60" y1="1790" x2="180" y2="1790"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Station: manual-parser-syntax-fix -->
   <g class="metro-station" data-action="show-detail" data-assertion-id="manual-parser-syntax-fix" data-type="assertion" transform="translate(60, 7190)">
     <title>Manual Parser Syntax Fix</title>
@@ -3322,55 +3376,55 @@
   
   <!-- Dependency: branch-metro-map-in-detail-panel → clickable-metro-map-stations -->
   <path class="metro-dependency" d="M60,215 Q120,215 120,147.5 T180,80"
-        fill="none" stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: branch-metro-map-in-detail-panel → hide-metro-map-for-ungrouped-assertions -->
   <line class="metro-dependency" x1="60" y1="215" x2="180" y2="215"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: metro-map-scrollable-viewport → metro-map-pan-and-zoom -->
   <line class="metro-dependency" x1="180" y1="170" x2="300" y2="170"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: branch-metro-map-in-detail-panel → metro-map-scrollable-viewport -->
   <path class="metro-dependency" d="M60,215 Q120,215 120,192.5 T180,170"
-        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: branch-metro-map-in-detail-panel → metro-map-station-tooltips -->
   <path class="metro-dependency" d="M60,215 Q120,215 120,237.5 T180,260"
-        fill="none" stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: branch-metro-map-in-detail-panel → metro-stations-have-stable-hover-state -->
   <path class="metro-dependency" d="M60,215 Q120,215 120,260 T180,305"
-        fill="none" stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: branch-metro-map-in-detail-panel → metro-tracks-use-distinct-colors -->
   <path class="metro-dependency" d="M60,215 Q120,215 120,282.5 T180,350"
-        fill="none" stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: branch-metro-map-in-detail-panel → subtle-track-terminus-dots -->
   <path class="metro-dependency" d="M60,215 Q120,215 120,170 T180,125"
-        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: subtle-track-terminus-dots → terminal-nodes-have-no-extra-lines -->
   <line class="metro-dependency" x1="180" y1="125" x2="300" y2="125"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: clickable-metro-map-stations → Done -->
   <line class="metro-dependency" x1="180" y1="80" x2="420" y2="80"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: hide-completed-specs-toggle → Done -->
   <line class="metro-dependency" x1="60" y1="440" x2="420" y2="440"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: hide-metro-map-for-ungrouped-assertions → Done -->
   <line class="metro-dependency" x1="180" y1="215" x2="420" y2="215"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: metro-map-pan-and-zoom → Done -->
   <line class="metro-dependency" x1="300" y1="170" x2="420" y2="170"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: metro-map-station-tooltips → Done -->
   <line class="metro-dependency" x1="180" y1="260" x2="420" y2="260"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: metro-stations-have-stable-hover-state → Done -->
   <line class="metro-dependency" x1="180" y1="305" x2="420" y2="305"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: metro-tracks-use-distinct-colors → Done -->
   <line class="metro-dependency" x1="180" y1="350" x2="420" y2="350"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: terminal-nodes-have-no-extra-lines → Done -->
   <line class="metro-dependency" x1="300" y1="125" x2="420" y2="125"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Station: branch-metro-map-in-detail-panel -->
   <g class="metro-station" data-action="show-detail" data-assertion-id="branch-metro-map-in-detail-panel" data-type="assertion" transform="translate(60, 215)">
     <title>Persistent Collapsible Metro Map in Detail Panel</title>
@@ -3421,7 +3475,7 @@
   </g>
   <!-- Station: metro-tracks-use-distinct-colors -->
   <g class="metro-station" data-action="show-detail" data-assertion-id="metro-tracks-use-distinct-colors" data-type="assertion" transform="translate(180, 350)">
-    <title>Metro Map Uses Tree-Stacking Layout with Distinct Track Colors</title>
+    <title>Metro Map Uses Tree-Stacking Layout with Uniform Gray Lines</title>
     <circle r="8" fill="#10b981" stroke="#fff" stroke-width="3"/>
     <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: 400;">Metro Map Uses Tr...</text>
   </g>
@@ -3472,76 +3526,89 @@
 </svg>
                         </div>
                     
+                        <div class="metro-map-branch" id="metro-map-feature/spec-searchbar" data-branch="feature/spec-searchbar" style="display: none;">
+                            
+<svg class="metro-map" width="800" height="200" viewBox="0 0 800 200">
+  
+  <!-- Station: searchbar-filters-spec-tree -->
+  <g class="metro-station" data-action="show-detail" data-assertion-id="searchbar-filters-spec-tree" data-type="assertion" transform="translate(60, 80)">
+    <title>Searchbar Filters Spec Tree</title>
+    <circle r="10" fill="#10b981" stroke="#fff" stroke-width="4" filter="drop-shadow(0 0 6px rgba(59, 130, 246, 0.6))"/>
+    <text class="metro-label" y="28" style="font-size: 10px; fill: #1e293b; text-anchor: middle; font-weight: 700;">Searchbar Filters...</text>
+  </g>
+</svg>
+                        </div>
+                    
                         <div class="metro-map-branch" id="metro-map-feature/spec-parser" data-branch="feature/spec-parser" style="display: none;">
                             
 <svg class="metro-map" width="800" height="665" viewBox="0 0 800 665">
   
   <!-- Dependency: tests-in-correct-location → assertions-have-tests -->
   <line class="metro-dependency" x1="180" y1="575" x2="300" y2="575"
-        stroke="#94a3b8" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: assertions-have-tests → ci-runs-all-tests -->
   <line class="metro-dependency" x1="300" y1="575" x2="420" y2="575"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: parses-frontmatter → detects-duplicate-ids -->
   <path class="metro-dependency" d="M180,282.5 Q240,282.5 240,338.75 T300,395"
-        fill="none" stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: validates-status-values → identifies-next-priority -->
   <path class="metro-dependency" d="M300,327.5 Q360,327.5 360,316.25 T420,305"
-        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: identifies-next-priority → locked-by-field-for-parallel-builders -->
   <line class="metro-dependency" x1="420" y1="305" x2="540" y2="305"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: parses-frontmatter → outputs-valid-json -->
   <path class="metro-dependency" d="M180,282.5 Q240,282.5 240,248.75 T300,215"
-        fill="none" stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: validates-status-values → parent-status-synchronization -->
   <path class="metro-dependency" d="M300,327.5 Q360,327.5 360,338.75 T420,350"
-        fill="none" stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: parser-script-exists → parses-frontmatter -->
   <line class="metro-dependency" x1="60" y1="282.5" x2="180" y2="282.5"
-        stroke="#94a3b8" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: enforces-folder-structure → sidecar-test-runner -->
   <line class="metro-dependency" x1="60" y1="80" x2="180" y2="80"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: target-directory-structure → tests-in-correct-location -->
   <line class="metro-dependency" x1="60" y1="575" x2="180" y2="575"
-        stroke="#94a3b8" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: parses-frontmatter → validates-required-fields -->
   <path class="metro-dependency" d="M180,282.5 Q240,282.5 240,226.25 T300,170"
-        fill="none" stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: parses-frontmatter → validates-status-values -->
   <path class="metro-dependency" d="M180,282.5 Q240,282.5 240,305 T300,327.5"
-        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Dependency: parses-frontmatter → validates-timestamps -->
   <path class="metro-dependency" d="M180,282.5 Q240,282.5 240,271.25 T300,260"
-        fill="none" stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: ci-runs-all-tests → Done -->
   <line class="metro-dependency" x1="420" y1="575" x2="660" y2="575"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: detects-duplicate-ids → Done -->
   <line class="metro-dependency" x1="300" y1="395" x2="660" y2="395"
-        stroke="#f97316" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: locked-by-field-for-parallel-builders → Done -->
   <line class="metro-dependency" x1="540" y1="305" x2="660" y2="305"
-        stroke="#10b981" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: no-implementation-outside-app → Done -->
   <line class="metro-dependency" x1="60" y1="485" x2="660" y2="485"
-        stroke="#a855f7" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: outputs-valid-json → Done -->
   <line class="metro-dependency" x1="300" y1="215" x2="660" y2="215"
-        stroke="#ec4899" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: parent-status-synchronization → Done -->
   <line class="metro-dependency" x1="420" y1="350" x2="660" y2="350"
-        stroke="#14b8a6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: sidecar-test-runner → Done -->
   <line class="metro-dependency" x1="180" y1="80" x2="660" y2="80"
-        stroke="#eab308" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: validates-required-fields → Done -->
   <line class="metro-dependency" x1="300" y1="170" x2="660" y2="170"
-        stroke="#ef4444" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Convergence: validates-timestamps → Done -->
   <line class="metro-dependency" x1="300" y1="260" x2="660" y2="260"
-        stroke="#3b82f6" stroke-width="3" opacity="0.6"/>
+        stroke="#94a3b8" stroke-width="3" opacity="0.4"/>
   <!-- Station: assertions-have-tests -->
   <g class="metro-station" data-action="show-detail" data-assertion-id="assertions-have-tests" data-type="assertion" transform="translate(300, 575)">
     <title>Assertions Must Have Automated Tests When Possible</title>
@@ -5127,6 +5194,34 @@ When users provide mockups, prototypes, or design references:
 Immediately commit spec changes to git with clear, descriptive messages. This creates an audit trail of spec evolution and helps track when requirements changed.
 
 Commit message should describe what the spec defines or what changed.
+
+### 8. Re-coordinate (for feature branch changes)
+After updating assertions on a feature branch, re-run the coordinator skill to refresh the dependency tree and work plan.
+
+**When to re-coordinate:**
+- Adding new assertions to a feature branch
+- Changing assertion priorities or dependencies
+- Marking assertions as failed (requires re-work)
+- Major structural changes to branch
+
+**Process:**
+1. Read &#96;specs/coach-skills-system/coordinator-skill.md&#96;
+2. Analyze current branch dependency structure
+3. Show updated dependency tree to user
+4. Validate with parser
+5. Update frontmatter if dependencies changed
+6. Commit coordination updates if needed
+
+**Why this matters:**
+- Keeps dependency tree accurate for builders
+- Identifies newly-unlocked parallel work
+- Prevents conflicts from stale dependencies
+- Shows clear path through feature work
+
+**Skip if:**
+- Only content changes (not status/priority/dependencies)
+- Working on isolated main branch assertions
+- No structural changes to dependencies
 
 ## Example Interaction
 
@@ -11021,7 +11116,7 @@ Metro station nodes remain visually stable when hovered - no shake, jitter, or p
                 
                     <div class="detail-content" id="detail-assertion-metro-tracks-use-distinct-colors" data-branch="feature/dependency-visualization">
                         <div class="detail-header">
-                            <div class="detail-title">Metro Map Uses Tree-Stacking Layout with Distinct Track Colors</div>
+                            <div class="detail-title">Metro Map Uses Tree-Stacking Layout with Uniform Gray Lines</div>
                             <div class="detail-meta">
                                 <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
                                 <span class="meta-item">Priority: <span class="detail-priority-badge">1</span></span>
@@ -11041,13 +11136,13 @@ depends-on: branch-metro-map-in-detail-panel
 branch: feature/dependency-visualization
 ---
 
-# Metro Map Uses Tree-Stacking Layout with Distinct Track Colors
+# Metro Map Uses Tree-Stacking Layout with Uniform Gray Lines
 
 ## What Must Be True
 
 Independent dependency trees are laid out as complete, self-contained units stacked vertically. Each tree occupies its own vertical band — no two trees share Y-space, making visual overlap between trees structurally impossible. Within a tree that has internal branching (one parent with multiple children), branches fan out vertically with enough space allocated so they never collide with adjacent trees.
 
-Dependency tracks use distinct colors from an 8-color palette so individual paths are visually traceable.
+All dependency lines (tracks) are uniform gray (&#96;#94a3b8&#96;). There are no per-track colors — visual distinction comes from the spatial layout, not line color.
 
 ## Success Criteria
 
@@ -11058,26 +11153,9 @@ Dependency tracks use distinct colors from an 8-color palette so individual path
 - The shared parent node sits at the vertical center of its children&#39;s Y range
 - No two nodes from different trees ever occupy the same Y position
 - Horizontal position reflects dependency depth (left-to-right flow)
-- No dead/unused layout code exists in the codebase (e.g., unused Sugiyama functions)
-- Each dependency track/line gets a color from the 8-color palette
-- Colors are visually distinct and accessible (sufficient contrast)
-- Dependencies leading to different terminal assertions use different colors
-
-## Color Palette
-
-Track colors (accessible, distinct):
-- Blue: &#96;#3b82f6&#96;
-- Orange: &#96;#f97316&#96;
-- Green: &#96;#10b981&#96;
-- Purple: &#96;#a855f7&#96;
-- Pink: &#96;#ec4899&#96;
-- Teal: &#96;#14b8a6&#96;
-- Yellow: &#96;#eab308&#96;
-- Red: &#96;#ef4444&#96;
-
-## Failure Mode (Current Bug)
-
-The current layout traces each terminal assertion back to its root independently, placing all nodes in that chain at the same Y. When multiple terminals share a common ancestor (e.g., &#96;parses-frontmatter&#96; has 6 children that are each terminals or lead to terminals), &#96;positions.set()&#96; overwrites the shared node&#39;s position with whichever terminal processes it last. This causes streams to visually overlap because nodes end up at Y positions that don&#39;t match their connecting lines.
+- No dead/unused layout code exists in the codebase (e.g., unused Sugiyama functions, unused color palette/track-color assignment code)
+- All dependency lines use uniform gray color (&#96;#94a3b8&#96;, opacity 0.4, stroke-width 3)
+- No per-track color assignment logic exists for dependency lines
 </pre>
                         </div>
                     </div>
@@ -11160,6 +11238,89 @@ spekk show
 # Verify browser opens with correct file
 # Test on different platforms if possible
 &#96;&#96;&#96;</pre>
+                        </div>
+                    </div>
+                
+                    <div class="detail-content" id="detail-assertion-searchbar-filters-spec-tree" data-branch="feature/spec-searchbar">
+                        <div class="detail-header">
+                            <div class="detail-title">Searchbar Filters Spec Tree</div>
+                            <div class="detail-meta">
+                                <span class="meta-item">Status: <span class="detail-status-badge">✅</span></span>
+                                <span class="meta-item">Priority: <span class="detail-priority-badge">2</span></span>
+                                <span class="meta-item">Parent: <strong>spec-explorer-web-interface</strong></span>
+                                <span class="meta-item">Branch: <strong>feature/spec-searchbar</strong></span>
+                                <span class="meta-item">File: <strong>specs/spec-explorer-web-interface/assertions/searchbar-filters-spec-tree.md</strong></span>
+                            </div>
+                        </div>
+                        <div class="detail-body">
+                            <pre style="white-space: pre-wrap; font-family: inherit;">---
+id: searchbar-filters-spec-tree
+parent: spec-explorer-web-interface
+created: 2026-02-26T20:00:00Z
+priority: 2
+status: done
+branch: feature/spec-searchbar
+---
+
+# Searchbar Filters Spec Tree
+
+**Tests:** src/__tests__/searchbar-filters-spec-tree.test.js
+
+## What Must Be True
+
+A text input in the tree panel allows real-time filtering of specs and assertions by name, content, and status.
+
+## Success Criteria
+
+- Search input appears in the tree panel header, below the &quot;Show completed specs&quot; toggle and above the spec tree list
+- Placeholder text reads &quot;Search specs...&quot;
+- Typing filters the spec tree in real-time (case-insensitive substring match)
+- Search matches against spec names, assertion names, status, and priority
+- Search overrides the &quot;hide completed&quot; toggle — matching completed specs become visible during an active search
+- Clearing the search input restores normal toggle behavior (completed specs re-hide if toggle is unchecked)
+- If an assertion matches, its parent spec is shown and expanded to reveal the match
+- If only a spec name matches, it shows with all its assertions visible
+- Specs and assertions that don&#39;t match are hidden
+- Empty search input = no filter applied (all specs visible per toggle state)
+
+## Visual Example
+
+**Search input placement:**
+&#96;&#96;&#96;
+┌─────────────────────────────────┐
+│ Spec Tree - project             │
+│ 5 specs, 12 assertions          │
+│ (3 completed specs hidden)      │
+│ ☐ Show completed specs          │
+│                                 │
+│ [🔍 Search specs...           ] │
+│                                 │
+│ ▸ authentication (in_progress)  │
+│ ▸ dashboard (not_started)       │
+└─────────────────────────────────┘
+&#96;&#96;&#96;
+
+**With active search &quot;parser&quot;:**
+&#96;&#96;&#96;
+┌─────────────────────────────────┐
+│ [🔍 parser                    ] │
+│                                 │
+│ ▾ spec-parser (done)            │  ← completed but visible because it matches
+│   ├ parser-reads-frontmatter    │
+│   └ parser-handles-nested       │
+│ ▾ robust-error-handling         │  ← visible because child matches
+│   └ parser-error-messages       │  ← matches &quot;parser&quot;
+└─────────────────────────────────┘
+&#96;&#96;&#96;
+
+## Behavior Rules
+
+- Filtering is purely visual (CSS class toggling + JS), no data re-parsing
+- Follows existing patterns: event delegation, classList manipulation, vanilla JS
+- Search state does NOT persist in localStorage (fresh on each page load)
+- When search is active and matches a completed spec, that spec is shown regardless of toggle state
+- When search is cleared, the completed specs toggle reasserts control
+</pre>
                         </div>
                     </div>
                 
@@ -13793,10 +13954,11 @@ This should be the final step after all other test organization assertions are c
     </div>
     
     <script>
-        // Initialize completed specs toggle and metro map collapse on page load
+        // Initialize completed specs toggle, metro map collapse, and search on page load
         document.addEventListener('DOMContentLoaded', function() {
             initializeCompletedSpecsToggle();
             initializeMetroMapCollapse();
+            initializeSearch();
         });
 
         function initializeCompletedSpecsToggle() {
@@ -13850,6 +14012,73 @@ This should be the final step after all other test organization assertions are c
             } else {
                 hiddenCountElement.textContent = '';
             }
+        }
+
+        function initializeSearch() {
+            const searchInput = document.getElementById('spec-search');
+            const specTree = document.querySelector('.spec-tree');
+            if (!searchInput || !specTree) return;
+
+            searchInput.addEventListener('input', function() {
+                const query = this.value.trim().toLowerCase();
+                const specItems = specTree.querySelectorAll('.spec-item');
+
+                if (!query) {
+                    // Clear search: remove all search-hidden classes, restore toggle behavior
+                    specItems.forEach(function(specItem) {
+                        specItem.classList.remove('search-hidden');
+                        var assertions = specItem.querySelectorAll('.assertion-item');
+                        assertions.forEach(function(a) { a.classList.remove('search-hidden'); });
+                    });
+                    // Restore completed specs toggle behavior
+                    updateHiddenCount();
+                    return;
+                }
+
+                // Active search: filter specs and assertions
+                specItems.forEach(function(specItem) {
+                    var specSearchText = specItem.dataset.searchText || '';
+                    var specMatches = specSearchText.indexOf(query) !== -1;
+                    var assertionItems = specItem.querySelectorAll('.assertion-item');
+                    var anyAssertionMatches = false;
+
+                    assertionItems.forEach(function(assertionItem) {
+                        var assertionSearchText = assertionItem.dataset.searchText || '';
+                        var assertionMatches = assertionSearchText.indexOf(query) !== -1;
+
+                        if (assertionMatches) {
+                            assertionItem.classList.remove('search-hidden');
+                            anyAssertionMatches = true;
+                        } else {
+                            assertionItem.classList.add('search-hidden');
+                        }
+                    });
+
+                    if (specMatches || anyAssertionMatches) {
+                        // Show the spec (override completed toggle)
+                        specItem.classList.remove('search-hidden');
+
+                        // If an assertion matched, expand the spec to reveal it
+                        if (anyAssertionMatches) {
+                            var assertionsList = specItem.querySelector('.assertions-list');
+                            var toggle = specItem.querySelector('.toggle-icon');
+                            var header = specItem.querySelector('.spec-header');
+                            if (assertionsList && !assertionsList.classList.contains('expanded')) {
+                                assertionsList.classList.add('expanded');
+                                if (toggle) { toggle.classList.add('expanded'); toggle.textContent = '\u25BC'; }
+                                if (header) { header.classList.add('expanded'); }
+                            }
+                        }
+
+                        // If only spec name matches (no assertions matched), show all assertions
+                        if (specMatches && !anyAssertionMatches) {
+                            assertionItems.forEach(function(a) { a.classList.remove('search-hidden'); });
+                        }
+                    } else {
+                        specItem.classList.add('search-hidden');
+                    }
+                });
+            });
         }
 
         function initializeMetroMapCollapse() {
