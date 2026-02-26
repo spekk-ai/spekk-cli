@@ -151,16 +151,23 @@ export async function showSpekk(options = {}) {
 async function showSpekkWatch() {
   const specsDir = join(process.cwd(), 'specs');
 
+  let dirty = false;
+
   function getHTML() {
+    dirty = false; // Reset when fresh HTML is served
     const { specs, assertions } = parseAllSpecs();
     const html = generateSpecExplorerHTML(specs, assertions);
     // Inject SSE client script before </body>
     return html.replace('</body>', SSE_CLIENT_SCRIPT + '\n</body>');
   }
 
-  const { port, notifyClients, close: closeServer } = await startWatchServer({ getHTML });
+  const { port, notifyClients, close: closeServer } = await startWatchServer({
+    getHTML,
+    isDirty: () => dirty,
+  });
 
   const stopWatcher = watchSpecs(specsDir, () => {
+    dirty = true;
     notifyClients();
   });
 

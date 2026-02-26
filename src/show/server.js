@@ -6,9 +6,10 @@ import { createServer } from 'node:http';
  * @param {Object} options
  * @param {() => string} options.getHTML - Function that returns HTML string (called fresh on every GET /)
  * @param {number} [options.port=3117] - Port to bind to (retries up to 10 times if in use)
+ * @param {() => boolean} [options.isDirty] - Optional callback; if it returns true when a new SSE client connects, an immediate reload event is sent
  * @returns {Promise<{ server: import('node:http').Server, port: number, notifyClients: () => void, close: () => void }>}
  */
-export async function startWatchServer({ getHTML, port = 3117 }) {
+export async function startWatchServer({ getHTML, port = 3117, isDirty }) {
   const sseClients = new Set();
 
   function notifyClients() {
@@ -26,6 +27,9 @@ export async function startWatchServer({ getHTML, port = 3117 }) {
       });
       res.write('\n');
       sseClients.add(res);
+      if (isDirty && isDirty()) {
+        res.write('event: reload\ndata: reload\n\n');
+      }
       req.on('close', () => {
         sseClients.delete(res);
       });

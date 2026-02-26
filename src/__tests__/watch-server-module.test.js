@@ -179,4 +179,136 @@ describe('Watch Server Module', { concurrency: 1 }, () => {
       result.close();
     }
   });
+
+  test('new SSE client receives immediate reload when isDirty returns true', async () => {
+    let dirty = false;
+    const result = await startWatchServer({
+      getHTML: () => '<html></html>',
+      port: 0,
+      isDirty: () => dirty,
+    });
+
+    try {
+      // First connection with dirty=false should NOT get an immediate reload
+      const controller1 = new AbortController();
+      const res1 = await fetch(`http://localhost:${result.port}/events`, {
+        signal: controller1.signal,
+      });
+      const noReload = await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          controller1.abort();
+          resolve(true); // timed out = no reload received, which is what we want
+        }, 200);
+
+        (async () => {
+          const reader = res1.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          try {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              if (buffer.includes('event: reload')) {
+                clearTimeout(timeout);
+                controller1.abort();
+                resolve(false); // got reload unexpectedly
+                return;
+              }
+            }
+          } catch (err) {
+            if (err.name !== 'AbortError') throw err;
+          }
+        })();
+      });
+      assert.ok(noReload, 'Should NOT get immediate reload when isDirty returns false');
+
+      // Now set dirty=true and connect a new SSE client
+      dirty = true;
+      const controller2 = new AbortController();
+      const res2 = await fetch(`http://localhost:${result.port}/events`, {
+        signal: controller2.signal,
+      });
+
+      const gotReload = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          controller2.abort();
+          reject(new Error('Timed out waiting for immediate reload event'));
+        }, 2000);
+
+        (async () => {
+          const reader = res2.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          try {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              if (buffer.includes('event: reload')) {
+                clearTimeout(timeout);
+                controller2.abort();
+                resolve(buffer);
+                return;
+              }
+            }
+          } catch (err) {
+            if (err.name !== 'AbortError') reject(err);
+          }
+        })();
+      });
+
+      assert.ok(gotReload.includes('event: reload'), 'Should receive immediate reload when isDirty returns true');
+    } finally {
+      result.close();
+    }
+  });
+
+  test('isDirty is optional and server works without it', async () => {
+    // No isDirty passed - should not throw
+    const result = await startWatchServer({
+      getHTML: () => '<html></html>',
+      port: 0,
+    });
+
+    try {
+      const controller = new AbortController();
+      const res = await fetch(`http://localhost:${result.port}/events`, {
+        signal: controller.signal,
+      });
+      assert.strictEqual(res.status, 200);
+
+      // Verify no immediate reload (just the initial newline)
+      const noReload = await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          controller.abort();
+          resolve(true);
+        }, 200);
+
+        (async () => {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          try {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              if (buffer.includes('event: reload')) {
+                clearTimeout(timeout);
+                controller.abort();
+                resolve(false);
+                return;
+              }
+            }
+          } catch (err) {
+            if (err.name !== 'AbortError') throw err;
+          }
+        })();
+      });
+      assert.ok(noReload, 'Should not get reload when isDirty is not provided');
+    } finally {
+      result.close();
+    }
+  });
 });
