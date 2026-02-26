@@ -4,6 +4,7 @@ parent: spec-explorer-web-interface
 created: 2026-02-26T20:00:00Z
 priority: 2
 status: not_started
+branch: feature/spec-searchbar
 ---
 
 # Searchbar Filters Spec Tree
