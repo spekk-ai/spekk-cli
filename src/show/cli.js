@@ -1061,6 +1061,11 @@ export function generateSpecExplorerHTML(specs, assertions) {
         .assertion-item.search-hidden {
             display: none !important;
         }
+
+        /* Override completed hiding when item matches an active search */
+        .spec-item.search-match {
+            display: block !important;
+        }
     </style>
 </head>
 <body>
@@ -1247,9 +1252,10 @@ export function generateSpecExplorerHTML(specs, assertions) {
                 const specItems = specTree.querySelectorAll('.spec-item');
 
                 if (!query) {
-                    // Clear search: remove all search-hidden classes, restore toggle behavior
+                    // Clear search: remove all search-hidden and search-match classes, restore toggle behavior
                     specItems.forEach(function(specItem) {
                         specItem.classList.remove('search-hidden');
+                        specItem.classList.remove('search-match');
                         var assertions = specItem.querySelectorAll('.assertion-item');
                         assertions.forEach(function(a) { a.classList.remove('search-hidden'); });
                     });
@@ -1278,8 +1284,9 @@ export function generateSpecExplorerHTML(specs, assertions) {
                     });
 
                     if (specMatches || anyAssertionMatches) {
-                        // Show the spec (override completed toggle)
+                        // Show the spec (override completed toggle via search-match)
                         specItem.classList.remove('search-hidden');
+                        specItem.classList.add('search-match');
 
                         // If an assertion matched, expand the spec to reveal it
                         if (anyAssertionMatches) {
@@ -1299,6 +1306,7 @@ export function generateSpecExplorerHTML(specs, assertions) {
                         }
                     } else {
                         specItem.classList.add('search-hidden');
+                        specItem.classList.remove('search-match');
                     }
                 });
             });

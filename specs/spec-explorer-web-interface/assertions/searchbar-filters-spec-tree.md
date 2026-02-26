@@ -3,7 +3,7 @@ id: searchbar-filters-spec-tree
 parent: spec-explorer-web-interface
 created: 2026-02-26T20:00:00Z
 priority: 2
-status: failed
+status: done
 branch: feature/spec-searchbar
 ---
 
@@ -66,6 +66,3 @@ A text input in the tree panel allows real-time filtering of specs and assertion
 - When search is active and matches a completed spec, that spec is shown regardless of toggle state
 - When search is cleared, the completed specs toggle reasserts control
 
-## Known Bug (failed)
-
-**CSS specificity issue:** The `.spec-item.completed { display: none }` rule (line 623 of cli.js) still hides completed specs even when the search JS removes the `search-hidden` class. The search correctly identifies matching completed specs but never overrides the CSS that hides them. Fix: add a `search-match` class (or similar) to matching items with a CSS rule like `.spec-item.search-match { display: block !important }` that overrides the completed hiding. Remove the class when search is cleared so the toggle reasserts control.

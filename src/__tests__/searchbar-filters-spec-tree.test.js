@@ -126,4 +126,49 @@ status: not_started
       cleanup();
     }
   });
+
+  test('search-match class overrides completed spec hiding', () => {
+    try {
+      const html = setupProject({
+        'done-assertion.md': `---
+id: done-assertion
+parent: test-spec
+created: 2026-01-22T21:00:00Z
+priority: 1
+status: done
+---
+
+# Done Assertion`
+      });
+
+      // CSS rule: .spec-item.search-match must override display with !important
+      assert.ok(
+        html.includes('.spec-item.search-match'),
+        'Should include CSS rule for .spec-item.search-match'
+      );
+      // The rule must use display: block !important to override .spec-item.completed { display: none }
+      const searchMatchRuleStart = html.indexOf('.spec-item.search-match');
+      const searchMatchRuleEnd = html.indexOf('}', searchMatchRuleStart);
+      const searchMatchRule = html.slice(searchMatchRuleStart, searchMatchRuleEnd + 1);
+      assert.ok(
+        searchMatchRule.includes('display: block !important') || searchMatchRule.includes('display:block !important'),
+        'search-match rule must use display: block !important to override completed hiding'
+      );
+
+      // JS adds search-match class when a spec matches during active search
+      assert.ok(
+        html.includes("classList.add('search-match')"),
+        'JS should add search-match class to matching spec items'
+      );
+
+      // JS removes search-match class when search is cleared
+      assert.ok(
+        html.includes("classList.remove('search-match')"),
+        'JS should remove search-match class when search is cleared'
+      );
+
+    } finally {
+      cleanup();
+    }
+  });
 });
