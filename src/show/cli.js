@@ -9,8 +9,106 @@ import { watchSpecs } from './watcher.js';
 const SSE_CLIENT_SCRIPT = `
 <script>
 (function() {
+  // --- Restore UI state from sessionStorage after a watch-mode reload ---
+  function restoreWatchState() {
+    var raw = sessionStorage.getItem('spekkWatchState');
+    if (!raw) return;
+    sessionStorage.removeItem('spekkWatchState');
+
+    try {
+      var state = JSON.parse(raw);
+    } catch (e) {
+      return;
+    }
+
+    // Re-expand saved specs
+    if (state.expandedSpecs && state.expandedSpecs.length) {
+      state.expandedSpecs.forEach(function(specId) {
+        var assertions = document.getElementById('assertions-' + specId);
+        var toggle = document.getElementById('toggle-' + specId);
+        if (assertions && toggle) {
+          assertions.classList.add('expanded');
+          toggle.classList.add('expanded');
+          toggle.parentElement.classList.add('expanded');
+          toggle.textContent = '\\u25BC';
+        }
+      });
+    }
+
+    // Re-activate the saved detail panel
+    if (state.activeDetailId) {
+      var detailEl = document.getElementById(state.activeDetailId);
+      if (detailEl) {
+        // Hide all detail panels first
+        document.querySelectorAll('.detail-content').forEach(function(el) {
+          el.classList.remove('active');
+        });
+        detailEl.classList.add('active');
+
+        // Hide empty state
+        var emptyState = document.getElementById('empty-state');
+        if (emptyState) {
+          emptyState.style.display = 'none';
+        }
+
+        // Mark corresponding tree item as selected
+        // Extract type and id from detail panel id (e.g. "detail-assertion-foo" or "detail-spec-bar")
+        var match = state.activeDetailId.match(/^detail-(assertion|spec)-(.+)$/);
+        if (match) {
+          var type = match[1];
+          var id = match[2];
+          if (type === 'assertion') {
+            var item = document.querySelector('.assertion-item[data-assertion-id="' + id + '"]');
+            if (item) item.classList.add('selected');
+          } else if (type === 'spec') {
+            var toggleEl = document.getElementById('toggle-' + id);
+            if (toggleEl) toggleEl.parentElement.classList.add('selected');
+          }
+        }
+      }
+    }
+
+    // Restore sidebar scroll position
+    if (typeof state.scrollTop === 'number') {
+      var treePanel = document.querySelector('.tree-panel');
+      if (treePanel) {
+        requestAnimationFrame(function() {
+          treePanel.scrollTop = state.scrollTop;
+        });
+      }
+    }
+  }
+
+  // Run restore after DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', restoreWatchState);
+  } else {
+    restoreWatchState();
+  }
+
+  // --- SSE client: save state before reload ---
   var es = new EventSource('/events');
   es.addEventListener('reload', function() {
+    // Collect expanded spec IDs
+    var expandedSpecs = [];
+    document.querySelectorAll('[id^="assertions-"].expanded').forEach(function(el) {
+      expandedSpecs.push(el.id.replace('assertions-', ''));
+    });
+
+    // Collect active detail panel ID
+    var activeDetail = document.querySelector('.detail-content.active');
+    var activeDetailId = activeDetail ? activeDetail.id : null;
+
+    // Collect sidebar scroll position
+    var treePanel = document.querySelector('.tree-panel');
+    var scrollTop = treePanel ? treePanel.scrollTop : 0;
+
+    sessionStorage.setItem('spekkWatchState', JSON.stringify({
+      expandedSpecs: expandedSpecs,
+      activeDetailId: activeDetailId,
+      scrollTop: scrollTop
+    }));
+
     location.reload();
   });
 })();
