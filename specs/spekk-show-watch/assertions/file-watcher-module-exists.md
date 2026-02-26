@@ -3,7 +3,7 @@ id: file-watcher-module-exists
 parent: spekk-show-watch
 created: 2026-02-26T18:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/spekk-show-watch
 ---
 
@@ -19,6 +19,8 @@ A self-contained module that watches the `specs/` directory for file changes and
 - Uses Node.js built-in `fs.watch` with `{ recursive: true }` - no external dependencies
 - Returns a cleanup function that stops watching when called
 - Test file at `src/__tests__/file-watcher-module.test.js` validates debounce behavior and cleanup
+
+**Tests:** src/__tests__/file-watcher-module.test.js
 
 ## Interface Contract
 
