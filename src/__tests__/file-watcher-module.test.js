@@ -1,115 +1,144 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { watchSpecs } from '../show/watcher.js';
 
-describe('File Watcher Module', () => {
-  const testDir = join(tmpdir(), `spekk-watcher-test-${Date.now()}`);
+describe('File Watcher Module (polling)', () => {
+  let testDir;
+  let specsDir;
 
   function setup() {
+    testDir = join(tmpdir(), `spekk-watcher-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    specsDir = join(testDir, 'specs');
+    mkdirSync(specsDir, { recursive: true });
+  }
+
+  function teardown() {
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }
-    mkdirSync(join(testDir, 'specs'), { recursive: true });
   }
 
-  function cleanup() {
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true });
-    }
-  }
-
-  test('exports watchSpecs function', () => {
-    assert.strictEqual(typeof watchSpecs, 'function');
-  });
-
-  test('returns a cleanup function', () => {
+  test('detects file modifications', async () => {
     setup();
     try {
-      const stop = watchSpecs(join(testDir, 'specs'), () => {});
-      assert.strictEqual(typeof stop, 'function');
+      writeFileSync(join(specsDir, 'existing.md'), 'original');
+      let callCount = 0;
+      const stop = watchSpecs(specsDir, () => { callCount++; });
+
+      // Wait for first poll to pass with no changes
+      await new Promise(r => setTimeout(r, 600));
+      assert.strictEqual(callCount, 0, 'No changes yet');
+
+      // Modify the file — ensure mtime advances
+      await new Promise(r => setTimeout(r, 50));
+      writeFileSync(join(specsDir, 'existing.md'), 'modified');
+
+      // Wait for poll to detect
+      await new Promise(r => setTimeout(r, 600));
+      assert.ok(callCount >= 1, 'onChange should fire after modification');
       stop();
     } finally {
-      cleanup();
+      teardown();
     }
   });
 
-  test('invokes onChange for .md file changes with debounce', async () => {
+  test('detects new .md files added', async () => {
     setup();
     try {
-      const specsDir = join(testDir, 'specs');
       let callCount = 0;
+      const stop = watchSpecs(specsDir, () => { callCount++; });
 
-      const stop = watchSpecs(specsDir, () => {
-        callCount++;
-      });
+      // Add a new .md file after watcher starts
+      await new Promise(r => setTimeout(r, 100));
+      writeFileSync(join(specsDir, 'new-spec.md'), 'new content');
 
-      // Write multiple .md files in rapid succession
-      writeFileSync(join(specsDir, 'spec-a.md'), 'content a');
-      writeFileSync(join(specsDir, 'spec-b.md'), 'content b');
-      writeFileSync(join(specsDir, 'spec-c.md'), 'content c');
-
-      // Wait for debounce to fire (300ms debounce + buffer)
-      await new Promise(resolve => setTimeout(resolve, 600));
-
-      // Should have been debounced into a single call
-      assert.strictEqual(callCount, 1, 'Rapid changes should be debounced into one call');
-
+      await new Promise(r => setTimeout(r, 600));
+      assert.ok(callCount >= 1, 'onChange should fire when new .md file appears');
       stop();
     } finally {
-      cleanup();
+      teardown();
     }
   });
 
-  test('ignores non-.md file changes', async () => {
+  test('detects .md files deleted', async () => {
     setup();
     try {
-      const specsDir = join(testDir, 'specs');
+      writeFileSync(join(specsDir, 'to-delete.md'), 'will be deleted');
       let callCount = 0;
+      const stop = watchSpecs(specsDir, () => { callCount++; });
 
-      const stop = watchSpecs(specsDir, () => {
-        callCount++;
-      });
+      // Wait for initial poll with no changes
+      await new Promise(r => setTimeout(r, 600));
+      assert.strictEqual(callCount, 0);
 
-      // Write non-md files
-      writeFileSync(join(specsDir, 'readme.txt'), 'text content');
+      unlinkSync(join(specsDir, 'to-delete.md'));
+
+      await new Promise(r => setTimeout(r, 600));
+      assert.ok(callCount >= 1, 'onChange should fire when .md file is deleted');
+      stop();
+    } finally {
+      teardown();
+    }
+  });
+
+  test('ignores non-.md files', async () => {
+    setup();
+    try {
+      let callCount = 0;
+      const stop = watchSpecs(specsDir, () => { callCount++; });
+
+      await new Promise(r => setTimeout(r, 100));
+      writeFileSync(join(specsDir, 'readme.txt'), 'text');
       writeFileSync(join(specsDir, 'data.json'), '{}');
+      writeFileSync(join(specsDir, 'script.js'), '//js');
 
-      // Wait longer than debounce window
-      await new Promise(resolve => setTimeout(resolve, 600));
-
-      assert.strictEqual(callCount, 0, 'Non-.md file changes should be ignored');
-
+      await new Promise(r => setTimeout(r, 600));
+      assert.strictEqual(callCount, 0, 'Non-.md files should be ignored');
       stop();
     } finally {
-      cleanup();
+      teardown();
     }
   });
 
-  test('cleanup function stops watching', async () => {
+  test('cleanup stops polling', async () => {
     setup();
     try {
-      const specsDir = join(testDir, 'specs');
       let callCount = 0;
+      const stop = watchSpecs(specsDir, () => { callCount++; });
 
-      const stop = watchSpecs(specsDir, () => {
-        callCount++;
-      });
-
-      // Stop watching immediately
       stop();
 
       // Write .md file after cleanup
       writeFileSync(join(specsDir, 'after-stop.md'), 'should not trigger');
 
-      // Wait longer than debounce window
-      await new Promise(resolve => setTimeout(resolve, 600));
-
+      await new Promise(r => setTimeout(r, 700));
       assert.strictEqual(callCount, 0, 'No changes should fire after cleanup');
     } finally {
-      cleanup();
+      teardown();
+    }
+  });
+
+  test('onChange fires once per poll cycle even with multiple changes', async () => {
+    setup();
+    try {
+      let callCount = 0;
+      const stop = watchSpecs(specsDir, () => { callCount++; });
+
+      // Create multiple .md files between polls
+      await new Promise(r => setTimeout(r, 100));
+      writeFileSync(join(specsDir, 'a.md'), 'a');
+      writeFileSync(join(specsDir, 'b.md'), 'b');
+      writeFileSync(join(specsDir, 'c.md'), 'c');
+
+      // Wait for exactly one poll cycle to detect all three
+      await new Promise(r => setTimeout(r, 600));
+      assert.strictEqual(callCount, 1, 'Multiple changes in one cycle should produce one onChange call');
+      stop();
+    } finally {
+      teardown();
     }
   });
 });

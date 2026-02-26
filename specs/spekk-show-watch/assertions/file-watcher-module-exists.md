@@ -3,7 +3,7 @@ id: file-watcher-module-exists
 parent: spekk-show-watch
 created: 2026-02-26T18:00:00Z
 priority: 1
-status: in_progress
+status: done
 branch: feature/spekk-show-watch
 ---
 

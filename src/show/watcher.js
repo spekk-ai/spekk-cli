@@ -1,42 +1,76 @@
-import { watch } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
- * Watches a specs directory recursively for .md file changes.
- * Calls onChange() debounced on changes.
+ * Recursively scan a directory and collect all .md files with their mtimeMs.
+ * Returns a Map<relativePath, mtimeMs>.
+ */
+function scanMdFiles(specsDir) {
+  const snapshot = new Map();
+  try {
+    const entries = readdirSync(specsDir, { recursive: true });
+    for (const entry of entries) {
+      const rel = typeof entry === 'string' ? entry : entry.toString();
+      if (!rel.endsWith('.md')) continue;
+      try {
+        const fullPath = join(specsDir, rel);
+        const stat = statSync(fullPath);
+        snapshot.set(rel, stat.mtimeMs);
+      } catch {
+        // File may have been deleted between readdir and stat; skip it
+      }
+    }
+  } catch {
+    // Directory may not exist yet; return empty snapshot
+  }
+  return snapshot;
+}
+
+/**
+ * Watches a specs directory for .md file changes using polling.
+ * Polls every 500ms, comparing mtimes against a cached snapshot.
+ * Calls onChange() when changes are detected (debounced per poll cycle).
  *
  * @param {string} specsDir - Path to the specs directory to watch
  * @param {Function} onChange - Callback invoked when .md files change
- * @returns {Function} Cleanup function that stops the watcher
+ * @returns {Function} Cleanup function that stops polling
  */
 export function watchSpecs(specsDir, onChange) {
-  let debounceTimer = null;
-  let stopped = false;
+  let snapshot = scanMdFiles(specsDir);
 
-  const watcher = watch(specsDir, { recursive: true }, (eventType, filename) => {
-    if (stopped) return;
+  const intervalId = setInterval(() => {
+    const current = scanMdFiles(specsDir);
+    let dirty = false;
 
-    // Only react to .md file changes
-    if (!filename || !filename.endsWith('.md')) return;
-
-    // Debounce: reset timer on each qualifying event
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-    }
-
-    debounceTimer = setTimeout(() => {
-      if (!stopped) {
-        onChange();
+    // Check for modified or deleted files
+    for (const [path, mtime] of snapshot) {
+      if (!current.has(path)) {
+        dirty = true;
+        break;
       }
-    }, 300);
-  });
-
-  // Return cleanup function
-  return function cleanup() {
-    stopped = true;
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-      debounceTimer = null;
+      if (current.get(path) !== mtime) {
+        dirty = true;
+        break;
+      }
     }
-    watcher.close();
+
+    // Check for new files
+    if (!dirty) {
+      for (const path of current.keys()) {
+        if (!snapshot.has(path)) {
+          dirty = true;
+          break;
+        }
+      }
+    }
+
+    if (dirty) {
+      snapshot = current;
+      onChange();
+    }
+  }, 500);
+
+  return function cleanup() {
+    clearInterval(intervalId);
   };
 }
