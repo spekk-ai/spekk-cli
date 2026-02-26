@@ -3,7 +3,7 @@ id: watch-mode-integrated
 parent: spekk-show-watch
 created: 2026-02-26T18:00:00Z
 priority: 1
-status: done
+status: in_progress
 depends-on: file-watcher-module-exists
 branch: feature/spekk-show-watch
 ---
@@ -42,3 +42,9 @@ The `--watch` flag is parsed, all modules are wired together, and `spekk show --
 - `watch-server-module-exists` - provides `startWatchServer()`
 
 Note: only one `depends-on` in frontmatter (the watcher). The server is also required but the coordinator chains them appropriately.
+
+## Bug: Browser open fails in watch mode
+
+`openInBrowser()` in `src/show/cli.js` unconditionally wraps its argument with `file://` prefix (line 89). The non-watch path passes a file path so this is correct. But the watch path passes `http://localhost:{port}` — resulting in `file://http://localhost:3117` which is invalid.
+
+**Fix:** `openInBrowser()` should detect when the input is already a URL (starts with `http://` or `https://`) and pass it directly to the OS open command without the `file://` prefix.
