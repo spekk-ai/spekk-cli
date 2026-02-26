@@ -72,6 +72,8 @@ Example: `builder-macbook-pro-12345-1706210400`
 - Stale locks (>2 hours) handled by parser, not builder
 - Builder doesn't need to check lock age - parser does it
 
+**Tests:** `src/builder/__tests__/builder-locks-and-unlocks.test.js`
+
 ## Validation
 
 Test parallel builders:
