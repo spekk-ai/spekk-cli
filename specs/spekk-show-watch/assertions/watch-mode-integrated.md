@@ -3,7 +3,7 @@ id: watch-mode-integrated
 parent: spekk-show-watch
 created: 2026-02-26T18:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: file-watcher-module-exists
 branch: feature/spekk-show-watch
 ---

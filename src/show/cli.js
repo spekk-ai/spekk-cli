@@ -3,32 +3,85 @@ import { join, basename } from 'node:path';
 import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
 import { parseAllSpecs } from '../parser/index.js';
+import { startWatchServer } from './server.js';
+import { watchSpecs } from './watcher.js';
 
-export async function showSpekk() {
+const SSE_CLIENT_SCRIPT = `
+<script>
+(function() {
+  var es = new EventSource('/events');
+  es.addEventListener('reload', function() {
+    location.reload();
+  });
+})();
+</script>`;
+
+export async function showSpekk(options = {}) {
+  const { watch = false } = options;
+
+  if (watch) {
+    return showSpekkWatch();
+  }
+
+  // --- Non-watch path (unchanged) ---
   // Create .spekk directory if it doesn't exist
   const spekkDir = join(process.cwd(), '.spekk');
-  
+
   if (!existsSync(spekkDir)) {
     mkdirSync(spekkDir, { recursive: true });
     console.log('Created .spekk directory');
   }
-  
+
   // Parse all specs and assertions
   const { specs, assertions } = parseAllSpecs();
-  
+
   // Generate HTML content
   const htmlContent = generateSpecExplorerHTML(specs, assertions);
-  
+
   // Write HTML file (overwrite if exists)
   const htmlFilePath = join(spekkDir, 'index.html');
   writeFileSync(htmlFilePath, htmlContent, 'utf8');
-  
+
   console.log('Generated spec explorer at .spekk/index.html');
-  
+
   // Open the HTML file in the default browser (skip in test/CI environments)
   if (process.env.NODE_ENV !== 'test' && !process.env.CI) {
     openInBrowser(htmlFilePath);
   }
+}
+
+async function showSpekkWatch() {
+  const specsDir = join(process.cwd(), 'specs');
+
+  function getHTML() {
+    const { specs, assertions } = parseAllSpecs();
+    const html = generateSpecExplorerHTML(specs, assertions);
+    // Inject SSE client script before </body>
+    return html.replace('</body>', SSE_CLIENT_SCRIPT + '\n</body>');
+  }
+
+  const { port, notifyClients, close: closeServer } = await startWatchServer({ getHTML });
+
+  const stopWatcher = watchSpecs(specsDir, () => {
+    notifyClients();
+  });
+
+  // Open browser (skip in test/CI environments)
+  if (process.env.NODE_ENV !== 'test' && !process.env.CI) {
+    openInBrowser(`http://localhost:${port}`);
+  }
+
+  console.log('Watching specs/ for changes... (press Ctrl+C to stop)');
+
+  // Graceful shutdown on SIGINT
+  process.on('SIGINT', () => {
+    stopWatcher();
+    closeServer();
+    process.exit(0);
+  });
+
+  // Keep the process alive by returning a promise that never resolves
+  return new Promise(() => {});
 }
 
 export function openInBrowser(htmlFilePath) {
