@@ -3,7 +3,7 @@ id: searchbar-filters-spec-tree
 parent: spec-explorer-web-interface
 created: 2026-02-26T20:00:00Z
 priority: 2
-status: done
+status: in_progress
 branch: feature/spec-searchbar
 ---
 
@@ -65,4 +65,11 @@ A text input in the tree panel allows real-time filtering of specs and assertion
 - Search state does NOT persist in localStorage (fresh on each page load)
 - When search is active and matches a completed spec, that spec is shown regardless of toggle state
 - When search is cleared, the completed specs toggle reasserts control
+- When search is cleared, specs that were auto-expanded by the search are re-collapsed (specs the user manually expanded before searching stay expanded)
+
+## Bug: Search auto-expand is not reversed on clear
+
+The `initializeSearch` function in `src/show/cli.js` auto-expands specs when an assertion match is found (lines ~1465-1468) by adding `.expanded` class. But when the search is cleared (lines ~1423-1433), it only removes `search-hidden` and `search-match` — it never removes `.expanded` from specs that it auto-expanded.
+
+**Fix:** Before expanding a spec during search, track whether it was already expanded. On search clear, collapse any specs that were only expanded by the search (not by the user). The simplest approach: before performing the first search expansion, snapshot which specs are already expanded. On clear, restore to that snapshot.
 
