@@ -5,6 +5,7 @@ created: 2026-02-25T20:10:00Z
 priority: 1
 status: done
 depends-on: locked-by-field-for-parallel-builders
+branch: feature/builder-locks
 ---
 
 # Builder Locks and Unlocks Assertions
