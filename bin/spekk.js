@@ -8,6 +8,7 @@ import { runBuilderLoop, runCoachLoop } from '../src/loops/index.js';
 import { showStatus } from '../src/status/cli.js';
 import { showSpekk } from '../src/show/cli.js';
 import { parseFlags } from '../src/cli/parse-flags.js';
+import { launchServe } from '../src/serve/cli.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -56,6 +57,10 @@ COMMANDS:
     await launchObserverAgent(args.slice(1));
     break;
 
+  case 'serve':
+    launchServe(args.slice(1));
+    break;
+
   case 'status':
     await showStatus();
     break;
@@ -80,6 +85,7 @@ USAGE:
 COMMANDS:
   show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
+  serve     Start WebSocket server for browser extension (--port, --host)
   coach     Launch the Coach Agent to create and refine specs
               Use "spekk coach meeting [file]" for meeting transcript processing
   builder   Launch the Builder Agent to implement specs
