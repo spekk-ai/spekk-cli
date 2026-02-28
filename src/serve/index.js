@@ -1,6 +1,8 @@
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
+import { COACH_SYSTEM_PROMPT } from './coach-prompt.js';
+import { formatMessageForClaude } from './message-formatter.js';
 
 const DEFAULT_PORT = 3118;
 
@@ -34,8 +36,12 @@ export function startServe(options = {}) {
     const origin = req.headers.origin || 'unknown';
     console.log(`[serve] Connection #${connId} opened (origin: ${origin})`);
 
-    // Spawn a Claude Code subprocess for this connection
-    const claude = spawn('claude', ['--dangerously-skip-permissions', '--output-format', 'stream-json'], {
+    // Spawn a Claude Code subprocess for this connection, with coach system prompt
+    const claude = spawn('claude', [
+      '--dangerously-skip-permissions',
+      '--output-format', 'stream-json',
+      '--system-prompt', COACH_SYSTEM_PROMPT,
+    ], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
     });
@@ -82,11 +88,18 @@ export function startServe(options = {}) {
       connections.delete(ws);
     });
 
-    // Extension messages -> Claude stdin
+    // Extension messages -> Claude stdin (formatted for readability)
     ws.on('message', (data) => {
-      const message = data.toString();
+      const raw = data.toString();
+      const formatted = formatMessageForClaude(raw);
+
+      // null means the message should not be forwarded (e.g., ping)
+      if (formatted === null) {
+        return;
+      }
+
       if (!claude.stdin.destroyed) {
-        claude.stdin.write(message + '\n');
+        claude.stdin.write(formatted + '\n');
       }
     });
 
