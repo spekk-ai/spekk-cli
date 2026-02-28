@@ -14,7 +14,8 @@
     "!src/test-runner.js",
     "!src/test-runner-mocked.js",
     "specs/builder-agent/",
-    "specs/coach-agent/"
+    "specs/coach-agent/",
+    "specs/coach-skills-system/"
   ],
   "scripts": {
     "next": "node src/parser/cli.js",
