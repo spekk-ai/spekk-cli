@@ -38,8 +38,11 @@ export function startServe(options = {}) {
 
     // Spawn a Claude Code subprocess for this connection, with coach system prompt
     const claude = spawn('claude', [
+      '-p',
+      '--verbose',
       '--dangerously-skip-permissions',
       '--output-format', 'stream-json',
+      '--input-format', 'stream-json',
       '--system-prompt', COACH_SYSTEM_PROMPT,
     ], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -49,6 +52,7 @@ export function startServe(options = {}) {
     connections.set(ws, { claude, id: connId });
 
     // Stream Claude stdout -> WebSocket
+    // Filter stream-json events to only forward useful content to the extension
     let stdoutBuf = '';
     claude.stdout.on('data', (chunk) => {
       stdoutBuf += chunk.toString();
@@ -56,8 +60,32 @@ export function startServe(options = {}) {
       const lines = stdoutBuf.split('\n');
       stdoutBuf = lines.pop(); // keep incomplete line in buffer
       for (const line of lines) {
-        if (line.trim() && ws.readyState === ws.OPEN) {
-          ws.send(line);
+        if (!line.trim() || ws.readyState !== ws.OPEN) continue;
+        try {
+          const event = JSON.parse(line);
+          if (event.type === 'assistant') {
+            // Extract text content from the assistant message
+            const textParts = (event.message?.content || [])
+              .filter(c => c.type === 'text')
+              .map(c => c.text);
+            if (textParts.length > 0) {
+              ws.send(JSON.stringify({
+                type: 'assistant',
+                content: textParts.join(''),
+                session_id: event.session_id,
+              }));
+            }
+          } else if (event.type === 'result') {
+            ws.send(JSON.stringify({
+              type: 'result',
+              content: event.result || '',
+              is_error: event.is_error || false,
+              session_id: event.session_id,
+            }));
+          }
+          // Skip: system/init, rate_limit_event, etc.
+        } catch {
+          // Non-JSON line, skip
         }
       }
     });
@@ -65,6 +93,7 @@ export function startServe(options = {}) {
     // Forward stderr as error messages
     claude.stderr.on('data', (chunk) => {
       const msg = chunk.toString().trim();
+      console.log(`[serve] #${connId} stderr: ${msg.slice(0, 300)}`);
       if (msg && ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({ type: 'error', message: msg }));
       }
@@ -91,7 +120,9 @@ export function startServe(options = {}) {
     // Extension messages -> Claude stdin (formatted for readability)
     ws.on('message', (data) => {
       const raw = data.toString();
+      console.log(`[serve] #${connId} ← raw: ${raw.slice(0, 300)}`);
       const formatted = formatMessageForClaude(raw);
+      console.log(`[serve] #${connId} ← formatted: ${formatted ? formatted.slice(0, 300) : '(null, skipped)'}`);
 
       // null means the message should not be forwarded (e.g., ping)
       if (formatted === null) {
@@ -99,7 +130,15 @@ export function startServe(options = {}) {
       }
 
       if (!claude.stdin.destroyed) {
-        claude.stdin.write(formatted + '\n');
+        const stdinMsg = JSON.stringify({
+          type: 'user',
+          message: { role: 'user', content: formatted },
+          session_id: 'default',
+        });
+        claude.stdin.write(stdinMsg + '\n');
+        console.log(`[serve] #${connId} wrote to claude stdin: ${stdinMsg.slice(0, 300)}`);
+      } else {
+        console.log(`[serve] #${connId} stdin is destroyed, cannot write`);
       }
     });
 
