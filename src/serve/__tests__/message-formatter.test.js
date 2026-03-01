@@ -371,6 +371,20 @@ describe('message-formatter', () => {
       );
     });
 
+    it('formats navigation action (alias for navigate) with url', () => {
+      assert.equal(
+        formatSingleAction({ type: 'navigation', url: 'https://example.com/settings' }),
+        'Navigated to https://example.com/settings',
+      );
+    });
+
+    it('formats navigation action without url', () => {
+      assert.equal(
+        formatSingleAction({ type: 'navigation' }),
+        'Navigated to new page',
+      );
+    });
+
     it('formats submit action', () => {
       assert.equal(formatSingleAction({ type: 'submit', selector: '#login-form' }), 'Submitted form `#login-form`');
     });

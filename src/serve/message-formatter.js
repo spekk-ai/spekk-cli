@@ -123,6 +123,7 @@ function formatSingleAction(action) {
         ? `Pressed "${action.key}" in ${selector}`
         : `Pressed key in ${selector}`;
     case 'navigate':
+    case 'navigation':
       return action.url
         ? `Navigated to ${action.url}`
         : `Navigated to new page`;

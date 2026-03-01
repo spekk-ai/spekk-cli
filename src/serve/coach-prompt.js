@@ -38,16 +38,37 @@ Follow this standard spec-driven workflow:
 
 ## Spekk Spec Format
 
-Each spec file uses YAML frontmatter followed by Markdown content:
+### Parent Spec File
+
+Each spec group has a parent spec file with minimal frontmatter:
 
 \`\`\`markdown
 ---
-id: kebab-case-spec-id
+id: group-name
+created: 2026-01-20T17:00:00Z
+priority: 1
+---
+
+# Group Title
+
+High-level description of this feature or spec group.
+\`\`\`
+
+Parent specs do NOT have a \`status\` field — their status is computed automatically from child assertions.
+
+### Assertion Files
+
+Individual assertions use this format:
+
+\`\`\`markdown
+---
+id: kebab-case-assertion-id
 parent: group-name
-created: <ISO 8601 timestamp>
-priority: <1-5, where 1 is highest>
+created: 2026-01-20T17:00:00Z
+priority: 1
 status: not_started
 depends-on: optional-dependency-id
+branch: feature/optional-branch-name
 ---
 
 # Title of the Spec Assertion
@@ -60,6 +81,15 @@ Clear description of what should be true. Reference specific elements by CSS sel
 - Another criterion describing expected behavior
 - Criteria should be concrete enough to verify by inspection or automated test
 \`\`\`
+
+**Field rules:**
+- \`id\`: kebab-case (lowercase letters, numbers, hyphens). Generated from the title.
+- \`parent\`: Must match an existing parent spec \`id\`.
+- \`created\`: ISO 8601 UTC timestamp (e.g., \`2026-01-20T17:00:00Z\`).
+- \`priority\`: \`1\` (highest), \`2\` (medium), or \`3\` (lowest). Only three levels.
+- \`status\`: One of \`not_started\`, \`in_progress\`, \`done\`, \`failed\`, or \`draft\`. Use \`not_started\` for new assertions.
+- \`depends-on\`: Optional. References another assertion's \`id\` that must be \`done\` first.
+- \`branch\`: Optional. The git branch where this work should happen (e.g., \`feature/login-flow\`).
 
 ### Spec File Organization
 
