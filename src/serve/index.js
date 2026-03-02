@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { COACH_SYSTEM_PROMPT } from './coach-prompt.js';
 import { formatMessageForClaude } from './message-formatter.js';
+import { gatherSpecContext } from './spec-context.js';
 
 const DEFAULT_PORT = 3118;
 
@@ -75,7 +76,7 @@ export function startServe(options = {}) {
       env: { ...process.env },
     });
 
-    connections.set(ws, { claude, id: connId });
+    connections.set(ws, { claude, id: connId, isFirstMessage: true });
 
     // Stream Claude stdout -> WebSocket
     // Filter stream-json events to only forward useful content to the extension
@@ -182,12 +183,29 @@ export function startServe(options = {}) {
         return;
       }
 
+      // On the first real message per connection, gather spec context
+      // and prepend it so the coach has live data about the project
+      const conn = connections.get(ws);
+      let messageContent = formatted;
+      if (conn && conn.isFirstMessage) {
+        conn.isFirstMessage = false;
+        try {
+          const specContext = gatherSpecContext();
+          if (specContext) {
+            messageContent = specContext + '\n\n' + formatted;
+            console.log(`[serve] #${connId} injected spec context (${specContext.length} chars)`);
+          }
+        } catch (err) {
+          console.warn(`[serve] #${connId} failed to gather spec context: ${err.message}`);
+        }
+      }
+
       if (!claude.stdin.destroyed) {
         // Immediately notify client that the coach is thinking
         sendStatus('thinking');
         const stdinMsg = JSON.stringify({
           type: 'user',
-          message: { role: 'user', content: formatted },
+          message: { role: 'user', content: messageContent },
           session_id: 'default',
         });
         claude.stdin.write(stdinMsg + '\n');
