@@ -198,8 +198,7 @@ export function formatMessageForClaude(rawMessage) {
     }
 
     case 'ping':
-    case 'force_takeover':
-      return null; // Don't forward control messages to Claude
+      return null; // Don't forward pings to Claude
 
     default:
       // Unknown message type — forward as-is for resilience
