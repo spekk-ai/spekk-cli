@@ -146,6 +146,34 @@ describe('message-formatter', () => {
       assert.equal(result, null);
     });
 
+    it('formats init message with all fields', () => {
+      const raw = JSON.stringify({
+        type: 'init',
+        url: 'https://example.com/dashboard',
+        title: 'Dashboard - MyApp',
+        version: '1.2.0',
+      });
+      const result = formatMessageForClaude(raw);
+      assert.equal(result, [
+        '[Session initialized]',
+        'Current page: https://example.com/dashboard',
+        'Page title: Dashboard - MyApp',
+        'Extension version: 1.2.0',
+      ].join('\n'));
+    });
+
+    it('formats minimal init message', () => {
+      const raw = JSON.stringify({ type: 'init' });
+      const result = formatMessageForClaude(raw);
+      assert.equal(result, '[Session initialized]');
+    });
+
+    it('init messages never return null', () => {
+      const raw = JSON.stringify({ type: 'init' });
+      const result = formatMessageForClaude(raw);
+      assert.notEqual(result, null);
+    });
+
     it('passes through non-JSON strings as-is', () => {
       const result = formatMessageForClaude('just plain text');
       assert.equal(result, 'just plain text');

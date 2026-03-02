@@ -1,10 +1,31 @@
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { COACH_SYSTEM_PROMPT } from './coach-prompt.js';
+import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
+import { resolveSkillContent } from '../coach/cli.js';
 import { formatMessageForClaude } from './message-formatter.js';
 
 const DEFAULT_PORT = 3118;
+
+/**
+ * Build the system prompt for the serve coach session.
+ * Uses the real coach-agent prompt and appends coordinator skill as available context.
+ */
+function buildServeCoachPrompt() {
+  const { activationMessage } = launchAgentWithPrompt('coach-agent');
+
+  let prompt = activationMessage;
+
+  const coordinatorSkill = resolveSkillContent('coordinate');
+  if (coordinatorSkill) {
+    prompt += '\n\n---\n\n**Available Skill: Coordinator**\n\n';
+    prompt += 'The coordinator skill is available for use when the user asks to plan work, organize branches, or analyze dependencies.\n';
+    prompt += 'Use it when you detect relevant triggers — do NOT execute it automatically on session start.\n';
+    prompt += '\n<skill-reference>\n' + coordinatorSkill + '\n</skill-reference>\n';
+  }
+
+  return prompt;
+}
 
 /**
  * Map Claude tool names to user-friendly activity descriptions.
@@ -53,6 +74,8 @@ export function startServe(options = {}) {
     res.end();
   });
 
+  const coachSystemPrompt = buildServeCoachPrompt();
+
   const wss = new WebSocketServer({ server: httpServer });
   const connections = new Map(); // ws -> { claude, id }
   let connectionCounter = 0;
@@ -69,7 +92,7 @@ export function startServe(options = {}) {
       '--dangerously-skip-permissions',
       '--output-format', 'stream-json',
       '--input-format', 'stream-json',
-      '--system-prompt', COACH_SYSTEM_PROMPT,
+      '--system-prompt', coachSystemPrompt,
     ], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },

@@ -197,6 +197,14 @@ export function formatMessageForClaude(rawMessage) {
       return `[User recorded browser actions]\n${formatActionRecording(att)}`;
     }
 
+    case 'init': {
+      const parts = ['[Session initialized]'];
+      if (data.url) parts.push(`Current page: ${data.url}`);
+      if (data.title) parts.push(`Page title: ${data.title}`);
+      if (data.version) parts.push(`Extension version: ${data.version}`);
+      return parts.join('\n');
+    }
+
     case 'ping':
       return null; // Don't forward pings to Claude
 

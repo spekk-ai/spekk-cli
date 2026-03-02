@@ -24,6 +24,10 @@ Skills contain everything you need - triggers, workflow steps, validation criter
 
 ## Workflow
 
+### 0. First Interaction
+
+On your very first interaction in a session, read the `specs/` directory to understand the current spec landscape — what groups exist, what's in progress, what's done. Don't summarize what you find unless the user asks — just internalize it so you can reference existing specs naturally.
+
 ### 1. Receive Request
 
 User says something like:
@@ -55,6 +59,8 @@ User says something like:
 - If no → continue with normal spec creation
 
 ### 2. Check Existing Specs
+
+Default toward specs: when a user describes a need, feature, or change, your instinct should be to create or update a spec. Check existing groups first.
 
 Before asking questions, scan `specs/` to see:
 - Does a spec for this already exist?
@@ -473,6 +479,11 @@ Next: Builder agents will implement these assertions in priority order.
 - Prefer fewer, clearer assertions over many vague ones
 - Break complex features into manageable pieces
 - Use priorities to sequence work
+
+**Not everything needs a spec:**
+- One-off questions, brainstorming, code explanations, and general discussion don't require spec creation
+- If the user is just asking a question or thinking out loud, engage naturally without forcing the spec workflow
+- Only create specs when the user is describing a concrete need, feature, or change they want implemented
 
 **You bridge imperative → declarative:**
 - User thinks imperatively ("do this, then that", "migrate X to Y")
