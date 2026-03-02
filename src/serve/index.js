@@ -3,8 +3,35 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { COACH_SYSTEM_PROMPT } from './coach-prompt.js';
 import { formatMessageForClaude } from './message-formatter.js';
+import { gatherSpecContext } from './spec-context.js';
 
 const DEFAULT_PORT = 3118;
+
+/**
+ * Map Claude tool names to user-friendly activity descriptions.
+ */
+function describeToolUse(toolName) {
+  switch (toolName) {
+    case 'Read':
+    case 'Glob':
+    case 'Grep':
+      return 'Reading files...';
+    case 'Write':
+    case 'Edit':
+    case 'NotebookEdit':
+      return 'Writing code...';
+    case 'Bash':
+      return 'Running a command...';
+    case 'WebSearch':
+    case 'WebFetch':
+      return 'Searching the web...';
+    default:
+      if (typeof toolName === 'string' && toolName.length > 0) {
+        return `Using ${toolName}...`;
+      }
+      return 'Working...';
+  }
+}
 
 /**
  * Start the WebSocket server that bridges browser extension <-> coach agent.
@@ -49,11 +76,24 @@ export function startServe(options = {}) {
       env: { ...process.env },
     });
 
-    connections.set(ws, { claude, id: connId });
+    connections.set(ws, { claude, id: connId, isFirstMessage: true });
 
     // Stream Claude stdout -> WebSocket
     // Filter stream-json events to only forward useful content to the extension
     let stdoutBuf = '';
+    let lastStatusKey = 'idle:'; // Track last sent status to avoid duplicates
+
+    function sendStatus(state, detail) {
+      if (ws.readyState !== ws.OPEN) return;
+      // Avoid sending duplicate status with same state+detail
+      const key = `${state}:${detail || ''}`;
+      if (key === lastStatusKey) return;
+      lastStatusKey = key;
+      const msg = { type: 'status', state };
+      if (detail) msg.detail = detail;
+      ws.send(JSON.stringify(msg));
+    }
+
     claude.stdout.on('data', (chunk) => {
       stdoutBuf += chunk.toString();
       // stream-json outputs newline-delimited JSON
@@ -63,7 +103,10 @@ export function startServe(options = {}) {
         if (!line.trim() || ws.readyState !== ws.OPEN) continue;
         try {
           const event = JSON.parse(line);
+
           if (event.type === 'assistant') {
+            // Send idle status when assistant content arrives
+            sendStatus('idle');
             // Extract text content from the assistant message
             const textParts = (event.message?.content || [])
               .filter(c => c.type === 'text')
@@ -76,14 +119,25 @@ export function startServe(options = {}) {
               }));
             }
           } else if (event.type === 'result') {
+            sendStatus('idle');
             ws.send(JSON.stringify({
               type: 'result',
               content: event.result || '',
               is_error: event.is_error || false,
               session_id: event.session_id,
             }));
+          } else if (event.type === 'tool_use') {
+            // Claude is using a tool -- send working status with detail
+            const toolName = event.tool?.name || event.name || '';
+            sendStatus('working', describeToolUse(toolName));
+          } else if (event.type === 'tool_result') {
+            // Tool finished; Claude will either think again or respond
+            sendStatus('thinking');
+          } else if (event.type === 'system' || event.type === 'init') {
+            // Processing has started, Claude is thinking
+            sendStatus('thinking');
           }
-          // Skip: system/init, rate_limit_event, etc.
+          // Skip: rate_limit_event, etc.
         } catch {
           // Non-JSON line, skip
         }
@@ -120,19 +174,38 @@ export function startServe(options = {}) {
     // Extension messages -> Claude stdin (formatted for readability)
     ws.on('message', (data) => {
       const raw = data.toString();
-      console.log(`[serve] #${connId} ← raw: ${raw.slice(0, 300)}`);
+      console.log(`[serve] #${connId} <- raw: ${raw.slice(0, 300)}`);
       const formatted = formatMessageForClaude(raw);
-      console.log(`[serve] #${connId} ← formatted: ${formatted ? formatted.slice(0, 300) : '(null, skipped)'}`);
+      console.log(`[serve] #${connId} <- formatted: ${formatted ? formatted.slice(0, 300) : '(null, skipped)'}`);
 
       // null means the message should not be forwarded (e.g., ping)
       if (formatted === null) {
         return;
       }
 
+      // On the first real message per connection, gather spec context
+      // and prepend it so the coach has live data about the project
+      const conn = connections.get(ws);
+      let messageContent = formatted;
+      if (conn && conn.isFirstMessage) {
+        conn.isFirstMessage = false;
+        try {
+          const specContext = gatherSpecContext();
+          if (specContext) {
+            messageContent = specContext + '\n\n' + formatted;
+            console.log(`[serve] #${connId} injected spec context (${specContext.length} chars)`);
+          }
+        } catch (err) {
+          console.warn(`[serve] #${connId} failed to gather spec context: ${err.message}`);
+        }
+      }
+
       if (!claude.stdin.destroyed) {
+        // Immediately notify client that the coach is thinking
+        sendStatus('thinking');
         const stdinMsg = JSON.stringify({
           type: 'user',
-          message: { role: 'user', content: formatted },
+          message: { role: 'user', content: messageContent },
           session_id: 'default',
         });
         claude.stdin.write(stdinMsg + '\n');
