@@ -3,7 +3,14 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
 import { resolveSkillContent } from '../coach/cli.js';
-import { formatMessageForClaude } from './message-formatter.js';
+import {
+  formatChatMessage,
+  formatElementSelection,
+  formatActionRecording,
+  formatInitMessage,
+} from './message-formatter.js';
+import { createWSAdapter } from './ws-adapter.js';
+import { createServeApi } from './shapes.js';
 
 const DEFAULT_PORT = 3118;
 
@@ -77,13 +84,17 @@ export function startServe(options = {}) {
   const coachSystemPrompt = buildServeCoachPrompt();
 
   const wss = new WebSocketServer({ server: httpServer });
-  const connections = new Map(); // ws -> { claude, id }
+  const connections = new Map(); // ws -> { claude, id, api }
   let connectionCounter = 0;
 
   wss.on('connection', (ws, req) => {
     const connId = ++connectionCounter;
     const origin = req.headers.origin || 'unknown';
     console.log(`[serve] Connection #${connId} opened (origin: ${origin})`);
+
+    // Create the typed WebSocket API for this connection
+    const adapter = createWSAdapter(ws);
+    const api = createServeApi(adapter);
 
     // Spawn a Claude Code subprocess for this connection, with coach system prompt
     const claude = spawn('claude', [
@@ -98,7 +109,7 @@ export function startServe(options = {}) {
       env: { ...process.env },
     });
 
-    connections.set(ws, { claude, id: connId });
+    connections.set(ws, { claude, id: connId, api });
 
     // Stream Claude stdout -> WebSocket
     // Filter stream-json events to only forward useful content to the extension
@@ -111,9 +122,7 @@ export function startServe(options = {}) {
       const key = `${state}:${detail || ''}`;
       if (key === lastStatusKey) return;
       lastStatusKey = key;
-      const msg = { type: 'status', state };
-      if (detail) msg.detail = detail;
-      ws.send(JSON.stringify(msg));
+      api.send.status(detail ? { state, detail } : { state });
     }
 
     claude.stdout.on('data', (chunk) => {
@@ -134,20 +143,18 @@ export function startServe(options = {}) {
               .filter(c => c.type === 'text')
               .map(c => c.text);
             if (textParts.length > 0) {
-              ws.send(JSON.stringify({
-                type: 'assistant',
+              api.send.assistant({
                 content: textParts.join(''),
-                session_id: event.session_id,
-              }));
+                sessionId: event.session_id,
+              });
             }
           } else if (event.type === 'result') {
             sendStatus('idle');
-            ws.send(JSON.stringify({
-              type: 'result',
+            api.send.result({
               content: event.result || '',
-              is_error: event.is_error || false,
-              session_id: event.session_id,
-            }));
+              isError: event.is_error || false,
+              sessionId: event.session_id,
+            });
           } else if (event.type === 'tool_use') {
             // Claude is using a tool -- send working status with detail
             const toolName = event.tool?.name || event.name || '';
@@ -171,14 +178,14 @@ export function startServe(options = {}) {
       const msg = chunk.toString().trim();
       console.log(`[serve] #${connId} stderr: ${msg.slice(0, 300)}`);
       if (msg && ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: 'error', message: msg }));
+        api.send.error({ message: msg });
       }
     });
 
     claude.on('exit', (code) => {
       console.log(`[serve] Claude process for connection #${connId} exited (code: ${code})`);
       if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: 'system', event: 'agent_exited', code }));
+        api.send.agentExited({ code: code ?? 1 });
         ws.close(1000, 'Agent process exited');
       }
       connections.delete(ws);
@@ -187,26 +194,17 @@ export function startServe(options = {}) {
     claude.on('error', (err) => {
       console.error(`[serve] Claude process error for connection #${connId}:`, err.message);
       if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: 'error', message: `Agent error: ${err.message}` }));
+        api.send.error({ message: `Agent error: ${err.message}` });
         ws.close(1011, 'Agent process error');
       }
       connections.delete(ws);
     });
 
-    // Extension messages -> Claude stdin (formatted for readability)
-    ws.on('message', (data) => {
-      const raw = data.toString();
-      console.log(`[serve] #${connId} <- raw: ${raw.slice(0, 300)}`);
-      const formatted = formatMessageForClaude(raw);
-      console.log(`[serve] #${connId} <- formatted: ${formatted ? formatted.slice(0, 300) : '(null, skipped)'}`);
-
-      // null means the message should not be forwarded (e.g., ping)
-      if (formatted === null) {
-        return;
-      }
-
+    // Helper to write a formatted message to Claude's stdin
+    function sendToClaude(formatted) {
+      if (formatted === null) return;
+      console.log(`[serve] #${connId} <- formatted: ${formatted.slice(0, 300)}`);
       if (!claude.stdin.destroyed) {
-        // Immediately notify client that the coach is thinking
         sendStatus('thinking');
         const stdinMsg = JSON.stringify({
           type: 'user',
@@ -218,6 +216,31 @@ export function startServe(options = {}) {
       } else {
         console.log(`[serve] #${connId} stdin is destroyed, cannot write`);
       }
+    }
+
+    // Register typed message handlers
+    api.on.chat((data) => {
+      console.log(`[serve] #${connId} <- coach:chat`);
+      const formatted = formatChatMessage(data);
+      sendToClaude(formatted);
+    });
+
+    api.on.elementSelection((data) => {
+      console.log(`[serve] #${connId} <- coach:elementSelection`);
+      const formatted = `[User selected an element]\n${formatElementSelection(data)}`;
+      sendToClaude(formatted);
+    });
+
+    api.on.actionRecording((data) => {
+      console.log(`[serve] #${connId} <- coach:actionRecording`);
+      const formatted = `[User recorded browser actions]\n${formatActionRecording(data)}`;
+      sendToClaude(formatted);
+    });
+
+    api.on.init((data) => {
+      console.log(`[serve] #${connId} <- coach:init`);
+      const formatted = formatInitMessage(data);
+      sendToClaude(formatted);
     });
 
     ws.on('close', (code, reason) => {

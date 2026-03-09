@@ -240,6 +240,20 @@ function formatChatMessage(data) {
   return parts.join('\n');
 }
 
+/**
+ * Format an init message into a human-readable prompt for Claude.
+ *
+ * @param {object} data - Validated init data (camelCase)
+ * @returns {string} Formatted init message
+ */
+function formatInitMessage(data) {
+  const parts = ['[Session initialized]'];
+  if (data.url) parts.push(`Current page: ${data.url}`);
+  if (data.title) parts.push(`Page title: ${data.title}`);
+  if (data.version) parts.push(`Extension version: ${data.version}`);
+  return parts.join('\n');
+}
+
 // Export individual formatters for testing
 export {
   formatElementSelection,
@@ -248,4 +262,5 @@ export {
   formatSingleAction,
   formatAttachment,
   formatChatMessage,
+  formatInitMessage,
 };

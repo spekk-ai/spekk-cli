@@ -61,17 +61,19 @@ describe('spekk serve', () => {
       setTimeout(() => reject(new Error('Connection timeout')), 3000);
     });
 
-    // Send a message - expect either a stream-json response or system event
+    // Send a message in the new wire format - expect an { event, data } response
     const message = await new Promise((resolve, reject) => {
       ws.on('message', (data) => {
         resolve(JSON.parse(data.toString()));
       });
-      ws.send('Say hello');
+      ws.send(JSON.stringify({ event: 'coach:chat', data: { content: 'Say hello' } }));
       setTimeout(() => reject(new Error('No response within timeout')), 15000);
     });
 
     assert.ok(message, 'Should receive a JSON message from Claude subprocess');
     assert.equal(typeof message, 'object');
+    assert.ok(message.event, 'Response should have an event field');
+    assert.ok(message.event.startsWith('coach:'), 'Event should be namespaced under coach channel');
 
     ws.close();
     await new Promise(resolve => ws.on('close', resolve));

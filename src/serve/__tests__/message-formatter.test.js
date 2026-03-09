@@ -8,6 +8,7 @@ import {
   formatSingleAction,
   formatAttachment,
   formatChatMessage,
+  formatInitMessage,
 } from '../message-formatter.js';
 
 describe('message-formatter', () => {
@@ -499,6 +500,35 @@ describe('message-formatter', () => {
       });
       assert.ok(result.includes('Visual context:'));
       assert.ok(result.includes('[Screenshot of current page]'));
+    });
+  });
+
+  // -- formatInitMessage ------------------------------------------------------
+
+  describe('formatInitMessage', () => {
+
+    it('formats with all fields', () => {
+      const result = formatInitMessage({
+        url: 'https://example.com/dashboard',
+        title: 'Dashboard - MyApp',
+        version: '1.2.0',
+      });
+      assert.equal(result, [
+        '[Session initialized]',
+        'Current page: https://example.com/dashboard',
+        'Page title: Dashboard - MyApp',
+        'Extension version: 1.2.0',
+      ].join('\n'));
+    });
+
+    it('formats with no optional fields', () => {
+      const result = formatInitMessage({});
+      assert.equal(result, '[Session initialized]');
+    });
+
+    it('formats with only url', () => {
+      const result = formatInitMessage({ url: 'https://example.com' });
+      assert.equal(result, '[Session initialized]\nCurrent page: https://example.com');
     });
   });
 });
