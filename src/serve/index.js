@@ -9,7 +9,7 @@ import {
   formatActionRecording,
   formatInitMessage,
 } from './message-formatter.js';
-import { createWSAdapter } from './ws-adapter.js';
+import { createWSAdapter } from '@thinknimble/tn-models';
 import { createServeApi } from './shapes.js';
 
 const DEFAULT_PORT = 3118;
@@ -70,6 +70,7 @@ function describeToolUse(toolName) {
 export function startServe(options = {}) {
   const port = options.port || DEFAULT_PORT;
   const host = options.host || 'localhost';
+  const debug = options.verbose ? (...args) => console.log('[serve:debug]', ...args) : () => {};
 
   const httpServer = createServer((req, res) => {
     if (req.url === '/health') {
@@ -122,6 +123,7 @@ export function startServe(options = {}) {
       const key = `${state}:${detail || ''}`;
       if (key === lastStatusKey) return;
       lastStatusKey = key;
+      debug(`#${connId} sendStatus: ${state}`, detail || '');
       api.send.status(detail ? { state, detail } : { state });
     }
 
@@ -132,17 +134,22 @@ export function startServe(options = {}) {
       stdoutBuf = lines.pop(); // keep incomplete line in buffer
       for (const line of lines) {
         if (!line.trim() || ws.readyState !== ws.OPEN) continue;
+        let event;
         try {
-          const event = JSON.parse(line);
+          event = JSON.parse(line);
+        } catch {
+          continue; // Non-JSON line, skip
+        }
 
+        try {
+          debug(`#${connId} claude event: ${event.type}`);
           if (event.type === 'assistant') {
-            // Send idle status when assistant content arrives
             sendStatus('idle');
-            // Extract text content from the assistant message
             const textParts = (event.message?.content || [])
               .filter(c => c.type === 'text')
               .map(c => c.text);
             if (textParts.length > 0) {
+              debug(`#${connId} -> assistant (${textParts.join('').length} chars, session=${event.session_id})`);
               api.send.assistant({
                 content: textParts.join(''),
                 sessionId: event.session_id,
@@ -150,6 +157,7 @@ export function startServe(options = {}) {
             }
           } else if (event.type === 'result') {
             sendStatus('idle');
+            debug(`#${connId} -> result (error=${event.is_error}, session=${event.session_id})`);
             api.send.result({
               content: event.result || '',
               isError: event.is_error || false,
@@ -167,8 +175,8 @@ export function startServe(options = {}) {
             sendStatus('thinking');
           }
           // Skip: rate_limit_event, etc.
-        } catch {
-          // Non-JSON line, skip
+        } catch (err) {
+          console.error(`[serve] #${connId} api.send error:`, err.message);
         }
       }
     });
@@ -203,7 +211,7 @@ export function startServe(options = {}) {
     // Helper to write a formatted message to Claude's stdin
     function sendToClaude(formatted) {
       if (formatted === null) return;
-      console.log(`[serve] #${connId} <- formatted: ${formatted.slice(0, 300)}`);
+      debug(`#${connId} <- formatted: ${formatted.slice(0, 300)}`);
       if (!claude.stdin.destroyed) {
         sendStatus('thinking');
         const stdinMsg = JSON.stringify({
@@ -212,7 +220,7 @@ export function startServe(options = {}) {
           session_id: 'default',
         });
         claude.stdin.write(stdinMsg + '\n');
-        console.log(`[serve] #${connId} wrote to claude stdin: ${stdinMsg.slice(0, 300)}`);
+        debug(`#${connId} wrote to claude stdin: ${stdinMsg.slice(0, 300)}`);
       } else {
         console.log(`[serve] #${connId} stdin is destroyed, cannot write`);
       }
@@ -220,25 +228,25 @@ export function startServe(options = {}) {
 
     // Register typed message handlers
     api.on.chat((data) => {
-      console.log(`[serve] #${connId} <- coach:chat`);
+      debug(`#${connId} <- coach:chat`);
       const formatted = formatChatMessage(data);
       sendToClaude(formatted);
     });
 
     api.on.elementSelection((data) => {
-      console.log(`[serve] #${connId} <- coach:elementSelection`);
+      debug(`#${connId} <- coach:elementSelection`);
       const formatted = `[User selected an element]\n${formatElementSelection(data)}`;
       sendToClaude(formatted);
     });
 
     api.on.actionRecording((data) => {
-      console.log(`[serve] #${connId} <- coach:actionRecording`);
+      debug(`#${connId} <- coach:actionRecording`);
       const formatted = `[User recorded browser actions]\n${formatActionRecording(data)}`;
       sendToClaude(formatted);
     });
 
     api.on.init((data) => {
-      console.log(`[serve] #${connId} <- coach:init`);
+      debug(`#${connId} <- coach:init`);
       const formatted = formatInitMessage(data);
       sendToClaude(formatted);
     });

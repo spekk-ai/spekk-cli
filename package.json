@@ -52,6 +52,6 @@
     "glob": "^10.3.10",
     "ws": "^8.19.0",
     "zod": "^3.23.0",
-    "@thinknimble/tn-models": "^4.1.0"
+    "@thinknimble/tn-models": "^4.1.1"
   }
 }

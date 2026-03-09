@@ -4,6 +4,7 @@ import { startServe } from './index.js';
 const serveFlagDefs = {
   port: { flags: ['--port', '-p'], type: 'string' },
   host: { flags: ['--host'], type: 'string' },
+  verbose: { flags: ['--verbose', '-v'], type: 'boolean' },
   help: { flags: ['--help', '-h'], type: 'boolean' },
 };
 
@@ -20,6 +21,7 @@ USAGE:
 OPTIONS:
   --port, -p <port>   Port to listen on (default: 3118)
   --host <host>       Host to bind to (default: localhost)
+  --verbose, -v       Enable debug logging for WebSocket messages
   --help, -h          Show this help message
 
 DESCRIPTION:
@@ -35,6 +37,7 @@ DESCRIPTION:
   const options = {};
   if (flags.port) options.port = parseInt(flags.port, 10);
   if (flags.host) options.host = flags.host;
+  if (flags.verbose) options.verbose = true;
 
   startServe(options);
 }
