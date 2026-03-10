@@ -3,8 +3,7 @@ id: publish-workflow-uses-self-hosted-runner
 parent: self-hosted-gh-runners
 created: 2026-03-10T00:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-warespace-i7-205326-1773184726
+status: done
 branch: feature/self-hosted-runners
 ---
 
