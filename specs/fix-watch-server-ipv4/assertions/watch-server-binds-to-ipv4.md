@@ -3,8 +3,7 @@ id: watch-server-binds-to-ipv4
 parent: fix-watch-server-ipv4
 created: 2026-03-11T00:25:00Z
 priority: 1
-status: in_progress
-locked-by: builder-Williams-MBP.local-54279-1773188871
+status: done
 branch: fix/watch-server-ipv4
 ---
 
