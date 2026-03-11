@@ -113,7 +113,7 @@ describe('Watch Server Module', { concurrency: 1 }, () => {
   test('port retry when port is in use', async () => {
     const blocker = createServer();
     const blockerPort = await new Promise((resolve) => {
-      blocker.listen(0, 'localhost', () => {
+      blocker.listen(0, '127.0.0.1', () => {
         resolve(blocker.address().port);
       });
     });
@@ -128,7 +128,7 @@ describe('Watch Server Module', { concurrency: 1 }, () => {
         assert.ok(result.port > blockerPort, 'Should have moved to a higher port');
         assert.ok(result.port <= blockerPort + 10, 'Should be within retry range');
 
-        const res = await fetch(`http://localhost:${result.port}/`);
+        const res = await fetch(`http://127.0.0.1:${result.port}/`);
         assert.strictEqual(res.status, 200);
       } finally {
         result.close();

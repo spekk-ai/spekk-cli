@@ -26,6 +26,9 @@ function colorLog(color, message) {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
+// Track the active Claude child process so SIGINT can interrupt it
+let activeChildProcess = null;
+
 function handleInterrupt(signal) {
   colorLog('yellow', `\n🛑 Received ${signal}. Exiting gracefully...`);
   process.exit(0);
@@ -211,6 +214,8 @@ This ensures you work on the correct assertion based on the user's filter.
     stdio: ['pipe', 'inherit', 'inherit']
   });
 
+  activeChildProcess = claudeProcess;
+
   // Handle stdin errors
   claudeProcess.stdin.on('error', (error) => {
     if (error.code !== 'EPIPE') {
@@ -241,6 +246,7 @@ This ensures you work on the correct assertion based on the user's filter.
     });
 
     claudeProcess.on('exit', (code) => {
+      activeChildProcess = null;
       if (code === 0) {
         colorLog('green', '✅ Builder agent completed work');
         resolve(true);
@@ -254,15 +260,15 @@ This ensures you work on the correct assertion based on the user's filter.
 
 /**
  * Build the Claude spawn args for a given mode.
- * Interactive mode: no --print, prompt passed as positional arg (user can interact)
+ * Interactive mode: --system-prompt loads context, user drives the session
  * Headless mode: stdin piped with activation message (autonomous)
  */
 function buildClaudeSpawnConfig(interactive, activationMessage) {
   const args = ['--dangerously-skip-permissions'];
 
   if (interactive) {
-    // Interactive: pass prompt as positional arg, inherit all stdio for terminal access
-    args.push(activationMessage);
+    // Interactive: load builder context via --system-prompt so Claude waits for user input
+    args.push('--system-prompt', activationMessage);
     return { args, options: { stdio: 'inherit' } };
   }
 
@@ -275,7 +281,7 @@ function buildClaudeSpawnConfig(interactive, activationMessage) {
  */
 async function launchInteractiveBuilder(flags) {
   colorLog('cyan', '🔧 Starting Builder Agent (interactive mode)...');
-  colorLog('yellow', 'Press Ctrl+C to exit gracefully.');
+  colorLog('yellow', 'Ctrl+C interrupts the current action. Use /exit to end the session.');
 
   const { activationMessage } = launchAgentWithPrompt('builder-agent');
 
@@ -297,7 +303,8 @@ ${spekkCommand}
     fullMessage = commandHint + activationMessage;
   }
 
-  // Launch Claude in interactive mode: stdio inherited, prompt as positional arg
+  // Launch Claude in interactive mode: context loaded via --system-prompt,
+  // Claude waits for user input instead of auto-executing
   const { args, options } = buildClaudeSpawnConfig(true, fullMessage);
   const claudeProcess = spawn('claude', args, options);
 
@@ -336,15 +343,27 @@ async function launchBuilderAgent(args = []) {
     return;
   }
 
-  // Handle interrupts gracefully
-  process.on('SIGINT', () => handleInterrupt('SIGINT'));
-  process.on('SIGTERM', () => handleInterrupt('SIGTERM'));
-
-  // Handle interactive mode - just launch the prompt without auto-selecting
+  // Interactive mode: only when explicitly requested via --interactive flag.
+  // Parent suppresses SIGINT so Claude Code handles Ctrl+C natively (Esc-style interrupt).
+  // The session ends when Claude exits on its own (e.g. /exit, Ctrl+D).
   if (flags.interactive) {
+    process.on('SIGINT', () => {});
+    process.on('SIGTERM', () => handleInterrupt('SIGTERM'));
     await launchInteractiveBuilder(flags);
     return;
   }
+
+  // Non-interactive modes: Ctrl+C interrupts the current build (Esc-style)
+  // without killing the parent process. Between builds, Ctrl+C exits.
+  process.on('SIGINT', () => {
+    if (activeChildProcess) {
+      colorLog('yellow', '\n⚡ Interrupting current build...');
+      try { activeChildProcess.kill('SIGINT'); } catch {}
+    } else {
+      handleInterrupt('SIGINT');
+    }
+  });
+  process.on('SIGTERM', () => handleInterrupt('SIGTERM'));
 
   // Determine mode
   const once = flags.once;
