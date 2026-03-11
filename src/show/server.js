@@ -70,7 +70,7 @@ function listenWithRetry(server, port, maxRetries) {
 
     function tryListen() {
       server.once('error', onError);
-      server.listen(currentPort, 'localhost', () => {
+      server.listen(currentPort, '127.0.0.1', () => {
         server.removeListener('error', onError);
         resolve(server.address().port);
       });
