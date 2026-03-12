@@ -3,7 +3,7 @@ id: sandbox-create-workflow
 parent: sandbox-command
 created: 2026-03-12T18:00:00Z
 priority: 1
-status: done
+status: in_progress
 branch: feature/sandbox-command
 depends-on: do-api-client
 ---
@@ -22,8 +22,10 @@ depends-on: do-api-client
 - The droplet is created with the tag `spekk-sandbox` and the name `spekk-{name}`
 - After droplet creation, polls `getDroplet(id)` every 5 seconds until status is `active` and a public IPv4 address is available (timeout after 5 minutes)
 - After the droplet is active, polls SSH connectivity (TCP connect to port 22) until it succeeds, then checks for the `/opt/spekk/.provisioned` marker file via SSH (timeout after 10 minutes)
-- Reads credentials from environment variables: `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `SPEKK_AGENT_TOKEN`, `SPEKK_HOST` -- if any are missing, prints which are missing and exits with an error
-- SSHes into the droplet as `root` and writes `/etc/spekk/agent.env` with the four credential values, sets permissions to 600
+- Reads credentials from environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `GITHUB_TOKEN`, `SPEKK_AGENT_TOKEN`, `SPEKK_HOST` -- if any are missing, prints which are missing and exits with an error
+- AWS Bedrock is the default model provider for agent sandboxes (not direct Anthropic API)
+- SSHes into the droplet as `root` and writes `/etc/spekk/agent.env` with all six credential values, sets permissions to 600
+- The agent.env file also includes `CLAUDE_CODE_USE_BEDROCK=1` so Claude Code on the droplet uses Bedrock by default
 - Configures git credentials and gh CLI for the `agent` user via SSH commands (same steps as `setup-credentials.sh`)
 - Copies `agent-client.py` from bundled templates to `/opt/spekk/agent-client.py` via SCP
 - Installs the `websockets` Python package via SSH, then enables and starts the `spekk-agent` systemd service
