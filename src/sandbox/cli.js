@@ -105,7 +105,8 @@ OPTIONS:
       break;
     }
     case 'deploy': {
-      console.log('sandbox deploy: not yet implemented');
+      const { deployCommand } = await import('./deploy.js');
+      await deployCommand(subArgs);
       break;
     }
   }
