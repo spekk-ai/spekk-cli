@@ -89,19 +89,23 @@ OPTIONS:
       break;
     }
     case 'list': {
-      console.log('sandbox list: not yet implemented');
+      const { listCommand } = await import('./list.js');
+      await listCommand();
       break;
     }
     case 'status': {
-      console.log('sandbox status: not yet implemented');
+      const { statusCommand } = await import('./status.js');
+      await statusCommand(subArgs);
       break;
     }
     case 'ssh': {
-      console.log('sandbox ssh: not yet implemented');
+      const { sshCommand } = await import('./ssh.js');
+      await sshCommand(subArgs);
       break;
     }
     case 'destroy': {
-      console.log('sandbox destroy: not yet implemented');
+      const { destroyCommand } = await import('./destroy.js');
+      await destroyCommand(subArgs);
       break;
     }
     case 'deploy': {
