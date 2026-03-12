@@ -4,7 +4,7 @@ import { saveSandbox } from './store.js';
 import { spawn } from 'child_process';
 import net from 'net';
 
-const REQUIRED_ENV_VARS = ['ANTHROPIC_API_KEY', 'GITHUB_TOKEN', 'SPEKK_AGENT_TOKEN', 'SPEKK_HOST'];
+const REQUIRED_ENV_VARS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 'GITHUB_TOKEN', 'SPEKK_AGENT_TOKEN', 'SPEKK_HOST'];
 const DROPLET_READY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const PROVISION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const POLL_INTERVAL = 5000; // 5 seconds
@@ -118,9 +118,10 @@ async function waitForProvisioning(ip) {
 }
 
 async function injectCredentials(ip) {
-  const envContent = REQUIRED_ENV_VARS
-    .map((v) => `${v}=${process.env[v]}`)
-    .join('\n');
+  const envLines = REQUIRED_ENV_VARS
+    .map((v) => `${v}=${process.env[v]}`);
+  envLines.push('CLAUDE_CODE_USE_BEDROCK=1');
+  const envContent = envLines.join('\n');
 
   await runSSH(ip, `mkdir -p /etc/spekk && cat > /etc/spekk/agent.env << 'ENVEOF'
 ${envContent}

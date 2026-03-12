@@ -21,7 +21,9 @@ describe('createSandbox', () => {
 
     // Set required env vars
     process.env.DO_API_TOKEN = 'test-token';
-    process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+    process.env.AWS_ACCESS_KEY_ID = 'AKIAIOSFODNN7EXAMPLE';
+    process.env.AWS_SECRET_ACCESS_KEY = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
+    process.env.AWS_DEFAULT_REGION = 'us-east-1';
     process.env.GITHUB_TOKEN = 'ghp_test';
     process.env.SPEKK_AGENT_TOKEN = 'agent-token';
     process.env.SPEKK_HOST = 'https://spekk.example.com';
@@ -40,7 +42,7 @@ describe('createSandbox', () => {
   });
 
   it('errors when required environment variables are missing', async () => {
-    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.AWS_ACCESS_KEY_ID;
     delete process.env.GITHUB_TOKEN;
 
     // Mock fetch for DO API calls
@@ -55,7 +57,7 @@ describe('createSandbox', () => {
 
     assert.strictEqual(process.exitCode, 1);
     const allOutput = errors.join(' ');
-    assert.ok(allOutput.includes('ANTHROPIC_API_KEY'), 'Should mention missing ANTHROPIC_API_KEY');
+    assert.ok(allOutput.includes('AWS_ACCESS_KEY_ID'), 'Should mention missing AWS_ACCESS_KEY_ID');
     assert.ok(allOutput.includes('GITHUB_TOKEN'), 'Should mention missing GITHUB_TOKEN');
   });
 

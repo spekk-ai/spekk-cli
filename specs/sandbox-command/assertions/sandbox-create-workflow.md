@@ -3,7 +3,7 @@ id: sandbox-create-workflow
 parent: sandbox-command
 created: 2026-03-12T18:00:00Z
 priority: 1
-status: in_progress
+status: done
 branch: feature/sandbox-command
 depends-on: do-api-client
 ---
