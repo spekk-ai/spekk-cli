@@ -117,10 +117,16 @@ async function waitForProvisioning(ip) {
   throw new Error(`Provisioning did not complete within 10 minutes on ${ip}`);
 }
 
-async function injectCredentials(ip) {
+async function injectCredentials(ip, name) {
   const envLines = REQUIRED_ENV_VARS
     .map((v) => `${v}=${process.env[v]}`);
   envLines.push('CLAUDE_CODE_USE_BEDROCK=1');
+
+  const host = process.env.SPEKK_HOST.replace(/^https?:\/\//, '');
+  const token = process.env.SPEKK_AGENT_TOKEN;
+  envLines.push(`SPEKK_SERVER_URL=wss://${host}/ws/agent/${token}/`);
+  envLines.push(`SPEKK_AGENT_NAME=spekk-${name}`);
+
   const envContent = envLines.join('\n');
 
   await runSSH(ip, `mkdir -p /etc/spekk && cat > /etc/spekk/agent.env << 'ENVEOF'
@@ -241,7 +247,7 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
 
     // Inject credentials
     console.log('Injecting credentials...');
-    await injectCredentials(ip);
+    await injectCredentials(ip, name);
 
     // Configure git credentials
     console.log('Configuring git credentials...');

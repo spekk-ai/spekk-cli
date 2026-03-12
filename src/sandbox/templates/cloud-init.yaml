@@ -65,6 +65,7 @@ runcmd:
     Type=simple
     User=agent
     WorkingDirectory=/opt/spekk
+    EnvironmentFile=/etc/spekk/agent.env
     ExecStart=/opt/spekk/.venv/bin/python /opt/spekk/agent-client.py
     Restart=always
     RestartSec=5
