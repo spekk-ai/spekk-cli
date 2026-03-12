@@ -15,7 +15,8 @@
     "!src/test-runner-mocked.js",
     "specs/builder-agent/",
     "specs/coach-agent/",
-    "specs/coach-skills-system/"
+    "specs/coach-skills-system/",
+    "src/sandbox/templates/"
   ],
   "scripts": {
     "next": "node src/parser/cli.js",

@@ -1,0 +1,77 @@
+#cloud-config
+
+users:
+  - name: agent
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAA... your-key-here
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - git
+  - python3
+  - python3-pip
+  - jq
+  - unzip
+
+runcmd:
+  # Install Docker
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io
+  - usermod -aG docker agent
+
+  # Install Node.js (LTS)
+  - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  - apt-get install -y nodejs
+
+  # Install GitHub CLI
+  - curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+  - apt-get update
+  - apt-get install -y gh
+
+  # Install Claude Code CLI
+  - npm install -g @anthropic-ai/claude-code
+
+  # Set up spekk directory
+  - mkdir -p /opt/spekk
+  - chown agent:agent /opt/spekk
+
+  # Install Python websockets for agent client
+  - pip3 install websockets
+
+  # Copy agent client and set up systemd service
+  - |
+    cat > /etc/systemd/system/spekk-agent.service << 'UNIT'
+    [Unit]
+    Description=Spekk Agent Client
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=agent
+    WorkingDirectory=/opt/spekk
+    ExecStart=/usr/bin/python3 /opt/spekk/agent-client.py
+    Restart=always
+    RestartSec=5
+    Environment=PYTHONUNBUFFERED=1
+
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+
+  - systemctl daemon-reload
+  - systemctl enable spekk-agent
+
+  # Mark provisioning complete
+  - touch /opt/spekk/.provisioned
