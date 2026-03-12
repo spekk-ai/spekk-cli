@@ -1,6 +1,6 @@
 {
   "name": "@spekk/cli",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "CLI tool for spec-driven development with coach and builder agents",
   "main": "src/index.js",
   "type": "module",
