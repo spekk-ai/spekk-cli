@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import childProcess from 'child_process';
 import { getSandbox } from './store.js';
 import { fetchAgentClient } from './templates.js';
 
@@ -7,7 +7,7 @@ import { fetchAgentClient } from './templates.js';
  */
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], ...opts });
+    const child = childProcess.spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], ...opts });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => { stdout += d; });

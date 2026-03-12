@@ -3,16 +3,21 @@ import assert from 'node:assert';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import childProcess from 'child_process';
+import { EventEmitter } from 'events';
+import { Readable } from 'stream';
 import { deployCommand } from '../deploy.js';
 
 let originalHome;
 let originalFetch;
+let originalSpawn;
 let tmpDir;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'spekk-deploy-test-'));
   originalHome = process.env.HOME;
   originalFetch = globalThis.fetch;
+  originalSpawn = childProcess.spawn;
   process.env.HOME = tmpDir;
   process.env.GITHUB_TOKEN = 'test-token';
 
@@ -28,6 +33,7 @@ beforeEach(async () => {
 afterEach(async () => {
   process.env.HOME = originalHome;
   globalThis.fetch = originalFetch;
+  childProcess.spawn = originalSpawn;
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -92,32 +98,41 @@ describe('sandbox deploy', () => {
       'test-deploy': { dropletId: 999, ip: '192.168.1.100', region: 'nyc1', status: 'active' }
     });
 
-    const originalExit = process.exit;
-    const originalError = console.error;
-    const originalLog = console.log;
-    let errorMsg = '';
-    let logMsgs = [];
+    // Mock spawn so scp/ssh are never actually executed
+    const spawnCalls = [];
+    childProcess.spawn = (cmd, args, opts) => {
+      spawnCalls.push({ cmd, args });
+      const child = new EventEmitter();
+      const stdoutData = (cmd === 'ssh' && args.includes('systemctl is-active spekk-agent')) ? 'active\n' : '';
+      child.stdout = Readable.from([stdoutData]);
+      child.stderr = Readable.from([]);
+      process.nextTick(() => child.emit('close', 0));
+      return child;
+    };
 
-    process.exit = (code) => { throw new Error('EXIT:' + code); };
-    console.error = (msg) => { errorMsg += msg; };
+    const originalLog = console.log;
+    let logMsgs = [];
     console.log = (msg) => { logMsgs.push(msg); };
 
     try {
       await deployCommand(['test-deploy']);
-    } catch (e) {
-      // Expected: SCP will fail since no real server
-      if (!e.message.startsWith('EXIT')) throw e;
     } finally {
-      process.exit = originalExit;
-      console.error = originalError;
       console.log = originalLog;
     }
 
-    // It should have gotten past the "not found" check and attempted SCP
-    const allOutput = [...logMsgs, errorMsg].join(' ');
+    // Verify the sandbox IP was used in console output
+    const allOutput = logMsgs.join(' ');
     assert.ok(
       allOutput.includes('192.168.1.100'),
       `Expected IP 192.168.1.100 in output, got: ${allOutput}`
+    );
+
+    // Verify scp was called with the correct IP
+    const scpCall = spawnCalls.find(c => c.cmd === 'scp');
+    assert.ok(scpCall, 'Expected scp to be called');
+    assert.ok(
+      scpCall.args.some(a => a.includes('192.168.1.100')),
+      `Expected scp args to include IP, got: ${scpCall.args}`
     );
   });
 });
