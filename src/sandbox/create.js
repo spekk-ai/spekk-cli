@@ -129,9 +129,10 @@ async function injectCredentials(ip, name) {
 
   const envContent = envLines.join('\n');
 
-  await runSSH(ip, `mkdir -p /etc/spekk && cat > /etc/spekk/agent.env << 'ENVEOF'
+  await runSSH(ip, `cat > /etc/spekk/agent.env << 'ENVEOF'
 ${envContent}
 ENVEOF
+chown agent:agent /etc/spekk/agent.env
 chmod 600 /etc/spekk/agent.env`);
 }
 

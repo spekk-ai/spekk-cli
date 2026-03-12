@@ -3,7 +3,7 @@ id: sandbox-security-hardening
 parent: sandbox-command
 created: 2026-03-12T22:30:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: sandbox-command-routing
 branch: feature/sandbox-command
 ---
