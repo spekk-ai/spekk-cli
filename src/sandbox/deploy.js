@@ -56,11 +56,11 @@ export async function deployCommand(args) {
   const pipResult = await run('ssh', [
     '-o', 'StrictHostKeyChecking=no',
     `root@${ip}`,
-    'pip3 install --upgrade websockets',
+    'uv pip install --system --upgrade websockets',
   ]);
 
   if (pipResult.code !== 0) {
-    console.error(`SSH pip install failed (${ip}): ${pipResult.stderr.trim()}`);
+    console.error(`SSH uv install failed (${ip}): ${pipResult.stderr.trim()}`);
     process.exit(1);
   }
 

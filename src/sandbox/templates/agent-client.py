@@ -17,7 +17,7 @@ import sys
 try:
     import websockets
 except ImportError:
-    print("ERROR: websockets package not installed. Run: pip3 install websockets", file=sys.stderr)
+    print("ERROR: websockets package not installed. Run: uv pip install --system websockets", file=sys.stderr)
     sys.exit(1)
 
 logging.basicConfig(

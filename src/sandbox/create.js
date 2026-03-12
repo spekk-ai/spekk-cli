@@ -144,7 +144,7 @@ async function configureGitCredentials(ip) {
 async function deployAgentClient(ip) {
   const agentClientPath = getTemplatePath('agent-client.py');
   await runSCP(agentClientPath, ip, '/opt/spekk/agent-client.py');
-  await runSSH(ip, 'pip3 install websockets 2>/dev/null || pip install websockets');
+  await runSSH(ip, 'uv pip install --system websockets');
   await runSSH(ip, 'systemctl enable spekk-agent && systemctl start spekk-agent');
 }
 

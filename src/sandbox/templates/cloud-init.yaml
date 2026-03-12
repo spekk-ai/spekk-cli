@@ -18,7 +18,7 @@ packages:
   - lsb-release
   - git
   - python3
-  - python3-pip
+  - python3-venv
   - jq
   - unzip
 
@@ -47,8 +47,11 @@ runcmd:
   - mkdir -p /opt/spekk
   - chown agent:agent /opt/spekk
 
+  # Install uv package manager
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+
   # Install Python websockets for agent client
-  - pip3 install websockets
+  - uv pip install --system websockets
 
   # Copy agent client and set up systemd service
   - |
