@@ -1,6 +1,6 @@
 {
   "name": "@spekk/cli",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "CLI tool for spec-driven development with coach and builder agents",
   "main": "src/index.js",
   "type": "module",
@@ -49,7 +49,9 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "glob": "^10.3.10"
-  },
-  "devDependencies": {}
+    "glob": "^10.3.10",
+    "ws": "^8.19.0",
+    "zod": "^3.23.0",
+    "@thinknimble/tn-models": "^4.1.1"
+  }
 }
