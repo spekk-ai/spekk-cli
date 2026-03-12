@@ -27,7 +27,7 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 }
 
 function parseCreateFlags(args) {
-  const flags = { region: 'nyc1', size: 's-2vcpu-4gb', name: null };
+  const flags = { region: 'nyc1', size: 's-2vcpu-4gb', name: null, project: null };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--name':
@@ -38,6 +38,9 @@ function parseCreateFlags(args) {
         break;
       case '--size':
         flags.size = args[++i];
+        break;
+      case '--project':
+        flags.project = args[++i];
         break;
     }
   }
@@ -73,9 +76,10 @@ USAGE:
   spekk sandbox create --name <name> [options]
 
 OPTIONS:
-  --name <name>     Sandbox name (required)
-  --region <region> DigitalOcean region (default: nyc1)
-  --size <size>     Droplet size slug (default: s-2vcpu-4gb)
+  --name <name>        Sandbox name (required)
+  --region <region>    DigitalOcean region (default: nyc1)
+  --size <size>        Droplet size slug (default: s-2vcpu-4gb)
+  --project <project>  Assign to a DigitalOcean project (name or UUID)
 `);
         return;
       }

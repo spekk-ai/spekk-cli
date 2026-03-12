@@ -1,4 +1,4 @@
-import { createDroplet, getDroplet, listSSHKeys } from './do-api.js';
+import { createDroplet, getDroplet, listSSHKeys, listProjects, assignToProject } from './do-api.js';
 import { readTemplate, getTemplatePath } from './templates.js';
 import { saveSandbox } from './store.js';
 import { spawn } from 'child_process';
@@ -169,7 +169,29 @@ async function registerAgent(name, ip) {
   return res.json();
 }
 
-export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb' }) {
+// UUID v4 pattern for detecting project IDs
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveProject(projectValue) {
+  // If it looks like a UUID, use it directly
+  if (UUID_RE.test(projectValue)) {
+    return { id: projectValue, name: projectValue };
+  }
+
+  // Otherwise, look up by name
+  const projects = await listProjects();
+  const match = projects.find((p) => p.name === projectValue);
+  if (!match) {
+    const names = projects.map((p) => `  - ${p.name}`).join('\n');
+    console.error(`Error: No project found with name "${projectValue}"`);
+    console.error(`Available projects:\n${names}`);
+    process.exitCode = 1;
+    return null;
+  }
+  return { id: match.id, name: match.name };
+}
+
+export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb', project }) {
   const dropletName = `spekk-${name}`;
   let dropletId = null;
   let ip = null;
@@ -177,6 +199,13 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
   try {
     // Validate environment
     checkRequiredEnv();
+
+    // Resolve project before creating anything
+    let resolvedProject = null;
+    if (project) {
+      resolvedProject = await resolveProject(project);
+      if (!resolvedProject) return; // error already printed
+    }
 
     // Get SSH keys
     console.log('Fetching SSH keys...');
@@ -232,15 +261,25 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
       console.error(`Warning: Agent registration failed: ${err.message}`);
     }
 
+    // Assign to project if specified
+    if (resolvedProject) {
+      console.log(`Assigning droplet to project "${resolvedProject.name}"...`);
+      await assignToProject(resolvedProject.id, [`do:droplet:${dropletId}`]);
+    }
+
     // Save metadata locally
-    await saveSandbox(name, {
+    const metadata = {
       dropletId,
       ip,
       region,
       size,
       createdAt: new Date().toISOString(),
       status: 'active',
-    });
+    };
+    if (resolvedProject) {
+      metadata.project = resolvedProject.name;
+    }
+    await saveSandbox(name, metadata);
 
     // Print summary
     console.log(`

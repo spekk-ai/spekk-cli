@@ -75,3 +75,16 @@ export async function listSSHKeys() {
   const body = await doFetch('/v2/account/keys');
   return body.ssh_keys;
 }
+
+export async function listProjects() {
+  const body = await doFetch('/v2/projects');
+  return body.projects;
+}
+
+export async function assignToProject(projectId, resourceUrns) {
+  const body = await doFetch(`/v2/projects/${projectId}/resources`, {
+    method: 'POST',
+    body: JSON.stringify({ resources: resourceUrns }),
+  });
+  return body;
+}
