@@ -56,7 +56,7 @@ export async function deployCommand(args) {
   const pipResult = await run('ssh', [
     '-o', 'StrictHostKeyChecking=no',
     `root@${ip}`,
-    'uv pip install --system --upgrade websockets',
+    'uv pip install --python /opt/spekk/.venv/bin/python --upgrade websockets',
   ]);
 
   if (pipResult.code !== 0) {

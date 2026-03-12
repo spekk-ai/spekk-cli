@@ -48,10 +48,11 @@ runcmd:
   - chown agent:agent /opt/spekk
 
   # Install uv package manager
-  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
-  # Install Python websockets for agent client
-  - uv pip install --system websockets
+  # Create Python venv and install websockets for agent client
+  - uv venv /opt/spekk/.venv
+  - uv pip install --python /opt/spekk/.venv/bin/python websockets
 
   # Copy agent client and set up systemd service
   - |
@@ -64,7 +65,7 @@ runcmd:
     Type=simple
     User=agent
     WorkingDirectory=/opt/spekk
-    ExecStart=/usr/bin/python3 /opt/spekk/agent-client.py
+    ExecStart=/opt/spekk/.venv/bin/python /opt/spekk/agent-client.py
     Restart=always
     RestartSec=5
     Environment=PYTHONUNBUFFERED=1

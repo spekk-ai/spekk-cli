@@ -3,7 +3,7 @@ id: sandbox-use-uv-for-python
 parent: sandbox-command
 created: 2026-03-12T20:00:00Z
 priority: 1
-status: in_progress
+status: done
 branch: feature/sandbox-command
 ---
 
