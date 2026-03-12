@@ -1,5 +1,5 @@
 import { createDroplet, getDroplet, listSSHKeys, listProjects, assignToProject } from './do-api.js';
-import { readTemplate, getTemplatePath } from './templates.js';
+import { readTemplate, fetchAgentClient } from './templates.js';
 import { saveSandbox } from './store.js';
 import { spawn } from 'child_process';
 import net from 'net';
@@ -118,13 +118,18 @@ async function waitForProvisioning(ip) {
 }
 
 async function injectCredentials(ip, name) {
-  const envLines = REQUIRED_ENV_VARS
-    .map((v) => `${v}=${process.env[v]}`);
-  envLines.push('CLAUDE_CODE_USE_BEDROCK=1');
+  // Strip scheme and trailing slashes from SPEKK_HOST for bare hostname
+  const bareHost = process.env.SPEKK_HOST
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '');
 
-  const host = process.env.SPEKK_HOST.replace(/^https?:\/\//, '');
-  const token = process.env.SPEKK_AGENT_TOKEN;
-  envLines.push(`SPEKK_SERVER_URL=wss://${host}/ws/agent/${token}/`);
+  const envLines = REQUIRED_ENV_VARS
+    .map((v) => {
+      if (v === 'SPEKK_HOST') return `SPEKK_HOST=${bareHost}`;
+      return `${v}=${process.env[v]}`;
+    });
+  envLines.push('CLAUDE_CODE_USE_BEDROCK=1');
+  envLines.push('WORKSPACE=/opt/spekk/workspace');
   envLines.push(`SPEKK_AGENT_NAME=spekk-${name}`);
 
   const envContent = envLines.join('\n');
@@ -149,17 +154,19 @@ async function configureGitCredentials(ip) {
 }
 
 async function deployAgentClient(ip) {
-  const agentClientPath = getTemplatePath('agent-client.py');
+  const agentClientPath = await fetchAgentClient();
   await runSCP(agentClientPath, ip, '/opt/spekk/agent-client.py');
   await runSSH(ip, 'uv pip install --python /opt/spekk/.venv/bin/python websockets');
   await runSSH(ip, 'systemctl enable spekk-agent && systemctl start spekk-agent');
 }
 
 async function registerAgent(name, ip) {
-  const spekkHost = process.env.SPEKK_HOST;
+  const spekkHost = process.env.SPEKK_HOST
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '');
   const agentToken = process.env.SPEKK_AGENT_TOKEN;
 
-  const res = await fetch(`${spekkHost}/api/agents/`, {
+  const res = await fetch(`https://${spekkHost}/api/agents/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -1,4 +1,4 @@
-import { test, describe, beforeEach, afterEach } from 'node:test';
+import { test, describe, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs/promises';
 import path from 'path';
@@ -6,16 +6,28 @@ import os from 'os';
 import { deployCommand } from '../deploy.js';
 
 let originalHome;
+let originalFetch;
 let tmpDir;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'spekk-deploy-test-'));
   originalHome = process.env.HOME;
+  originalFetch = globalThis.fetch;
   process.env.HOME = tmpDir;
+  process.env.GITHUB_TOKEN = 'test-token';
+
+  // Mock fetch so fetchAgentClient succeeds (returns a base64-encoded Python script)
+  const fakeContent = Buffer.from('#!/usr/bin/env python3\nimport websockets\n').toString('base64');
+  globalThis.fetch = mock.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ content: fakeContent }),
+  }));
 });
 
 afterEach(async () => {
   process.env.HOME = originalHome;
+  globalThis.fetch = originalFetch;
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 

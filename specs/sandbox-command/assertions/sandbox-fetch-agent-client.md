@@ -3,7 +3,7 @@ id: sandbox-fetch-agent-client
 parent: sandbox-command
 created: 2026-03-12T23:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: sandbox-create-workflow
 branch: feature/sandbox-command
 ---

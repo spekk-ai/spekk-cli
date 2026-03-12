@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { getSandbox } from './store.js';
-import { getTemplatePath } from './templates.js';
+import { fetchAgentClient } from './templates.js';
 
 /**
  * Runs a command and returns a promise that resolves with { code, stdout, stderr }.
@@ -35,10 +35,12 @@ export async function deployCommand(args) {
   }
 
   const ip = sandbox.ip;
-  const templatePath = getTemplatePath('agent-client.py');
+
+  // Step 1: Fetch agent-client.py from GitHub and copy via SCP
+  console.log(`Fetching agent-client.py from GitHub...`);
+  const templatePath = await fetchAgentClient();
   const remoteDest = `root@${ip}:/opt/spekk/agent-client.py`;
 
-  // Step 1: Copy agent-client.py via SCP
   console.log(`Copying agent-client.py to ${ip}...`);
   const scpResult = await run('scp', [
     '-o', 'StrictHostKeyChecking=no',
