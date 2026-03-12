@@ -3,7 +3,7 @@ id: sandbox-command-routing
 parent: sandbox-command
 created: 2026-03-12T15:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/sandbox-command
 ---
 

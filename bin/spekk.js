@@ -9,6 +9,7 @@ import { showStatus } from '../src/status/cli.js';
 import { showSpekk } from '../src/show/cli.js';
 import { parseFlags } from '../src/cli/parse-flags.js';
 import { launchServe } from '../src/serve/cli.js';
+import { launchSandbox } from '../src/sandbox/cli.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -61,6 +62,10 @@ COMMANDS:
     launchServe(args.slice(1));
     break;
 
+  case 'sandbox':
+    await launchSandbox(args.slice(1));
+    break;
+
   case 'status':
     await showStatus();
     break;
@@ -90,6 +95,7 @@ COMMANDS:
               Use "spekk coach meeting [file]" for meeting transcript processing
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
+  sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
   loop      Run orchestration workflows (builder/coach loops)
   help      Show this help message
 
