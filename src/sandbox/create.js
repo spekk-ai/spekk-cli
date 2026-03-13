@@ -1,5 +1,5 @@
 import { createDroplet, getDroplet, listSSHKeys, listProjects, assignToProject } from './do-api.js';
-import { readTemplate, fetchAgentClient } from './templates.js';
+import { readTemplate, getTemplatePath } from './templates.js';
 import { saveSandbox } from './store.js';
 import { generateAgentToken } from './tokens.js';
 import { spawn } from 'child_process';
@@ -159,7 +159,7 @@ async function configureGitCredentials(ip) {
 }
 
 async function deployAgentClient(ip) {
-  const agentClientPath = await fetchAgentClient();
+  const agentClientPath = getTemplatePath('agent-client.py');
   await runSCP(agentClientPath, ip, '/opt/spekk/agent-client.py');
   await runSSH(ip, 'uv pip install --python /opt/spekk/.venv/bin/python websockets');
   await runSSH(ip, 'systemctl enable spekk-agent && systemctl start spekk-agent');

@@ -16,7 +16,8 @@
     "specs/builder-agent/",
     "specs/coach-agent/",
     "specs/coach-skills-system/",
-    "src/sandbox/templates/"
+    "src/sandbox/templates/",
+    "src/sandbox/templates/agent-client.py"
   ],
   "scripts": {
     "next": "node src/parser/cli.js",
