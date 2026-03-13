@@ -1,10 +1,11 @@
 import { createDroplet, getDroplet, listSSHKeys, listProjects, assignToProject } from './do-api.js';
 import { readTemplate, fetchAgentClient } from './templates.js';
 import { saveSandbox } from './store.js';
+import { generateAgentToken } from './tokens.js';
 import { spawn } from 'child_process';
 import net from 'net';
 
-const REQUIRED_ENV_VARS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 'GITHUB_TOKEN', 'SPEKK_AGENT_TOKEN', 'SPEKK_HOST'];
+const REQUIRED_ENV_VARS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 'GITHUB_TOKEN', 'SPEKK_HOST'];
 const DROPLET_READY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const PROVISION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const POLL_INTERVAL = 5000; // 5 seconds
@@ -117,20 +118,24 @@ async function waitForProvisioning(ip) {
   throw new Error(`Provisioning did not complete within 10 minutes on ${ip}`);
 }
 
-async function injectCredentials(ip, name) {
+async function injectCredentials(ip, name, agentToken) {
   // Strip scheme and trailing slashes from SPEKK_HOST for bare hostname
   const bareHost = process.env.SPEKK_HOST
     .replace(/^https?:\/\//, '')
     .replace(/\/+$/, '');
 
-  const envLines = REQUIRED_ENV_VARS
-    .map((v) => {
-      if (v === 'SPEKK_HOST') return `SPEKK_HOST=${bareHost}`;
-      return `${v}=${process.env[v]}`;
-    });
-  envLines.push('CLAUDE_CODE_USE_BEDROCK=1');
-  envLines.push('WORKSPACE=/opt/spekk/workspace');
-  envLines.push(`SPEKK_AGENT_NAME=spekk-${name}`);
+  // Inject only the credentials needed on the sandbox (not DO_API_TOKEN)
+  const envLines = [
+    `AWS_ACCESS_KEY_ID=${process.env.AWS_ACCESS_KEY_ID}`,
+    `AWS_SECRET_ACCESS_KEY=${process.env.AWS_SECRET_ACCESS_KEY}`,
+    `AWS_DEFAULT_REGION=${process.env.AWS_DEFAULT_REGION}`,
+    `GITHUB_TOKEN=${process.env.GITHUB_TOKEN}`,
+    `SPEKK_HOST=${bareHost}`,
+    `SPEKK_AGENT_TOKEN=${agentToken}`,
+    'CLAUDE_CODE_USE_BEDROCK=1',
+    'WORKSPACE=/opt/spekk/workspace',
+    `SPEKK_AGENT_NAME=spekk-${name}`,
+  ];
 
   const envContent = envLines.join('\n');
 
@@ -158,29 +163,6 @@ async function deployAgentClient(ip) {
   await runSCP(agentClientPath, ip, '/opt/spekk/agent-client.py');
   await runSSH(ip, 'uv pip install --python /opt/spekk/.venv/bin/python websockets');
   await runSSH(ip, 'systemctl enable spekk-agent && systemctl start spekk-agent');
-}
-
-async function registerAgent(name, ip) {
-  const spekkHost = process.env.SPEKK_HOST
-    .replace(/^https?:\/\//, '')
-    .replace(/\/+$/, '');
-  const agentToken = process.env.SPEKK_AGENT_TOKEN;
-
-  const res = await fetch(`https://${spekkHost}/api/agents/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Token ${agentToken}`,
-    },
-    body: JSON.stringify({ name, ip }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Failed to register agent: ${res.status} ${body}`);
-  }
-
-  return res.json();
 }
 
 // UUID v4 pattern for detecting project IDs
@@ -213,6 +195,9 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
   try {
     // Validate environment
     checkRequiredEnv();
+
+    // Generate a fresh agent token for this sandbox
+    const agentToken = generateAgentToken();
 
     // Resolve project before creating anything
     let resolvedProject = null;
@@ -255,7 +240,7 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
 
     // Inject credentials
     console.log('Injecting credentials...');
-    await injectCredentials(ip, name);
+    await injectCredentials(ip, name, agentToken);
 
     // Configure git credentials
     console.log('Configuring git credentials...');
@@ -264,16 +249,6 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
     // Deploy agent client
     console.log('Deploying agent client...');
     await deployAgentClient(ip);
-
-    // Register with Spekk API
-    console.log('Registering agent...');
-    let agentConnected = true;
-    try {
-      await registerAgent(name, ip);
-    } catch (err) {
-      agentConnected = false;
-      console.error(`Warning: Agent registration failed: ${err.message}`);
-    }
 
     // Assign to project if specified
     if (resolvedProject) {
@@ -295,14 +270,22 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
     }
     await saveSandbox(name, metadata);
 
+    // Get bare hostname for display
+    const bareHost = process.env.SPEKK_HOST
+      .replace(/^https?:\/\//, '')
+      .replace(/\/+$/, '');
+
     // Print summary
     console.log(`
 Sandbox created successfully:
-  Name:    ${name}
-  IP:      ${ip}
-  Region:  ${region}
-  Size:    ${size}
-  ${agentConnected ? 'Agent connected' : 'Agent connection error (registered locally)'}
+  Name:           spekk-${name}
+  IP:             ${ip}
+  AGENT_TOKEN:    ${agentToken}
+
+Next: Add this agent in Django admin at https://${bareHost}/staff/agent/agent/add/
+  - Name: ${name}
+  - Sandbox ID: spekk-${name}
+  - Auth token: ${agentToken}
 `);
   } catch (err) {
     if (dropletId && ip) {
