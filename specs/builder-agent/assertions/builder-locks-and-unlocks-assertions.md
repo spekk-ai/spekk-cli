@@ -5,6 +5,7 @@ created: 2026-02-25T20:10:00Z
 priority: 1
 status: done
 depends-on: locked-by-field-for-parallel-builders
+branch: feature/builder-locks
 ---
 
 # Builder Locks and Unlocks Assertions
@@ -70,6 +71,8 @@ Example: `builder-macbook-pro-12345-1706210400`
 - Git provides atomic commit mechanism for claiming work
 - Stale locks (>2 hours) handled by parser, not builder
 - Builder doesn't need to check lock age - parser does it
+
+**Tests:** `src/builder/__tests__/builder-locks-and-unlocks.test.js`
 
 ## Validation
 
