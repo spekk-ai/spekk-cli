@@ -3,7 +3,8 @@ id: sandbox-token-generator
 parent: sandbox-command
 created: 2026-03-13T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Williams-MBP.local-68739-1773430892
 ---
 
 # Sandbox Token Generator
