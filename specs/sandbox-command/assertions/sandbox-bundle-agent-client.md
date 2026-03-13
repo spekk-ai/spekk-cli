@@ -3,7 +3,8 @@ id: sandbox-bundle-agent-client
 parent: sandbox-command
 created: 2026-03-13T01:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Williams-MBP.local-82655-1773431907
 ---
 
 # Bundle agent-client.py with CLI
