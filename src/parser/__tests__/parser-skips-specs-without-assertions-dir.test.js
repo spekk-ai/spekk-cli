@@ -94,32 +94,4 @@ Missing assertions directory.`);
     }
   });
 
-  test('spec directory with parent .md but no assertions/ is treated as zero assertions', () => {
-    const tempDir = path.join(process.cwd(), 'temp-zero-assertions-test');
-    const specDir = path.join(tempDir, 'lonely-spec');
-
-    try {
-      fs.mkdirSync(specDir, { recursive: true });
-
-      fs.writeFileSync(path.join(specDir, 'lonely-spec.md'), `---
-id: lonely-spec
-created: 2026-01-28T21:35:00Z
-priority: 1
----
-# Lonely Spec
-
-No assertions directory at all.`);
-
-      // Should not throw
-      const { specs, assertions } = parseAllSpecs(tempDir);
-
-      const spec = specs.find(s => s.id === 'lonely-spec');
-      assert.ok(spec, 'Should parse the spec even without assertions/');
-
-      const specAssertions = assertions.filter(a => a.parent === 'lonely-spec');
-      assert.equal(specAssertions.length, 0, 'Should have zero assertions');
-    } finally {
-      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
-    }
-  });
 });

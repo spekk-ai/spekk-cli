@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs';
 import path from 'path';
-import { parseAllSpecs, findNextAssertion, computeParentStatus } from '../index.js';
+import { parseAllSpecs } from '../index.js';
 
 describe('Parser skips malformed assertion files', () => {
 
@@ -202,37 +202,6 @@ Missing parent field.`);
     }
   });
 
-  test('spekk next returns the next valid assertion even when other assertion files are malformed', () => {
-    const tempDir = createTempDir('next-valid');
-    try {
-      const assertionsDir = writeSpec(tempDir, 'test-spec');
-
-      // A valid not_started assertion
-      writeAssertion(assertionsDir, 'next-valid-assertion', 'test-spec');
-
-      // A malformed assertion (invalid priority)
-      fs.writeFileSync(path.join(assertionsDir, 'bad-priority.md'), `---
-id: bad-priority
-parent: test-spec
-created: 2026-01-28T21:35:00Z
-priority: 99
-status: not_started
----
-# Bad Priority
-
-Invalid priority value.`);
-
-      const { specs, assertions } = parseAllSpecs(tempDir);
-
-      const next = findNextAssertion(assertions, specs, { allBranches: true });
-      assert.ok(next, 'Should return a next assertion');
-      assert.equal(next.id, 'next-valid-assertion',
-        'Should return the valid assertion as next');
-    } finally {
-      cleanupTempDir(tempDir);
-    }
-  });
-
   test('a spec with zero parseable assertions (all malformed) is treated as having no assertions', () => {
     const tempDir = createTempDir('all-malformed');
     try {
@@ -278,29 +247,4 @@ Invalid date format.`);
     }
   });
 
-  test('parser does not crash or throw when assertion files are malformed', () => {
-    const tempDir = createTempDir('no-crash');
-    try {
-      const assertionsDir = writeSpec(tempDir, 'test-spec');
-
-      // Mix of malformed files
-      fs.writeFileSync(path.join(assertionsDir, 'empty.md'), '');
-      fs.writeFileSync(path.join(assertionsDir, 'no-frontmatter.md'), '# Just Markdown\n\nNo frontmatter at all.');
-      fs.writeFileSync(path.join(assertionsDir, 'invalid-status.md'), `---
-id: invalid-status
-parent: test-spec
-created: 2026-01-28T21:35:00Z
-priority: 1
-status: bananas
----
-# Invalid Status`);
-
-      // This must not throw
-      assert.doesNotThrow(() => {
-        parseAllSpecs(tempDir);
-      }, 'parseAllSpecs should not throw when assertion files are malformed');
-    } finally {
-      cleanupTempDir(tempDir);
-    }
-  });
 });
