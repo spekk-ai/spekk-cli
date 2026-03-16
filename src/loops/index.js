@@ -93,15 +93,12 @@ export async function runBuilderLoop() {
       try {
         colorLog('cyan', '   Agent Context: Working on assertion ' + assertion.id);
         
-        // Launch Claude Code with the builder agent message
-        const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
-          stdio: ['pipe', 'inherit', 'inherit']
+        // Launch Claude Code with the builder agent message as a positional argument.
+        // Using stdio: 'inherit' so Claude gets a real TTY (required for Ink/raw mode on Windows).
+        const claudeProcess = spawn('claude', ['--dangerously-skip-permissions', 'You are the Builder Agent - read the prompt and follow the instructions exactly.'], {
+          stdio: 'inherit'
         });
-        
-        // Send the agent activation message
-        claudeProcess.stdin.write('You are the Builder Agent - read the prompt and follow the instructions exactly.\n');
-        claudeProcess.stdin.end();
-        
+
         // Wait for Claude Code to complete
         await new Promise((resolve, reject) => {
           claudeProcess.on('error', (error) => {
@@ -200,15 +197,12 @@ export async function runCoachLoop() {
       try {
         colorLog('blue', '   Interactive mode starting...');
         
-        // Launch Claude Code with the coach agent message
-        const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
-          stdio: ['pipe', 'inherit', 'inherit']
+        // Launch Claude Code with the coach agent message as a positional argument.
+        // Using stdio: 'inherit' so Claude gets a real TTY (required for Ink/raw mode on Windows).
+        const claudeProcess = spawn('claude', ['--dangerously-skip-permissions', 'You are the Coach Agent - read the prompt and follow the instructions exactly.'], {
+          stdio: 'inherit'
         });
-        
-        // Send the agent activation message
-        claudeProcess.stdin.write('You are the Coach Agent - read the prompt and follow the instructions exactly.\n');
-        claudeProcess.stdin.end();
-        
+
         // Wait for Claude Code to complete
         await new Promise((resolve, reject) => {
           claudeProcess.on('error', (error) => {

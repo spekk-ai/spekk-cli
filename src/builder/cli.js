@@ -210,28 +210,13 @@ This ensures you work on the correct assertion based on the user's filter.
     fullMessage = commandOverride + activationMessage;
   }
 
-  const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
-    stdio: ['pipe', 'inherit', 'inherit']
+  // Launch Claude Code with the activation message as a positional argument.
+  // Using stdio: 'inherit' so Claude gets a real TTY (required for Ink/raw mode on Windows).
+  const claudeProcess = spawn('claude', ['--dangerously-skip-permissions', fullMessage], {
+    stdio: 'inherit'
   });
 
   activeChildProcess = claudeProcess;
-
-  // Handle stdin errors
-  claudeProcess.stdin.on('error', (error) => {
-    if (error.code !== 'EPIPE') {
-      colorLog('red', '❌ Error writing to Claude stdin: ' + error.message);
-    }
-  });
-
-  // Send the agent activation message (with flag overrides if any)
-  try {
-    claudeProcess.stdin.write(fullMessage + '\n');
-    claudeProcess.stdin.end();
-  } catch (error) {
-    if (error.code !== 'EPIPE') {
-      throw error;
-    }
-  }
 
   // Wait for Claude Code to complete
   return new Promise((resolve, reject) => {
@@ -272,8 +257,9 @@ function buildClaudeSpawnConfig(interactive, activationMessage) {
     return { args, options: { stdio: 'inherit' } };
   }
 
-  // Headless: pipe stdin to send activation message
-  return { args, options: { stdio: ['pipe', 'inherit', 'inherit'] } };
+  // Headless: pass activation message as positional arg, inherit stdio for TTY
+  args.push(activationMessage);
+  return { args, options: { stdio: 'inherit' } };
 }
 
 /**
