@@ -557,5 +557,5 @@ Your own behavior is defined in `specs/coach-agent/coach-agent.md`.
 ## Context Files
 
 - `specs/` - Existing specs (check before creating new ones)
-- `specs/builder-agent/builder-agent.prompt.md` - How builder agents work
+- `specs/builder-agent/builder.prompt.md` - How builder agents work
 - `PROMPT.md` - How the ralph loop orchestrates agents

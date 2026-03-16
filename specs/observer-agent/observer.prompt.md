@@ -192,5 +192,5 @@ Your own behavior is defined in `specs/observer-agent/observer-agent.md`.
 - `specs/` - All specifications (read to understand system requirements)
 - `app/` - All implementation code (read to understand current state)
 - `observations/` - Previous observations (read to avoid duplicates)
-- `specs/coach-agent/coach-agent.prompt.md` - How coach handles spec updates
-- `specs/builder-agent/builder-agent.prompt.md` - How builder implements changes
+- `specs/coach-agent/coach.prompt.md` - How coach handles spec updates
+- `specs/builder-agent/builder.prompt.md` - How builder implements changes
