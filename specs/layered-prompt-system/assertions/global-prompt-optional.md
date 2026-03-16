@@ -14,7 +14,9 @@ The global prompt from `~/.spekk/` is optional. If present, it's appended to the
 
 ## Success Criteria
 
-- Global prompt loaded from `~/.spekk/specs/<agent>/<agent>.prompt.md`
-- If file exists, content is appended to base prompt
-- If file doesn't exist, no error - resolution continues
+- Global extend prompt loaded from `~/.spekk/<agent>.prompt.md`
+- Global override prompt loaded from `~/.spekk/<agent>.prompt.override.md`
+- If override exists, it replaces the package base prompt
+- If extend exists, content is appended after the base (or overridden base)
+- If neither exists, no error — resolution continues
 - `~` correctly expands to user's home directory on all platforms

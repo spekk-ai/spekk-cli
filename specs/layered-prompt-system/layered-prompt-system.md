@@ -8,28 +8,38 @@ priority: 1
 
 ## Overview
 
-Agent prompts are assembled from three layers, allowing customization at global and project levels while preserving base behavior from the spekk package.
+Agent prompts are assembled from layers, allowing customization at global and project levels while preserving base behavior from the spekk package. Users can either extend the base prompt or completely override it.
+
+## Naming Convention
+
+Agent names are simplified: `coach`, `builder`, `observer` (not `coach-agent`, etc.).
+
+- `<agent>.prompt.md` — **extends** the base prompt (appended after it)
+- `<agent>.prompt.override.md` — **replaces** the base prompt entirely
 
 ## Layers
 
-| Layer | Path | Purpose |
-|-------|------|---------|
-| Base | `<spekk-package>/specs/<agent>/<agent>.prompt.md` | Ships with spekk, core agent behavior |
-| Global | `~/.spekk/specs/<agent>/<agent>.prompt.md` | User's personal defaults across all projects |
-| Local | `./specs/<agent>/<agent>.prompt.md` | Project-specific customizations |
+| Layer | Extend Path | Override Path | Purpose |
+|-------|------------|---------------|---------|
+| Base | `<spekk-package>/specs/<agent>-agent/<agent>.prompt.md` | — | Ships with spekk, core agent behavior |
+| Global | `~/.spekk/<agent>.prompt.md` | `~/.spekk/<agent>.prompt.override.md` | User's personal defaults across all projects |
+| Local | `.spekk/<agent>.prompt.md` | `.spekk/<agent>.prompt.override.md` | Project-specific customizations |
 
 ## Resolution
 
-1. Start with base prompt (required, ships with spekk)
-2. Append global prompt if exists
-3. Append local prompt if exists
+1. Determine base prompt:
+   - If local override (`.spekk/<agent>.prompt.override.md`) exists → use as base
+   - Else if global override (`~/.spekk/<agent>.prompt.override.md`) exists → use as base
+   - Else use package base (`<spekk>/specs/<agent>-agent/<agent>.prompt.md`, required)
+2. Append global extend (`~/.spekk/<agent>.prompt.md`) if exists
+3. Append local extend (`.spekk/<agent>.prompt.md`) if exists
 4. Concatenate with `\n\n---\n\n` separator
 
 ## Examples
 
-### Adding company coding standards to builder
+### Extending: Adding company coding standards to builder
 
-Create `~/.spekk/specs/builder-agent/builder-agent.prompt.md`:
+Create `~/.spekk/builder.prompt.md`:
 ```markdown
 ## Company Standards
 
@@ -38,11 +48,11 @@ Create `~/.spekk/specs/builder-agent/builder-agent.prompt.md`:
 - No console.log in production code
 ```
 
-This applies to every project you work on.
+This is appended to the base builder prompt for every project you work on.
 
-### Adding project-specific skills to coach
+### Extending: Adding project-specific context to coach
 
-Create `./specs/coach-agent/coach-agent.prompt.md`:
+Create `.spekk/coach.prompt.md`:
 ```markdown
 ## Domain Knowledge
 
@@ -52,7 +62,19 @@ This is a healthcare app. When creating specs:
 - All dates must be in patient's timezone
 ```
 
-This only applies to this project.
+This is appended to the base coach prompt for this project only.
+
+### Overriding: Completely replacing the builder prompt
+
+Create `.spekk/builder.prompt.override.md`:
+```markdown
+# Custom Builder Agent
+
+You are a builder agent for a Django/React project.
+...entirely custom instructions...
+```
+
+This replaces the base builder prompt entirely. Global and local extends still layer on top.
 
 ## Assertions
 

@@ -4,6 +4,10 @@ parent: layered-prompt-system
 created: 2026-02-21T12:15:00Z
 priority: 1
 status: not_started
+depends_on:
+  - base-prompt-required
+  - global-prompt-optional
+  - local-prompt-optional
 ---
 
 # Prompts Concatenated With Separator
@@ -14,7 +18,7 @@ When multiple prompt layers exist, they are concatenated with a clear separator 
 
 ## Success Criteria
 
-- Layers concatenated in order: base → global → local
+- Layers concatenated in order: base (or override) → global extend → local extend
 - Separator between layers is `\n\n---\n\n`
 - Final prompt is a single string passed to Claude
-- No separator added if only base prompt exists
+- No separator added if only one layer exists

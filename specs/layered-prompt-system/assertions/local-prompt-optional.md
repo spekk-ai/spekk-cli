@@ -10,11 +10,13 @@ status: not_started
 
 ## Description
 
-The local prompt from the current working directory is optional. If present, it's appended after global. If missing, resolution continues silently.
+The local prompt from the project's `.spekk/` directory is optional. If present, it's appended after global. If missing, resolution continues silently.
 
 ## Success Criteria
 
-- Local prompt loaded from `./specs/<agent>/<agent>.prompt.md` (relative to cwd)
-- If file exists, content is appended after global prompt
-- If file doesn't exist, no error - resolution continues
+- Local extend prompt loaded from `.spekk/<agent>.prompt.md` (relative to cwd)
+- Local override prompt loaded from `.spekk/<agent>.prompt.override.md` (relative to cwd)
+- If override exists, it replaces the base prompt (takes precedence over global override)
+- If extend exists, content is appended after global extend
+- If neither exists, no error — resolution continues
 - Works correctly regardless of where spekk is invoked from
