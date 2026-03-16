@@ -2,7 +2,6 @@
 id: coach-agent
 created: 2026-01-20T17:00:00Z
 priority: 3
-status: done
 ---
 
 # Coach Agent

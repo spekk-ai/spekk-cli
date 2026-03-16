@@ -2,7 +2,6 @@
 id: spec-explorer-web-interface
 created: 2026-01-22T21:00:00Z
 priority: 2
-status: not_started
 ---
 
 # Spec Explorer Web Interface

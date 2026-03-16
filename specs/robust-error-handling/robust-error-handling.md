@@ -2,7 +2,6 @@
 id: robust-error-handling
 created: 2026-01-28T21:35:00Z
 priority: 1
-status: not_started
 ---
 
 # Robust Error Handling
