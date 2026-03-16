@@ -2,25 +2,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { parseAllSpecs, parseFrontmatter, validateDependsOn, detectCircularDependencies } from '../index.js';
-
-// Helper to cleanup temp directories and symlinks
-function cleanupTest(tempDir, symlinkPath) {
-  try {
-    if (symlinkPath && fs.existsSync(symlinkPath)) {
-      fs.unlinkSync(symlinkPath);
-    }
-  } catch (err) {
-    // Ignore cleanup errors
-  }
-  try {
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true });
-    }
-  } catch (err) {
-    // Ignore cleanup errors
-  }
-}
 
 describe('depends-on Field Validation', () => {
   test('parses depends-on field and converts to camelCase', () => {
@@ -33,22 +16,22 @@ depends-on: other-assertion
 ---
 
 # Test`;
-    
+
     const { data } = parseFrontmatter(yaml);
     assert.equal(data.dependsOn, 'other-assertion', 'Should convert depends-on to dependsOn');
     assert.equal(data['depends-on'], undefined, 'Should not have kebab-case key in parsed data');
   });
 
   test('rejects invalid type for depends-on field', () => {
-    const tempDir = path.join(process.cwd(), 'temp-depends-invalid-type-test');
-    const assertionsDir = path.join(tempDir, 'assertions');
-    const symlinkPath = path.join(process.cwd(), 'specs', 'temp-depends-invalid-type-test');
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spekk-test-depends-type-'));
+    const specsDir = path.join(testDir, 'specs');
+    const specDir = path.join(specsDir, 'temp-depends-invalid-type-test');
+    const assertionsDir = path.join(specDir, 'assertions');
 
     try {
-      cleanupTest(tempDir, symlinkPath);
       fs.mkdirSync(assertionsDir, { recursive: true });
 
-      fs.writeFileSync(path.join(tempDir, 'temp-depends-invalid-type-test.md'), `---
+      fs.writeFileSync(path.join(specDir, 'temp-depends-invalid-type-test.md'), `---
 id: temp-depends-invalid-type-test
 created: 2026-01-20T16:00:00Z
 priority: 1
@@ -69,28 +52,26 @@ depends-on:
 
 # Test Assertion`);
 
-      fs.symlinkSync(tempDir, symlinkPath);
-
       assert.throws(
-        () => parseAllSpecs(),
+        () => parseAllSpecs(specsDir),
         /Field 'depends-on' must be a string or null/,
         'Should reject array type for depends-on'
       );
     } finally {
-      cleanupTest(tempDir, symlinkPath);
+      if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 
   test('rejects invalid format for depends-on field', () => {
-    const tempDir = path.join(process.cwd(), 'temp-depends-invalid-format-test');
-    const assertionsDir = path.join(tempDir, 'assertions');
-    const symlinkPath = path.join(process.cwd(), 'specs', 'temp-depends-invalid-format-test');
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spekk-test-depends-format-'));
+    const specsDir = path.join(testDir, 'specs');
+    const specDir = path.join(specsDir, 'temp-depends-invalid-format-test');
+    const assertionsDir = path.join(specDir, 'assertions');
 
     try {
-      cleanupTest(tempDir, symlinkPath);
       fs.mkdirSync(assertionsDir, { recursive: true });
 
-      fs.writeFileSync(path.join(tempDir, 'temp-depends-invalid-format-test.md'), `---
+      fs.writeFileSync(path.join(specDir, 'temp-depends-invalid-format-test.md'), `---
 id: temp-depends-invalid-format-test
 created: 2026-01-20T16:00:00Z
 priority: 1
@@ -118,28 +99,26 @@ depends-on: otherAssertion
 
 # Test Assertion`);
 
-      fs.symlinkSync(tempDir, symlinkPath);
-
       assert.throws(
-        () => parseAllSpecs(),
+        () => parseAllSpecs(specsDir),
         /Field 'depends-on' must be kebab-case/,
         'Should reject non-kebab-case format for depends-on'
       );
     } finally {
-      cleanupTest(tempDir, symlinkPath);
+      if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 
   test('rejects non-existent assertion reference', () => {
-    const tempDir = path.join(process.cwd(), 'temp-depends-nonexistent-test');
-    const assertionsDir = path.join(tempDir, 'assertions');
-    const symlinkPath = path.join(process.cwd(), 'specs', 'temp-depends-nonexistent-test');
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spekk-test-depends-nonexist-'));
+    const specsDir = path.join(testDir, 'specs');
+    const specDir = path.join(specsDir, 'temp-depends-nonexistent-test');
+    const assertionsDir = path.join(specDir, 'assertions');
 
     try {
-      cleanupTest(tempDir, symlinkPath);
       fs.mkdirSync(assertionsDir, { recursive: true });
 
-      fs.writeFileSync(path.join(tempDir, 'temp-depends-nonexistent-test.md'), `---
+      fs.writeFileSync(path.join(specDir, 'temp-depends-nonexistent-test.md'), `---
 id: temp-depends-nonexistent-test
 created: 2026-01-20T16:00:00Z
 priority: 1
@@ -157,28 +136,26 @@ depends-on: nonexistent-assertion
 
 # Test Assertion`);
 
-      fs.symlinkSync(tempDir, symlinkPath);
-
       assert.throws(
-        () => parseAllSpecs(),
+        () => parseAllSpecs(specsDir),
         /Field 'depends-on' references non-existent assertion 'nonexistent-assertion'/,
         'Should reject reference to non-existent assertion'
       );
     } finally {
-      cleanupTest(tempDir, symlinkPath);
+      if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 
   test('rejects self-reference in depends-on', () => {
-    const tempDir = path.join(process.cwd(), 'temp-depends-self-test');
-    const assertionsDir = path.join(tempDir, 'assertions');
-    const symlinkPath = path.join(process.cwd(), 'specs', 'temp-depends-self-test');
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spekk-test-depends-self-'));
+    const specsDir = path.join(testDir, 'specs');
+    const specDir = path.join(specsDir, 'temp-depends-self-test');
+    const assertionsDir = path.join(specDir, 'assertions');
 
     try {
-      cleanupTest(tempDir, symlinkPath);
       fs.mkdirSync(assertionsDir, { recursive: true });
 
-      fs.writeFileSync(path.join(tempDir, 'temp-depends-self-test.md'), `---
+      fs.writeFileSync(path.join(specDir, 'temp-depends-self-test.md'), `---
 id: temp-depends-self-test
 created: 2026-01-20T16:00:00Z
 priority: 1
@@ -196,28 +173,26 @@ depends-on: test-assertion
 
 # Test Assertion`);
 
-      fs.symlinkSync(tempDir, symlinkPath);
-
       assert.throws(
-        () => parseAllSpecs(),
+        () => parseAllSpecs(specsDir),
         /Field 'depends-on' cannot reference itself/,
         'Should reject self-reference in depends-on'
       );
     } finally {
-      cleanupTest(tempDir, symlinkPath);
+      if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 
   test('detects circular dependencies', () => {
-    const tempDir = path.join(process.cwd(), 'temp-depends-circular-test');
-    const assertionsDir = path.join(tempDir, 'assertions');
-    const symlinkPath = path.join(process.cwd(), 'specs', 'temp-depends-circular-test');
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spekk-test-depends-circular-'));
+    const specsDir = path.join(testDir, 'specs');
+    const specDir = path.join(specsDir, 'temp-depends-circular-test');
+    const assertionsDir = path.join(specDir, 'assertions');
 
     try {
-      cleanupTest(tempDir, symlinkPath);
       fs.mkdirSync(assertionsDir, { recursive: true });
 
-      fs.writeFileSync(path.join(tempDir, 'temp-depends-circular-test.md'), `---
+      fs.writeFileSync(path.join(specDir, 'temp-depends-circular-test.md'), `---
 id: temp-depends-circular-test
 created: 2026-01-20T16:00:00Z
 priority: 1
@@ -225,7 +200,7 @@ priority: 1
 
 # Circular Test Spec`);
 
-      // Create circular dependency: a → b → c → a
+      // Create circular dependency: a -> b -> c -> a
       fs.writeFileSync(path.join(assertionsDir, 'assertion-a.md'), `---
 id: assertion-a
 parent: temp-depends-circular-test
@@ -256,28 +231,26 @@ depends-on: assertion-a
 
 # Assertion C`);
 
-      fs.symlinkSync(tempDir, symlinkPath);
-
       assert.throws(
-        () => parseAllSpecs(),
+        () => parseAllSpecs(specsDir),
         /Circular dependency detected/,
         'Should detect circular dependencies'
       );
     } finally {
-      cleanupTest(tempDir, symlinkPath);
+      if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 
   test('accepts valid dependency chain without cycles', () => {
-    const tempDir = path.join(process.cwd(), 'temp-depends-valid-chain-test');
-    const assertionsDir = path.join(tempDir, 'assertions');
-    const symlinkPath = path.join(process.cwd(), 'specs', 'temp-depends-valid-chain-test');
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spekk-test-depends-valid-'));
+    const specsDir = path.join(testDir, 'specs');
+    const specDir = path.join(specsDir, 'temp-depends-valid-chain-test');
+    const assertionsDir = path.join(specDir, 'assertions');
 
     try {
-      cleanupTest(tempDir, symlinkPath);
       fs.mkdirSync(assertionsDir, { recursive: true });
 
-      fs.writeFileSync(path.join(tempDir, 'temp-depends-valid-chain-test.md'), `---
+      fs.writeFileSync(path.join(specDir, 'temp-depends-valid-chain-test.md'), `---
 id: temp-depends-valid-chain-test
 created: 2026-01-20T16:00:00Z
 priority: 1
@@ -285,7 +258,7 @@ priority: 1
 
 # Valid Chain Test Spec`);
 
-      // Create valid chain: a → b → c
+      // Create valid chain: a -> b -> c
       fs.writeFileSync(path.join(assertionsDir, 'assertion-c.md'), `---
 id: assertion-c
 parent: temp-depends-valid-chain-test
@@ -315,14 +288,12 @@ depends-on: assertion-b
 
 # Assertion A`);
 
-      fs.symlinkSync(tempDir, symlinkPath);
-
       // Should not throw
-      const { assertions } = parseAllSpecs();
+      const { assertions } = parseAllSpecs(specsDir);
       const assertionA = assertions.find(a => a.id === 'assertion-a');
       const assertionB = assertions.find(a => a.id === 'assertion-b');
       const assertionC = assertions.find(a => a.id === 'assertion-c');
-      
+
       assert.ok(assertionA, 'Should parse assertion A');
       assert.ok(assertionB, 'Should parse assertion B');
       assert.ok(assertionC, 'Should parse assertion C');
@@ -330,7 +301,7 @@ depends-on: assertion-b
       assert.equal(assertionB.dependsOn, 'assertion-c', 'B should depend on C');
       assert.equal(assertionC.dependsOn, undefined, 'C should have no dependency');
     } finally {
-      cleanupTest(tempDir, symlinkPath);
+      if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 
@@ -340,7 +311,7 @@ depends-on: assertion-b
       dependsOn: ['invalid', 'array']
     };
     const allAssertions = [{ id: 'test-assertion' }];
-    
+
     assert.throws(
       () => validateDependsOn(testData, 'test.md', allAssertions),
       /Field 'depends-on' must be a string or null/,
@@ -353,7 +324,7 @@ depends-on: assertion-b
       { id: 'a', dependsOn: 'b' },
       { id: 'b', dependsOn: 'a' }
     ];
-    
+
     assert.throws(
       () => detectCircularDependencies(assertions),
       /Circular dependency detected/,
