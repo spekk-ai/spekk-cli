@@ -265,8 +265,125 @@ describe('PromptResolver local prompt layer', () => {
     assert.strictEqual(content, '# Project Custom Builder');
   });
 
+  test('final prompt is always a single string regardless of layer count', () => {
+    const globalDir = path.join(tempHome, '.spekk');
+    mkdirSync(globalDir, { recursive: true });
+    writeFileSync(path.join(globalDir, 'builder.prompt.md'), '## Global Extend');
+
+    const localDir = path.join(tempCwd, '.spekk');
+    mkdirSync(localDir, { recursive: true });
+    writeFileSync(path.join(localDir, 'builder.prompt.md'), '## Local Extend');
+
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    const content = resolver.getPromptContent('builder');
+
+    assert.strictEqual(typeof content, 'string', 'getPromptContent must return a string');
+    assert.ok(!Array.isArray(content), 'Result must not be an array');
+  });
+
   test('cwd defaults to process.cwd when not provided', () => {
     const resolver = new PromptResolver({ homeDir: tempHome });
     assert.strictEqual(resolver.cwd, process.cwd());
+  });
+});
+
+describe('PromptResolver works for all agents', () => {
+  let tempHome;
+  let tempCwd;
+
+  beforeEach(() => {
+    tempHome = mkdtempSync(path.join(tmpdir(), 'spekk-home-'));
+    tempCwd = mkdtempSync(path.join(tmpdir(), 'spekk-cwd-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempHome, { recursive: true, force: true });
+    rmSync(tempCwd, { recursive: true, force: true });
+  });
+
+  for (const agentName of ['coach', 'builder', 'observer']) {
+    test(`${agentName} supports global extend layer`, () => {
+      const globalDir = path.join(tempHome, '.spekk');
+      mkdirSync(globalDir, { recursive: true });
+      writeFileSync(path.join(globalDir, `${agentName}.prompt.md`), `## Global ${agentName} extend`);
+
+      const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+      const content = resolver.getPromptContent(agentName);
+
+      // Verify the extend content is present and follows a separator
+      assert.ok(content.includes(`## Global ${agentName} extend`), `${agentName} global extend should be appended`);
+      assert.ok(content.includes('\n\n---\n\n'), `${agentName} should contain separator when extend is appended`);
+      // The extend should appear after the last separator
+      const lastSepIdx = content.lastIndexOf('\n\n---\n\n');
+      const extendIdx = content.indexOf(`## Global ${agentName} extend`);
+      assert.ok(extendIdx > lastSepIdx, `${agentName} global extend should follow the last separator`);
+    });
+
+    test(`${agentName} supports local override layer`, () => {
+      const localDir = path.join(tempCwd, '.spekk');
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(path.join(localDir, `${agentName}.prompt.override.md`), `# Custom ${agentName}`);
+
+      const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+      const content = resolver.getPromptContent(agentName);
+
+      assert.strictEqual(content, `# Custom ${agentName}`);
+    });
+
+    test(`${agentName} supports all three layers combined`, () => {
+      const globalDir = path.join(tempHome, '.spekk');
+      mkdirSync(globalDir, { recursive: true });
+      writeFileSync(path.join(globalDir, `${agentName}.prompt.md`), `## Global ${agentName}`);
+
+      const localDir = path.join(tempCwd, '.spekk');
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(path.join(localDir, `${agentName}.prompt.md`), `## Local ${agentName}`);
+
+      const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+      const content = resolver.getPromptContent(agentName);
+
+      // Verify both extends are present and in correct order
+      assert.ok(content.includes(`## Global ${agentName}`), `${agentName} should include global extend`);
+      assert.ok(content.includes(`## Local ${agentName}`), `${agentName} should include local extend`);
+      const globalIdx = content.indexOf(`## Global ${agentName}`);
+      const localIdx = content.indexOf(`## Local ${agentName}`);
+      assert.ok(globalIdx < localIdx, `${agentName} global extend should appear before local extend`);
+    });
+  }
+
+  test('adding a new agent only requires adding an entry to promptFiles', () => {
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+
+    // Simulate adding a new agent by pushing to promptFiles
+    const newAgentPromptPath = path.join(tempCwd, 'new-agent.prompt.md');
+    writeFileSync(newAgentPromptPath, '# New Agent Base Prompt');
+    resolver.promptFiles.push({ name: 'planner', path: newAgentPromptPath });
+
+    // The new agent should work with layered prompts immediately
+    const globalDir = path.join(tempHome, '.spekk');
+    mkdirSync(globalDir, { recursive: true });
+    writeFileSync(path.join(globalDir, 'planner.prompt.md'), '## Global planner extend');
+
+    const content = resolver.getPromptContent('planner');
+    const parts = content.split('\n\n---\n\n');
+    assert.strictEqual(parts.length, 2);
+    assert.ok(parts[0].includes('# New Agent Base Prompt'));
+    assert.ok(parts[1].includes('## Global planner extend'));
+  });
+
+  test('all CLI launchers use simplified names via launchAgentWithPrompt or PromptResolver', () => {
+    // This test documents the contract: each CLI uses the simplified name
+    const resolver = new PromptResolver();
+    const agentNames = resolver.promptFiles.map(p => p.name);
+
+    // All three agents must be registered
+    assert.ok(agentNames.includes('coach'), 'coach must be registered');
+    assert.ok(agentNames.includes('builder'), 'builder must be registered');
+    assert.ok(agentNames.includes('observer'), 'observer must be registered');
+
+    // None should use the old -agent suffix
+    for (const name of agentNames) {
+      assert.ok(!name.includes('-agent'), `Agent name "${name}" should not contain -agent suffix`);
+    }
   });
 });

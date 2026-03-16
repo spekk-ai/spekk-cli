@@ -3,7 +3,7 @@ id: works-for-all-agents
 parent: layered-prompt-system
 created: 2026-02-21T12:15:00Z
 priority: 1
-status: not_started
+status: done
 depends_on:
   - prompts-concatenated-with-separator
 ---

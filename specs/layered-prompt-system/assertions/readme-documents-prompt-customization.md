@@ -3,7 +3,7 @@ id: readme-documents-prompt-customization
 parent: layered-prompt-system
 created: 2026-03-16T00:00:00Z
 priority: 1
-status: not_started
+status: done
 depends_on:
   - works-for-all-agents
 ---
