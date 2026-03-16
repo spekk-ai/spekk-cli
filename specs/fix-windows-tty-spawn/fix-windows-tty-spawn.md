@@ -2,7 +2,6 @@
 id: fix-windows-tty-spawn
 created: 2026-03-16T12:00:00Z
 priority: 1
-status: done
 ---
 
 # Fix Windows TTY Compatibility for Claude Code Spawning
