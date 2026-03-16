@@ -3,13 +3,14 @@ id: parser-skips-malformed-assertions
 parent: robust-error-handling
 created: 2026-03-16T18:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: parser-skips-specs-without-assertions-dir
 ---
 
 # Parser Skips Malformed Assertion Files
 
 **Closes:** #41
+**Tests:** src/parser/__tests__/parser-skips-malformed-assertions.test.js
 
 ## What Must Be True
 

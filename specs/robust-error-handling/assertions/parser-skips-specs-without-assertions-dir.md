@@ -3,7 +3,7 @@ id: parser-skips-specs-without-assertions-dir
 parent: robust-error-handling
 created: 2026-03-16T18:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Parser Skips Specs Without Assertions Directory

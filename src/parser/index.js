@@ -421,7 +421,8 @@ function validateFolderStructure(specsDir) {
       
       // Check assertions directory exists
       if (!fs.existsSync(assertionsDir)) {
-        throw new Error(`Invalid folder structure: Missing assertions directory specs/${specDir}/assertions/`);
+        console.warn(`Warning: Spec specs/${specDir}/ has no assertions/ directory — skipping.`);
+        continue;
       }
       
       // Verify assertions directory is actually a directory
