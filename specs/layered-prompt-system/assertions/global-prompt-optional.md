@@ -3,10 +3,12 @@ id: global-prompt-optional
 parent: layered-prompt-system
 created: 2026-02-21T12:15:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Global Prompt Is Optional
+
+**Tests:** src/cli/__tests__/prompt-resolver.test.js
 
 ## Description
 
