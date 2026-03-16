@@ -16,10 +16,10 @@ const DEFAULT_PORT = 3118;
 
 /**
  * Build the system prompt for the serve coach session.
- * Uses the real coach-agent prompt and appends coordinator skill as available context.
+ * Uses the real coach prompt and appends coordinator skill as available context.
  */
 function buildServeCoachPrompt() {
-  const { activationMessage } = launchAgentWithPrompt('coach-agent');
+  const { activationMessage } = launchAgentWithPrompt('coach');
 
   let prompt = activationMessage;
 

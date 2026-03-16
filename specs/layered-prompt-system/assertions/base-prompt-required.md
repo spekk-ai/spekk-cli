@@ -3,7 +3,7 @@ id: base-prompt-required
 parent: layered-prompt-system
 created: 2026-02-21T12:15:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Base Prompt Is Required (Unless Overridden)

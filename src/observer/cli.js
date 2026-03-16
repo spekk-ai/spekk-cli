@@ -33,7 +33,7 @@ async function launchObserverAgent(cliArgs = null) {
     
     // Parse options to pass context to Claude agent
     const options = parseOptions(args);
-    let baseMessage = resolver.createActivationMessage('observer-agent');
+    let baseMessage = resolver.createActivationMessage('observer');
     
     if (Object.keys(options).length > 0) {
       baseMessage += '\n\nCLI Options provided:\n';

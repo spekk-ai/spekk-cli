@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.join(__dirname, '../../..');
-const builderPromptPath = path.join(projectRoot, 'specs/builder-agent/builder-agent.prompt.md');
+const builderPromptPath = path.join(projectRoot, 'specs/builder-agent/builder.prompt.md');
 
 describe('Builder Locks and Unlocks Assertions', () => {
   let promptContent;
