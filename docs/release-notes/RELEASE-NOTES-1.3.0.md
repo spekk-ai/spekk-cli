@@ -2,6 +2,8 @@
 
 New `spekk sandbox` command for provisioning and managing DigitalOcean droplet-based agent sandboxes.
 
+⚠️ Right now this is for my admin use only, but conceivably if you get the right credentials together, you can use this to create sandboxes for yourself. It only creates the VM and deploys the agent. Connecting to Slack is a separate process partially automated through Django. I'm working towards full end-user-trigger-able automation, but need to think through a few things before then.
+
 ## New Commands
 
 - **`spekk sandbox create`** — Provision a new DO droplet with cloud-init, wait for SSH readiness, inject credentials, configure git/gh, and deploy the agent client. Flags: `--name` (required), `--region` (default: nyc1), `--size` (default: s-2vcpu-4gb).
