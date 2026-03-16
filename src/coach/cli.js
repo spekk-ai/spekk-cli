@@ -95,29 +95,11 @@ async function launchCoachAgent(cliArgs = null) {
       message = activationMessage;
     }
 
-    // Launch Claude Code with the coach agent message and prompt
-    const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
-      stdio: ['pipe', 'inherit', 'inherit']
+    // Launch Claude Code with the coach agent message as a positional argument.
+    // Using stdio: 'inherit' so Claude gets a real TTY (required for Ink/raw mode on Windows).
+    const claudeProcess = spawn('claude', ['--dangerously-skip-permissions', message], {
+      stdio: 'inherit'
     });
-
-    // Handle stdin errors (like EPIPE when Claude exits quickly)
-    claudeProcess.stdin.on('error', (error) => {
-      // Ignore EPIPE errors when Claude exits quickly
-      if (error.code !== 'EPIPE') {
-        console.error('Error writing to Claude stdin:', error.message);
-      }
-    });
-
-    // Send the agent activation message with full prompt content
-    try {
-      claudeProcess.stdin.write(message + '\n');
-      claudeProcess.stdin.end();
-    } catch (error) {
-      // Ignore EPIPE errors when Claude exits quickly
-      if (error.code !== 'EPIPE') {
-        throw error;
-      }
-    }
 
     // Handle process events
     claudeProcess.on('error', (error) => {

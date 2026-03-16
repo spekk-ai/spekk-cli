@@ -271,12 +271,14 @@ describe('buildClaudeSpawnConfig', () => {
     assert.ok(!config.args.includes('-p'), 'Should NOT include -p flag');
   });
 
-  test('headless mode uses piped stdin and does not include prompt in args', () => {
+  test('headless mode passes prompt as positional arg with inherited stdio for TTY compatibility', () => {
     const prompt = 'You are the Builder Agent';
     const config = buildClaudeSpawnConfig(false, prompt);
 
-    assert.deepStrictEqual(config.options.stdio, ['pipe', 'inherit', 'inherit']);
-    assert.ok(!config.args.includes(prompt), 'Should NOT pass prompt as positional arg in headless mode');
+    assert.deepStrictEqual(config.options.stdio, 'inherit');
+    assert.ok(config.args.includes(prompt), 'Should pass prompt as positional arg in headless mode');
+    assert.ok(!config.args.includes('--print'), 'Should NOT include --print flag');
+    assert.ok(!config.args.includes('-p'), 'Should NOT include -p flag');
   });
 
   test('both modes include --dangerously-skip-permissions', () => {
