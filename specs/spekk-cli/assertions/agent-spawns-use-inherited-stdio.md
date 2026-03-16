@@ -3,7 +3,7 @@ id: agent-spawns-use-inherited-stdio
 parent: spekk-cli
 created: 2026-03-16T00:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # CLI agent spawns use inherited stdio
