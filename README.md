@@ -91,6 +91,58 @@ spekk show
 spekk status
 ```
 
+## Customizing Agent Prompts
+
+Spekk uses a layered prompt system that lets you customize agent behavior (coach, builder, observer) at two levels without modifying the package itself.
+
+### Extend vs Override
+
+The file naming convention determines how your customization is applied:
+
+- **`<agent>.prompt.md`** -- **extends** the base prompt. Your content is appended after the built-in prompt, so you add rules or context without losing defaults.
+- **`<agent>.prompt.override.md`** -- **overrides** the base prompt entirely. Your content replaces the built-in prompt. Extend files still layer on top of an override.
+
+### Where to Put Customization Files
+
+| Location | Scope | Example Path |
+|----------|-------|-------------|
+| `~/.spekk/` | Global -- applies to all your projects | `~/.spekk/builder.prompt.md` |
+| `.spekk/` (project root) | Local -- applies to this project only | `.spekk/coach.prompt.md` |
+
+Local files take precedence over global files. If both a local override and a global override exist, the local override wins.
+
+### Example: Extending the Builder Prompt Globally
+
+Create `~/.spekk/builder.prompt.md`:
+
+```markdown
+## Company Standards
+
+- Use TypeScript strict mode
+- All functions must have JSDoc comments
+- No console.log in production code
+```
+
+This is appended to the base builder prompt for every project you work on.
+
+### Example: Overriding the Coach Prompt for a Project
+
+Create `.spekk/coach.prompt.override.md`:
+
+```markdown
+# Custom Coach Agent
+
+You are a coach agent for a Django/HTMX project.
+When creating specs, follow Django conventions and
+reference the project's existing app structure.
+```
+
+This completely replaces the base coach prompt for this project. Any extend files (`~/.spekk/coach.prompt.md` or `.spekk/coach.prompt.md`) are still appended after the override.
+
+### Version Control
+
+The `.spekk/` directory can be committed to your repo so the whole team shares the same prompt customizations, or added to `.gitignore` if you prefer individual configuration. Choose whichever approach fits your team.
+
 ## How It Works
 
 ### 1. Spec Structure

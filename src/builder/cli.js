@@ -188,7 +188,7 @@ function buildSpekkNextCommand(flags) {
 async function buildAssertion(assertion, flags = {}) {
   colorLog('magenta', '🤖 Launching Claude Code Builder Agent...');
 
-  const { activationMessage } = launchAgentWithPrompt('builder-agent');
+  const { activationMessage } = launchAgentWithPrompt('builder');
 
   // Build the command with flags so Claude works on the correct assertion
   const spekkCommand = buildSpekkNextCommand(flags);
@@ -283,7 +283,7 @@ async function launchInteractiveBuilder(flags) {
   colorLog('cyan', '🔧 Starting Builder Agent (interactive mode)...');
   colorLog('yellow', 'Ctrl+C interrupts the current action. Use /exit to end the session.');
 
-  const { activationMessage } = launchAgentWithPrompt('builder-agent');
+  const { activationMessage } = launchAgentWithPrompt('builder');
 
   // Build command hint with any filters provided
   const spekkCommand = buildSpekkNextCommand(flags);

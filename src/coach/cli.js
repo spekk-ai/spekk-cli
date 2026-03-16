@@ -80,7 +80,7 @@ async function launchCoachAgent(cliArgs = null) {
       return;
     }
 
-    const { activationMessage } = launchAgentWithPrompt('coach-agent');
+    const { activationMessage } = launchAgentWithPrompt('coach');
     let message;
 
     // Handle skill subcommands
