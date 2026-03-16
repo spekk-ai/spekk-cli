@@ -3,7 +3,7 @@ id: test-fixtures-use-isolated-temp-dirs
 parent: optimize-test-performance
 created: 2026-03-16T20:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: enable-parallel-test-execution
 ---
 

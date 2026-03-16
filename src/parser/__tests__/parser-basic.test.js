@@ -2,21 +2,22 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import * as parserModule from '../index.js';
 
 const { parseAllSpecs, findNextAssertion } = parserModule;
 
-// TODO: Fix test isolation - tests fail due to cross-contamination from shared specs/ directory
-// See GitHub issue for details
-describe.skip('Parser Basic Tests', () => {
+describe('Parser Basic Tests', () => {
   test('identifies highest priority assertion as next', () => {
-    const tempDir = path.join(process.cwd(), 'temp-priority-basic-test');
-    const assertionsDir = path.join(tempDir, 'assertions');
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spekk-test-basic-'));
+    const specsDir = path.join(testDir, 'specs');
+    const specDir = path.join(specsDir, 'temp-priority-basic-test');
+    const assertionsDir = path.join(specDir, 'assertions');
 
     try {
       fs.mkdirSync(assertionsDir, { recursive: true });
 
-      fs.writeFileSync(path.join(tempDir, 'temp-priority-basic-test.md'), `---
+      fs.writeFileSync(path.join(specDir, 'temp-priority-basic-test.md'), `---
 id: temp-priority-basic-test
 created: 2026-01-20T16:00:00Z
 priority: 1
@@ -44,22 +45,13 @@ status: not_started
 
 # Low Priority Assertion`);
 
-      const originalSpecsPath = path.join(process.cwd(), 'specs', 'temp-priority-basic-test');
-      fs.symlinkSync(tempDir, originalSpecsPath);
+      const { assertions } = parseAllSpecs(specsDir);
+      const nextAssertion = findNextAssertion(assertions, [], { allBranches: true });
 
-      try {
-        const { assertions } = parseAllSpecs();
-        const nextAssertion = findNextAssertion(assertions.filter(a => a.parent === 'temp-priority-basic-test'), [], { allBranches: true });
-
-        assert.ok(nextAssertion, 'Should find next assertion');
-        assert.equal(nextAssertion.id, 'high-priority-assertion', 'Should pick priority 1 over priority 2');
-
-      } finally {
-        fs.unlinkSync(originalSpecsPath);
-      }
-
+      assert.ok(nextAssertion, 'Should find next assertion');
+      assert.equal(nextAssertion.id, 'high-priority-assertion', 'Should pick priority 1 over priority 2');
     } finally {
-      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
+      if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 
@@ -87,13 +79,15 @@ status: not_started
   });
 
   test('enforces proper folder structure for specs', () => {
-    const tempDir = path.join(process.cwd(), 'temp-valid-structure-test');
-    const assertionsDir = path.join(tempDir, 'assertions');
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spekk-test-structure-'));
+    const specsDir = path.join(testDir, 'specs');
+    const specDir = path.join(specsDir, 'temp-valid-structure-test');
+    const assertionsDir = path.join(specDir, 'assertions');
 
     try {
       fs.mkdirSync(assertionsDir, { recursive: true });
 
-      fs.writeFileSync(path.join(tempDir, 'temp-valid-structure-test.md'), `---
+      fs.writeFileSync(path.join(specDir, 'temp-valid-structure-test.md'), `---
 id: temp-valid-structure-test
 created: 2026-01-20T16:00:00Z
 priority: 1
@@ -111,24 +105,15 @@ status: not_started
 
 # Valid Structure Assertion`);
 
-      const originalSpecsPath = path.join(process.cwd(), 'specs', 'temp-valid-structure-test');
-      fs.symlinkSync(tempDir, originalSpecsPath);
+      const { specs, assertions } = parseAllSpecs(specsDir);
+      const testSpec = specs.find(s => s.id === 'temp-valid-structure-test');
+      const testAssertion = assertions.find(a => a.id === 'valid-structure-assertion');
 
-      try {
-        const { specs, assertions } = parseAllSpecs();
-        const testSpec = specs.find(s => s.id === 'temp-valid-structure-test');
-        const testAssertion = assertions.find(a => a.id === 'valid-structure-assertion');
-
-        assert.ok(testSpec, 'Should find properly structured spec');
-        assert.ok(testAssertion, 'Should find assertion in proper directory');
-        assert.equal(testAssertion.parent, 'temp-valid-structure-test', 'Assertion should reference parent spec');
-
-      } finally {
-        fs.unlinkSync(originalSpecsPath);
-      }
-
+      assert.ok(testSpec, 'Should find properly structured spec');
+      assert.ok(testAssertion, 'Should find assertion in proper directory');
+      assert.equal(testAssertion.parent, 'temp-valid-structure-test', 'Assertion should reference parent spec');
     } finally {
-      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
+      if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 });
