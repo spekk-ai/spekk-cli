@@ -2,7 +2,6 @@
 id: fix-builder-test-validation
 created: 2026-01-28T21:40:00Z
 priority: 1
-status: not_started
 ---
 
 # Fix Builder Test Validation

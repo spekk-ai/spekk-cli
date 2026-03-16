@@ -2,7 +2,6 @@
 id: observer-agent
 created: 2026-01-22T17:00:00Z
 priority: 2
-status: in_progress
 ---
 
 # Observer Agent

@@ -34,7 +34,7 @@ function getCurrentGitBranch() {
 
 // Simple YAML frontmatter parser (since we don't have gray-matter)
 function parseFrontmatter(content) {
-  const lines = content.split('\n');
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
   
   if (lines[0] !== '---') {
     throw new Error('File must start with --- YAML frontmatter delimiter');
