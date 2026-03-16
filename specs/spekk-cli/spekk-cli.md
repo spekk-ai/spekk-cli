@@ -2,6 +2,7 @@
 id: spekk-cli
 created: 2026-01-21T19:00:00Z
 priority: 2
+status: not_started
 ---
 
 # Spekk CLI

@@ -2,6 +2,7 @@
 id: cli-prompt-resolution
 created: 2026-01-28T19:30:00Z
 priority: 1
+status: not_started
 ---
 
 # CLI Agent Prompt Resolution

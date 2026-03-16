@@ -2,6 +2,7 @@
 id: builder-agent
 created: 2026-01-20T18:15:00Z
 priority: 1
+status: in_progress
 ---
 
 # Builder Agent
@@ -47,6 +48,7 @@ Make tests pass or satisfy success criteria
 ### 7. Update Status
 Edit assertion frontmatter:
 ```yaml
+status: done
 ```
 
 ### 8. Commit

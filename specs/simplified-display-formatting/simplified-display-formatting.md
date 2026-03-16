@@ -2,6 +2,7 @@
 id: simplified-display-formatting
 created: 2026-01-22T22:30:00Z
 priority: 2
+status: not_started
 ---
 
 # Simplified Display Formatting

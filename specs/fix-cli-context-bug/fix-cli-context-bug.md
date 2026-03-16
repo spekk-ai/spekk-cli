@@ -2,6 +2,7 @@
 id: fix-cli-context-bug
 created: 2026-01-28T21:22:00Z
 priority: 1
+status: not_started
 ---
 
 # Fix CLI Context Bug

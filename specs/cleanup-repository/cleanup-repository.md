@@ -2,6 +2,7 @@
 id: cleanup-repository
 created: 2026-01-28T21:18:00Z
 priority: 1
+status: not_started
 ---
 
 # Clean Up Repository

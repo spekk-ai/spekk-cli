@@ -2,6 +2,7 @@
 id: bootstrap-system-recovery
 created: 2026-01-28T21:30:00Z
 priority: 1
+status: not_started
 ---
 
 # Bootstrap System Recovery

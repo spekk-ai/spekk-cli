@@ -2,6 +2,7 @@
 id: coach-skills-system
 created: 2026-01-23T22:14:00Z
 priority: 1
+status: not_started
 ---
 
 # Coach Skills System

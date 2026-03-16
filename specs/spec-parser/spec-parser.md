@@ -2,6 +2,7 @@
 id: spec-parser
 created: 2026-01-20T15:35:00Z
 priority: 1
+status: in_progress
 ---
 
 # Spec Parser
@@ -38,6 +39,7 @@ Both specs and assertions are Markdown files with YAML frontmatter.
 id: spec-parser              # Unique identifier (kebab-case)
 created: 2026-01-20T15:35:00Z  # ISO 8601 timestamp (immutable)
 priority: 1                   # 1 (highest) | 2 (medium) | 3 (lowest)
+status: not_started          # not_started | in_progress | done
 ---
 ```
 
@@ -48,6 +50,7 @@ id: parses-frontmatter       # Unique within parent spec
 parent: spec-parser          # Parent spec id
 created: 2026-01-20T16:00:00Z
 priority: 1                   # 1 (highest) | 2 (medium) | 3 (lowest)
+status: not_started
 ---
 ```
 

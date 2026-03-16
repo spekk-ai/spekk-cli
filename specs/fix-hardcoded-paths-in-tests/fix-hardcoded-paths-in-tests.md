@@ -2,6 +2,7 @@
 id: fix-hardcoded-paths-in-tests
 created: 2026-01-22T20:45:00Z
 priority: 1
+status: not_started
 ---
 
 # Fix Hardcoded Paths in Tests
