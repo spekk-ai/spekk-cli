@@ -3,11 +3,13 @@ id: builder-loop-handles-parser-errors
 parent: robust-error-handling
 created: 2026-03-16T18:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: parser-skips-specs-without-assertions-dir
 ---
 
 # Builder Loop Handles Parser Errors Gracefully
+
+**Tests:** `src/loops/__tests__/builder-loop-handles-parser-errors.test.js`
 
 **Closes:** #7
 

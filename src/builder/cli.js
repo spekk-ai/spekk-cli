@@ -381,8 +381,14 @@ async function launchBuilderAgent(args = []) {
     try {
       result = getNextAssertion(flags);
     } catch (error) {
-      colorLog('red', '❌ ' + error.message);
-      process.exit(1);
+      if (once) {
+        colorLog('red', '❌ ' + error.message);
+        process.exit(1);
+      }
+      colorLog('yellow', '⚠️ Parser error (transient). Retrying in 5s...');
+      colorLog('yellow', '   ' + error.message);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      continue;
     }
 
     // Check result type
@@ -398,14 +404,26 @@ async function launchBuilderAgent(args = []) {
     }
 
     if (result.type === 'error') {
-      colorLog('red', `❌ ${result.message}`);
-      process.exit(1);
+      if (once) {
+        colorLog('red', `❌ ${result.message}`);
+        process.exit(1);
+      }
+      colorLog('yellow', `⚠️ Parser returned error (transient). Retrying in 5s...`);
+      colorLog('yellow', `   ${result.message}`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      continue;
     }
 
     if (result.type !== 'assertion') {
-      colorLog('red', '❌ Unexpected result from parser:');
-      console.log(JSON.stringify(result, null, 2));
-      process.exit(1);
+      if (once) {
+        colorLog('red', '❌ Unexpected result from parser:');
+        console.log(JSON.stringify(result, null, 2));
+        process.exit(1);
+      }
+      colorLog('yellow', '⚠️ Unexpected result type from parser. Retrying in 5s...');
+      colorLog('yellow', '   ' + JSON.stringify(result, null, 2));
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      continue;
     }
 
     const assertion = result;
