@@ -3,7 +3,7 @@ id: spec-aware-coach-context
 parent: coach-agent
 created: 2026-03-01T17:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Serve uses the real coach agent prompt and coach reads specs on first interaction
