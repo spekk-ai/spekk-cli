@@ -48,25 +48,27 @@ export async function runBuilderLoop() {
       let nextResult;
       try {
         const parserPath = join(__dirname, '../parser/cli.js');
-        nextResult = execSync(`node "${parserPath}"`, { 
+        nextResult = execSync(`node "${parserPath}"`, {
           encoding: 'utf8',
           stdio: ['pipe', 'pipe', 'pipe']
         });
       } catch (error) {
-        colorLog('red', '❌ Failed to get next assertion:');
-        console.error(error.message);
-        process.exit(1);
+        colorLog('yellow', '⚠️ Parser command failed (transient error). Retrying in 5s...');
+        colorLog('yellow', '   ' + error.message);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        continue;
       }
-      
+
       let parsedResult;
       try {
         parsedResult = JSON.parse(nextResult);
       } catch (error) {
-        colorLog('red', '❌ Invalid JSON from parser:');
-        console.log(nextResult);
-        process.exit(1);
+        colorLog('yellow', '⚠️ Malformed JSON from parser. Retrying in 5s...');
+        colorLog('yellow', '   Raw output: ' + (nextResult || '(empty)').slice(0, 200));
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        continue;
       }
-      
+
       // Check if we have any assertions to work on
       if (parsedResult.type === 'complete') {
         colorLog('green', '✨ All assertions completed. Waiting for new work...');
@@ -74,11 +76,12 @@ export async function runBuilderLoop() {
         await new Promise(resolve => setTimeout(resolve, 5000));
         continue;
       }
-      
+
       if (parsedResult.type !== 'assertion') {
-        colorLog('red', '❌ Unexpected result from parser:');
-        console.log(JSON.stringify(parsedResult, null, 2));
-        process.exit(1);
+        colorLog('yellow', '⚠️ Unexpected result type from parser. Retrying in 5s...');
+        colorLog('yellow', '   ' + JSON.stringify(parsedResult, null, 2));
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        continue;
       }
       
       const assertion = parsedResult;
