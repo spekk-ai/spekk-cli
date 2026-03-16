@@ -3,8 +3,7 @@ id: local-prompt-optional
 parent: layered-prompt-system
 created: 2026-02-21T12:15:00Z
 priority: 1
-status: in_progress
-locked-by: builder-Williams-MBP.local-88202-1773689679
+status: done
 ---
 
 # Local Prompt Is Optional
