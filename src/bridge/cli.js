@@ -195,6 +195,21 @@ export async function run(args) {
       // Fall through to bridge-only launch if no justfile
     }
 
+    // Check if we have a token for this server — if not, prompt login
+    const existingToken = getToken(flags.token, serverUrl);
+    if (!existingToken) {
+      console.log(dim(`  No token found for ${serverUrl}. Let's log in first.`));
+      console.log('');
+      const { execSync: execLogin } = await import('child_process');
+      const httpUrl = serverUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+      try {
+        execLogin(`node ${path.join(getRepoInfo().path, 'bridge-app', 'cli', 'index.js')} login --server ${httpUrl}`, { stdio: 'inherit' });
+      } catch {
+        console.error(red('Login failed. Run `spekk bridge login` manually.'));
+        process.exit(1);
+      }
+    }
+
     // Staging/production: just launch the Electron menubar app
     try {
       const { spawn } = await import('child_process');
