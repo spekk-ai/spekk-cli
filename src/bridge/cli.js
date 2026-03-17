@@ -163,8 +163,39 @@ export async function run(args) {
   }
 
   if (subcommand === 'up') {
-    // Try to launch the Electron menubar app
     const serverUrl = getServerUrl(flags.server);
+    const isLocal = serverUrl.includes('localhost') || serverUrl.includes('127.0.0.1');
+
+    // For local dev: start the full stack (pg/redis, server, client, bridge, browser)
+    if (isLocal) {
+      const { spawn, execSync: exec } = await import('child_process');
+      const repo = getRepoInfo();
+
+      // Check for justfile (indicates spekk-app repo)
+      const justfilePath = path.join(repo.path, 'justfile');
+      if (fs.existsSync(justfilePath)) {
+        console.log(cyan('spekk bridge up --local'));
+        console.log(dim('  Starting full local dev stack...'));
+        console.log('');
+
+        // Run `just bridge-dev` which handles everything
+        const child = spawn('just', ['bridge-dev'], {
+          cwd: repo.path,
+          stdio: 'inherit',
+          env: { ...process.env },
+        });
+
+        // Forward Ctrl+C to child
+        process.on('SIGINT', () => child.kill('SIGINT'));
+        process.on('SIGTERM', () => child.kill('SIGTERM'));
+
+        await new Promise((resolve) => child.on('close', resolve));
+        return;
+      }
+      // Fall through to bridge-only launch if no justfile
+    }
+
+    // Staging/production: just launch the Electron menubar app
     try {
       const { spawn } = await import('child_process');
       // Look for bridge-app relative to the repo root
