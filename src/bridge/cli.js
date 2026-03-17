@@ -18,15 +18,50 @@ const FLAG_DEFS = {
 };
 
 /**
- * Read the API token from flag, env var, or ~/.spekk/token file.
+ * Normalize a server URL to a filesystem-safe key for token storage.
+ * ws://localhost:8000 → localhost_8000
+ * wss://staging.spekk.ai → staging.spekk.ai
  */
-function getToken(flagToken) {
+function normalizeServerHost(url) {
+  return (url || '')
+    .replace(/^(wss?|https?):\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/:/g, '_')
+    .toLowerCase();
+}
+
+/**
+ * Read the API token from flag, env var, or ~/.spekk/tokens/{server} file.
+ * Falls back to legacy ~/.spekk/token and migrates it.
+ */
+function getToken(flagToken, serverUrl) {
   if (flagToken) return flagToken;
   if (process.env.SPEKK_API_TOKEN) return process.env.SPEKK_API_TOKEN;
 
-  const tokenPath = path.join(process.env.HOME || process.env.USERPROFILE, '.spekk', 'token');
+  const home = process.env.HOME || process.env.USERPROFILE;
+  const host = normalizeServerHost(serverUrl);
+
+  // Try per-server token first
+  if (host) {
+    const perServerPath = path.join(home, '.spekk', 'tokens', host);
+    try {
+      return fs.readFileSync(perServerPath, 'utf8').trim();
+    } catch {}
+  }
+
+  // Fall back to legacy single token file and migrate it
+  const legacyPath = path.join(home, '.spekk', 'token');
   try {
-    return fs.readFileSync(tokenPath, 'utf8').trim();
+    const token = fs.readFileSync(legacyPath, 'utf8').trim();
+    if (token && host) {
+      // Migrate to per-server storage
+      const tokensDir = path.join(home, '.spekk', 'tokens');
+      if (!fs.existsSync(tokensDir)) fs.mkdirSync(tokensDir, { recursive: true });
+      fs.writeFileSync(path.join(tokensDir, host), token);
+      fs.unlinkSync(legacyPath);
+      console.log(dim(`  Migrated token to ~/.spekk/tokens/${host}`));
+    }
+    return token;
   } catch {
     return null;
   }
@@ -184,14 +219,13 @@ export async function run(args) {
     return;
   }
 
-  const token = getToken(flags.token);
+  const serverUrl = getServerUrl(flags.server);
+  const token = getToken(flags.token, serverUrl);
   if (!token) {
     console.error(red('Error: No API token found.'));
-    console.error('Set SPEKK_API_TOKEN env var, pass --token, or create ~/.spekk/token');
+    console.error(`Set SPEKK_API_TOKEN, pass --token, or run: spekk bridge login`);
     process.exit(1);
   }
-
-  const serverUrl = getServerUrl(flags.server);
   const repo = getRepoInfo();
   const verbose = flags.verbose;
 
