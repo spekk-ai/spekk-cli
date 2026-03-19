@@ -3,7 +3,7 @@ id: prompt-resolver-supports-per-agent-skills
 parent: builder-skills-system
 created: 2026-03-19T19:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/code-quality-qa
 ---
 

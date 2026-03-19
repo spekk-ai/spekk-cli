@@ -387,3 +387,89 @@ describe('PromptResolver works for all agents', () => {
     }
   });
 });
+
+describe('PromptResolver per-agent skills directories', () => {
+  let tempHome;
+  let tempCwd;
+
+  beforeEach(() => {
+    tempHome = mkdtempSync(path.join(tmpdir(), 'spekk-home-'));
+    tempCwd = mkdtempSync(path.join(tmpdir(), 'spekk-cwd-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempHome, { recursive: true, force: true });
+    rmSync(tempCwd, { recursive: true, force: true });
+  });
+
+  test('coach activation message includes coach skills directory', () => {
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    const message = resolver.createActivationMessage('coach');
+    assert.ok(message.includes('Skills directory:'), 'Coach should have Skills directory');
+    assert.ok(message.includes('coach-skills-system'), 'Coach skills dir should reference coach-skills-system');
+  });
+
+  test('builder activation message includes builder skills directory', () => {
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    const message = resolver.createActivationMessage('builder');
+    assert.ok(message.includes('Skills directory:'), 'Builder should have Skills directory');
+    assert.ok(message.includes('builder-skills-system'), 'Builder skills dir should reference builder-skills-system');
+  });
+
+  test('observer activation message does NOT include a skills directory', () => {
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    const message = resolver.createActivationMessage('observer');
+    assert.ok(!message.includes('Skills directory:'), 'Observer should not have Skills directory');
+  });
+
+  test('getSkillsPaths returns null for agents without skills', () => {
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    assert.strictEqual(resolver.getSkillsPaths('observer'), null);
+  });
+
+  test('getSkillsPaths returns three paths for coach', () => {
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    const paths = resolver.getSkillsPaths('coach');
+    assert.ok(paths.packageDir.includes('coach-skills-system'));
+    assert.ok(paths.globalDir.includes('coach-skills'));
+    assert.ok(paths.localDir.includes('coach-skills'));
+  });
+
+  test('getSkillsPaths returns three paths for builder', () => {
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    const paths = resolver.getSkillsPaths('builder');
+    assert.ok(paths.packageDir.includes('builder-skills-system'));
+    assert.ok(paths.globalDir.includes('builder-skills'));
+    assert.ok(paths.localDir.includes('builder-skills'));
+  });
+
+  test('local skills dir is included in activation message when it exists', () => {
+    const localSkillsDir = path.join(tempCwd, '.spekk', 'builder-skills');
+    mkdirSync(localSkillsDir, { recursive: true });
+
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    const message = resolver.createActivationMessage('builder');
+
+    assert.ok(message.includes('Local skills:'), 'Should include Local skills line when dir exists');
+    assert.ok(message.includes(localSkillsDir), 'Should include the actual local skills path');
+  });
+
+  test('global skills dir is included in activation message when it exists', () => {
+    const globalSkillsDir = path.join(tempHome, '.spekk', 'coach-skills');
+    mkdirSync(globalSkillsDir, { recursive: true });
+
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    const message = resolver.createActivationMessage('coach');
+
+    assert.ok(message.includes('Global skills:'), 'Should include Global skills line when dir exists');
+    assert.ok(message.includes(globalSkillsDir), 'Should include the actual global skills path');
+  });
+
+  test('activation message omits global/local skills lines when dirs do not exist', () => {
+    const resolver = new PromptResolver({ homeDir: tempHome, cwd: tempCwd });
+    const message = resolver.createActivationMessage('builder');
+
+    assert.ok(!message.includes('Global skills:'), 'Should not include Global skills when dir missing');
+    assert.ok(!message.includes('Local skills:'), 'Should not include Local skills when dir missing');
+  });
+});

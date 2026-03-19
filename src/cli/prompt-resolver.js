@@ -9,6 +9,13 @@ const projectRoot = join(__dirname, '../..');
 
 const PROMPT_SEPARATOR = '\n\n---\n\n';
 
+// Per-agent skills directory mapping (package-level relative path).
+// Agents not listed here have no skills system.
+const AGENT_SKILLS_DIRS = {
+  coach: 'specs/coach-skills-system',
+  builder: 'specs/builder-skills-system',
+};
+
 export class PromptResolver {
   constructor({ homeDir, cwd } = {}) {
     this.homeDir = homeDir || homedir();
@@ -109,22 +116,47 @@ export class PromptResolver {
     return layers.join(PROMPT_SEPARATOR);
   }
 
+  /**
+   * Get the skills paths for an agent using layered resolution.
+   * Returns { packageDir, globalDir, localDir } or null if agent has no skills.
+   */
+  getSkillsPaths(agentName) {
+    const relativeDir = AGENT_SKILLS_DIRS[agentName];
+    if (!relativeDir) return null;
+
+    const packageDir = join(projectRoot, relativeDir);
+    const globalDir = join(this.homeDir, '.spekk', `${agentName}-skills`);
+    const localDir = join(this.cwd, '.spekk', `${agentName}-skills`);
+
+    return { packageDir, globalDir, localDir };
+  }
+
   createActivationMessage(agentName) {
     const agentDisplayName = agentName.charAt(0).toUpperCase() + agentName.slice(1);
 
     try {
       const promptContent = this.getPromptContent(agentName);
 
-      // Include path information for skill discovery
       const workingDir = process.cwd();
       const spekkInstallation = projectRoot;
-      const skillsDir = join(projectRoot, 'specs/coach-skills-system');
+
+      // Build skills lines per-agent
+      let skillsLines = '';
+      const skillsPaths = this.getSkillsPaths(agentName);
+      if (skillsPaths) {
+        skillsLines += `\nSkills directory: ${skillsPaths.packageDir}`;
+        if (existsSync(skillsPaths.globalDir)) {
+          skillsLines += `\nGlobal skills: ${skillsPaths.globalDir}`;
+        }
+        if (existsSync(skillsPaths.localDir)) {
+          skillsLines += `\nLocal skills: ${skillsPaths.localDir}`;
+        }
+      }
 
       return `You are the ${agentDisplayName} Agent - read the prompt and follow the instructions exactly.
 
 Working directory: ${workingDir}
-Spekk installation: ${spekkInstallation}
-Skills directory: ${skillsDir}
+Spekk installation: ${spekkInstallation}${skillsLines}
 
 Here is your prompt:
 
