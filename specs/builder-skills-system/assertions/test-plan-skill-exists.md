@@ -21,10 +21,16 @@ A builder skill file exists at `specs/builder-skills-system/test-plan-skill.md` 
   - Writing step-by-step instructions in plain language
 - Has **Patterns** section containing:
   - Default mode template (concise, PR-focused, 5-10 test items)
-  - Staging mode template (comprehensive with browser/device matrix, accessibility, regression)
+  - Staging mode template (comprehensive with regression, accessibility)
   - Test step format: action → expected result, always specify which user to sign in as
   - How to handle API-only changes (Swagger testing + UI smoke tests for dependent features)
   - Project-specific rules integration (`.claude/test-plan-rules.md`)
   - PR comment posting via `gh pr comment`
+- Has **Deterministic checks** for conditional test plan sections:
+  - `dir-exists: ios/` or `dir-exists: android/` → include native mobile manual QA steps
+  - `dir-exists: client/src/` + responsive CSS patterns → include responsive viewport testing
+  - No mobile indicators → skip mobile/device matrix entirely
+  - `has-dependency: @playwright/test` → Playwright covers desktop browsers, don't duplicate in manual plan
+  - API-only changes with no UI impact → skip browser/device matrix, focus on Swagger/contract verification
 - Guidelines: plain language, no technical terms, specific button/field names, actual test account emails
 - Content migrated from the `test-plan` slash command
