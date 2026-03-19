@@ -263,6 +263,25 @@ This project uses npm scripts for standardized development commands:
 - `npm run test:impl` - Run implementation tests only
 - `npm run test:specs` - Run spec validation tests only
 
+## Available Skills
+
+Skills are markdown files that provide domain-specific implementation patterns for common assertion types (e.g., e2e testing, API auditing, test ID instrumentation).
+
+**Skills directory:** `specs/builder-skills-system/` (shipped with the package)
+
+Skills are resolved from three layers (later layers override earlier by filename):
+1. **Package skills**: `<spekk-install>/specs/builder-skills-system/` — core skills shipped with spekk
+2. **Global skills**: `~/.spekk/builder-skills/` — your personal skills across all projects
+3. **Local skills**: `.spekk/builder-skills/` — project-specific skills that extend or override package skills
+
+**To use a skill:**
+1. When working on an assertion, check if the assertion content matches any skill triggers
+2. List the skills directory to see available skill files
+3. Read the matching skill file — it contains triggers, workflow steps, and code patterns
+4. Follow the skill's workflow and patterns during implementation
+
+Skills contain everything you need — triggers, step-by-step workflow, and code patterns to follow. No loaders or registries required.
+
 ## Context Files
 
 If you need context:
