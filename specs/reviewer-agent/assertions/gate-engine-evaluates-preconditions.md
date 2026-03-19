@@ -3,7 +3,7 @@ id: gate-engine-evaluates-preconditions
 parent: reviewer-agent
 created: 2026-03-19T18:09:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: gate-loader-parses-gate-files
 branch: feature/code-quality-qa
 ---
