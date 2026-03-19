@@ -3,7 +3,7 @@ id: default-gates-exist
 parent: reviewer-agent
 created: 2026-03-19T18:12:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: gate-loader-parses-gate-files
 branch: feature/code-quality-qa
 ---

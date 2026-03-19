@@ -18,6 +18,7 @@
     "specs/coach-skills-system/",
     "specs/builder-skills-system/",
     "specs/reviewer-agent/",
+    "gates/",
     "src/sandbox/templates/"
   ],
   "scripts": {
