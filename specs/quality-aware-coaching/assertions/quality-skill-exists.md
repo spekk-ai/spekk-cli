@@ -3,8 +3,7 @@ id: quality-skill-exists
 parent: quality-aware-coaching
 created: 2026-03-19T18:00:00Z
 priority: 1
-status: not_started
-branch: feature/code-quality-qa
+status: draft
 ---
 
 # Quality-aware assertions skill exists in coach skills system

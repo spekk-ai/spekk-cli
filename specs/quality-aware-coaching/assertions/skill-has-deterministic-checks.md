@@ -3,9 +3,8 @@ id: skill-has-deterministic-checks
 parent: quality-aware-coaching
 created: 2026-03-19T18:01:00Z
 priority: 1
-status: not_started
+status: draft
 depends-on: quality-skill-exists
-branch: feature/code-quality-qa
 ---
 
 # Skill defines deterministic codebase checks

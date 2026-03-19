@@ -3,9 +3,8 @@ id: e2e-testing-skill-exists
 parent: builder-skills-system
 created: 2026-03-19T18:05:00Z
 priority: 1
-status: not_started
+status: draft
 depends-on: builder-prompt-references-skills
-branch: feature/code-quality-qa
 ---
 
 # E2e testing skill exists with Playwright patterns

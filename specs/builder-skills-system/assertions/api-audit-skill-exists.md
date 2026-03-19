@@ -3,9 +3,8 @@ id: api-audit-skill-exists
 parent: builder-skills-system
 created: 2026-03-19T18:07:00Z
 priority: 1
-status: not_started
+status: draft
 depends-on: builder-prompt-references-skills
-branch: feature/code-quality-qa
 ---
 
 # API audit skill exists with route analysis patterns

@@ -3,9 +3,8 @@ id: coach-prompt-references-skill
 parent: quality-aware-coaching
 created: 2026-03-19T18:02:00Z
 priority: 1
-status: not_started
+status: draft
 depends-on: quality-skill-exists
-branch: feature/code-quality-qa
 ---
 
 # Coach prompt lists the quality-aware assertions skill

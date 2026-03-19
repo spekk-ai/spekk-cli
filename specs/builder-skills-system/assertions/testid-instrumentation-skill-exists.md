@@ -3,9 +3,8 @@ id: testid-instrumentation-skill-exists
 parent: builder-skills-system
 created: 2026-03-19T18:06:00Z
 priority: 1
-status: not_started
+status: draft
 depends-on: builder-prompt-references-skills
-branch: feature/code-quality-qa
 ---
 
 # Test ID instrumentation skill exists with naming conventions
