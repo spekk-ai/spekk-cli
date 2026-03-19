@@ -3,7 +3,7 @@ id: builder-skills-directory-exists
 parent: builder-skills-system
 created: 2026-03-19T18:03:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/code-quality-qa
 ---
 
