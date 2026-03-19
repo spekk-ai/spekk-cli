@@ -26,6 +26,7 @@
     "coach": "node src/coach/cli.js",
     "builder": "node src/builder/cli.js",
     "observer": "node src/observer/cli.js",
+    "review": "node bin/spekk.js review",
     "test": "npm run test:impl && npm run test:specs",
     "test:impl": "node src/test-runner.js",
     "test:specs": "echo 'No spec validator configured'",

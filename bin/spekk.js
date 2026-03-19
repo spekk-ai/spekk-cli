@@ -10,6 +10,7 @@ import { showSpekk } from '../src/show/cli.js';
 import { parseFlags } from '../src/cli/parse-flags.js';
 import { launchServe } from '../src/serve/cli.js';
 import { launchSandbox } from '../src/sandbox/cli.js';
+import { launchReview } from '../src/reviewer/cli.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -66,6 +67,10 @@ COMMANDS:
     await launchSandbox(args.slice(1));
     break;
 
+  case 'review':
+    await launchReview(args.slice(1));
+    break;
+
   case 'status':
     await showStatus();
     break;
@@ -96,6 +101,7 @@ COMMANDS:
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
+  review    Evaluate quality gates on current branch (--list, --no-llm, --gate)
   loop      Run orchestration workflows (builder/coach loops)
   help      Show this help message
 

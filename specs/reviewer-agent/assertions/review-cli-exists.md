@@ -3,7 +3,7 @@ id: review-cli-exists
 parent: reviewer-agent
 created: 2026-03-19T18:10:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: gate-engine-evaluates-preconditions
 branch: feature/code-quality-qa
 ---
