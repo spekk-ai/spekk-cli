@@ -3,7 +3,7 @@ id: reviewer-prompt-exists
 parent: reviewer-agent
 created: 2026-03-19T18:11:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: review-cli-exists
 branch: feature/code-quality-qa
 ---

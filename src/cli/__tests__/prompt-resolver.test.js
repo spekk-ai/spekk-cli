@@ -11,10 +11,10 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.join(__dirname, '../../..');
 
 describe('PromptResolver', () => {
-  test('uses simplified agent names: coach, builder, observer', () => {
+  test('uses simplified agent names: coach, builder, observer, reviewer', () => {
     const resolver = new PromptResolver();
     const names = resolver.promptFiles.map(p => p.name);
-    assert.deepStrictEqual(names, ['coach', 'builder', 'observer']);
+    assert.deepStrictEqual(names, ['coach', 'builder', 'observer', 'reviewer']);
   });
 
   test('base prompt files use <agent>.prompt.md naming convention', () => {
@@ -38,7 +38,7 @@ describe('PromptResolver', () => {
 
   test('getPromptContent loads content for simplified agent names', () => {
     const resolver = new PromptResolver();
-    for (const name of ['coach', 'builder', 'observer']) {
+    for (const name of ['coach', 'builder', 'observer', 'reviewer']) {
       const content = resolver.getPromptContent(name);
       assert.ok(content.length > 0, `${name} prompt should have content`);
     }
@@ -301,7 +301,7 @@ describe('PromptResolver works for all agents', () => {
     rmSync(tempCwd, { recursive: true, force: true });
   });
 
-  for (const agentName of ['coach', 'builder', 'observer']) {
+  for (const agentName of ['coach', 'builder', 'observer', 'reviewer']) {
     test(`${agentName} supports global extend layer`, () => {
       const globalDir = path.join(tempHome, '.spekk');
       mkdirSync(globalDir, { recursive: true });
@@ -376,10 +376,11 @@ describe('PromptResolver works for all agents', () => {
     const resolver = new PromptResolver();
     const agentNames = resolver.promptFiles.map(p => p.name);
 
-    // All three agents must be registered
+    // All four agents must be registered
     assert.ok(agentNames.includes('coach'), 'coach must be registered');
     assert.ok(agentNames.includes('builder'), 'builder must be registered');
     assert.ok(agentNames.includes('observer'), 'observer must be registered');
+    assert.ok(agentNames.includes('reviewer'), 'reviewer must be registered');
 
     // None should use the old -agent suffix
     for (const name of agentNames) {

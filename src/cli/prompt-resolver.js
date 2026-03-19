@@ -32,6 +32,10 @@ export class PromptResolver {
       {
         name: 'observer',
         path: join(projectRoot, 'specs/observer-agent/observer.prompt.md')
+      },
+      {
+        name: 'reviewer',
+        path: join(projectRoot, 'specs/reviewer-agent/reviewer.prompt.md')
       }
     ];
   }

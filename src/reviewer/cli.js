@@ -1,4 +1,6 @@
+import { spawn } from 'node:child_process';
 import { parseFlags as sharedParseFlags } from '../cli/parse-flags.js';
+import { PromptResolver } from '../cli/prompt-resolver.js';
 import { loadGates } from './gate-loader.js';
 import { evaluateGates } from './gate-engine.js';
 
@@ -158,6 +160,57 @@ export async function launchReview(args = []) {
     return;
   }
 
-  // Default: evaluate and show results
+  // Default: evaluate, then launch reviewer agent for applicable gates
+  const applicable = results.filter(r => r.status === 'pass');
+
+  if (applicable.length === 0) {
+    displayListResults(results, gates);
+    colorLog('cyan', 'No applicable gates — nothing to review.');
+    return;
+  }
+
   displayListResults(results, gates);
+
+  // Build gate context for the reviewer agent
+  const gateMap = new Map(gates.map(g => [g.id, g]));
+  const gateContext = applicable.map(r => {
+    const gate = gateMap.get(r.id);
+    return `### Gate: ${gate.id}\n\n**File:** ${gate.file}\n**Tags:** ${gate.tags.join(', ') || 'none'}\n`;
+  }).join('\n');
+
+  const resolver = new PromptResolver();
+  const activationMessage = resolver.createActivationMessage('reviewer');
+  const fullMessage = `${activationMessage}\n\n---\n\n## Gates to Review\n\nThe following gates passed deterministic preconditions and need your LLM judgment + workflow execution:\n\n${gateContext}`;
+
+  colorLog('cyan', 'Launching Reviewer Agent...');
+
+  const claudeProcess = spawn('claude', ['--dangerously-skip-permissions', fullMessage], {
+    stdio: 'inherit',
+  });
+
+  await new Promise((resolve) => {
+    claudeProcess.on('error', (error) => {
+      if (error.code === 'ENOENT') {
+        colorLog('red', 'Claude Code CLI not found. Please install Claude Code first.');
+      } else {
+        colorLog('red', 'Error launching Claude Code: ' + error.message);
+      }
+      resolve();
+    });
+
+    claudeProcess.on('exit', (code) => {
+      if (code === 0) {
+        colorLog('green', 'Reviewer agent completed.');
+      } else {
+        colorLog('yellow', `Reviewer agent exited with code ${code}`);
+      }
+      resolve();
+    });
+
+    process.on('SIGINT', () => {
+      colorLog('yellow', '\nStopping Reviewer Agent...');
+      claudeProcess.kill('SIGINT');
+      resolve();
+    });
+  });
 }
