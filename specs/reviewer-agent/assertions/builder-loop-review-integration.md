@@ -3,7 +3,7 @@ id: builder-loop-review-integration
 parent: reviewer-agent
 created: 2026-03-19T18:13:00Z
 priority: 3
-status: not_started
+status: done
 depends-on: review-cli-exists
 branch: feature/code-quality-qa
 ---

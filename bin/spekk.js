@@ -21,7 +21,7 @@ switch (command) {
   case 'loop':
     switch (subcommand) {
       case 'builder':
-        await runBuilderLoop();
+        await runBuilderLoop(args.slice(2));
         break;
       case 'coach':
         await runCoachLoop();
@@ -33,12 +33,15 @@ switch (command) {
 spekk loop - Orchestration workflows for spec-driven development
 
 USAGE:
-  spekk loop [COMMAND]
+  spekk loop [COMMAND] [FLAGS]
 
 COMMANDS:
   builder   Run the automated builder loop (gets next assertion, implements, commits, repeats)
   coach     Run the interactive coach loop (create specs, commit, repeat)
   help      Show this help message
+
+BUILDER FLAGS:
+  --review  Run quality gates (spekk review --no-llm) after each build iteration
 `);
         break;
       default:

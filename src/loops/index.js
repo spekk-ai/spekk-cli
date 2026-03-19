@@ -27,9 +27,14 @@ function handleInterrupt(signal) {
   process.exit(0);
 }
 
-export async function runBuilderLoop() {
+export async function runBuilderLoop(args = []) {
+  const reviewEnabled = args.includes('--review');
+
   colorLog('cyan', '🔧 Starting Builder Loop...');
   colorLog('blue', 'This will continuously get next assertions and implement them.');
+  if (reviewEnabled) {
+    colorLog('blue', 'Review gates will run after each build iteration.');
+  }
   colorLog('yellow', 'Press Ctrl+C to exit gracefully.');
   
   // Handle interrupts gracefully
@@ -164,7 +169,27 @@ export async function runBuilderLoop() {
         // Don't exit - continue with next assertion
       }
       
-      // Step 4: Brief pause before next iteration
+      // Step 4: Run review gates if --review flag is set
+      if (reviewEnabled) {
+        colorLog('blue', '🔍 Running quality gates...');
+        try {
+          const spekkBin = join(__dirname, '../../bin/spekk.js');
+          const reviewOutput = execSync(`node "${spekkBin}" review --no-llm`, {
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+          if (reviewOutput.trim()) {
+            console.log(reviewOutput);
+          }
+          colorLog('green', '   ✅ Review gates completed');
+        } catch (error) {
+          // Review failures are warnings only — don't block next iteration
+          colorLog('yellow', '   ⚠️ Review gates reported issues (non-blocking):');
+          if (error.stdout) console.log(error.stdout);
+        }
+      }
+
+      // Step 5: Brief pause before next iteration
       colorLog('blue', '⏳ Preparing for next iteration...');
       await new Promise(resolve => setTimeout(resolve, 500));
     }
