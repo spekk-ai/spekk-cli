@@ -4,7 +4,7 @@ parent: builder-skills-system
 created: 2026-03-19T18:07:00Z
 priority: 1
 status: not_started
-depends-on: builder-skills-directory-exists
+depends-on: builder-prompt-references-skills
 branch: feature/code-quality-qa
 ---
 

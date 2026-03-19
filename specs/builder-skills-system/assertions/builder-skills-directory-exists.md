@@ -7,15 +7,13 @@ status: not_started
 branch: feature/code-quality-qa
 ---
 
-# Builder skills directory exists with skill format documentation
+# Builder skills directory exists at package level
 
-The directory `specs/builder-skills-system/` exists and contains a parent spec that documents the skill file format and how the builder loads skills.
+The directory `specs/builder-skills-system/` exists in the spekk package and is shipped with npm, parallel to the existing `specs/coach-skills-system/`.
 
 ## Success Criteria
 
-- Directory `specs/builder-skills-system/` exists (already created as part of this spec)
-- Parent spec `builder-skills-system.md` documents:
-  - Skill file format (triggers, workflow, patterns sections)
-  - How the builder discovers and loads skills
-  - That skills are markdown — no code, no loaders, no registries
-- Pattern is consistent with coach skills system (`specs/coach-skills-system/coach-skills-system.md`)
+- Directory `specs/builder-skills-system/` exists in the package
+- Parent spec `builder-skills-system.md` documents the skill file format (triggers, workflow, patterns sections) — consistent with `specs/coach-skills-system/coach-skills-system.md`
+- `package.json` `files` array includes `specs/builder-skills-system/` so skills ship with the package
+- Skills follow the same markdown structure as coach skills (no code, no loaders, no registries)
