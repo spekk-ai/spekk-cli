@@ -27,7 +27,7 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 }
 
 function parseCreateFlags(args) {
-  const flags = { region: 'nyc1', size: 's-2vcpu-4gb', name: null, project: null };
+  const flags = { region: 'nyc1', size: 's-2vcpu-4gb', name: null, project: null, vpc: null };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--name':
@@ -41,6 +41,9 @@ function parseCreateFlags(args) {
         break;
       case '--project':
         flags.project = args[++i];
+        break;
+      case '--vpc':
+        flags.vpc = args[++i];
         break;
     }
   }
@@ -80,6 +83,7 @@ OPTIONS:
   --region <region>    DigitalOcean region (default: nyc1)
   --size <size>        Droplet size slug (default: s-2vcpu-4gb)
   --project <project>  Assign to a DigitalOcean project (name or UUID)
+  --vpc <uuid>         Place droplet in a specific DigitalOcean VPC (optional)
 `);
         return;
       }
