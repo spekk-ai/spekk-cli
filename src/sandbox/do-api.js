@@ -36,7 +36,7 @@ async function doFetch(path, options = {}) {
   return body;
 }
 
-export async function createDroplet({ name, region, size, userData, sshKeyIds }) {
+export async function createDroplet({ name, region, size, userData, sshKeyIds, vpcUuid }) {
   const payload = {
     name,
     region,
@@ -45,6 +45,7 @@ export async function createDroplet({ name, region, size, userData, sshKeyIds })
     ssh_keys: sshKeyIds || [],
     user_data: userData || undefined,
     tags: ['spekk-sandbox'],
+    ...(vpcUuid ? { vpc_uuid: vpcUuid } : {}),
   };
 
   const body = await doFetch('/v2/droplets', {

@@ -187,7 +187,7 @@ async function resolveProject(projectValue) {
   return { id: match.id, name: match.name };
 }
 
-export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb', project }) {
+export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb', project, vpc }) {
   const dropletName = `spekk-${name}`;
   let dropletId = null;
   let ip = null;
@@ -225,6 +225,7 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
       size,
       userData,
       sshKeyIds,
+      vpcUuid: vpc,
     });
     dropletId = droplet.id;
     console.log(`Droplet created (ID: ${dropletId}). Waiting for it to become active...`);
