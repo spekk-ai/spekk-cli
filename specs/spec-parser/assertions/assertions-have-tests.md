@@ -4,6 +4,8 @@ parent: spec-parser
 created: 2026-01-20T16:25:00Z
 priority: 2
 status: done
+depends-on: tests-in-correct-location
+branch: feature/spec-parser
 ---
 
 # Assertions Must Have Automated Tests When Possible

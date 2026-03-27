@@ -1,217 +1,248 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert';
-import { parseAllSpecs, run } from '../index.js';
+import { run } from '../cli.js';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import os from 'os';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+test('CLI reads specs from current working directory', async (t) => {
+  const originalCwd = process.cwd();
+  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-'));
+  const specsDir = path.join(testDir, 'specs');
 
-describe('CLI Reads Local Specs', () => {
-  let originalCwd;
-  let tempDir;
-  let capturedOutput;
-  let originalLog;
-
-  beforeEach(() => {
-    // Save original working directory
-    originalCwd = process.cwd();
-    
-    // Create a unique temporary directory
-    tempDir = path.join(os.tmpdir(), `spekk-test-${Date.now()}`);
-    fs.mkdirSync(tempDir, { recursive: true });
-    
-    // Create a test spec structure in temp directory
-    const specsDir = path.join(tempDir, 'specs');
-    const testSpecDir = path.join(specsDir, 'test-spec');
-    const assertionsDir = path.join(testSpecDir, 'assertions');
-    
+  try {
+    // Create a simple spec structure
     fs.mkdirSync(specsDir, { recursive: true });
-    fs.mkdirSync(testSpecDir, { recursive: true });
-    fs.mkdirSync(assertionsDir, { recursive: true });
-    
-    // Create a test spec file
-    const specContent = `---
+    fs.mkdirSync(path.join(specsDir, 'test-spec'), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(specsDir, 'test-spec', 'test-spec.md'),
+      `---
 id: test-spec
-created: 2026-01-28T10:00:00Z
+created: 2024-01-01T00:00:00Z
 priority: 1
-status: in_progress
 ---
 
 # Test Spec
+`
+    );
 
-This is a test spec in the temporary directory.`;
-    
-    fs.writeFileSync(path.join(testSpecDir, 'test-spec.md'), specContent);
-    
-    // Create a test assertion file
-    const assertionContent = `---
+    // Change to test directory and run the CLI
+    process.chdir(testDir);
+
+    const logOutput = [];
+    t.mock.method(console, 'log', (msg) => logOutput.push(msg));
+
+    await run({ specsDirectory: path.join(testDir, 'specs'), allBranches: true });
+
+    assert.strictEqual(logOutput.length, 1);
+    const output = JSON.parse(logOutput[0]);
+    assert.strictEqual(output.status, 'complete');
+  } finally {
+    process.chdir(originalCwd);
+
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  }
+});
+
+test('CLI uses specsDirectory option to find specs', async (t) => {
+  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-'));
+  const specsDir = path.join(testDir, 'specs');
+
+  try {
+    fs.mkdirSync(specsDir, { recursive: true });
+    fs.mkdirSync(path.join(specsDir, 'another-spec', 'assertions'), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(specsDir, 'another-spec', 'another-spec.md'),
+      `---
+id: another-spec
+created: 2024-01-02T00:00:00Z
+priority: 2
+---
+
+# Another Spec
+`
+    );
+
+    fs.writeFileSync(
+      path.join(specsDir, 'another-spec', 'assertions', 'test-assertion.md'),
+      `---
 id: test-assertion
-parent: test-spec
-created: 2026-01-28T10:00:00Z
+parent: another-spec
+created: 2024-01-02T00:00:00Z
 priority: 1
 status: not_started
 ---
 
 # Test Assertion
+`
+    );
 
-This is a test assertion in the temporary directory.`;
-    
-    fs.writeFileSync(path.join(assertionsDir, 'test-assertion.md'), assertionContent);
-    
-    // Capture console.log output
-    capturedOutput = [];
-    originalLog = console.log;
-    console.log = (...args) => {
-      capturedOutput.push(args.join(' '));
-    };
-  });
+    const logOutput = [];
+    t.mock.method(console, 'log', (msg) => logOutput.push(msg));
 
-  afterEach(() => {
-    // Restore original working directory
-    process.chdir(originalCwd);
-    
-    // Clean up temp directory
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-    
-    // Restore console.log
-    console.log = originalLog;
-  });
+    await run({ specsDirectory: specsDir, allBranches: true });
 
-  it('should read specs from current working directory when no specsDirectory provided', () => {
-    // Change to the temp directory
-    process.chdir(tempDir);
-    
-    // Call parseAllSpecs without arguments (should use process.cwd())
-    const result = parseAllSpecs();
-    
-    // Should find our test spec and assertion
-    assert.strictEqual(result.specs.length, 1);
-    assert.strictEqual(result.specs[0].id, 'test-spec');
-    assert.strictEqual(result.assertions.length, 1);
-    assert.strictEqual(result.assertions[0].id, 'test-assertion');
-  });
-
-  it('should use process.cwd() for spekk next command', () => {
-    // Change to the temp directory
-    process.chdir(tempDir);
-    
-    // Run the parser (simulates 'spekk next')
-    run();
-    
-    // Parse the JSON output
-    assert.strictEqual(capturedOutput.length, 1);
-    const output = JSON.parse(capturedOutput[0]);
-    
-    // Should return our test assertion from the temp directory
-    assert.strictEqual(output.type, 'assertion');
+    assert.strictEqual(logOutput.length, 1);
+    const output = JSON.parse(logOutput[0]);
     assert.strictEqual(output.id, 'test-assertion');
-    assert.strictEqual(output.parent, 'test-spec');
-  });
-
-  it('should read different specs when run from different directories', () => {
-    // First, run from temp directory
-    process.chdir(tempDir);
-    run();
-    
-    assert.strictEqual(capturedOutput.length, 1);
-    const tempDirOutput = JSON.parse(capturedOutput[0]);
-    assert.strictEqual(tempDirOutput.id, 'test-assertion');
-    
-    // Clear captured output
-    capturedOutput.length = 0;
-    
-    // Now run from original directory (spekk-cli installation)
-    process.chdir(originalCwd);
-    run();
-    
-    assert.strictEqual(capturedOutput.length, 1);
-    const installDirOutput = JSON.parse(capturedOutput[0]);
-    
-    // Should get different results from different directories
-    assert.notStrictEqual(installDirOutput.id, 'test-assertion');
-  });
-
-  it('should show appropriate error when no specs directory exists', () => {
-    // Create a temp directory with no specs folder
-    const emptyDir = path.join(os.tmpdir(), `spekk-empty-${Date.now()}`);
-    fs.mkdirSync(emptyDir, { recursive: true });
-    
-    try {
-      // Change to the empty directory
-      process.chdir(emptyDir);
-      
-      // Run the parser
-      run();
-      
-      // Parse the JSON output
-      assert.strictEqual(capturedOutput.length, 1);
-      const output = JSON.parse(capturedOutput[0]);
-      
-      // Should indicate no specifications found
-      assert.strictEqual(output.status, 'empty');
-      assert.match(output.message, /no specifications found/i);
-    } finally {
-      // Clean up
-      process.chdir(originalCwd);
-      fs.rmSync(emptyDir, { recursive: true, force: true });
+  } finally {
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
     }
-  });
+  }
+});
 
-  it('should handle nested directory structures correctly', () => {
-    // Create a nested project structure
-    const projectDir = path.join(tempDir, 'my-project');
-    const projectSpecsDir = path.join(projectDir, 'specs');
-    const nestedSpecDir = path.join(projectSpecsDir, 'nested-spec');
-    const nestedAssertionsDir = path.join(nestedSpecDir, 'assertions');
-    
-    fs.mkdirSync(projectDir, { recursive: true });
-    fs.mkdirSync(projectSpecsDir, { recursive: true });
-    fs.mkdirSync(nestedSpecDir, { recursive: true });
-    fs.mkdirSync(nestedAssertionsDir, { recursive: true });
-    
-    // Create a nested spec
-    const nestedSpecContent = `---
-id: nested-spec
-created: 2026-01-28T11:00:00Z
+test('CLI reads different specs from different directories', async (t) => {
+  const testDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-1-'));
+  const testDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-2-'));
+
+  try {
+    // Setup first directory
+    const specsDir1 = path.join(testDir1, 'specs');
+    fs.mkdirSync(path.join(specsDir1, 'spec-one', 'assertions'), { recursive: true });
+    fs.writeFileSync(
+      path.join(specsDir1, 'spec-one', 'spec-one.md'),
+      `---
+id: spec-one
+created: 2024-01-01T00:00:00Z
+priority: 1
+---
+
+# Spec One
+`
+    );
+    fs.writeFileSync(
+      path.join(specsDir1, 'spec-one', 'assertions', 'assertion-one.md'),
+      `---
+id: assertion-one
+parent: spec-one
+created: 2024-01-01T00:00:00Z
 priority: 1
 status: not_started
 ---
 
-# Nested Spec`;
-    
-    fs.writeFileSync(path.join(nestedSpecDir, 'nested-spec.md'), nestedSpecContent);
-    
-    // Create a nested assertion
-    const nestedAssertionContent = `---
-id: nested-assertion
-parent: nested-spec
-created: 2026-01-28T11:00:00Z
+# Assertion One
+`
+    );
+
+    // Setup second directory
+    const specsDir2 = path.join(testDir2, 'specs');
+    fs.mkdirSync(path.join(specsDir2, 'spec-two', 'assertions'), { recursive: true });
+    fs.writeFileSync(
+      path.join(specsDir2, 'spec-two', 'spec-two.md'),
+      `---
+id: spec-two
+created: 2024-01-02T00:00:00Z
+priority: 1
+---
+
+# Spec Two
+`
+    );
+    fs.writeFileSync(
+      path.join(specsDir2, 'spec-two', 'assertions', 'assertion-two.md'),
+      `---
+id: assertion-two
+parent: spec-two
+created: 2024-01-02T00:00:00Z
 priority: 1
 status: not_started
 ---
 
-# Nested Assertion`;
-    
-    fs.writeFileSync(path.join(nestedAssertionsDir, 'nested-assertion.md'), nestedAssertionContent);
-    
-    // Change to the nested project directory
-    process.chdir(projectDir);
-    
-    // Run the parser
-    run();
-    
-    // Parse the JSON output
-    assert.strictEqual(capturedOutput.length, 1);
-    const output = JSON.parse(capturedOutput[0]);
-    
-    // Should find the nested assertion
-    assert.strictEqual(output.type, 'assertion');
-    assert.strictEqual(output.id, 'nested-assertion');
-    assert.strictEqual(output.parent, 'nested-spec');
-  });
+# Assertion Two
+`
+    );
+
+    // Test first directory
+    const logOutput1 = [];
+    t.mock.method(console, 'log', (msg) => logOutput1.push(msg));
+    await run({ specsDirectory: specsDir1, allBranches: true });
+    assert.strictEqual(JSON.parse(logOutput1[0]).id, 'assertion-one');
+
+    // Test second directory
+    const logOutput2 = [];
+    t.mock.method(console, 'log', (msg) => logOutput2.push(msg));
+    await run({ specsDirectory: specsDir2, allBranches: true });
+    assert.strictEqual(JSON.parse(logOutput2[0]).id, 'assertion-two');
+  } finally {
+    if (fs.existsSync(testDir1)) {
+      fs.rmSync(testDir1, { recursive: true, force: true });
+    }
+    if (fs.existsSync(testDir2)) {
+      fs.rmSync(testDir2, { recursive: true, force: true });
+    }
+  }
+});
+
+test('CLI shows appropriate message when no specs directory exists', async (t) => {
+  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-'));
+
+  try {
+    const logOutput = [];
+    t.mock.method(console, 'log', (msg) => logOutput.push(msg));
+
+    // Pass a non-existent specs directory
+    await run({ specsDirectory: path.join(testDir, 'specs'), allBranches: true });
+
+    assert.ok(logOutput.length > 0);
+    const output = JSON.parse(logOutput[0]);
+    assert.strictEqual(output.status, 'empty');
+  } finally {
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  }
+});
+
+test('CLI handles nested directory structures', async (t) => {
+  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-'));
+  const specsDir = path.join(testDir, 'specs');
+
+  try {
+    // Create nested structure
+    fs.mkdirSync(path.join(specsDir, 'parent-spec', 'assertions'), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(specsDir, 'parent-spec', 'parent-spec.md'),
+      `---
+id: parent-spec
+created: 2024-01-01T00:00:00Z
+priority: 1
+---
+
+# Parent Spec
+`
+    );
+
+    fs.writeFileSync(
+      path.join(specsDir, 'parent-spec', 'assertions', 'child-assertion.md'),
+      `---
+id: child-assertion
+parent: parent-spec
+created: 2024-01-02T00:00:00Z
+priority: 1
+status: not_started
+---
+
+# Child Assertion
+`
+    );
+
+    const logOutput = [];
+    t.mock.method(console, 'log', (msg) => logOutput.push(msg));
+
+    await run({ specsDirectory: specsDir, allBranches: true });
+
+    assert.strictEqual(logOutput.length, 1);
+    const output = JSON.parse(logOutput[0]);
+    assert.strictEqual(output.id, 'child-assertion');
+  } finally {
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  }
 });

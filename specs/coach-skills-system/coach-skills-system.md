@@ -2,7 +2,6 @@
 id: coach-skills-system
 created: 2026-01-23T22:14:00Z
 priority: 1
-status: not_started
 ---
 
 # Coach Skills System
@@ -17,6 +16,25 @@ The coach agent should be able to:
 - Maintain a lean, extensible framework for adding new skills
 - Provide structured outputs when using skills
 
+## Architecture
+
+Skills are **markdown files with workflow instructions**, not JavaScript classes.
+
+**Rationale:**
+- Coach agent IS already Claude - skills shouldn't call Claude API
+- Skills should be instructions for the AI, not procedural code
+- Consistent with spec-driven architecture (everything else is markdown)
+- Easy to create (write markdown, not implement JS classes)
+
+**Structure:**
+- Skills live in `specs/coach-skills-system/` as markdown files
+- Each skill defines: triggers, workflow steps, validation
+- Coach prompt lists available skills (or directory location)
+- Coach reads markdown files directly
+- Coach executes workflows using its own intelligence
+- **Zero infrastructure needed** - Just markdown files + coach
+- No JavaScript classes, no loaders, no registries, no API calls
+
 ## Skills Available
 
 ### Business Model Validator
@@ -29,6 +47,14 @@ Helps validate startup/business models through structured questioning and scorin
 - Hypothesis prioritization
 
 Produces quantitative health score and actionable recommendations.
+
+### Meeting Notes to Specs
+Processes meeting transcripts and extracts actionable outcomes. Activated via `spekk coach meeting`. Categorizes content into:
+- **Todos** - action items and follow-ups → TODOS.md
+- **Specs** - features and product changes → spec files in specs/
+- **Context** - architectural decisions → CONTEXT.md
+
+See `specs/meeting-notes-to-specs/` for full spec.
 
 ## Success Criteria
 

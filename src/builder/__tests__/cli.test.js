@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
 import { EventEmitter } from 'node:events';
+import { parseFlags, buildSpekkNextCommand, buildClaudeSpawnConfig } from '../cli.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -111,27 +112,180 @@ describe('Builder CLI', () => {
   test('builder CLI works from any directory', async () => {
     // Test that the builder CLI can find prompt files even when run from a different directory
     // This test now uses mocks to avoid spawning real processes
-    
+
     // Create a subdirectory to run from
     const subDir = path.join(tempDir, 'subdir');
     fs.mkdirSync(subDir);
-    
+
     const originalCwd = process.cwd();
     process.chdir(subDir);
-    
+
     try {
       // Simulate successful execution without file errors
       const errorOutput = ''; // No errors in mock
-      
+
       // Should not fail with file not found errors for prompt files
-      const relevantErrors = errorOutput.split('\n').filter(line => 
+      const relevantErrors = errorOutput.split('\n').filter(line =>
         line.includes('ENOENT') && (line.includes('prompt') || line.includes('specs/'))
       );
-      
+
       assert.strictEqual(relevantErrors.length, 0, 'Should not have prompt file not found errors');
-      
+
     } finally {
       process.chdir(originalCwd);
     }
+  });
+});
+
+describe('Builder CLI Flag Parsing', () => {
+  test('parseFlags returns default values with no args', () => {
+    const flags = parseFlags([]);
+    assert.strictEqual(flags.once, false);
+    assert.strictEqual(flags.dryRun, false);
+    assert.strictEqual(flags.confirm, false);
+    assert.strictEqual(flags.spec, null);
+    assert.strictEqual(flags.assertion, null);
+    assert.strictEqual(flags.help, false);
+  });
+
+  test('parseFlags recognizes --once flag', () => {
+    const flags = parseFlags(['--once']);
+    assert.strictEqual(flags.once, true);
+  });
+
+  test('parseFlags does not recognize removed --all flag', () => {
+    const flags = parseFlags(['--all']);
+    assert.strictEqual(flags.once, false);
+    // --all is no longer a recognized flag
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(flags, 'all'), false);
+  });
+
+  test('parseFlags recognizes --dry-run flag', () => {
+    const flags = parseFlags(['--dry-run']);
+    assert.strictEqual(flags.dryRun, true);
+  });
+
+  test('parseFlags recognizes -d short flag', () => {
+    const flags = parseFlags(['-d']);
+    assert.strictEqual(flags.dryRun, true);
+  });
+
+  test('parseFlags recognizes --confirm flag', () => {
+    const flags = parseFlags(['--confirm']);
+    assert.strictEqual(flags.confirm, true);
+  });
+
+  test('parseFlags recognizes -c short flag', () => {
+    const flags = parseFlags(['-c']);
+    assert.strictEqual(flags.confirm, true);
+  });
+
+  test('parseFlags recognizes --spec with value', () => {
+    const flags = parseFlags(['--spec', 'my-spec']);
+    assert.strictEqual(flags.spec, 'my-spec');
+  });
+
+  test('parseFlags recognizes -s short flag with value', () => {
+    const flags = parseFlags(['-s', 'my-spec']);
+    assert.strictEqual(flags.spec, 'my-spec');
+  });
+
+  test('parseFlags recognizes --assertion with value', () => {
+    const flags = parseFlags(['--assertion', 'my-assertion']);
+    assert.strictEqual(flags.assertion, 'my-assertion');
+  });
+
+  test('parseFlags recognizes --interactive flag', () => {
+    const flags = parseFlags(['--interactive']);
+    assert.strictEqual(flags.interactive, true);
+  });
+
+  test('parseFlags recognizes -i short flag', () => {
+    const flags = parseFlags(['-i']);
+    assert.strictEqual(flags.interactive, true);
+  });
+
+  test('parseFlags recognizes --help flag', () => {
+    const flags = parseFlags(['--help']);
+    assert.strictEqual(flags.help, true);
+  });
+
+  test('parseFlags recognizes -h short flag', () => {
+    const flags = parseFlags(['-h']);
+    assert.strictEqual(flags.help, true);
+  });
+
+  test('parseFlags handles multiple flags together', () => {
+    const flags = parseFlags(['--once', '--confirm', '--spec', 'auth']);
+    assert.strictEqual(flags.once, true);
+    assert.strictEqual(flags.confirm, true);
+    assert.strictEqual(flags.spec, 'auth');
+  });
+
+  test('parseFlags handles combined short and long flags', () => {
+    const flags = parseFlags(['--once', '-c', '-s', 'auth', '--dry-run']);
+    assert.strictEqual(flags.once, true);
+    assert.strictEqual(flags.confirm, true);
+    assert.strictEqual(flags.dryRun, true);
+    assert.strictEqual(flags.spec, 'auth');
+  });
+});
+
+describe('buildSpekkNextCommand consistency', () => {
+  test('buildSpekkNextCommand uses local bin/spekk.js path, not global spekk', () => {
+    const flags = parseFlags([]);
+    const cmd = buildSpekkNextCommand(flags);
+    assert.ok(cmd.includes('bin/spekk.js'), 'Command should reference local bin/spekk.js');
+    assert.ok(!cmd.startsWith('spekk '), 'Command should not start with bare "spekk"');
+  });
+
+  test('buildSpekkNextCommand includes next subcommand', () => {
+    const flags = parseFlags([]);
+    const cmd = buildSpekkNextCommand(flags);
+    assert.ok(cmd.includes(' next'), 'Command should include "next" subcommand');
+  });
+
+  test('buildSpekkNextCommand appends --spec flag', () => {
+    const flags = parseFlags(['--spec', 'my-spec']);
+    const cmd = buildSpekkNextCommand(flags);
+    assert.ok(cmd.includes('bin/spekk.js'), 'Command should reference local bin/spekk.js');
+    assert.ok(cmd.includes('--spec my-spec'), 'Command should include --spec flag');
+  });
+
+  test('buildSpekkNextCommand appends --assertion flag', () => {
+    const flags = parseFlags(['--assertion', 'my-assertion']);
+    const cmd = buildSpekkNextCommand(flags);
+    assert.ok(cmd.includes('bin/spekk.js'), 'Command should reference local bin/spekk.js');
+    assert.ok(cmd.includes('--assertion my-assertion'), 'Command should include --assertion flag');
+  });
+});
+
+describe('buildClaudeSpawnConfig', () => {
+  test('interactive mode uses stdio inherit and includes prompt as positional arg', () => {
+    const prompt = 'You are the Builder Agent';
+    const config = buildClaudeSpawnConfig(true, prompt);
+
+    assert.deepStrictEqual(config.options.stdio, 'inherit');
+    assert.ok(config.args.includes(prompt), 'Should pass prompt as positional arg');
+    assert.ok(!config.args.includes('--print'), 'Should NOT include --print flag');
+    assert.ok(!config.args.includes('-p'), 'Should NOT include -p flag');
+  });
+
+  test('headless mode passes prompt as positional arg with inherited stdio for TTY compatibility', () => {
+    const prompt = 'You are the Builder Agent';
+    const config = buildClaudeSpawnConfig(false, prompt);
+
+    assert.deepStrictEqual(config.options.stdio, 'inherit');
+    assert.ok(config.args.includes(prompt), 'Should pass prompt as positional arg in headless mode');
+    assert.ok(!config.args.includes('--print'), 'Should NOT include --print flag');
+    assert.ok(!config.args.includes('-p'), 'Should NOT include -p flag');
+  });
+
+  test('both modes include --dangerously-skip-permissions', () => {
+    const interactive = buildClaudeSpawnConfig(true, 'test');
+    const headless = buildClaudeSpawnConfig(false, 'test');
+
+    assert.ok(interactive.args.includes('--dangerously-skip-permissions'));
+    assert.ok(headless.args.includes('--dangerously-skip-permissions'));
   });
 });

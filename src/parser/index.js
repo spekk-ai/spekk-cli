@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,9 +12,29 @@ function getSpekkInstallationDirectory() {
   return path.join(__dirname, '../..');
 }
 
+// Get current git branch
+function getCurrentGitBranch() {
+  try {
+    const branch = execSync('git branch --show-current', { 
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']  // Suppress stderr
+    }).trim();
+    
+    if (!branch) {
+      console.warn('Warning: Not in a git repository. Defaulting to main.');
+      return 'main';
+    }
+    
+    return branch;
+  } catch (error) {
+    console.warn('Warning: Could not detect git branch. Defaulting to main.');
+    return 'main';
+  }
+}
+
 // Simple YAML frontmatter parser (since we don't have gray-matter)
 function parseFrontmatter(content) {
-  const lines = content.split('\n');
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
   
   if (lines[0] !== '---') {
     throw new Error('File must start with --- YAML frontmatter delimiter');
@@ -62,7 +83,10 @@ function parseFrontmatter(content) {
     } else {
       // If we were in an array, save it
       if (inArray && currentKey) {
-        frontmatter[currentKey] = arrayValues;
+        // Convert kebab-case keys to camelCase for JavaScript
+        const jsKey = currentKey === 'depends-on' ? 'dependsOn' :
+                     currentKey === 'locked-by' ? 'lockedBy' : currentKey;
+        frontmatter[jsKey] = arrayValues;
         arrayValues = [];
         inArray = false;
       }
@@ -89,7 +113,10 @@ function parseFrontmatter(content) {
             value = value.slice(1, -1);
           }
           
-          frontmatter[key] = value;
+          // Convert kebab-case keys to camelCase for JavaScript
+          const jsKey = key === 'depends-on' ? 'dependsOn' :
+                       key === 'locked-by' ? 'lockedBy' : key;
+          frontmatter[jsKey] = value;
           currentKey = null; // Reset if we got a value
         }
       }
@@ -98,7 +125,10 @@ function parseFrontmatter(content) {
   
   // Handle any remaining array
   if (inArray && currentKey) {
-    frontmatter[currentKey] = arrayValues;
+    // Convert kebab-case keys to camelCase for JavaScript
+    const jsKey = currentKey === 'depends-on' ? 'dependsOn' :
+                 currentKey === 'locked-by' ? 'lockedBy' : currentKey;
+    frontmatter[jsKey] = arrayValues;
   }
   
   return { data: frontmatter, content: markdownContent };
@@ -146,6 +176,89 @@ function validateFields(data, filePath, isAssertion = false) {
   
   if (data.updated && !timestampPattern.test(data.updated)) {
     throw new Error(`Invalid ISO 8601 timestamp in 'updated' field: '${data.updated}' in ${filePath}`);
+  }
+  
+  // Validate branch field
+  if (data.branch !== undefined && data.branch !== null) {
+    const branch = data.branch;
+    
+    // Type check
+    if (typeof branch !== 'string') {
+      throw new Error(`Field 'branch' must be a string in ${filePath}`);
+    }
+    
+    // Cannot start or end with /
+    if (branch.startsWith('/') || branch.endsWith('/')) {
+      throw new Error(`Field 'branch' cannot start or end with '/' in ${filePath}`);
+    }
+    
+    // Format check (valid git branch name)
+    const validBranchPattern = /^[a-zA-Z0-9][a-zA-Z0-9/_-]*$/;
+    if (!validBranchPattern.test(branch)) {
+      throw new Error(`Field 'branch' contains invalid characters in ${filePath}\nFound: "${branch}"\nGit branch names can only contain letters, numbers, slashes, hyphens, and underscores.`);
+    }
+    
+    // Warning for non-standard patterns (don't throw, just warn)
+    const standardPatterns = /^(main|master|develop|feature\/|bugfix\/|hotfix\/|release\/)/;
+    if (!standardPatterns.test(branch)) {
+      console.warn(`Warning: Field 'branch' uses non-standard pattern in ${filePath}\nFound: "${branch}"\nConsider using standard patterns: main, feature/<name>, bugfix/<name>, hotfix/<name>`);
+    }
+  }
+}
+
+// Validate depends-on field
+function validateDependsOn(data, filePath, allAssertions) {
+  // Skip if field is not present or is null (both are valid)
+  if (data.dependsOn === undefined || data.dependsOn === null) {
+    return;
+  }
+  
+  const dependsOn = data.dependsOn;
+  
+  // Type check
+  if (typeof dependsOn !== 'string') {
+    throw new Error(`Field 'depends-on' must be a string or null in ${filePath}\nFound: ${JSON.stringify(dependsOn)}`);
+  }
+  
+  // Format check (kebab-case)
+  const kebabCasePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+  if (!kebabCasePattern.test(dependsOn)) {
+    throw new Error(`Field 'depends-on' must be kebab-case (lowercase with hyphens) in ${filePath}\nFound: "${dependsOn}"`);
+  }
+  
+  // Reference check
+  if (!allAssertions.some(a => a.id === dependsOn)) {
+    throw new Error(`Field 'depends-on' references non-existent assertion '${dependsOn}' in ${filePath}`);
+  }
+  
+  // Self-reference check
+  if (dependsOn === data.id) {
+    throw new Error(`Field 'depends-on' cannot reference itself in ${filePath}`);
+  }
+}
+
+// Detect circular dependencies
+function detectCircularDependencies(assertions) {
+  for (const assertion of assertions) {
+    if (!assertion.dependsOn) continue;
+    
+    const visited = new Set();
+    const path = [];
+    let current = assertion;
+    
+    while (current && current.dependsOn) {
+      if (visited.has(current.id)) {
+        // Found a cycle - build the cycle path
+        path.push(current.id);
+        const cycleStart = path.indexOf(current.id);
+        const cycle = path.slice(cycleStart).join(' → ');
+        throw new Error(`Circular dependency detected:\n  ${cycle}\n\nBreak the cycle by removing or changing one of the dependencies.`);
+      }
+      
+      visited.add(current.id);
+      path.push(current.id);
+      current = assertions.find(a => a.id === current.dependsOn);
+    }
   }
 }
 
@@ -308,7 +421,8 @@ function validateFolderStructure(specsDir) {
       
       // Check assertions directory exists
       if (!fs.existsSync(assertionsDir)) {
-        throw new Error(`Invalid folder structure: Missing assertions directory specs/${specDir}/assertions/`);
+        console.warn(`Warning: Spec specs/${specDir}/ has no assertions/ directory — skipping.`);
+        continue;
       }
       
       // Verify assertions directory is actually a directory
@@ -371,6 +485,7 @@ function parseAllSpecs(specsDirectory = null) {
         specs.push({
           ...data,
           status: data.status || 'not_started',
+          branch: data.branch || 'main',
           file: `specs/${specDir}/${specDir}.md`,
           title: extractTitle(markdownContent),
           content: content
@@ -411,6 +526,7 @@ function parseAllSpecs(specsDirectory = null) {
           assertions.push({
             ...data,
             status: data.status || 'not_started',
+            branch: data.branch || 'main',
             file: `specs/${specDir}/assertions/${assertionFile}`,
             title: extractTitle(markdownContent),
             content: content
@@ -429,6 +545,14 @@ function parseAllSpecs(specsDirectory = null) {
       throw new Error(`Parent spec '${assertion.parent}' not found for assertion '${assertion.id}'`);
     }
   }
+  
+  // Validate depends-on fields (after all assertions are loaded)
+  for (const assertion of assertions) {
+    validateDependsOn(assertion, assertion.file, assertions);
+  }
+  
+  // Detect circular dependencies
+  detectCircularDependencies(assertions);
   
   // Update parent spec statuses based on child assertions
   for (const spec of specs) {
@@ -505,24 +629,95 @@ function computeParentStatus(parentId, assertions) {
   return 'not_started';
 }
 
+// Check if a lock is stale (>2 hours old)
+function isLockStale(lockedBy) {
+  if (!lockedBy) return true; // No lock means it's available
+
+  // Extract timestamp from lock format: builder-{hostname}-{pid}-{timestamp}
+  const parts = lockedBy.split('-');
+  const timestamp = parseInt(parts[parts.length - 1]);
+
+  if (isNaN(timestamp)) {
+    // Invalid timestamp format, treat as stale
+    return true;
+  }
+
+  const currentTime = Math.floor(Date.now() / 1000);
+  const lockAge = currentTime - timestamp;
+
+  // Stale if older than 2 hours (7200 seconds)
+  return lockAge > 7200;
+}
+
 // Find next priority assertion
-function findNextAssertion(assertions, specs = []) {
+function findNextAssertion(assertions, specs = [], options = {}) {
+  // If specific assertion is requested, return it directly
+  if (options.assertion) {
+    const targetAssertion = assertions.find(a => a.id === options.assertion);
+    if (!targetAssertion) {
+      return { error: true, message: `Assertion '${options.assertion}' not found` };
+    }
+    return targetAssertion;
+  }
+
   // Filter to incomplete items, excluding:
-  // - Assertions with status 'done' or 'draft'  
+  // - Assertions with status 'done' or 'draft'
   // - Assertions whose parent spec has status 'draft'
-  const incomplete = assertions.filter(a => {
+  let incomplete = assertions.filter(a => {
     if (['done', 'draft'].includes(a.status)) return false;
-    
+
     const parentSpec = specs.find(s => s.id === a.parent);
     if (parentSpec?.status === 'draft') return false;
-    
+
     return true;
   });
-  
+
+  // Filter by branch (unless --all-branches is specified)
+  if (!options.allBranches) {
+    // Allow currentBranch to be injected for testing, otherwise detect it
+    const currentBranch = options.currentBranch || getCurrentGitBranch();
+    
+    // Filter to assertions with matching branch OR no branch field (for backwards compatibility)
+    const branchFiltered = incomplete.filter(a => !a.branch || a.branch === currentBranch);
+    
+    // Use filtered results
+    incomplete = branchFiltered;
+  }
+
+  // Filter by spec if specified
+  if (options.spec) {
+    const specExists = specs.some(s => s.id === options.spec);
+    if (!specExists) {
+      return { error: true, message: `Spec '${options.spec}' not found` };
+    }
+    incomplete = incomplete.filter(a => a.parent === options.spec);
+  }
+
+  // Filter by dependency satisfaction
+  incomplete = incomplete.filter(a => {
+    if (!a.dependsOn) return true;  // No dependency
+
+    const dependency = assertions.find(d => d.id === a.dependsOn);
+    return dependency && dependency.status === 'done';
+  });
+
+  // Filter by lock status
+  // Skip assertions that are in_progress AND have a fresh (non-stale) lock
+  incomplete = incomplete.filter(a => {
+    // If not in_progress, no lock filtering needed
+    if (a.status !== 'in_progress') return true;
+
+    // If in_progress but no lock, include it (backwards compatible)
+    if (!a.lockedBy) return true;
+
+    // If in_progress with a lock, check if lock is stale
+    return isLockStale(a.lockedBy);
+  });
+
   if (incomplete.length === 0) {
     return null;
   }
-  
+
   // Sort by priority (1 highest), then by created date (oldest first), then by id
   incomplete.sort((a, b) => {
     if (a.priority !== b.priority) {
@@ -533,7 +728,7 @@ function findNextAssertion(assertions, specs = []) {
     }
     return a.id.localeCompare(b.id);
   });
-  
+
   return incomplete[0];
 }
 
@@ -590,8 +785,23 @@ export function run(options = {}) {
       return;
     }
     
-    const nextAssertion = findNextAssertion(assertions, specs);
-    
+    const nextAssertion = findNextAssertion(assertions, specs, {
+      spec: options.spec,
+      assertion: options.assertion,
+      allBranches: options.allBranches,
+      currentBranch: options.currentBranch
+    });
+
+    // Handle error from findNextAssertion
+    if (nextAssertion && nextAssertion.error) {
+      console.log(JSON.stringify({
+        type: 'error',
+        message: nextAssertion.message
+      }, null, 2));
+      process.exit(1);
+      return;
+    }
+
     if (!nextAssertion) {
       console.log(JSON.stringify({
         type: 'complete',
@@ -611,6 +821,10 @@ export function run(options = {}) {
       file: nextAssertion.file,
       priority: nextAssertion.priority,
       status: nextAssertion.status,
+      branch: nextAssertion.branch,
+      created: nextAssertion.created,
+      dependsOn: nextAssertion.dependsOn,
+      lockedBy: nextAssertion.lockedBy,
       title: nextAssertion.title,
       content: nextAssertion.content,
       'validation-tools': nextAssertion['validation-tools'] || [],
@@ -631,4 +845,4 @@ export function run(options = {}) {
 }
 
 // Export the parser functions for testing
-export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields };
+export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields, validateDependsOn, detectCircularDependencies, getCurrentGitBranch, isLockStale };

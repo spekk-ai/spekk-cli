@@ -2,7 +2,6 @@
 id: test-file-organization
 created: 2026-01-21T23:30:00Z
 priority: 1
-status: not_started
 ---
 
 # Parser Test File Organization

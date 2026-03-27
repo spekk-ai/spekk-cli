@@ -4,6 +4,7 @@ parent: spec-parser
 created: 2026-01-21T19:15:00Z
 priority: 1
 status: done
+branch: feature/spec-parser
 ---
 
 # CLI Directory Structure

@@ -33,7 +33,7 @@ async function launchObserverAgent(cliArgs = null) {
     
     // Parse options to pass context to Claude agent
     const options = parseOptions(args);
-    let baseMessage = resolver.createActivationMessage('observer-agent');
+    let baseMessage = resolver.createActivationMessage('observer');
     
     if (Object.keys(options).length > 0) {
       baseMessage += '\n\nCLI Options provided:\n';
@@ -46,15 +46,12 @@ async function launchObserverAgent(cliArgs = null) {
       baseMessage += '\nYou can use these preferences in your monitoring approach. The programmatic observer tool is available in src/observer/programmatic.js if you want to use it.';
     }
     
-    // Launch Claude Code with the observer agent message and prompt
-    const claudeProcess = spawn('claude', ['--dangerously-skip-permissions'], {
-      stdio: ['pipe', 'inherit', 'inherit']
+    // Launch Claude Code with the observer agent message as a positional argument.
+    // Using stdio: 'inherit' so Claude gets a real TTY (required for Ink/raw mode on Windows).
+    const claudeProcess = spawn('claude', ['--dangerously-skip-permissions', baseMessage], {
+      stdio: 'inherit'
     });
-    
-    // Send the agent activation message with full prompt content and context
-    claudeProcess.stdin.write(baseMessage + '\n');
-    claudeProcess.stdin.end();
-    
+
     // Handle process events
     claudeProcess.on('error', (error) => {
       if (error.code === 'ENOENT') {

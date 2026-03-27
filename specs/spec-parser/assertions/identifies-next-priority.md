@@ -4,6 +4,8 @@ parent: spec-parser
 created: 2026-01-20T16:15:00Z
 priority: 2
 status: done
+depends-on: validates-status-values
+branch: feature/spec-parser
 ---
 
 # Parser Must Identify Next Priority Item

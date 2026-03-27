@@ -3,12 +3,14 @@ id: todos-formatted-for-tracking
 parent: meeting-notes-to-specs
 created: 2025-02-12T19:30:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # Todos Formatted for Action Tracking
 
-Todo items extracted from meetings are formatted and output to TODOS.md for tracking.
+**Tests:** src/coach/__tests__/todos-formatted-for-tracking.test.js
+
+Todo items extracted from meetings by the coach's meeting-processing skill are formatted and output to TODOS.md for tracking.
 
 ## Success Criteria
 

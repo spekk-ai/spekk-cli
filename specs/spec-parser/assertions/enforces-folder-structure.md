@@ -4,6 +4,7 @@ parent: spec-parser
 created: 2026-01-20T16:00:00Z
 priority: 1
 status: done
+branch: feature/spec-parser
 ---
 
 # Parser Must Enforce Folder Structure

@@ -7,6 +7,9 @@ import { launchObserverAgent } from '../src/observer/cli.js';
 import { runBuilderLoop, runCoachLoop } from '../src/loops/index.js';
 import { showStatus } from '../src/status/cli.js';
 import { showSpekk } from '../src/show/cli.js';
+import { parseFlags } from '../src/cli/parse-flags.js';
+import { launchServe } from '../src/serve/cli.js';
+import { launchSandbox } from '../src/sandbox/cli.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -44,24 +47,36 @@ COMMANDS:
     break;
 
   case 'coach':
-    await launchCoachAgent();
+    await launchCoachAgent(args.slice(1));
     break;
   
   case 'builder':
-    await launchBuilderAgent();
+    await launchBuilderAgent(args.slice(1));
     break;
   
   case 'observer':
     await launchObserverAgent(args.slice(1));
     break;
-  
+
+  case 'serve':
+    launchServe(args.slice(1));
+    break;
+
+  case 'sandbox':
+    await launchSandbox(args.slice(1));
+    break;
+
   case 'status':
     await showStatus();
     break;
   
-  case 'show':
-    await showSpekk();
+  case 'show': {
+    const showFlags = parseFlags(args.slice(1), {
+      watch: { flags: ['--watch', '-w'], type: 'boolean' },
+    });
+    await showSpekk(showFlags);
     break;
+  }
   
   case '--help':
   case '-h':
@@ -73,11 +88,14 @@ USAGE:
   spekk [COMMAND]
 
 COMMANDS:
-  show      Generate and display spec explorer web interface
+  show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
+  serve     Start WebSocket server for browser extension (--port, --host)
   coach     Launch the Coach Agent to create and refine specs
+              Use "spekk coach meeting [file]" for meeting transcript processing
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
+  sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
   loop      Run orchestration workflows (builder/coach loops)
   help      Show this help message
 
@@ -87,11 +105,22 @@ DEFAULT:
     break;
   
   default:
-    // Default behavior: run the parser
-    const allFlag = args.includes('--all');
-    if (allFlag) {
-      run({ all: true });
-    } else {
-      run();
+    // Default behavior: run the parser with flags
+    const options = {};
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      switch (arg) {
+        case '--all':
+          options.all = true;
+          break;
+        case '--spec':
+        case '-s':
+          options.spec = args[++i];
+          break;
+        case '--assertion':
+          options.assertion = args[++i];
+          break;
+      }
     }
+    run(options);
 }

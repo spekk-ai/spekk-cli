@@ -2,7 +2,6 @@
 id: optimize-test-performance
 created: 2026-01-28T21:25:00Z
 priority: 1
-status: not_started
 ---
 
 # Optimize Test Performance

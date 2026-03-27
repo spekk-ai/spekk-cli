@@ -4,6 +4,8 @@ parent: spec-parser
 created: 2026-01-21T19:45:00Z
 priority: 1
 status: done
+depends-on: target-directory-structure
+branch: feature/spec-parser
 ---
 
 # Tests Must Be In Correct Location

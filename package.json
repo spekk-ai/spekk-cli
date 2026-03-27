@@ -1,6 +1,6 @@
 {
   "name": "@spekk/cli",
-  "version": "1.0.4",
+  "version": "1.4.1",
   "description": "CLI tool for spec-driven development with coach and builder agents",
   "main": "src/index.js",
   "type": "module",
@@ -14,10 +14,13 @@
     "!src/test-runner.js",
     "!src/test-runner-mocked.js",
     "specs/builder-agent/",
-    "specs/coach-agent/"
+    "specs/coach-agent/",
+    "specs/coach-skills-system/",
+    "src/sandbox/templates/"
   ],
   "scripts": {
     "next": "node src/parser/cli.js",
+    "show": "node bin/spekk.js show",
     "status": "node bin/spekk.js status",
     "coach": "node src/coach/cli.js",
     "builder": "node src/builder/cli.js",
@@ -47,7 +50,9 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "glob": "^10.3.10"
-  },
-  "devDependencies": {}
+    "glob": "^10.3.10",
+    "ws": "^8.19.0",
+    "zod": "^3.23.0",
+    "@thinknimble/tn-models": "^4.1.1"
+  }
 }
