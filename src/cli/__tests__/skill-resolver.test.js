@@ -183,10 +183,10 @@ describe('SkillResolver', () => {
       assert.strictEqual(sharedEntries[0].source, localSkillDir, 'Local should win');
     });
 
-    test('returns empty array for builder when no skills exist', () => {
+    test('returns empty array for builder when no global/local skills exist', () => {
       const resolver = new SkillResolver({ homeDir: tempHome, cwd: tempCwd });
       const skills = resolver.listSkills('builder');
-      // builder-skills dir is empty (only .gitkeep), so no .md files
+      // builder-skills package dir is empty (.gitkeep only), no global/local skills in temp dirs
       assert.strictEqual(skills.length, 0);
     });
 
