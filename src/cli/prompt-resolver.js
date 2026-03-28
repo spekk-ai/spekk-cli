@@ -115,16 +115,13 @@ export class PromptResolver {
     try {
       const promptContent = this.getPromptContent(agentName);
 
-      // Include path information for skill discovery
       const workingDir = process.cwd();
       const spekkInstallation = projectRoot;
-      const skillsDir = join(projectRoot, 'specs/coach-skills-system');
 
       return `You are the ${agentDisplayName} Agent - read the prompt and follow the instructions exactly.
 
 Working directory: ${workingDir}
 Spekk installation: ${spekkInstallation}
-Skills directory: ${skillsDir}
 
 Here is your prompt:
 

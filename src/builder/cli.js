@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { createInterface } from 'readline';
 import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
 import { parseFlags as sharedParseFlags } from '../cli/parse-flags.js';
+import { SkillResolver } from '../cli/skill-resolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -55,15 +56,62 @@ function parseFlags(args) {
 }
 
 /**
+ * Extract the first positional (non-flag) argument as a potential skill subcommand.
+ * Returns the skill name or null.
+ */
+function extractSkillArg(args) {
+  // Collect all known flag strings to skip
+  const flagStrings = new Set();
+  const stringFlags = new Set();
+  for (const def of Object.values(builderFlagDefs)) {
+    for (const f of def.flags) {
+      flagStrings.add(f);
+      if (def.type === 'string') stringFlags.add(f);
+    }
+  }
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (flagStrings.has(arg)) {
+      if (stringFlags.has(arg)) i++; // skip the value too
+      continue;
+    }
+    if (arg.startsWith('-')) continue; // unknown flag, skip
+    return arg;
+  }
+  return null;
+}
+
+/**
+ * Build a skill activation message to prepend to the builder activation message.
+ */
+function buildBuilderSkillMessage(activationMessage, skillName, skill) {
+  let message = activationMessage;
+  message += '\n\n---\n\n**Skill Activation: `spekk builder ' + skillName + '`**\n\n';
+  message += 'The user has launched you with a skill active via `spekk builder ' + skillName + '`.\n';
+  message += 'Follow the inlined skill workflow below immediately — do not wait for trigger detection.\n';
+  message += '\n<skill-content>\n' + skill.content + '\n</skill-content>\n';
+  return message;
+}
+
+/**
  * Show help message
  */
 function showHelp() {
+  const skillResolver = new SkillResolver();
+  const skills = skillResolver.listSkills('builder');
+
+  let skillLines = '';
+  if (skills.length > 0) {
+    skillLines = '\nAVAILABLE SKILLS:\n' + skills.map(s => `  ${s.name}`).join('\n') + '\n';
+  }
+
   console.log(`
 spekk builder - Build assertions from specs
 
 USAGE:
-  spekk builder [FLAGS]
-
+  spekk builder [SKILL] [FLAGS]
+${skillLines}
 FLAGS:
   (none)              Loop through all assertions continuously (default)
   --once              Build one assertion then exit
@@ -329,6 +377,43 @@ async function launchBuilderAgent(args = []) {
     return;
   }
 
+  // Skill subcommand: detect first positional arg as potential skill
+  const skillName = extractSkillArg(args);
+  if (skillName) {
+    const skillResolver = new SkillResolver();
+    const skill = skillResolver.resolveSkill('builder', skillName);
+    if (skill) {
+      colorLog('cyan', `🔧 Starting Builder Agent with skill: ${skillName}`);
+      const { activationMessage } = launchAgentWithPrompt('builder');
+      const fullMessage = buildBuilderSkillMessage(activationMessage, skillName, skill);
+
+      const claudeProcess = spawn('claude', ['--dangerously-skip-permissions', fullMessage], {
+        stdio: 'inherit'
+      });
+
+      await new Promise((resolve, reject) => {
+        claudeProcess.on('error', (error) => {
+          if (error.code === 'ENOENT') {
+            colorLog('red', '❌ Error: Claude Code CLI not found.');
+          } else {
+            colorLog('red', '❌ Error launching Claude Code: ' + error.message);
+          }
+          reject(error);
+        });
+        claudeProcess.on('exit', (code) => {
+          if (code === 0) {
+            colorLog('green', '✅ Builder agent completed skill work');
+          } else {
+            colorLog('yellow', `⚠️ Claude Code exited with code ${code}`);
+          }
+          resolve();
+        });
+      });
+      return;
+    }
+    // Not a recognized skill — fall through to normal builder behavior
+  }
+
   // Interactive mode: only when explicitly requested via --interactive flag.
   // Parent suppresses SIGINT so Claude Code handles Ctrl+C natively (Esc-style interrupt).
   // The session ends when Claude exits on its own (e.g. /exit, Ctrl+D).
@@ -486,4 +571,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   launchBuilderAgent(args);
 }
 
-export { launchBuilderAgent, parseFlags, buildSpekkNextCommand, buildClaudeSpawnConfig };
+export { launchBuilderAgent, parseFlags, extractSkillArg, buildBuilderSkillMessage, buildSpekkNextCommand, buildClaudeSpawnConfig };
