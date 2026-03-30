@@ -10,6 +10,7 @@ import { showSpekk } from '../src/show/cli.js';
 import { parseFlags } from '../src/cli/parse-flags.js';
 import { launchServe } from '../src/serve/cli.js';
 import { launchSandbox } from '../src/sandbox/cli.js';
+import { SkillResolver } from '../src/cli/skill-resolver.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -80,7 +81,16 @@ COMMANDS:
   
   case '--help':
   case '-h':
-  case 'help':
+  case 'help': {
+    const skillResolver = new SkillResolver();
+    const coachSkills = skillResolver.listSkills('coach');
+    const builderSkills = skillResolver.listSkills('builder');
+
+    const formatSkills = (skills) =>
+      skills.length
+        ? skills.map(s => `    ${s.name}`).join('\n')
+        : '    (none)';
+
     console.log(`
 spekk - Spec-driven development CLI
 
@@ -92,17 +102,26 @@ COMMANDS:
   status    Show comprehensive overview of all specs and assertions
   serve     Start WebSocket server for browser extension (--port, --host)
   coach     Launch the Coach Agent to create and refine specs
-              Use "spekk coach meeting [file]" for meeting transcript processing
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
   loop      Run orchestration workflows (builder/coach loops)
   help      Show this help message
 
+COACH SKILLS:
+${formatSkills(coachSkills)}
+
+BUILDER SKILLS:
+${formatSkills(builderSkills)}
+
+  Run "spekk coach <skill>" or "spekk builder <skill>" to activate a skill.
+  Add custom skills in .spekk/skills/coach/ or .spekk/skills/builder/
+
 DEFAULT:
   When no command is provided, spekk runs the spec parser to find the next assertion.
 `);
     break;
+  }
   
   default:
     // Default behavior: run the parser with flags
