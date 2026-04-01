@@ -12,14 +12,8 @@ function makeFakeRelease(tagName = 'v1.2.3') {
   return {
     tag_name: tagName,
     assets: [
-      {
-        name: 'sandbox',
-        browser_download_url: `https://github.com/spekk-ai/spekk-app/releases/download/${tagName}/sandbox`,
-      },
-      {
-        name: 'cloud-init.yaml',
-        browser_download_url: `https://github.com/spekk-ai/spekk-app/releases/download/${tagName}/cloud-init.yaml`,
-      },
+      { name: 'sandbox', id: 1001 },
+      { name: 'cloud-init.yaml', id: 1002 },
     ],
   };
 }
@@ -45,10 +39,10 @@ describe('fetchReleaseArtifacts', () => {
       if (url.includes('/releases/latest')) {
         return { ok: true, status: 200, json: async () => fakeRelease };
       }
-      if (url.includes('/sandbox')) {
+      if (url.includes('/releases/assets/1001')) {
         return { ok: true, status: 200, arrayBuffer: async () => FAKE_BINARY.buffer };
       }
-      if (url.includes('/cloud-init.yaml')) {
+      if (url.includes('/releases/assets/1002')) {
         return { ok: true, status: 200, text: async () => FAKE_CLOUD_INIT };
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -75,11 +69,8 @@ describe('fetchReleaseArtifacts', () => {
       if (url.includes('/releases/tags/')) {
         return { ok: true, status: 200, json: async () => fakeRelease };
       }
-      if (url.includes('/sandbox')) {
-        return { ok: true, status: 200, arrayBuffer: async () => FAKE_BINARY.buffer };
-      }
-      if (url.includes('/cloud-init.yaml')) {
-        return { ok: true, status: 200, text: async () => FAKE_CLOUD_INIT };
+      if (url.includes('/releases/assets/')) {
+        return { ok: true, status: 200, arrayBuffer: async () => FAKE_BINARY.buffer, text: async () => FAKE_CLOUD_INIT };
       }
       throw new Error(`Unexpected URL: ${url}`);
     });

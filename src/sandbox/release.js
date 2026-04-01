@@ -47,10 +47,12 @@ export async function fetchReleaseArtifacts(tag = 'latest') {
     process.exit(1)
   }
 
-  // Step 3: Download both assets
+  // Step 3: Download both assets via API endpoint (not browser_download_url,
+  // which redirects to S3 and drops the Authorization header on private repos)
+  const assetHeaders = { 'Authorization': `token ${ghToken}`, 'Accept': 'application/octet-stream' }
   const [binaryRes, cloudInitRes] = await Promise.all([
-    fetch(binaryAsset.browser_download_url, { headers }),
-    fetch(cloudInitAsset.browser_download_url, { headers }),
+    fetch(`https://api.github.com/repos/spekk-ai/spekk-app/releases/assets/${binaryAsset.id}`, { headers: assetHeaders }),
+    fetch(`https://api.github.com/repos/spekk-ai/spekk-app/releases/assets/${cloudInitAsset.id}`, { headers: assetHeaders }),
   ])
 
   if (!binaryRes.ok) {

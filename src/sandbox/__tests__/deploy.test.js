@@ -102,22 +102,19 @@ describe('sandbox deploy', () => {
     const originalFetch = globalThis.fetch;
     const FAKE_BINARY = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
     globalThis.fetch = async (url) => {
-      if (url.includes('/releases/')) {
+      if (url.includes('/releases/latest') || url.includes('/releases/tags/')) {
         return {
           ok: true, status: 200, json: async () => ({
             tag_name: 'v1.0.0',
             assets: [
-              { name: 'sandbox', browser_download_url: 'https://example.com/sandbox' },
-              { name: 'cloud-init.yaml', browser_download_url: 'https://example.com/cloud-init.yaml' },
+              { name: 'sandbox', id: 1001 },
+              { name: 'cloud-init.yaml', id: 1002 },
             ],
           }),
         };
       }
-      if (url.includes('/sandbox')) {
-        return { ok: true, status: 200, arrayBuffer: async () => FAKE_BINARY.buffer };
-      }
-      if (url.includes('/cloud-init.yaml')) {
-        return { ok: true, status: 200, text: async () => '#cloud-config\n' };
+      if (url.includes('/releases/assets/')) {
+        return { ok: true, status: 200, arrayBuffer: async () => FAKE_BINARY.buffer, text: async () => '#cloud-config\n' };
       }
     };
 
