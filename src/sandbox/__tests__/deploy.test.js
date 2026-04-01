@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import { Readable } from 'stream';
 import { deployCommand } from '../deploy.js';
 
+
 let originalHome;
 let originalSpawn;
 let tmpDir;
@@ -81,22 +82,46 @@ describe('sandbox deploy', () => {
     assert.strictEqual(typeof deployCommand, 'function');
   });
 
-  test('deploy looks up sandbox from store and attempts SCP with correct IP', async () => {
+  test('deploy looks up sandbox from store and deploys to correct IP', async () => {
     await writeSandboxFile({
       'test-deploy': { dropletId: 999, ip: '192.168.1.100', region: 'nyc1', status: 'active' }
     });
 
-    // Mock spawn so scp/ssh are never actually executed
+    // Mock spawn so rsync/ssh are never actually executed
     const spawnCalls = [];
     childProcess.spawn = (cmd, args, opts) => {
       spawnCalls.push({ cmd, args });
       const child = new EventEmitter();
-      const stdoutData = (cmd === 'ssh' && args.includes('systemctl is-active spekk-agent')) ? 'active\n' : '';
-      child.stdout = Readable.from([stdoutData]);
+      child.stdout = Readable.from(['']);
       child.stderr = Readable.from([]);
       process.nextTick(() => child.emit('close', 0));
       return child;
     };
+
+    // Mock fetch for fetchReleaseArtifacts
+    const originalFetch = globalThis.fetch;
+    const FAKE_BINARY = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
+    globalThis.fetch = async (url) => {
+      if (url.includes('/releases/')) {
+        return {
+          ok: true, status: 200, json: async () => ({
+            tag_name: 'v1.0.0',
+            assets: [
+              { name: 'sandbox', browser_download_url: 'https://example.com/sandbox' },
+              { name: 'cloud-init.yaml', browser_download_url: 'https://example.com/cloud-init.yaml' },
+            ],
+          }),
+        };
+      }
+      if (url.includes('/sandbox')) {
+        return { ok: true, status: 200, arrayBuffer: async () => FAKE_BINARY.buffer };
+      }
+      if (url.includes('/cloud-init.yaml')) {
+        return { ok: true, status: 200, text: async () => '#cloud-config\n' };
+      }
+    };
+
+    process.env.GITHUB_TOKEN = 'test-token';
 
     const originalLog = console.log;
     let logMsgs = [];
@@ -106,6 +131,7 @@ describe('sandbox deploy', () => {
       await deployCommand(['test-deploy']);
     } finally {
       console.log = originalLog;
+      globalThis.fetch = originalFetch;
     }
 
     // Verify the sandbox IP was used in console output
@@ -115,12 +141,12 @@ describe('sandbox deploy', () => {
       `Expected IP 192.168.1.100 in output, got: ${allOutput}`
     );
 
-    // Verify scp was called with the correct IP
-    const scpCall = spawnCalls.find(c => c.cmd === 'scp');
-    assert.ok(scpCall, 'Expected scp to be called');
+    // Verify rsync was called with the correct IP
+    const rsyncCall = spawnCalls.find(c => c.cmd === 'rsync');
+    assert.ok(rsyncCall, 'Expected rsync to be called');
     assert.ok(
-      scpCall.args.some(a => a.includes('192.168.1.100')),
-      `Expected scp args to include IP, got: ${scpCall.args}`
+      rsyncCall.args.some(a => a.includes('192.168.1.100')),
+      `Expected rsync args to include IP, got: ${rsyncCall.args}`
     );
   });
 });

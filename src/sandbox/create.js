@@ -1,5 +1,6 @@
 import { createDroplet, getDroplet, listSSHKeys, listProjects, assignToProject } from './do-api.js';
 import { fetchReleaseArtifacts } from './release.js';
+import { deployAgent } from './agent.js';
 import { saveSandbox } from './store.js';
 import { generateAgentToken } from './tokens.js';
 import { spawn } from 'child_process';
@@ -39,24 +40,6 @@ function runSSH(ip, command) {
   });
 }
 
-function runSCP(localPath, ip, remotePath) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('scp', [
-      '-o', 'StrictHostKeyChecking=no',
-      '-o', 'UserKnownHostsFile=/dev/null',
-      localPath,
-      `root@${ip}:${remotePath}`,
-    ], { stdio: ['pipe', 'pipe', 'pipe'] });
-
-    let stderr = '';
-    proc.stderr.on('data', (d) => { stderr += d; });
-    proc.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`SCP failed (exit ${code}): ${stderr.trim()}`));
-    });
-    proc.on('error', reject);
-  });
-}
 
 function checkTCPPort(ip, port, timeoutMs = 5000) {
   return new Promise((resolve) => {
@@ -158,11 +141,6 @@ async function configureGitCredentials(ip) {
   ].join(' && '));
 }
 
-async function deployAgentClient(ip, binaryPath) {
-  await runSCP(binaryPath, ip, '/opt/spekk/sandbox');
-  await runSSH(ip, 'chmod +x /opt/spekk/sandbox && systemctl enable spekk-agent && systemctl start spekk-agent');
-}
-
 // UUID v4 pattern for detecting project IDs
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -212,9 +190,9 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
     }
     const sshKeyIds = sshKeys.map((k) => k.id);
 
-    // Fetch release artifacts (binary + cloud-init template)
+    // Fetch release artifacts (cloud-init template for droplet user data)
     console.log('Fetching release artifacts from GitHub...');
-    const { binaryPath, cloudInitPath } = await fetchReleaseArtifacts();
+    const { cloudInitPath } = await fetchReleaseArtifacts();
     const { readFile } = await import('node:fs/promises');
     const userData = await readFile(cloudInitPath, 'utf-8');
 
@@ -250,7 +228,7 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
 
     // Deploy agent client
     console.log('Deploying agent client...');
-    await deployAgentClient(ip, binaryPath);
+    await deployAgent(ip);
 
     // Assign to project if specified
     if (resolvedProject) {
