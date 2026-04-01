@@ -40,6 +40,31 @@ export async function deployAgent(ip, artifacts = null) {
     'chmod +x /opt/spekk/agent-client',
   ]);
 
+  // Update systemd unit to point to Go binary (replaces any legacy Python unit)
+  const unitFile = [
+    '[Unit]',
+    'Description=Spekk Agent Client',
+    'After=network.target',
+    '',
+    '[Service]',
+    'Type=simple',
+    'User=agent',
+    'WorkingDirectory=/opt/spekk',
+    'EnvironmentFile=/etc/spekk/agent.env',
+    'ExecStart=/opt/spekk/agent-client',
+    'Restart=always',
+    'RestartSec=5',
+    '',
+    '[Install]',
+    'WantedBy=multi-user.target',
+  ].join('\\n');
+  await runCommand('ssh', [
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'UserKnownHostsFile=/dev/null',
+    `root@${ip}`,
+    `printf '${unitFile}' > /etc/systemd/system/spekk-agent.service`,
+  ]);
+
   // reload and restart
   await runCommand('ssh', [
     '-o', 'StrictHostKeyChecking=no',
