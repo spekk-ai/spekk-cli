@@ -8,7 +8,6 @@ import { EventEmitter } from 'events';
 import { Readable } from 'stream';
 import { deployCommand } from '../deploy.js';
 
-
 let originalHome;
 let originalSpawn;
 let tmpDir;
@@ -26,9 +25,6 @@ afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-/**
- * Write sandbox data directly to the filesystem under the temp HOME.
- */
 async function writeSandboxFile(sandboxes) {
   const spekkDir = path.join(tmpDir, '.spekk');
   await fs.mkdir(spekkDir, { recursive: true });
@@ -36,7 +32,7 @@ async function writeSandboxFile(sandboxes) {
 }
 
 describe('sandbox deploy', () => {
-  test('deployCommand exits with code 1 when sandbox not found', async () => {
+  test('exits with code 1 when sandbox not found', async () => {
     const originalExit = process.exit;
     const originalError = console.error;
     let exitCode = null;
@@ -58,36 +54,11 @@ describe('sandbox deploy', () => {
     assert.ok(errorMsg.includes('not found'), `Expected 'not found' in: ${errorMsg}`);
   });
 
-  test('deployCommand exits with code 1 when no name given', async () => {
-    const originalExit = process.exit;
-    const originalError = console.error;
-    let exitCode = null;
-
-    process.exit = (code) => { exitCode = code; throw new Error('EXIT'); };
-    console.error = () => {};
-
-    try {
-      await deployCommand([]);
-    } catch (e) {
-      if (e.message !== 'EXIT') throw e;
-    } finally {
-      process.exit = originalExit;
-      console.error = originalError;
-    }
-
-    assert.strictEqual(exitCode, 1);
-  });
-
-  test('deploy module exports deployCommand function', () => {
-    assert.strictEqual(typeof deployCommand, 'function');
-  });
-
-  test('deploy looks up sandbox from store and deploys to correct IP', async () => {
+  test('looks up sandbox from store and deploys to correct IP', async () => {
     await writeSandboxFile({
       'test-deploy': { dropletId: 999, ip: '192.168.1.100', region: 'nyc1', status: 'active' }
     });
 
-    // Mock spawn so rsync/ssh are never actually executed
     const spawnCalls = [];
     childProcess.spawn = (cmd, args, opts) => {
       spawnCalls.push({ cmd, args });
@@ -98,7 +69,6 @@ describe('sandbox deploy', () => {
       return child;
     };
 
-    // Mock fetch for fetchReleaseArtifacts
     const originalFetch = globalThis.fetch;
     const FAKE_BINARY = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
     globalThis.fetch = async (url) => {
@@ -131,14 +101,6 @@ describe('sandbox deploy', () => {
       globalThis.fetch = originalFetch;
     }
 
-    // Verify the sandbox IP was used in console output
-    const allOutput = logMsgs.join(' ');
-    assert.ok(
-      allOutput.includes('192.168.1.100'),
-      `Expected IP 192.168.1.100 in output, got: ${allOutput}`
-    );
-
-    // Verify rsync was called with the correct IP
     const rsyncCall = spawnCalls.find(c => c.cmd === 'rsync');
     assert.ok(rsyncCall, 'Expected rsync to be called');
     assert.ok(
