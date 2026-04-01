@@ -3,7 +3,8 @@ id: sandbox-go-deploy
 parent: sandbox-go-release
 created: 2026-04-01T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-xps13-1-1775073352
 branch: feature/sandbox-go-release
 depends-on: sandbox-release-downloader
 ---
