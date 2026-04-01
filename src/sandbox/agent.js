@@ -19,9 +19,10 @@ function runCommand(cmd, args) {
 /**
  * Deploy the Go agent binary to a sandbox droplet.
  * @param {string} ip - The IP address of the droplet
+ * @param {object} [artifacts] - Pre-fetched artifacts from fetchReleaseArtifacts(); fetched fresh if omitted
  */
-export async function deployAgent(ip) {
-  const { binaryPath, version } = await fetchReleaseArtifacts();
+export async function deployAgent(ip, artifacts = null) {
+  const { binaryPath, version } = artifacts ?? await fetchReleaseArtifacts();
 
   // rsync binary to remote
   await runCommand('rsync', [

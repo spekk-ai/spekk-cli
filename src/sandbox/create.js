@@ -190,11 +190,11 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
     }
     const sshKeyIds = sshKeys.map((k) => k.id);
 
-    // Fetch release artifacts (cloud-init template for droplet user data)
+    // Fetch release artifacts once — cloud-init for droplet user data, binary for deploy
     console.log('Fetching release artifacts from GitHub...');
-    const { cloudInitPath } = await fetchReleaseArtifacts();
+    const releaseArtifacts = await fetchReleaseArtifacts();
     const { readFile } = await import('node:fs/promises');
-    const userData = await readFile(cloudInitPath, 'utf-8');
+    const userData = await readFile(releaseArtifacts.cloudInitPath, 'utf-8');
 
     // Create droplet
     console.log(`Creating droplet "${dropletName}" in ${region} (${size})...`);
@@ -228,7 +228,7 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
 
     // Deploy agent client
     console.log('Deploying agent client...');
-    await deployAgent(ip);
+    await deployAgent(ip, releaseArtifacts);
 
     // Assign to project if specified
     if (resolvedProject) {
