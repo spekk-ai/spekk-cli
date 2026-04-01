@@ -3,8 +3,7 @@ id: sandbox-release-downloader
 parent: sandbox-go-release
 created: 2026-04-01T00:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-xps13-968370-1775070177
+status: done
 branch: feature/sandbox-go-release
 ---
 
@@ -22,3 +21,5 @@ branch: feature/sandbox-go-release
   - Prints a clear error with HTTP status and exits if the release or either asset is not found
 - `src/sandbox/templates/cloud-init.yaml` does not exist — it is no longer bundled
 - `src/sandbox/templates.js` does not export `fetchAgentClient()` — that function is removed
+
+**Tests:** src/sandbox/__tests__/release.test.js

@@ -1,5 +1,5 @@
 import { createDroplet, getDroplet, listSSHKeys, listProjects, assignToProject } from './do-api.js';
-import { readTemplate, fetchAgentClient } from './templates.js';
+import { fetchReleaseArtifacts } from './release.js';
 import { saveSandbox } from './store.js';
 import { generateAgentToken } from './tokens.js';
 import { spawn } from 'child_process';
@@ -158,11 +158,9 @@ async function configureGitCredentials(ip) {
   ].join(' && '));
 }
 
-async function deployAgentClient(ip) {
-  const agentClientPath = await fetchAgentClient();
-  await runSCP(agentClientPath, ip, '/opt/spekk/agent-client.py');
-  await runSSH(ip, 'uv pip install --python /opt/spekk/.venv/bin/python websockets');
-  await runSSH(ip, 'systemctl enable spekk-agent && systemctl start spekk-agent');
+async function deployAgentClient(ip, binaryPath) {
+  await runSCP(binaryPath, ip, '/opt/spekk/sandbox');
+  await runSSH(ip, 'chmod +x /opt/spekk/sandbox && systemctl enable spekk-agent && systemctl start spekk-agent');
 }
 
 // UUID v4 pattern for detecting project IDs
@@ -214,8 +212,11 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
     }
     const sshKeyIds = sshKeys.map((k) => k.id);
 
-    // Read cloud-init template
-    const userData = await readTemplate('cloud-init.yaml');
+    // Fetch release artifacts (binary + cloud-init template)
+    console.log('Fetching release artifacts from GitHub...');
+    const { binaryPath, cloudInitPath } = await fetchReleaseArtifacts();
+    const { readFile } = await import('node:fs/promises');
+    const userData = await readFile(cloudInitPath, 'utf-8');
 
     // Create droplet
     console.log(`Creating droplet "${dropletName}" in ${region} (${size})...`);
@@ -249,7 +250,7 @@ export async function createSandbox({ name, region = 'nyc1', size = 's-2vcpu-4gb
 
     // Deploy agent client
     console.log('Deploying agent client...');
-    await deployAgentClient(ip);
+    await deployAgentClient(ip, binaryPath);
 
     // Assign to project if specified
     if (resolvedProject) {

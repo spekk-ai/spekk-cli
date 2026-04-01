@@ -1,6 +1,5 @@
 import childProcess from 'child_process';
 import { getSandbox } from './store.js';
-import { fetchAgentClient } from './templates.js';
 
 /**
  * Runs a command and returns a promise that resolves with { code, stdout, stderr }.
@@ -36,15 +35,13 @@ export async function deployCommand(args) {
 
   const ip = sandbox.ip;
 
-  // Step 1: Fetch agent-client.py from GitHub and copy via SCP
-  console.log(`Fetching agent-client.py from GitHub...`);
-  const templatePath = await fetchAgentClient();
+  // Step 1: Copy agent binary via SCP
+  // NOTE: binary source path will be provided by fetchReleaseArtifacts (sandbox-go-deploy)
   const remoteDest = `root@${ip}:/opt/spekk/agent-client.py`;
 
-  console.log(`Copying agent-client.py to ${ip}...`);
+  console.log(`Copying agent to ${ip}...`);
   const scpResult = await run('scp', [
     '-o', 'StrictHostKeyChecking=no',
-    templatePath,
     remoteDest,
   ]);
 
