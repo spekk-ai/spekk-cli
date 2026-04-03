@@ -4,9 +4,7 @@ parent: layered-skill-discovery
 created: 2026-03-28T12:00:00Z
 priority: 1
 status: done
-depends_on:
-  - skill-resolver-layered-resolution
-  - skill-name-derivation
+depends-on: skill-resolver-layered-resolution
 ---
 
 # SkillResolver Has Comprehensive Test Coverage

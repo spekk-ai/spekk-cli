@@ -10,7 +10,7 @@ status: done
 
 ## Description
 
-The unused `Skill` base class (`src/coach/skill-interface.js`) and its re-export (`src/coach/skills/index.js`) are deleted. The hardcoded `skillsDir` reference in `PromptResolver.createActivationMessage()` is also removed — skills are now inlined by the CLI, the agent doesn't need to discover them.
+The unused `Skill` base class and its re-export no longer exist. Skills are inlined by the CLI at launch — the agent prompt does not include a `Skills directory:` path.
 
 ## Success Criteria
 

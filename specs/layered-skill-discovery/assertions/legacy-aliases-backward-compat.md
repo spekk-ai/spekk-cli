@@ -16,7 +16,7 @@ Existing CLI subcommands (`spekk coach meeting`, `spekk coach coordinate`) conti
 
 - `spekk coach meeting` resolves to `meeting-notes-to-specs-skill` via legacy alias
 - `spekk coach coordinate` resolves to `coordinator-skill` via legacy alias
-- `SKILL_MAP` constant no longer exists in `src/coach/cli.js`
-- `resolveSkillContent()` function no longer exists in `src/coach/cli.js`
-- Meeting-specific transcript handling still works (coach-specific behavior preserved)
-- The `src/serve/index.js` coordinator skill reference uses `SkillResolver` instead of the removed `resolveSkillContent`
+- No `SKILL_MAP` constant exists in `src/coach/cli.js`
+- No `resolveSkillContent()` function exists in `src/coach/cli.js`
+- Meeting-specific transcript handling works (coach-specific behavior preserved)
+- `src/serve/index.js` uses `SkillResolver` for coordinator skill resolution
