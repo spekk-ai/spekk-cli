@@ -3,7 +3,7 @@ id: legacy-aliases-backward-compat
 parent: layered-skill-discovery
 created: 2026-03-28T12:00:00Z
 priority: 1
-status: done
+status: in_progress
 ---
 
 # Legacy Aliases Preserve Backward Compatibility
@@ -20,3 +20,4 @@ Existing CLI subcommands (`spekk coach meeting`, `spekk coach coordinate`) conti
 - No `resolveSkillContent()` function exists in `src/coach/cli.js`
 - Meeting-specific transcript handling works (coach-specific behavior preserved)
 - `src/serve/index.js` uses `SkillResolver` for coordinator skill resolution
+- `spekk coach --help` lists alias names (`meeting`, `coordinate`) as the displayed subcommand names, not the underlying skill filenames
