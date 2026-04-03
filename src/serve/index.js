@@ -2,7 +2,7 @@ import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
-import { resolveSkillContent } from '../coach/cli.js';
+import { SkillResolver } from '../cli/skill-resolver.js';
 import {
   formatChatMessage,
   formatElementSelection,
@@ -23,12 +23,13 @@ function buildServeCoachPrompt() {
 
   let prompt = activationMessage;
 
-  const coordinatorSkill = resolveSkillContent('coordinate');
+  const skillResolver = new SkillResolver();
+  const coordinatorSkill = skillResolver.resolveSkill('coach', 'coordinate');
   if (coordinatorSkill) {
     prompt += '\n\n---\n\n**Available Skill: Coordinator**\n\n';
     prompt += 'The coordinator skill is available for use when the user asks to plan work, organize branches, or analyze dependencies.\n';
     prompt += 'Use it when you detect relevant triggers — do NOT execute it automatically on session start.\n';
-    prompt += '\n<skill-reference>\n' + coordinatorSkill + '\n</skill-reference>\n';
+    prompt += '\n<skill-reference>\n' + coordinatorSkill.content + '\n</skill-reference>\n';
   }
 
   return prompt;

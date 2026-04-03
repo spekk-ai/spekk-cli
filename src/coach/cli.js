@@ -5,41 +5,19 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchAgentWithPrompt } from '../cli/prompt-resolver.js';
+import { SkillResolver } from '../cli/skill-resolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const projectRoot = join(__dirname, '../..');
-
-// Mapping from subcommand name to skill filename in specs/coach-skills-system/
-const SKILL_MAP = {
-  meeting: 'meeting-notes-to-specs-skill.md',
-  coordinate: 'coordinator-skill.md',
-};
-
-/**
- * Resolve and read a skill markdown file for a given subcommand.
- * Returns the full content of the skill file.
- * Throws if the subcommand has no mapped skill or the file is missing.
- */
-function resolveSkillContent(subcommand) {
-  const skillFilename = SKILL_MAP[subcommand];
-  if (!skillFilename) {
-    return null;
-  }
-  const skillPath = join(projectRoot, 'specs', 'coach-skills-system', skillFilename);
-  if (!existsSync(skillPath)) {
-    throw new Error(`Skill file not found: ${skillPath}`);
-  }
-  return readFileSync(skillPath, 'utf8');
-}
 
 /**
  * Build the activation message for a skill subcommand.
  * Exported for testing.
  */
-function buildSkillActivationMessage(baseMessage, subcommand, args) {
-  const skillContent = resolveSkillContent(subcommand);
-  if (!skillContent) {
+function buildSkillActivationMessage(baseMessage, subcommand, args, skillResolver) {
+  const resolver = skillResolver || new SkillResolver();
+  const skill = resolver.resolveSkill('coach', subcommand);
+  if (!skill) {
     return baseMessage;
   }
 
@@ -47,7 +25,7 @@ function buildSkillActivationMessage(baseMessage, subcommand, args) {
   message += '\n\n---\n\n**Skill Activation: `spekk coach ' + subcommand + '`**\n\n';
   message += 'The user has launched you with a skill active via `spekk coach ' + subcommand + '`.\n';
   message += 'Follow the inlined skill workflow below immediately — do not wait for trigger detection.\n';
-  message += '\n<skill-content>\n' + skillContent + '\n</skill-content>\n';
+  message += '\n<skill-content>\n' + skill.content + '\n</skill-content>\n';
 
   // Subcommand-specific argument handling
   if (subcommand === 'meeting') {
@@ -80,13 +58,14 @@ async function launchCoachAgent(cliArgs = null) {
       return;
     }
 
+    const skillResolver = new SkillResolver();
     const { activationMessage } = launchAgentWithPrompt('coach');
     let message;
 
     // Handle skill subcommands
-    if (subcommand && SKILL_MAP[subcommand]) {
+    if (subcommand && skillResolver.resolveSkill('coach', subcommand)) {
       try {
-        message = buildSkillActivationMessage(activationMessage, subcommand, args);
+        message = buildSkillActivationMessage(activationMessage, subcommand, args, skillResolver);
       } catch (error) {
         console.error(`Error: ${error.message}`);
         process.exit(1);
@@ -137,28 +116,41 @@ async function launchCoachAgent(cliArgs = null) {
 }
 
 function showHelp() {
+  const skillResolver = new SkillResolver();
+  const skills = skillResolver.listSkills('coach');
+  const aliases = skillResolver.listAliases('coach');
+
+  // Build a reverse map: underlying filename stem → alias name
+  const reverseAliases = {};
+  for (const [alias, stem] of Object.entries(aliases)) {
+    reverseAliases[stem] = alias;
+  }
+
+  // Display alias name when one exists, otherwise the filename stem
+  let skillLines = '';
+  if (skills.length > 0) {
+    skillLines = skills.map(s => `  ${reverseAliases[s.name] || s.name}`).join('\n');
+  } else {
+    skillLines = '  (none found)';
+  }
+
   console.log(`
 spekk coach - Launch the Coach Agent
 
 USAGE:
-  spekk coach [SUBCOMMAND] [OPTIONS]
+  spekk coach [SKILL] [OPTIONS]
 
-SUBCOMMANDS:
-  meeting [file]   Launch coach with meeting-processing skill active
-                   If a transcript file is provided, it will be processed immediately.
-                   Without a file, the coach will prompt for a transcript.
-
-  coordinate       Launch coach with work coordination skill active
-                   Analyzes specs, builds dependency graphs, assigns branches.
+AVAILABLE SKILLS:
+${skillLines}
 
 OPTIONS:
   --help, -h       Show this help message
 
 EXAMPLES:
   spekk coach                          # Launch interactive coach
-  spekk coach meeting                  # Launch coach in meeting mode (prompts for transcript)
+  spekk coach meeting                  # Launch coach with meeting skill active
   spekk coach meeting notes.txt        # Process a transcript file
-  spekk coach coordinate               # Launch coach in coordinator mode
+  spekk coach coordinate               # Launch coach with coordinator skill
 `);
 }
 
@@ -167,4 +159,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   launchCoachAgent();
 }
 
-export { launchCoachAgent, buildSkillActivationMessage, resolveSkillContent, SKILL_MAP };
+export { launchCoachAgent, buildSkillActivationMessage };

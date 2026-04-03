@@ -3,7 +3,8 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
-import { buildSkillActivationMessage, resolveSkillContent, SKILL_MAP } from '../cli.js';
+import { buildSkillActivationMessage, launchCoachAgent } from '../cli.js';
+import { SkillResolver } from '../../cli/skill-resolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,33 +36,61 @@ describe('Coach CLI', () => {
       'Coach should pass subcommand args through');
   });
 
-  test('coach CLI handles meeting subcommand', async () => {
+  test('coach CLI uses SkillResolver for subcommand detection', async () => {
     const coachCli = fs.readFileSync(path.join(projectRoot, 'src/coach/cli.js'), 'utf8');
 
-    assert.ok(coachCli.includes("SKILL_MAP[subcommand]"),
-      'Coach CLI should check SKILL_MAP for subcommand');
+    assert.ok(coachCli.includes("resolveSkill('coach'"),
+      'Coach CLI should use SkillResolver.resolveSkill');
+    assert.ok(!coachCli.includes('SKILL_MAP'),
+      'Coach CLI should not contain SKILL_MAP');
   });
 
-  describe('Skill content inlining', () => {
-    test('SKILL_MAP contains meeting subcommand', () => {
-      assert.ok(SKILL_MAP.meeting, 'meeting should be mapped in SKILL_MAP');
-      assert.strictEqual(SKILL_MAP.meeting, 'meeting-notes-to-specs-skill.md');
+  describe('Help output shows alias names', () => {
+    test('--help lists "meeting" and "coordinate" not underlying filenames', async () => {
+      const lines = [];
+      const orig = console.log;
+      console.log = (...args) => lines.push(args.join(' '));
+      try {
+        await launchCoachAgent(['--help']);
+      } finally {
+        console.log = orig;
+      }
+      const output = lines.join('\n');
+      assert.ok(output.includes('meeting'), 'Help should list "meeting" alias');
+      assert.ok(output.includes('coordinate'), 'Help should list "coordinate" alias');
+      assert.ok(!output.includes('meeting-notes-to-specs-skill'),
+        'Help should not show raw filename "meeting-notes-to-specs-skill"');
+      assert.ok(!output.includes('coordinator-skill'),
+        'Help should not show raw filename "coordinator-skill"');
+    });
+  });
+
+  describe('Skill resolution via SkillResolver', () => {
+    test('SkillResolver finds meeting skill via legacy alias', () => {
+      const resolver = new SkillResolver();
+      const result = resolver.resolveSkill('coach', 'meeting');
+      assert.ok(result, 'meeting should resolve via legacy alias');
+      assert.strictEqual(result.name, 'meeting-notes-to-specs-skill');
     });
 
-    test('resolveSkillContent returns null for unknown subcommands', () => {
-      const result = resolveSkillContent('nonexistent-subcommand');
+    test('SkillResolver returns null for unknown subcommands', () => {
+      const resolver = new SkillResolver();
+      const result = resolver.resolveSkill('coach', 'nonexistent-subcommand');
       assert.strictEqual(result, null, 'Should return null for unmapped subcommand');
     });
 
-    test('resolveSkillContent reads the meeting skill file', () => {
-      const content = resolveSkillContent('meeting');
-      assert.ok(content, 'Should return skill file content');
-      assert.ok(content.includes('## Workflow'),
+    test('SkillResolver reads the meeting skill file content', () => {
+      const resolver = new SkillResolver();
+      const result = resolver.resolveSkill('coach', 'meeting');
+      assert.ok(result.content, 'Should return skill file content');
+      assert.ok(result.content.includes('## Workflow'),
         'Skill content should include ## Workflow heading');
-      assert.ok(content.includes('Extract and categorize into three types'),
+      assert.ok(result.content.includes('Extract and categorize into three types'),
         'Skill content should include workflow step about categorization');
     });
+  });
 
+  describe('Skill content inlining', () => {
     test('buildSkillActivationMessage includes full skill content for meeting subcommand', () => {
       const baseMessage = 'You are the Coach Agent.';
       const message = buildSkillActivationMessage(baseMessage, 'meeting', ['meeting']);

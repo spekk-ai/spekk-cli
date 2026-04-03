@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
 import { EventEmitter } from 'node:events';
-import { parseFlags, buildSpekkNextCommand, buildClaudeSpawnConfig } from '../cli.js';
+import { parseFlags, extractSkillArg, buildBuilderSkillMessage, buildSpekkNextCommand, buildClaudeSpawnConfig } from '../cli.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -287,5 +287,40 @@ describe('buildClaudeSpawnConfig', () => {
 
     assert.ok(interactive.args.includes('--dangerously-skip-permissions'));
     assert.ok(headless.args.includes('--dangerously-skip-permissions'));
+  });
+});
+
+describe('extractSkillArg', () => {
+  test('returns null when no positional args', () => {
+    assert.strictEqual(extractSkillArg([]), null);
+    assert.strictEqual(extractSkillArg(['--once']), null);
+    assert.strictEqual(extractSkillArg(['--spec', 'auth', '--once']), null);
+  });
+
+  test('extracts first positional arg', () => {
+    assert.strictEqual(extractSkillArg(['my-skill']), 'my-skill');
+    assert.strictEqual(extractSkillArg(['api-audit', '--once']), 'api-audit');
+  });
+
+  test('skips flags and their values to find positional arg', () => {
+    assert.strictEqual(extractSkillArg(['--spec', 'auth', 'my-skill']), 'my-skill');
+    assert.strictEqual(extractSkillArg(['--once', '--spec', 'auth', 'my-skill', '--confirm']), 'my-skill');
+  });
+
+  test('returns first positional even before flags', () => {
+    assert.strictEqual(extractSkillArg(['my-skill', '--once']), 'my-skill');
+  });
+});
+
+describe('buildBuilderSkillMessage', () => {
+  test('appends skill content to activation message', () => {
+    const base = 'You are the Builder Agent.';
+    const skill = { name: 'test-skill', content: '# Test Skill\nDo stuff.', source: '/tmp' };
+    const message = buildBuilderSkillMessage(base, 'test-skill', skill);
+
+    assert.ok(message.includes(base), 'Should include base message');
+    assert.ok(message.includes('<skill-content>'), 'Should include skill-content tag');
+    assert.ok(message.includes('# Test Skill'), 'Should include skill content');
+    assert.ok(message.includes('spekk builder test-skill'), 'Should reference the skill command');
   });
 });
