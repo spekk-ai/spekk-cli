@@ -204,6 +204,27 @@ describe('SkillResolver', () => {
     });
   });
 
+  describe('listAliases', () => {
+    test('returns coach alias names keyed by alias', () => {
+      const resolver = new SkillResolver({ homeDir: tempHome, cwd: tempCwd });
+      const aliases = resolver.listAliases('coach');
+      assert.strictEqual(aliases.meeting, 'meeting-notes-to-specs-skill');
+      assert.strictEqual(aliases.coordinate, 'coordinator-skill');
+    });
+
+    test('returns empty object for builder (no aliases defined)', () => {
+      const resolver = new SkillResolver({ homeDir: tempHome, cwd: tempCwd });
+      const aliases = resolver.listAliases('builder');
+      assert.deepStrictEqual(aliases, {});
+    });
+
+    test('returns empty object for unknown agent', () => {
+      const resolver = new SkillResolver({ homeDir: tempHome, cwd: tempCwd });
+      const aliases = resolver.listAliases('unknown-agent');
+      assert.deepStrictEqual(aliases, {});
+    });
+  });
+
   describe('constructor defaults', () => {
     test('defaults homeDir to os.homedir()', () => {
       const resolver = new SkillResolver();

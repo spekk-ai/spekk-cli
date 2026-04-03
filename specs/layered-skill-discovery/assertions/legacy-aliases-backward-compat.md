@@ -3,7 +3,7 @@ id: legacy-aliases-backward-compat
 parent: layered-skill-discovery
 created: 2026-03-28T12:00:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # Legacy Aliases Preserve Backward Compatibility

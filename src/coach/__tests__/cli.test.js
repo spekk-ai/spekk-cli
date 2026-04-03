@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
-import { buildSkillActivationMessage } from '../cli.js';
+import { buildSkillActivationMessage, launchCoachAgent } from '../cli.js';
 import { SkillResolver } from '../../cli/skill-resolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -43,6 +43,26 @@ describe('Coach CLI', () => {
       'Coach CLI should use SkillResolver.resolveSkill');
     assert.ok(!coachCli.includes('SKILL_MAP'),
       'Coach CLI should not contain SKILL_MAP');
+  });
+
+  describe('Help output shows alias names', () => {
+    test('--help lists "meeting" and "coordinate" not underlying filenames', async () => {
+      const lines = [];
+      const orig = console.log;
+      console.log = (...args) => lines.push(args.join(' '));
+      try {
+        await launchCoachAgent(['--help']);
+      } finally {
+        console.log = orig;
+      }
+      const output = lines.join('\n');
+      assert.ok(output.includes('meeting'), 'Help should list "meeting" alias');
+      assert.ok(output.includes('coordinate'), 'Help should list "coordinate" alias');
+      assert.ok(!output.includes('meeting-notes-to-specs-skill'),
+        'Help should not show raw filename "meeting-notes-to-specs-skill"');
+      assert.ok(!output.includes('coordinator-skill'),
+        'Help should not show raw filename "coordinator-skill"');
+    });
   });
 
   describe('Skill resolution via SkillResolver', () => {

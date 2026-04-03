@@ -118,10 +118,18 @@ async function launchCoachAgent(cliArgs = null) {
 function showHelp() {
   const skillResolver = new SkillResolver();
   const skills = skillResolver.listSkills('coach');
+  const aliases = skillResolver.listAliases('coach');
 
+  // Build a reverse map: underlying filename stem → alias name
+  const reverseAliases = {};
+  for (const [alias, stem] of Object.entries(aliases)) {
+    reverseAliases[stem] = alias;
+  }
+
+  // Display alias name when one exists, otherwise the filename stem
   let skillLines = '';
   if (skills.length > 0) {
-    skillLines = skills.map(s => `  ${s.name}`).join('\n');
+    skillLines = skills.map(s => `  ${reverseAliases[s.name] || s.name}`).join('\n');
   } else {
     skillLines = '  (none found)';
   }

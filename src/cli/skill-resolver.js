@@ -116,6 +116,16 @@ export class SkillResolver {
   }
 
   /**
+   * Return the legacy alias map for an agent.
+   * Keys are the alias names (e.g. "meeting"), values are the underlying skill filename stems.
+   *
+   * @returns {Record<string, string>}
+   */
+  listAliases(agentName) {
+    return LEGACY_ALIASES[agentName] || {};
+  }
+
+  /**
    * List all available skills for an agent, with later layers
    * not duplicating earlier ones (local wins over global wins over package).
    *
