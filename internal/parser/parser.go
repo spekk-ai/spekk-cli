@@ -139,6 +139,33 @@ func validateTimestamp(value string) bool {
 	return timestampPattern.MatchString(value)
 }
 
+// kebabCasePattern matches valid kebab-case identifiers.
+var kebabCasePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+
+// validBranchPattern matches valid git branch name characters.
+var validBranchPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_-]*$`)
+
+// standardBranchPattern matches commonly used branch naming patterns.
+var standardBranchPattern = regexp.MustCompile(`^(main|master|develop|feature/|bugfix/|hotfix/|release/)`)
+
+// validateBranch validates a branch field value. Returns an error for invalid branches
+// and prints a warning to stderr for non-standard patterns.
+func validateBranch(branch, filePath string) error {
+	if branch == "" {
+		return nil
+	}
+	if strings.HasPrefix(branch, "/") || strings.HasSuffix(branch, "/") {
+		return fmt.Errorf("Field 'branch' cannot start or end with '/' in %s", filePath)
+	}
+	if !validBranchPattern.MatchString(branch) {
+		return fmt.Errorf("Field 'branch' contains invalid characters in %s\nFound: %q\nGit branch names can only contain letters, numbers, slashes, hyphens, and underscores.", filePath, branch)
+	}
+	if !standardBranchPattern.MatchString(branch) {
+		fmt.Fprintf(os.Stderr, "Warning: Field 'branch' uses non-standard pattern in %s\nFound: %q\nConsider using standard patterns: main, feature/<name>, bugfix/<name>, hotfix/<name>\n", filePath, branch)
+	}
+	return nil
+}
+
 var validStatuses = map[string]bool{
 	"not_started": true,
 	"in_progress": true,
@@ -157,6 +184,9 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 	id := fm.get("id")
 	if id == "" {
 		return nil, fmt.Errorf("missing required field 'id'")
+	}
+	if !kebabCasePattern.MatchString(id) {
+		return nil, fmt.Errorf("invalid id format %q (must be kebab-case: lowercase with hyphens, no spaces/underscores/special chars)", id)
 	}
 
 	created := fm.get("created")
@@ -187,6 +217,9 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 	if branch == "" {
 		branch = "main"
 	}
+	if err := validateBranch(branch, relFilePath); err != nil {
+		return nil, err
+	}
 
 	return &Spec{
 		ID:       id,
@@ -210,6 +243,9 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 	id := fm.get("id")
 	if id == "" {
 		return nil, fmt.Errorf("missing required field 'id'")
+	}
+	if !kebabCasePattern.MatchString(id) {
+		return nil, fmt.Errorf("invalid id format %q (must be kebab-case: lowercase with hyphens, no spaces/underscores/special chars)", id)
 	}
 
 	parent := fm.get("parent")
@@ -244,6 +280,9 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 	branch := fm.get("branch")
 	if branch == "" {
 		branch = "main"
+	}
+	if err := validateBranch(branch, relFilePath); err != nil {
+		return nil, err
 	}
 
 	return &Assertion{
@@ -299,12 +338,12 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			// Flat .md files at specs/ level — warn if they have frontmatter.
+			// Flat .md files at specs/ level with frontmatter are an error.
 			if strings.HasSuffix(entry.Name(), ".md") {
 				flatPath := filepath.Join(specsDir, entry.Name())
 				raw, readErr := os.ReadFile(flatPath)
 				if readErr == nil && hasFrontmatter(string(raw)) {
-					fmt.Fprintf(os.Stderr, "Warning: flat .md file with frontmatter at specs/ level: %s — skipping\n", entry.Name())
+					return nil, fmt.Errorf("Invalid folder structure: Found flat .md files with frontmatter in specs/: %s. All specs must be in folders following the pattern specs/{spec-id}/{spec-id}.md", entry.Name())
 				}
 			}
 			continue
@@ -423,6 +462,38 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 		}
 	}
 
+	// Post-parse validation: assertion parent references existing specs.
+	for _, a := range assertions {
+		if _, exists := specIDsSeen[a.Parent]; !exists {
+			return nil, fmt.Errorf("Parent spec %q not found for assertion %q", a.Parent, a.ID)
+		}
+	}
+
+	// Post-parse validation: depends-on fields.
+	assertionIDs := make(map[string]bool)
+	for _, a := range assertions {
+		assertionIDs[a.ID] = true
+	}
+	for _, a := range assertions {
+		if a.DependsOn == "" {
+			continue
+		}
+		if !kebabCasePattern.MatchString(a.DependsOn) {
+			return nil, fmt.Errorf("Field 'depends-on' must be kebab-case (lowercase with hyphens) in %s\nFound: %q", a.File, a.DependsOn)
+		}
+		if a.DependsOn == a.ID {
+			return nil, fmt.Errorf("Field 'depends-on' cannot reference itself in %s", a.File)
+		}
+		if !assertionIDs[a.DependsOn] {
+			return nil, fmt.Errorf("Field 'depends-on' references non-existent assertion %q in %s", a.DependsOn, a.File)
+		}
+	}
+
+	// Post-parse validation: circular dependency detection.
+	if err := detectCircularDependencies(assertions); err != nil {
+		return nil, err
+	}
+
 	// Derive parent spec statuses from child assertion statuses.
 	for i := range specs {
 		if specs[i].Status != "draft" {
@@ -478,6 +549,48 @@ func computeParentStatus(parentID string, assertions []Assertion) string {
 	}
 
 	return "in_progress"
+}
+
+// detectCircularDependencies checks all assertions for dependency cycles.
+// Returns an error with the cycle path if a circular dependency is found.
+func detectCircularDependencies(assertions []Assertion) error {
+	depMap := make(map[string]string) // id -> dependsOn
+	for _, a := range assertions {
+		if a.DependsOn != "" {
+			depMap[a.ID] = a.DependsOn
+		}
+	}
+
+	for _, a := range assertions {
+		if a.DependsOn == "" {
+			continue
+		}
+
+		visited := make(map[string]bool)
+		var path []string
+		current := a.ID
+
+		for current != "" {
+			if visited[current] {
+				// Found a cycle — build the cycle path.
+				path = append(path, current)
+				cycleStart := -1
+				for i, id := range path {
+					if id == current {
+						cycleStart = i
+						break
+					}
+				}
+				cycle := strings.Join(path[cycleStart:], " → ")
+				return fmt.Errorf("Circular dependency detected:\n  %s\n\nBreak the cycle by removing or changing one of the dependencies.", cycle)
+			}
+
+			visited[current] = true
+			path = append(path, current)
+			current = depMap[current]
+		}
+	}
+	return nil
 }
 
 // IsLockStale reports whether a lockedBy string represents a stale (>2 hour old) lock.
