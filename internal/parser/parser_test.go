@@ -793,6 +793,534 @@ func TestFindNextAssertion_AllNone(t *testing.T) {
 // Integration test: parse project's own specs directory
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Kebab-case ID validation
+// ---------------------------------------------------------------------------
+
+func TestParseAllSpecs_InvalidSpecIDFormat(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	// Spec with invalid ID (uppercase).
+	specContent := `---
+id: MyFeature
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# My Feature
+`
+	writeFile(t, filepath.Join(specsDir, "MyFeature", "MyFeature.md"), specContent)
+
+	// Assertion also references the bad parent — this will cause a hard error
+	// since the spec was skipped but the assertion references it.
+	assertionContent := `---
+id: my-assertion
+parent: MyFeature
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# My Assertion
+`
+	writeFile(t, filepath.Join(specsDir, "MyFeature", "assertions", "my-assertion.md"), assertionContent)
+
+	_, err := ParseAllSpecs(specsDir)
+	// Should get a parent-not-found error since spec was skipped.
+	if err == nil {
+		t.Fatal("expected error due to orphaned assertion referencing skipped spec")
+	}
+	if !strings.Contains(err.Error(), "Parent spec 'MyFeature' not found") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestParseAllSpecs_InvalidSpecIDOnly(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	// Spec with invalid ID, no assertions.
+	specContent := `---
+id: BadId
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Bad Id
+`
+	writeFile(t, filepath.Join(specsDir, "BadId", "BadId.md"), specContent)
+	writeFile(t, filepath.Join(specsDir, "BadId", "assertions", "readme.md"), "no frontmatter")
+
+	result, err := ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if len(result.Specs) != 0 {
+		t.Errorf("expected 0 specs (invalid ID skipped), got %d", len(result.Specs))
+	}
+}
+
+func TestParseAllSpecs_InvalidAssertionIDFormat(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: valid-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Valid Spec
+`
+	writeFile(t, filepath.Join(specsDir, "valid-spec", "valid-spec.md"), specContent)
+
+	// Assertion with underscore in ID (not kebab-case).
+	badAssertion := `---
+id: bad_assertion
+parent: valid-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Bad Assertion
+`
+	writeFile(t, filepath.Join(specsDir, "valid-spec", "assertions", "bad_assertion.md"), badAssertion)
+
+	result, err := ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	// Invalid assertion should be skipped.
+	if len(result.Assertions) != 0 {
+		t.Errorf("expected 0 assertions (invalid ID skipped), got %d", len(result.Assertions))
+	}
+}
+
+func TestValidateKebabCase(t *testing.T) {
+	valid := []string{"foo", "foo-bar", "a1", "my-feature-v2", "a"}
+	for _, v := range valid {
+		if !validateKebabCase(v) {
+			t.Errorf("expected %q to be valid kebab-case", v)
+		}
+	}
+
+	invalid := []string{"Foo", "foo_bar", "foo-", "-foo", "123", "foo--bar", "FOO", "foo bar", "foo.bar"}
+	for _, v := range invalid {
+		if validateKebabCase(v) {
+			t.Errorf("expected %q to be invalid kebab-case", v)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Branch validation
+// ---------------------------------------------------------------------------
+
+func TestParseAllSpecs_InvalidBranch_LeadingSlash(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: branch-test
+created: 2026-01-01T00:00:00Z
+priority: 1
+branch: /bad-branch
+---
+
+# Branch Test
+`
+	writeFile(t, filepath.Join(specsDir, "branch-test", "branch-test.md"), specContent)
+	writeFile(t, filepath.Join(specsDir, "branch-test", "assertions", "dummy.md"), "no frontmatter")
+
+	result, err := ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	// Spec with invalid branch should be skipped.
+	if len(result.Specs) != 0 {
+		t.Errorf("expected 0 specs (invalid branch skipped), got %d", len(result.Specs))
+	}
+}
+
+func TestParseAllSpecs_InvalidBranch_SpecialChars(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: branch-test
+created: 2026-01-01T00:00:00Z
+priority: 1
+branch: "feature/bad branch!"
+---
+
+# Branch Test
+`
+	writeFile(t, filepath.Join(specsDir, "branch-test", "branch-test.md"), specContent)
+	writeFile(t, filepath.Join(specsDir, "branch-test", "assertions", "dummy.md"), "no frontmatter")
+
+	result, err := ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if len(result.Specs) != 0 {
+		t.Errorf("expected 0 specs (invalid branch skipped), got %d", len(result.Specs))
+	}
+}
+
+func TestParseAllSpecs_NonStandardBranchWarning(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: branch-test
+created: 2026-01-01T00:00:00Z
+priority: 1
+branch: custom-branch-name
+---
+
+# Branch Test
+`
+	writeFile(t, filepath.Join(specsDir, "branch-test", "branch-test.md"), specContent)
+
+	assertionContent := `---
+id: branch-assertion
+parent: branch-test
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Branch Assertion
+`
+	writeFile(t, filepath.Join(specsDir, "branch-test", "assertions", "branch-assertion.md"), assertionContent)
+
+	result, err := ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Spec should parse successfully but produce a warning.
+	if len(result.Specs) != 1 {
+		t.Errorf("expected 1 spec, got %d", len(result.Specs))
+	}
+	if len(result.Warnings) == 0 {
+		t.Error("expected a warning for non-standard branch pattern")
+	}
+}
+
+func TestValidateBranch(t *testing.T) {
+	tests := []struct {
+		branch  string
+		wantErr bool
+		wantWarn bool
+	}{
+		{"feature/my-thing", false, false},
+		{"main", false, false},
+		{"bugfix/fix-123", false, false},
+		{"/leading-slash", true, false},
+		{"trailing-slash/", true, false},
+		{"has spaces", true, false},
+		{"custom-name", false, true},
+	}
+
+	for _, tt := range tests {
+		hardErr, warn := validateBranch(tt.branch, "test.md")
+		if (hardErr != "") != tt.wantErr {
+			t.Errorf("validateBranch(%q): wantErr=%v, gotErr=%q", tt.branch, tt.wantErr, hardErr)
+		}
+		if (warn != "") != tt.wantWarn {
+			t.Errorf("validateBranch(%q): wantWarn=%v, gotWarn=%q", tt.branch, tt.wantWarn, warn)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Parent reference validation
+// ---------------------------------------------------------------------------
+
+func TestParseAllSpecs_InvalidParentReference(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: real-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Real Spec
+`
+	writeFile(t, filepath.Join(specsDir, "real-spec", "real-spec.md"), specContent)
+
+	// Assertion references non-existent parent.
+	assertionContent := `---
+id: orphan-assertion
+parent: nonexistent-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Orphan Assertion
+`
+	writeFile(t, filepath.Join(specsDir, "real-spec", "assertions", "orphan-assertion.md"), assertionContent)
+
+	_, err := ParseAllSpecs(specsDir)
+	if err == nil {
+		t.Fatal("expected error for invalid parent reference")
+	}
+	if !strings.Contains(err.Error(), "Parent spec 'nonexistent-spec' not found") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// depends-on validation
+// ---------------------------------------------------------------------------
+
+func TestParseAllSpecs_DependsOnInvalidFormat(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: dep-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Dep Spec
+`
+	writeFile(t, filepath.Join(specsDir, "dep-spec", "dep-spec.md"), specContent)
+
+	// depends-on with underscores (not kebab-case).
+	assertionContent := `---
+id: bad-dep
+parent: dep-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+depends-on: bad_format
+---
+
+# Bad Dep
+`
+	writeFile(t, filepath.Join(specsDir, "dep-spec", "assertions", "bad-dep.md"), assertionContent)
+
+	result, err := ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	// Should be skipped (parse-time validation).
+	if len(result.Assertions) != 0 {
+		t.Errorf("expected 0 assertions (bad depends-on skipped), got %d", len(result.Assertions))
+	}
+}
+
+func TestParseAllSpecs_DependsOnSelfReference(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: self-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Self Spec
+`
+	writeFile(t, filepath.Join(specsDir, "self-spec", "self-spec.md"), specContent)
+
+	assertionContent := `---
+id: self-ref
+parent: self-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+depends-on: self-ref
+---
+
+# Self Ref
+`
+	writeFile(t, filepath.Join(specsDir, "self-spec", "assertions", "self-ref.md"), assertionContent)
+
+	result, err := ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	// Should be skipped (parse-time self-reference check).
+	if len(result.Assertions) != 0 {
+		t.Errorf("expected 0 assertions (self-ref skipped), got %d", len(result.Assertions))
+	}
+}
+
+func TestParseAllSpecs_DependsOnNonExistent(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: ref-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Ref Spec
+`
+	writeFile(t, filepath.Join(specsDir, "ref-spec", "ref-spec.md"), specContent)
+
+	assertionContent := `---
+id: dangling-dep
+parent: ref-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+depends-on: ghost-assertion
+---
+
+# Dangling Dep
+`
+	writeFile(t, filepath.Join(specsDir, "ref-spec", "assertions", "dangling-dep.md"), assertionContent)
+
+	_, err := ParseAllSpecs(specsDir)
+	if err == nil {
+		t.Fatal("expected error for non-existent depends-on reference")
+	}
+	if !strings.Contains(err.Error(), "references non-existent assertion 'ghost-assertion'") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Circular dependency detection
+// ---------------------------------------------------------------------------
+
+func TestParseAllSpecs_CircularDependency(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: circ-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Circ Spec
+`
+	writeFile(t, filepath.Join(specsDir, "circ-spec", "circ-spec.md"), specContent)
+
+	assertionA := `---
+id: circ-a
+parent: circ-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+depends-on: circ-b
+---
+
+# Circ A
+`
+	writeFile(t, filepath.Join(specsDir, "circ-spec", "assertions", "circ-a.md"), assertionA)
+
+	assertionB := `---
+id: circ-b
+parent: circ-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+depends-on: circ-a
+---
+
+# Circ B
+`
+	writeFile(t, filepath.Join(specsDir, "circ-spec", "assertions", "circ-b.md"), assertionB)
+
+	_, err := ParseAllSpecs(specsDir)
+	if err == nil {
+		t.Fatal("expected error for circular dependency")
+	}
+	if !strings.Contains(err.Error(), "Circular dependency detected") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestParseAllSpecs_ThreeWayCircularDependency(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: tri-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+
+# Tri Spec
+`
+	writeFile(t, filepath.Join(specsDir, "tri-spec", "tri-spec.md"), specContent)
+
+	writeFile(t, filepath.Join(specsDir, "tri-spec", "assertions", "tri-a.md"), `---
+id: tri-a
+parent: tri-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+depends-on: tri-c
+---
+
+# Tri A
+`)
+
+	writeFile(t, filepath.Join(specsDir, "tri-spec", "assertions", "tri-b.md"), `---
+id: tri-b
+parent: tri-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+depends-on: tri-a
+---
+
+# Tri B
+`)
+
+	writeFile(t, filepath.Join(specsDir, "tri-spec", "assertions", "tri-c.md"), `---
+id: tri-c
+parent: tri-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+depends-on: tri-b
+---
+
+# Tri C
+`)
+
+	_, err := ParseAllSpecs(specsDir)
+	if err == nil {
+		t.Fatal("expected error for 3-way circular dependency")
+	}
+	if !strings.Contains(err.Error(), "Circular dependency detected") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestDetectCircularDependencies_NoCycle(t *testing.T) {
+	assertions := []Assertion{
+		{ID: "a", DependsOn: ""},
+		{ID: "b", DependsOn: "a"},
+		{ID: "c", DependsOn: "b"},
+	}
+	if err := detectCircularDependencies(assertions); err != nil {
+		t.Errorf("unexpected error for acyclic graph: %v", err)
+	}
+}
+
+func TestDetectCircularDependencies_Cycle(t *testing.T) {
+	assertions := []Assertion{
+		{ID: "x", DependsOn: "z"},
+		{ID: "y", DependsOn: "x"},
+		{ID: "z", DependsOn: "y"},
+	}
+	err := detectCircularDependencies(assertions)
+	if err == nil {
+		t.Fatal("expected circular dependency error")
+	}
+	// Should contain the arrow notation.
+	if !strings.Contains(err.Error(), "\u2192") {
+		t.Errorf("expected arrow in cycle path, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Integration test: parse project's own specs directory
+// ---------------------------------------------------------------------------
+
 func TestParseAllSpecs_ProjectSpecs(t *testing.T) {
 	// Walk up from internal/parser/ to find the project root specs/ dir.
 	// The test binary runs from the package directory.

@@ -44,6 +44,7 @@ type Spec struct {
 type ParseResult struct {
 	Specs      []Spec
 	Assertions []Assertion
+	Warnings   []string
 }
 
 // frontmatter holds raw parsed YAML frontmatter fields.
@@ -139,6 +140,34 @@ func validateTimestamp(value string) bool {
 	return timestampPattern.MatchString(value)
 }
 
+// kebabCasePattern matches valid kebab-case identifiers.
+var kebabCasePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+
+func validateKebabCase(value string) bool {
+	return kebabCasePattern.MatchString(value)
+}
+
+// branchCharPattern matches valid git branch name characters.
+var branchCharPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_-]*$`)
+
+// standardBranchPattern matches standard branch naming conventions.
+var standardBranchPattern = regexp.MustCompile(`^(main|master|develop|feature/|bugfix/|hotfix/|release/)`)
+
+// validateBranch checks branch field validity.
+// Returns an error string for hard failures, a warning string for non-standard patterns, or empty strings.
+func validateBranch(branch, filePath string) (hardErr string, warning string) {
+	if strings.HasPrefix(branch, "/") || strings.HasSuffix(branch, "/") {
+		return fmt.Sprintf("Field 'branch' cannot start or end with '/' in %s", filePath), ""
+	}
+	if !branchCharPattern.MatchString(branch) {
+		return fmt.Sprintf("Field 'branch' contains invalid characters in %s\nFound: %q\nGit branch names can only contain letters, numbers, slashes, hyphens, and underscores.", filePath, branch), ""
+	}
+	if !standardBranchPattern.MatchString(branch) {
+		return "", fmt.Sprintf("Warning: Field 'branch' uses non-standard pattern in %s\nFound: %q\nConsider using standard patterns: main, feature/<name>, bugfix/<name>, hotfix/<name>", filePath, branch)
+	}
+	return "", ""
+}
+
 var validStatuses = map[string]bool{
 	"not_started": true,
 	"in_progress": true,
@@ -148,31 +177,35 @@ var validStatuses = map[string]bool{
 }
 
 // parseSpec parses a spec parent file (e.g., specs/foo/foo.md).
-func parseSpec(relFilePath string, content string) (*Spec, error) {
+// Returns the spec, any branch warnings, and any error.
+func parseSpec(relFilePath string, content string) (*Spec, []string, error) {
 	fm, body, err := parseFrontmatter(content)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	id := fm.get("id")
 	if id == "" {
-		return nil, fmt.Errorf("missing required field 'id'")
+		return nil, nil, fmt.Errorf("missing required field 'id'")
+	}
+	if !validateKebabCase(id) {
+		return nil, nil, fmt.Errorf("Invalid id format '%s' (must be kebab-case: lowercase with hyphens, no spaces/underscores/special chars) in %s", id, relFilePath)
 	}
 
 	created := fm.get("created")
 	if created == "" {
-		return nil, fmt.Errorf("missing required field 'created'")
+		return nil, nil, fmt.Errorf("missing required field 'created'")
 	}
 	if !validateTimestamp(created) {
-		return nil, fmt.Errorf("invalid ISO 8601 timestamp in 'created' field: %q", created)
+		return nil, nil, fmt.Errorf("invalid ISO 8601 timestamp in 'created' field: %q", created)
 	}
 
 	priority, err := fm.getInt("priority")
 	if err != nil {
-		return nil, fmt.Errorf("missing or invalid required field 'priority'")
+		return nil, nil, fmt.Errorf("missing or invalid required field 'priority'")
 	}
 	if priority < 1 || priority > 3 {
-		return nil, fmt.Errorf("invalid priority value %d (must be 1, 2, or 3)", priority)
+		return nil, nil, fmt.Errorf("invalid priority value %d (must be 1, 2, or 3)", priority)
 	}
 
 	status := fm.get("status")
@@ -180,12 +213,21 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 		status = "not_started"
 	}
 	if !validStatuses[status] {
-		return nil, fmt.Errorf("invalid status value %q", status)
+		return nil, nil, fmt.Errorf("invalid status value %q", status)
 	}
 
 	branch := fm.get("branch")
 	if branch == "" {
 		branch = "main"
+	}
+
+	var warnings []string
+	if branch != "main" {
+		if hardErr, warn := validateBranch(branch, relFilePath); hardErr != "" {
+			return nil, nil, fmt.Errorf("%s", hardErr)
+		} else if warn != "" {
+			warnings = append(warnings, warn)
+		}
 	}
 
 	return &Spec{
@@ -197,40 +239,44 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 		File:     relFilePath,
 		Title:    extractTitle(body),
 		Content:  content,
-	}, nil
+	}, warnings, nil
 }
 
 // parseAssertion parses an assertion file (e.g., specs/foo/assertions/bar.md).
-func parseAssertion(relFilePath string, content string) (*Assertion, error) {
+// Returns the assertion, any branch warnings, and any error.
+func parseAssertion(relFilePath string, content string) (*Assertion, []string, error) {
 	fm, body, err := parseFrontmatter(content)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	id := fm.get("id")
 	if id == "" {
-		return nil, fmt.Errorf("missing required field 'id'")
+		return nil, nil, fmt.Errorf("missing required field 'id'")
+	}
+	if !validateKebabCase(id) {
+		return nil, nil, fmt.Errorf("Invalid id format '%s' (must be kebab-case: lowercase with hyphens, no spaces/underscores/special chars) in %s", id, relFilePath)
 	}
 
 	parent := fm.get("parent")
 	if parent == "" {
-		return nil, fmt.Errorf("missing required field 'parent'")
+		return nil, nil, fmt.Errorf("missing required field 'parent'")
 	}
 
 	created := fm.get("created")
 	if created == "" {
-		return nil, fmt.Errorf("missing required field 'created'")
+		return nil, nil, fmt.Errorf("missing required field 'created'")
 	}
 	if !validateTimestamp(created) {
-		return nil, fmt.Errorf("invalid ISO 8601 timestamp in 'created' field: %q", created)
+		return nil, nil, fmt.Errorf("invalid ISO 8601 timestamp in 'created' field: %q", created)
 	}
 
 	priority, err := fm.getInt("priority")
 	if err != nil {
-		return nil, fmt.Errorf("missing or invalid required field 'priority'")
+		return nil, nil, fmt.Errorf("missing or invalid required field 'priority'")
 	}
 	if priority < 1 || priority > 3 {
-		return nil, fmt.Errorf("invalid priority value %d (must be 1, 2, or 3)", priority)
+		return nil, nil, fmt.Errorf("invalid priority value %d (must be 1, 2, or 3)", priority)
 	}
 
 	status := fm.get("status")
@@ -238,12 +284,31 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		status = "not_started"
 	}
 	if !validStatuses[status] {
-		return nil, fmt.Errorf("invalid status value %q", status)
+		return nil, nil, fmt.Errorf("invalid status value %q", status)
 	}
 
 	branch := fm.get("branch")
 	if branch == "" {
 		branch = "main"
+	}
+
+	var warnings []string
+	if branch != "main" {
+		if hardErr, warn := validateBranch(branch, relFilePath); hardErr != "" {
+			return nil, nil, fmt.Errorf("%s", hardErr)
+		} else if warn != "" {
+			warnings = append(warnings, warn)
+		}
+	}
+
+	dependsOn := fm.get("depends-on")
+	if dependsOn != "" {
+		if !validateKebabCase(dependsOn) {
+			return nil, nil, fmt.Errorf("Field 'depends-on' must be kebab-case (lowercase with hyphens) in %s\nFound: %q", relFilePath, dependsOn)
+		}
+		if dependsOn == id {
+			return nil, nil, fmt.Errorf("Field 'depends-on' cannot reference itself in %s", relFilePath)
+		}
 	}
 
 	return &Assertion{
@@ -253,12 +318,12 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		Priority:  priority,
 		Status:    status,
 		Branch:    branch,
-		DependsOn: fm.get("depends-on"),
+		DependsOn: dependsOn,
 		LockedBy:  fm.get("locked-by"),
 		File:      relFilePath,
 		Title:     extractTitle(body),
 		Content:   content,
-	}, nil
+	}, warnings, nil
 }
 
 // hasFrontmatter reports whether file content starts with a frontmatter delimiter
@@ -294,6 +359,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 	var specs []Spec
 	var assertions []Assertion
+	var allWarnings []string
 
 	specIDsSeen := make(map[string]string) // id -> relative file path
 
@@ -350,10 +416,11 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 		relSpecFilePath := filepath.ToSlash(filepath.Join("specs", specDirName, specDirName+".md"))
 
-		spec, parseErr := parseSpec(relSpecFilePath, string(specFileRaw))
+		spec, specWarnings, parseErr := parseSpec(relSpecFilePath, string(specFileRaw))
 		if parseErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Skipping malformed spec file %s: %s\n", relSpecFilePath, parseErr.Error())
 		} else {
+			allWarnings = append(allWarnings, specWarnings...)
 			if existing, dup := specIDsSeen[spec.ID]; dup {
 				return nil, fmt.Errorf("duplicate spec id %q found in files: %s, %s", spec.ID, existing, relSpecFilePath)
 			}
@@ -406,11 +473,12 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 				continue
 			}
 
-			assertion, aParseErr := parseAssertion(relAFilePath, aContent)
+			assertion, aWarnings, aParseErr := parseAssertion(relAFilePath, aContent)
 			if aParseErr != nil {
 				fmt.Fprintf(os.Stderr, "Warning: Skipping malformed assertion file %s: %s\n", relAFilePath, aParseErr.Error())
 				continue
 			}
+			allWarnings = append(allWarnings, aWarnings...)
 
 			if existing, dup := assertionIDsSeen[assertion.ID]; dup {
 				fmt.Fprintf(os.Stderr, "Warning: Duplicate assertion id %q in spec %q: %s and %s — skipping second.\n",
@@ -423,6 +491,33 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 		}
 	}
 
+	// --- Cross-reference validation ---
+
+	// Validate assertion parent references existing spec.
+	for _, a := range assertions {
+		if _, ok := specIDsSeen[a.Parent]; !ok {
+			return nil, fmt.Errorf("Parent spec '%s' not found for assertion '%s'", a.Parent, a.ID)
+		}
+	}
+
+	// Build assertion ID set for depends-on reference validation.
+	assertionIDSet := make(map[string]bool)
+	for _, a := range assertions {
+		assertionIDSet[a.ID] = true
+	}
+
+	// Validate depends-on references existing assertion.
+	for _, a := range assertions {
+		if a.DependsOn != "" && !assertionIDSet[a.DependsOn] {
+			return nil, fmt.Errorf("Field 'depends-on' references non-existent assertion '%s' in %s", a.DependsOn, a.File)
+		}
+	}
+
+	// Detect circular dependencies.
+	if err := detectCircularDependencies(assertions); err != nil {
+		return nil, err
+	}
+
 	// Derive parent spec statuses from child assertion statuses.
 	for i := range specs {
 		if specs[i].Status != "draft" {
@@ -433,7 +528,51 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 	return &ParseResult{
 		Specs:      specs,
 		Assertions: assertions,
+		Warnings:   allWarnings,
 	}, nil
+}
+
+// detectCircularDependencies checks for cycles in the assertion dependency graph.
+func detectCircularDependencies(assertions []Assertion) error {
+	depMap := make(map[string]string) // assertion ID -> depends-on ID
+	for _, a := range assertions {
+		if a.DependsOn != "" {
+			depMap[a.ID] = a.DependsOn
+		}
+	}
+
+	for _, a := range assertions {
+		if a.DependsOn == "" {
+			continue
+		}
+		visited := make(map[string]bool)
+		var path []string
+		current := a.ID
+		for {
+			if visited[current] {
+				// Build cycle path starting from the repeated node.
+				cycleStart := current
+				var cyclePath []string
+				for i, p := range path {
+					if p == cycleStart {
+						cyclePath = path[i:]
+						break
+					}
+				}
+				cyclePath = append(cyclePath, cycleStart)
+				cycle := strings.Join(cyclePath, " \u2192 ")
+				return fmt.Errorf("Circular dependency detected:\n  %s\n\nBreak the cycle by removing or changing one of the dependencies.", cycle)
+			}
+			visited[current] = true
+			path = append(path, current)
+			next, ok := depMap[current]
+			if !ok {
+				break
+			}
+			current = next
+		}
+	}
+	return nil
 }
 
 // computeParentStatus derives the status of a spec from its child assertions.
