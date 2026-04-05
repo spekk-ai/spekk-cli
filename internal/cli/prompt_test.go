@@ -35,18 +35,6 @@ func setupDirs(t *testing.T) (*PromptResolver, func()) {
 	return pr, func() {} // t.TempDir handles cleanup
 }
 
-// writeFile creates a file at path with the given content, creating parent
-// directories as needed.
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // packageBasePath returns the expected path for a package base prompt file.
 func packageBasePath(pr *PromptResolver, agent string) string {
 	return filepath.Join(pr.InstallDir, "specs", agent+"-agent", agent+".prompt.md")

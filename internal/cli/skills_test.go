@@ -17,17 +17,6 @@ func setupTestDirs(t *testing.T) (workDir, homeDir, installDir string) {
 	return workDir, homeDir, installDir
 }
 
-// writeFile creates a file at the given path, creating parent directories as needed.
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func newResolver(workDir, homeDir, installDir string) *SkillResolver {
 	return &SkillResolver{
 		WorkDir:    workDir,
