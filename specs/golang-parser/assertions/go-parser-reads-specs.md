@@ -3,7 +3,7 @@ id: go-parser-reads-specs
 parent: golang-parser
 created: 2026-04-05T12:01:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: go-project-structure
 branch: feature/golang-parser
 ---
