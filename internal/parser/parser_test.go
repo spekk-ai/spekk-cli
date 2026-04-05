@@ -790,8 +790,352 @@ func TestFindNextAssertion_AllNone(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Integration test: parse project's own specs directory
+// Additional computeParentStatus edge cases
 // ---------------------------------------------------------------------------
+
+func TestComputeParentStatus_ExplicitInProgress(t *testing.T) {
+	// A child explicitly marked in_progress should yield in_progress for the parent.
+	assertions := []Assertion{
+		{ID: "a1", Parent: "p1", Status: "in_progress"},
+	}
+	status := computeParentStatus("p1", assertions)
+	if status != "in_progress" {
+		t.Errorf("expected in_progress, got %q", status)
+	}
+}
+
+func TestComputeParentStatus_FailedTakesPriorityOverInProgress(t *testing.T) {
+	// If any child is failed, parent must be failed regardless of in_progress children.
+	assertions := []Assertion{
+		{ID: "a1", Parent: "p1", Status: "in_progress"},
+		{ID: "a2", Parent: "p1", Status: "failed"},
+		{ID: "a3", Parent: "p1", Status: "done"},
+	}
+	status := computeParentStatus("p1", assertions)
+	if status != "failed" {
+		t.Errorf("expected failed (takes priority over in_progress), got %q", status)
+	}
+}
+
+func TestComputeParentStatus_DraftExcludedFromComputation(t *testing.T) {
+	// One draft + one done = all active children done → parent is done.
+	assertions := []Assertion{
+		{ID: "a1", Parent: "p1", Status: "done"},
+		{ID: "a2", Parent: "p1", Status: "draft"},
+	}
+	status := computeParentStatus("p1", assertions)
+	if status != "done" {
+		t.Errorf("expected done (draft excluded), got %q", status)
+	}
+}
+
+func TestComputeParentStatus_OnlyChildrenOfParent(t *testing.T) {
+	// Assertions belonging to a different parent should not affect computation.
+	assertions := []Assertion{
+		{ID: "a1", Parent: "p1", Status: "done"},
+		{ID: "a2", Parent: "p2", Status: "failed"},
+	}
+	status := computeParentStatus("p1", assertions)
+	if status != "done" {
+		t.Errorf("expected done (only p1 children), got %q", status)
+	}
+}
+
+func TestComputeParentStatus_AllNotStarted(t *testing.T) {
+	// All children not_started → parent is in_progress (because there are active children
+	// that are not all done; the spec says "if any child is in_progress or not_started → in_progress").
+	assertions := []Assertion{
+		{ID: "a1", Parent: "p1", Status: "not_started"},
+		{ID: "a2", Parent: "p1", Status: "not_started"},
+	}
+	status := computeParentStatus("p1", assertions)
+	if status != "in_progress" {
+		t.Errorf("expected in_progress for all not_started children, got %q", status)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Draft parent spec keeps its status (integration-level test)
+// ---------------------------------------------------------------------------
+
+func TestParseAllSpecs_DraftParentKeepsDraftStatus(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	// Parent spec with status: draft.
+	specContent := `---
+id: draft-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+status: draft
+---
+
+# Draft Spec
+`
+	writeFile(t, filepath.Join(specsDir, "draft-spec", "draft-spec.md"), specContent)
+
+	// Child assertion is done — but parent should remain draft.
+	assertionContent := `---
+id: draft-child
+parent: draft-spec
+created: 2026-01-01T00:00:00Z
+priority: 1
+status: done
+---
+
+# Draft Child
+`
+	writeFile(t, filepath.Join(specsDir, "draft-spec", "assertions", "draft-child.md"), assertionContent)
+
+	result, err := ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(result.Specs))
+	}
+	if result.Specs[0].Status != "draft" {
+		t.Errorf("expected draft parent to keep status=draft, got %q", result.Specs[0].Status)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Additional FindNextAssertion edge cases
+// ---------------------------------------------------------------------------
+
+func TestFindNextAssertion_SkipsDraft(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("draft-one", "spec", "draft", "main", "2026-01-01T00:00:00Z", 1),
+		makeTestAssertion("ready-one", "spec", "not_started", "main", "2026-01-02T00:00:00Z", 2),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "ready-one" {
+		t.Errorf("expected ready-one (draft skipped), got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_SkipsDraftParentSpec(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("child-of-draft", "draft-spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+		makeTestAssertion("child-of-active", "active-spec", "not_started", "main", "2026-01-02T00:00:00Z", 1),
+	}
+	specs := []Spec{
+		{ID: "draft-spec", Status: "draft"},
+		{ID: "active-spec", Status: "in_progress"},
+	}
+
+	next := FindNextAssertion(assertions, specs, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "child-of-active" {
+		t.Errorf("expected child-of-active (draft parent skipped), got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_SpecFilter(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("from-other-spec", "other-spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+		makeTestAssertion("from-target-spec", "target-spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{
+		AllBranches: true,
+		SpecID:      "target-spec",
+	})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "from-target-spec" {
+		t.Errorf("expected from-target-spec, got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_InProgressFreshLockSkipped(t *testing.T) {
+	freshTimestamp := strconv.FormatInt(time.Now().Unix()-60, 10)
+	assertions := []Assertion{
+		{
+			ID: "locked-fresh", Parent: "spec", Status: "in_progress",
+			Branch: "main", Created: "2026-01-01T00:00:00Z", Priority: 1,
+			LockedBy: "builder-host-123-" + freshTimestamp,
+		},
+		makeTestAssertion("unlocked", "spec", "not_started", "main", "2026-01-02T00:00:00Z", 2),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "unlocked" {
+		t.Errorf("expected unlocked (fresh lock skipped), got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_InProgressStaleLockIncluded(t *testing.T) {
+	staleTimestamp := strconv.FormatInt(time.Now().Unix()-10800, 10)
+	assertions := []Assertion{
+		{
+			ID: "locked-stale", Parent: "spec", Status: "in_progress",
+			Branch: "main", Created: "2026-01-01T00:00:00Z", Priority: 1,
+			LockedBy: "builder-host-123-" + staleTimestamp,
+		},
+		makeTestAssertion("other", "spec", "not_started", "main", "2026-01-02T00:00:00Z", 2),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	// Stale lock should NOT prevent selection; locked-stale has higher priority.
+	if next.ID != "locked-stale" {
+		t.Errorf("expected locked-stale (stale lock included), got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_InProgressNoLockIncluded(t *testing.T) {
+	// in_progress with no lock should be a candidate.
+	assertions := []Assertion{
+		{
+			ID: "in-prog-no-lock", Parent: "spec", Status: "in_progress",
+			Branch: "main", Created: "2026-01-01T00:00:00Z", Priority: 1,
+		},
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "in-prog-no-lock" {
+		t.Errorf("expected in-prog-no-lock, got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_SortByCreatedTiebreaker(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("newer", "spec", "not_started", "main", "2026-01-03T00:00:00Z", 1),
+		makeTestAssertion("older", "spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "older" {
+		t.Errorf("expected older (earlier created date), got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_SortByIDTiebreaker(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("zebra", "spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+		makeTestAssertion("alpha", "spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "alpha" {
+		t.Errorf("expected alpha (alphabetical tiebreaker), got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_AllBranchesDisablesBranchFilter(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("other-branch", "spec", "not_started", "feature/other", "2026-01-01T00:00:00Z", 1),
+	}
+
+	// With AllBranches=true, should still find the assertion even though branch doesn't match.
+	next := FindNextAssertion(assertions, nil, FindOptions{
+		AllBranches:   true,
+		CurrentBranch: "feature/mine",
+	})
+	if next == nil {
+		t.Fatal("expected an assertion with AllBranches=true")
+	}
+	if next.ID != "other-branch" {
+		t.Errorf("expected other-branch, got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_ByAssertionIDNotFound(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("exists", "spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AssertionID: "nonexistent"})
+	if next != nil {
+		t.Errorf("expected nil for non-existent assertion ID, got %v", next)
+	}
+}
+
+func TestFindNextAssertion_ByAssertionIDReturnsDoneAssertion(t *testing.T) {
+	// --assertion flag returns the assertion directly regardless of status.
+	assertions := []Assertion{
+		makeTestAssertion("done-one", "spec", "done", "main", "2026-01-01T00:00:00Z", 1),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AssertionID: "done-one"})
+	if next == nil {
+		t.Fatal("expected assertion by ID even if done")
+	}
+	if next.ID != "done-one" {
+		t.Errorf("expected done-one, got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_EmptyAssertionList(t *testing.T) {
+	next := FindNextAssertion(nil, nil, FindOptions{AllBranches: true})
+	if next != nil {
+		t.Errorf("expected nil for empty assertion list, got %v", next)
+	}
+}
+
+func TestFindNextAssertion_AllFilteredOut(t *testing.T) {
+	// All assertions are done or draft — nothing to return.
+	assertions := []Assertion{
+		makeTestAssertion("done-a", "spec", "done", "main", "2026-01-01T00:00:00Z", 1),
+		makeTestAssertion("draft-a", "spec", "draft", "main", "2026-01-01T00:00:00Z", 1),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next != nil {
+		t.Errorf("expected nil when all assertions are done/draft, got %v", next)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Additional IsLockStale edge cases
+// ---------------------------------------------------------------------------
+
+func TestIsLockStale_ExactlyAtBoundary(t *testing.T) {
+	// Lock exactly 7200 seconds old — should NOT be stale (> 7200, not >=).
+	ts := strconv.FormatInt(time.Now().Unix()-7200, 10)
+	lockedBy := "builder-host-123-" + ts
+	if IsLockStale(lockedBy) {
+		t.Error("expected lock exactly at 2-hour boundary to NOT be stale")
+	}
+}
+
+func TestIsLockStale_JustOverBoundary(t *testing.T) {
+	// Lock 7201 seconds old — should be stale.
+	ts := strconv.FormatInt(time.Now().Unix()-7201, 10)
+	lockedBy := "builder-host-123-" + ts
+	if !IsLockStale(lockedBy) {
+		t.Error("expected lock just over 2-hour boundary to be stale")
+	}
+}
+
+func TestIsLockStale_MalformedNoHyphens(t *testing.T) {
+	if !IsLockStale("justastringwithnohyphens") {
+		t.Error("expected malformed lock with no hyphens to be stale")
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Kebab-case ID validation
