@@ -3,7 +3,7 @@ id: go-skill-resolver
 parent: golang-cli
 created: 2026-04-05T12:13:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: go-command-router
 branch: feature/golang-cli
 ---
