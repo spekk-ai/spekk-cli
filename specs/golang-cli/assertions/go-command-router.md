@@ -3,7 +3,7 @@ id: go-command-router
 parent: golang-cli
 created: 2026-04-05T12:10:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: go-project-structure
 branch: feature/golang-cli
 ---
