@@ -5,7 +5,7 @@ created: 2026-04-05T12:02:00Z
 priority: 1
 status: not_started
 depends-on: go-parser-reads-specs
-branch: feature/golang-migration
+branch: feature/golang-parser
 ---
 
 # Go parser validates spec files

@@ -5,7 +5,7 @@ created: 2026-04-05T12:18:00Z
 priority: 2
 status: not_started
 depends-on: go-builder-launcher
-branch: feature/golang-migration
+branch: feature/golang-agents
 ---
 
 # Go orchestration loops

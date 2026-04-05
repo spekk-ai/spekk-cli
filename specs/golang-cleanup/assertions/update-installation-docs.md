@@ -5,7 +5,7 @@ created: 2026-04-05T12:34:00Z
 priority: 3
 status: not_started
 depends-on: update-ci-for-go
-branch: feature/golang-migration
+branch: feature/golang-cleanup
 ---
 
 # Installation and documentation updated for Go binary

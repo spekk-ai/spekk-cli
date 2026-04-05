@@ -5,7 +5,7 @@ created: 2026-04-05T12:11:00Z
 priority: 1
 status: not_started
 depends-on: go-command-router
-branch: feature/golang-migration
+branch: feature/golang-cli
 ---
 
 # Go flag parser handles all CLI flags

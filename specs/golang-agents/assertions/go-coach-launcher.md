@@ -5,7 +5,7 @@ created: 2026-04-05T12:15:00Z
 priority: 1
 status: not_started
 depends-on: go-prompt-resolver
-branch: feature/golang-migration
+branch: feature/golang-agents
 ---
 
 # Go coach agent launcher

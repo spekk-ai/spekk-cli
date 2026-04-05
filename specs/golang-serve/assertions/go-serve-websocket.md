@@ -5,7 +5,7 @@ created: 2026-04-05T12:25:00Z
 priority: 2
 status: not_started
 depends-on: go-prompt-resolver
-branch: feature/golang-migration
+branch: feature/golang-serve
 ---
 
 # Go serve command runs WebSocket server

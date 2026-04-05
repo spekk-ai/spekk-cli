@@ -5,7 +5,7 @@ created: 2026-04-05T12:10:00Z
 priority: 1
 status: not_started
 depends-on: go-project-structure
-branch: feature/golang-migration
+branch: feature/golang-cli
 ---
 
 # Go binary routes all CLI commands
