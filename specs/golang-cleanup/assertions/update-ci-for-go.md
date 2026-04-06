@@ -3,7 +3,7 @@ id: update-ci-for-go
 parent: golang-cleanup
 created: 2026-04-05T12:33:00Z
 priority: 3
-status: not_started
+status: done
 depends-on: remove-node-source
 branch: feature/golang-cleanup
 ---
