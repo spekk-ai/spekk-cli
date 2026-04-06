@@ -4,6 +4,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/spekk-dev/spekk-cli/internal/parser"
 )
 
 func main() {
@@ -54,12 +59,94 @@ func main() {
 	}
 }
 
+// getCurrentGitBranch returns the current git branch name, defaulting to "main".
+func getCurrentGitBranch() string {
+	out, err := exec.Command("git", "branch", "--show-current").Output()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Warning: Not in a git repository. Defaulting to main.")
+		return "main"
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "" {
+		return "main"
+	}
+	return branch
+}
+
+// findSpecsDir locates the specs/ directory relative to the git root or cwd.
+func findSpecsDir() string {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return filepath.Join(".", "specs")
+	}
+	return filepath.Join(strings.TrimSpace(string(out)), "specs")
+}
+
 // runParser runs the spec parser to find the next assertion.
 // Accepts flags: --all, --spec <name>, --assertion <name>, --all-branches
 func runParser(args []string) {
-	// TODO: implement via parser package
-	fmt.Fprintln(os.Stderr, "parser: not implemented yet")
-	os.Exit(0)
+	var showAll, allBranches bool
+	var specID, assertionID string
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--all":
+			showAll = true
+		case "--spec", "-s":
+			if i+1 < len(args) {
+				i++
+				specID = args[i]
+			}
+		case "--assertion":
+			if i+1 < len(args) {
+				i++
+				assertionID = args[i]
+			}
+		case "--all-branches":
+			allBranches = true
+		}
+	}
+
+	specsDir := findSpecsDir()
+
+	result, err := parser.ParseAllSpecs(specsDir)
+	if err != nil {
+		jsonBytes, _ := parser.FormatError(err.Error())
+		fmt.Println(string(jsonBytes))
+		os.Exit(1)
+	}
+
+	if len(result.Specs) == 0 && len(result.Assertions) == 0 {
+		jsonBytes, _ := parser.FormatEmpty()
+		fmt.Println(string(jsonBytes))
+		return
+	}
+
+	if showAll {
+		jsonBytes, _ := parser.FormatHierarchy(result)
+		fmt.Println(string(jsonBytes))
+		return
+	}
+
+	opts := parser.FindOptions{
+		AssertionID: assertionID,
+		SpecID:      specID,
+		AllBranches: allBranches,
+	}
+	if !allBranches {
+		opts.CurrentBranch = getCurrentGitBranch()
+	}
+
+	next := parser.FindNextAssertion(result.Assertions, result.Specs, opts)
+
+	if next == nil {
+		jsonBytes, _ := parser.FormatComplete()
+		fmt.Println(string(jsonBytes))
+		return
+	}
+
+	jsonBytes, _ := parser.FormatNextAssertion(next, result.Specs)
+	fmt.Println(string(jsonBytes))
 }
 
 // launchCoachAgent launches the Coach Agent to create and refine specs.

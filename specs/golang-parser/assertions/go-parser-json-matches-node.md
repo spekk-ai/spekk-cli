@@ -3,8 +3,7 @@ id: go-parser-json-matches-node
 parent: golang-parser
 created: 2026-04-05T12:04:00Z
 priority: 1
-status: in_progress
-locked-by: builder-Mac-69924-1775485876
+status: done
 depends-on: go-parser-computes-state
 branch: feature/golang-parser
 ---
