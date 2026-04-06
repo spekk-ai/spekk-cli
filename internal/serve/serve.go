@@ -419,9 +419,8 @@ func listenOnPort(host string, port, maxRetries int) (net.Listener, error) {
 // buildServeCoachPrompt builds the system prompt for serve sessions.
 func buildServeCoachPrompt(installDir string) (string, error) {
 	resolver := &cli.PromptResolver{
-		HomeDir:    homeDir(),
-		Cwd:        cwdStr(),
-		InstallDir: installDir,
+		HomeDir: homeDir(),
+		Cwd:     cwdStr(),
 	}
 
 	message, err := resolver.CreateActivationMessage("coach")

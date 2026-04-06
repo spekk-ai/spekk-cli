@@ -5,34 +5,24 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
-// setupTestDirs creates temp home and cwd directories, plus a fake install dir
-// with a base prompt file for the given agent.
-func setupTestDirs(t *testing.T, agent string) (homeDir, cwd, installDir string) {
-	t.Helper()
-	homeDir = t.TempDir()
-	cwd = t.TempDir()
-	installDir = t.TempDir()
-
-	// Create base prompt
-	agentDir := filepath.Join(installDir, "specs", agent+"-agent")
-	os.MkdirAll(agentDir, 0o755)
-	os.WriteFile(
-		filepath.Join(agentDir, agent+".prompt.md"),
-		[]byte("# Base "+agent+" prompt"),
-		0o644,
-	)
-	return
+// testEmbeddedFS creates a fake embedded FS with a base prompt for the agent.
+func testEmbeddedFS(agent string) fstest.MapFS {
+	return fstest.MapFS{
+		"specs/" + agent + "-agent/" + agent + ".prompt.md": {
+			Data: []byte("# Base " + agent + " prompt"),
+		},
+	}
 }
 
-func newResolver(home, cwd, install string) *PromptResolver {
-	return &PromptResolver{HomeDir: home, Cwd: cwd, InstallDir: install}
+func newResolver(home, cwd string, efs fstest.MapFS) *PromptResolver {
+	return &PromptResolver{HomeDir: home, Cwd: cwd, EmbeddedFS: efs}
 }
 
 func TestGetPromptContent_BasePrompt(t *testing.T) {
-	home, cwd, install := setupTestDirs(t, "builder")
-	r := newResolver(home, cwd, install)
+	r := newResolver(t.TempDir(), t.TempDir(), testEmbeddedFS("builder"))
 
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
@@ -47,7 +37,7 @@ func TestGetPromptContent_BasePrompt(t *testing.T) {
 }
 
 func TestGetPromptContent_UnknownAgent(t *testing.T) {
-	r := newResolver(t.TempDir(), t.TempDir(), t.TempDir())
+	r := newResolver(t.TempDir(), t.TempDir(), nil)
 
 	_, err := r.GetPromptContent("unknown-agent")
 	if err == nil || !strings.Contains(err.Error(), "Unknown agent") {
@@ -55,23 +45,22 @@ func TestGetPromptContent_UnknownAgent(t *testing.T) {
 	}
 }
 
-func TestGetPromptContent_MissingBasePrompt(t *testing.T) {
-	r := newResolver(t.TempDir(), t.TempDir(), t.TempDir())
+func TestGetPromptContent_NoEmbeddedFS(t *testing.T) {
+	r := newResolver(t.TempDir(), t.TempDir(), nil)
 
 	_, err := r.GetPromptContent("builder")
-	if err == nil || !strings.Contains(err.Error(), "Prompt file not found") {
-		t.Errorf("expected Prompt file not found error, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "embedded prompt") {
+		t.Errorf("expected embedded prompt error, got: %v", err)
 	}
 }
 
 func TestGetPromptContent_GlobalOverride(t *testing.T) {
-	home, cwd, install := setupTestDirs(t, "builder")
-
+	home := t.TempDir()
 	globalDir := filepath.Join(home, ".spekk")
 	os.MkdirAll(globalDir, 0o755)
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.override.md"), []byte("# Global Override"), 0o644)
 
-	r := newResolver(home, cwd, install)
+	r := newResolver(home, t.TempDir(), testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +71,8 @@ func TestGetPromptContent_GlobalOverride(t *testing.T) {
 }
 
 func TestGetPromptContent_LocalOverrideTakesPrecedence(t *testing.T) {
-	home, cwd, install := setupTestDirs(t, "builder")
+	home := t.TempDir()
+	cwd := t.TempDir()
 
 	globalDir := filepath.Join(home, ".spekk")
 	os.MkdirAll(globalDir, 0o755)
@@ -92,7 +82,7 @@ func TestGetPromptContent_LocalOverrideTakesPrecedence(t *testing.T) {
 	os.MkdirAll(localDir, 0o755)
 	os.WriteFile(filepath.Join(localDir, "builder.prompt.override.md"), []byte("# Local Override"), 0o644)
 
-	r := newResolver(home, cwd, install)
+	r := newResolver(home, cwd, testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -103,13 +93,12 @@ func TestGetPromptContent_LocalOverrideTakesPrecedence(t *testing.T) {
 }
 
 func TestGetPromptContent_GlobalExtendAppended(t *testing.T) {
-	home, cwd, install := setupTestDirs(t, "builder")
-
+	home := t.TempDir()
 	globalDir := filepath.Join(home, ".spekk")
 	os.MkdirAll(globalDir, 0o755)
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.md"), []byte("## Global Extend"), 0o644)
 
-	r := newResolver(home, cwd, install)
+	r := newResolver(home, t.TempDir(), testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -128,13 +117,12 @@ func TestGetPromptContent_GlobalExtendAppended(t *testing.T) {
 }
 
 func TestGetPromptContent_LocalExtendAppended(t *testing.T) {
-	home, cwd, install := setupTestDirs(t, "builder")
-
+	cwd := t.TempDir()
 	localDir := filepath.Join(cwd, ".spekk")
 	os.MkdirAll(localDir, 0o755)
 	os.WriteFile(filepath.Join(localDir, "builder.prompt.md"), []byte("## Local Extend"), 0o644)
 
-	r := newResolver(home, cwd, install)
+	r := newResolver(t.TempDir(), cwd, testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +138,8 @@ func TestGetPromptContent_LocalExtendAppended(t *testing.T) {
 }
 
 func TestGetPromptContent_AllThreeLayers(t *testing.T) {
-	home, cwd, install := setupTestDirs(t, "builder")
+	home := t.TempDir()
+	cwd := t.TempDir()
 
 	globalDir := filepath.Join(home, ".spekk")
 	os.MkdirAll(globalDir, 0o755)
@@ -160,7 +149,7 @@ func TestGetPromptContent_AllThreeLayers(t *testing.T) {
 	os.MkdirAll(localDir, 0o755)
 	os.WriteFile(filepath.Join(localDir, "builder.prompt.md"), []byte("## Local Extend"), 0o644)
 
-	r := newResolver(home, cwd, install)
+	r := newResolver(home, cwd, testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -182,14 +171,13 @@ func TestGetPromptContent_AllThreeLayers(t *testing.T) {
 }
 
 func TestGetPromptContent_GlobalOverrideWithExtends(t *testing.T) {
-	home, cwd, install := setupTestDirs(t, "builder")
-
+	home := t.TempDir()
 	globalDir := filepath.Join(home, ".spekk")
 	os.MkdirAll(globalDir, 0o755)
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.override.md"), []byte("# Custom Base"), 0o644)
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.md"), []byte("## Extra Instructions"), 0o644)
 
-	r := newResolver(home, cwd, install)
+	r := newResolver(home, t.TempDir(), testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -207,19 +195,16 @@ func TestGetPromptContent_GlobalOverrideWithExtends(t *testing.T) {
 	}
 }
 
-func TestGetPromptContent_MissingBaseWithGlobalOverride(t *testing.T) {
+func TestGetPromptContent_OverrideWithNoEmbedded(t *testing.T) {
 	home := t.TempDir()
-	cwd := t.TempDir()
-	install := t.TempDir() // No base prompt
-
 	globalDir := filepath.Join(home, ".spekk")
 	os.MkdirAll(globalDir, 0o755)
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.override.md"), []byte("# Override Builder"), 0o644)
 
-	r := newResolver(home, cwd, install)
+	r := newResolver(home, t.TempDir(), nil)
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
-		t.Fatalf("should succeed with override: %v", err)
+		t.Fatalf("should succeed with override even without embedded: %v", err)
 	}
 	if !strings.Contains(content, "# Override Builder") {
 		t.Errorf("expected override content, got: %s", content)
@@ -229,13 +214,12 @@ func TestGetPromptContent_MissingBaseWithGlobalOverride(t *testing.T) {
 func TestGetPromptContent_WorksForAllAgents(t *testing.T) {
 	for _, agent := range []string{"coach", "builder", "observer"} {
 		t.Run(agent, func(t *testing.T) {
-			home, cwd, install := setupTestDirs(t, agent)
-
+			home := t.TempDir()
 			globalDir := filepath.Join(home, ".spekk")
 			os.MkdirAll(globalDir, 0o755)
 			os.WriteFile(filepath.Join(globalDir, agent+".prompt.md"), []byte("## Global "+agent), 0o644)
 
-			r := newResolver(home, cwd, install)
+			r := newResolver(home, t.TempDir(), testEmbeddedFS(agent))
 			content, err := r.GetPromptContent(agent)
 			if err != nil {
 				t.Fatal(err)
@@ -251,8 +235,7 @@ func TestGetPromptContent_WorksForAllAgents(t *testing.T) {
 }
 
 func TestCreateActivationMessage(t *testing.T) {
-	home, cwd, install := setupTestDirs(t, "builder")
-	r := newResolver(home, cwd, install)
+	r := newResolver(t.TempDir(), t.TempDir(), testEmbeddedFS("builder"))
 
 	msg, err := r.CreateActivationMessage("builder")
 	if err != nil {
@@ -264,9 +247,6 @@ func TestCreateActivationMessage(t *testing.T) {
 	}
 	if !strings.Contains(msg, "Working directory:") {
 		t.Error("should include working directory")
-	}
-	if !strings.Contains(msg, "Spekk installation:") {
-		t.Error("should include installation path")
 	}
 	if !strings.Contains(msg, "# Base builder prompt") {
 		t.Error("should include prompt content")

@@ -5,27 +5,26 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	"github.com/spekk-dev/spekk-cli/internal/cli"
 )
 
-func setupInstallDir(t *testing.T, agent string) string {
-	t.Helper()
-	install := t.TempDir()
-	agentDir := filepath.Join(install, "specs", agent+"-agent")
-	os.MkdirAll(agentDir, 0o755)
-	os.WriteFile(
-		filepath.Join(agentDir, agent+".prompt.md"),
-		[]byte("# "+agent+" base prompt"),
-		0o644,
-	)
-	return install
+// testEmbeddedFS creates a fake embedded FS with a base prompt for the agent.
+func testEmbeddedFS(agent string) fstest.MapFS {
+	return fstest.MapFS{
+		"specs/" + agent + "-agent/" + agent + ".prompt.md": {
+			Data: []byte("# " + agent + " base prompt"),
+		},
+	}
 }
 
 func TestBuildActivationMessage_Coach(t *testing.T) {
-	install := setupInstallDir(t, "coach")
+	cli.DefaultEmbeddedFS = testEmbeddedFS("coach")
+	defer func() { cli.DefaultEmbeddedFS = nil }()
 
 	msg, err := BuildActivationMessage(LaunchOptions{
-		Agent:      "coach",
-		InstallDir: install,
+		Agent: "coach",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -43,11 +42,11 @@ func TestBuildActivationMessage_Coach(t *testing.T) {
 }
 
 func TestBuildActivationMessage_WithExtraMessage(t *testing.T) {
-	install := setupInstallDir(t, "coach")
+	cli.DefaultEmbeddedFS = testEmbeddedFS("coach")
+	defer func() { cli.DefaultEmbeddedFS = nil }()
 
 	msg, err := BuildActivationMessage(LaunchOptions{
 		Agent:        "coach",
-		InstallDir:   install,
 		ExtraMessage: "\n\n## Extra Content",
 	})
 	if err != nil {
@@ -163,8 +162,7 @@ func TestBuildSkillMessage_MeetingMissingFile(t *testing.T) {
 
 func TestBuildActivationMessage_UnknownAgent(t *testing.T) {
 	_, err := BuildActivationMessage(LaunchOptions{
-		Agent:      "unknown",
-		InstallDir: t.TempDir(),
+		Agent: "unknown",
 	})
 	if err == nil {
 		t.Fatal("expected error for unknown agent")

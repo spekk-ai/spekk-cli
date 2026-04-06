@@ -26,9 +26,8 @@ type LaunchOptions struct {
 // including optional skill activation.
 func BuildActivationMessage(opts LaunchOptions) (string, error) {
 	resolver := &cli.PromptResolver{
-		HomeDir:    homeDir(),
-		Cwd:        cwd(),
-		InstallDir: opts.InstallDir,
+		HomeDir: homeDir(),
+		Cwd:     cwd(),
 	}
 
 	message, err := resolver.CreateActivationMessage(opts.Agent)

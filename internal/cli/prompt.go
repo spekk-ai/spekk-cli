@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,24 +10,38 @@ import (
 
 const promptSeparator = "\n\n---\n\n"
 
+// DefaultEmbeddedFS is the embedded filesystem containing built-in agent prompts.
+// Set this from main() before any prompt resolution occurs.
+var DefaultEmbeddedFS fs.FS
+
 // validAgents lists the supported agent names.
 var validAgents = []string{"coach", "builder", "observer"}
 
 // PromptResolver resolves layered agent prompts.
+//
+// Resolution order:
+//
+//	Base (first match wins):
+//	  1. Local override:  .spekk/{agent}.prompt.override.md
+//	  2. Global override: ~/.spekk/{agent}.prompt.override.md
+//	  3. Embedded base:   built into the binary at compile time
+//
+//	Extensions (appended in order after base):
+//	  1. Global extend: ~/.spekk/{agent}.prompt.md
+//	  2. Local extend:  .spekk/{agent}.prompt.md
 type PromptResolver struct {
 	HomeDir    string
 	Cwd        string
-	InstallDir string
+	EmbeddedFS fs.FS // override for testing; falls back to DefaultEmbeddedFS
 }
 
 // NewPromptResolver creates a resolver with default paths.
-func NewPromptResolver(installDir string) *PromptResolver {
+func NewPromptResolver() *PromptResolver {
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
 	return &PromptResolver{
-		HomeDir:    home,
-		Cwd:        cwd,
-		InstallDir: installDir,
+		HomeDir: home,
+		Cwd:     cwd,
 	}
 }
 
@@ -40,9 +55,27 @@ func isValidAgent(name string) bool {
 	return false
 }
 
-// basePromptPath returns the package base prompt path for an agent.
-func (r *PromptResolver) basePromptPath(agent string) string {
-	return filepath.Join(r.InstallDir, "specs", agent+"-agent", agent+".prompt.md")
+// embeddedFS returns the embedded filesystem to use, preferring the
+// instance field over the package-level default.
+func (r *PromptResolver) embeddedFS() fs.FS {
+	if r.EmbeddedFS != nil {
+		return r.EmbeddedFS
+	}
+	return DefaultEmbeddedFS
+}
+
+// readBasePrompt reads the built-in base prompt from the embedded filesystem.
+func (r *PromptResolver) readBasePrompt(agent string) (string, error) {
+	efs := r.embeddedFS()
+	if efs == nil {
+		return "", fmt.Errorf("no embedded prompts available for agent %q", agent)
+	}
+	path := "specs/" + agent + "-agent/" + agent + ".prompt.md"
+	data, err := fs.ReadFile(efs, path)
+	if err != nil {
+		return "", fmt.Errorf("embedded prompt not found for agent %q", agent)
+	}
+	return string(data), nil
 }
 
 // readIfExists reads a file if it exists, returning empty string and false if not.
@@ -55,15 +88,6 @@ func readIfExists(path string) (string, bool) {
 }
 
 // GetPromptContent resolves the full prompt for an agent using layered resolution.
-//
-// Base (first match wins):
-//  1. Local override: .spekk/{agent}.prompt.override.md
-//  2. Global override: ~/.spekk/{agent}.prompt.override.md
-//  3. Package base: specs/{agent}-agent/{agent}.prompt.md
-//
-// Extensions (appended in order):
-//  1. Global extend: ~/.spekk/{agent}.prompt.md
-//  2. Local extend: .spekk/{agent}.prompt.md
 func (r *PromptResolver) GetPromptContent(agent string) (string, error) {
 	if !isValidAgent(agent) {
 		return "", fmt.Errorf("Unknown agent: %s", agent)
@@ -72,42 +96,35 @@ func (r *PromptResolver) GetPromptContent(agent string) (string, error) {
 	globalDir := filepath.Join(r.HomeDir, ".spekk")
 	localDir := filepath.Join(r.Cwd, ".spekk")
 
-	// Step 1: Determine base prompt
+	// Step 1: Determine base prompt (first match wins)
 	var base string
 
 	localOverridePath := filepath.Join(localDir, agent+".prompt.override.md")
 	if content, ok := readIfExists(localOverridePath); ok {
 		base = content
+	} else if content, ok := readIfExists(filepath.Join(globalDir, agent+".prompt.override.md")); ok {
+		base = content
 	} else {
-		globalOverridePath := filepath.Join(globalDir, agent+".prompt.override.md")
-		if content, ok := readIfExists(globalOverridePath); ok {
-			base = content
-		} else {
-			basePath := r.basePromptPath(agent)
-			content, ok := readIfExists(basePath)
-			if !ok {
-				return "", fmt.Errorf("Prompt file not found: %s", basePath)
-			}
-			base = content
+		content, err := r.readBasePrompt(agent)
+		if err != nil {
+			return "", err
 		}
+		base = content
 	}
 
-	// Step 2: Collect layers
+	// Step 2: Append extensions
 	layers := []string{base}
 
 	// Global extend
-	globalExtendPath := filepath.Join(globalDir, agent+".prompt.md")
-	if content, ok := readIfExists(globalExtendPath); ok {
+	if content, ok := readIfExists(filepath.Join(globalDir, agent+".prompt.md")); ok {
 		layers = append(layers, content)
 	}
 
 	// Local extend
-	localExtendPath := filepath.Join(localDir, agent+".prompt.md")
-	if content, ok := readIfExists(localExtendPath); ok {
+	if content, ok := readIfExists(filepath.Join(localDir, agent+".prompt.md")); ok {
 		layers = append(layers, content)
 	}
 
-	// Step 3: Concatenate
 	return strings.Join(layers, promptSeparator), nil
 }
 
@@ -124,9 +141,8 @@ func (r *PromptResolver) CreateActivationMessage(agent string) (string, error) {
 	return fmt.Sprintf(`You are the %s Agent - read the prompt and follow the instructions exactly.
 
 Working directory: %s
-Spekk installation: %s
 
 Here is your prompt:
 
-%s`, displayName, workingDir, r.InstallDir, promptContent), nil
+%s`, displayName, workingDir, promptContent), nil
 }
