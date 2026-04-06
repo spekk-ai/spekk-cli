@@ -3,8 +3,7 @@ id: node-delegates-to-go
 parent: golang-parser
 created: 2026-04-05T12:05:00Z
 priority: 2
-status: in_progress
-locked-by: builder-Mac-89657-1775487224
+status: done
 depends-on: go-parser-json-matches-node
 branch: feature/golang-parser
 ---
