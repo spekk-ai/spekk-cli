@@ -3,7 +3,8 @@ id: go-status-display
 parent: golang-status
 created: 2026-04-05T12:20:00Z
 priority: 2
-status: not_started
+status: in_progress
+locked-by: builder-Mac-4212-1775488038
 depends-on: go-parser-json-matches-node
 branch: feature/golang-parser
 ---
