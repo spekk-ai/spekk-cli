@@ -137,9 +137,7 @@ func cwdStr() string {
 
 // launchBuilderAgent launches the Builder Agent to implement specs.
 func launchBuilderAgent(args []string) {
-	// TODO: implement via builder package
-	fmt.Fprintln(os.Stderr, "builder agent: not implemented yet")
-	os.Exit(0)
+	agent.RunBuilder(args, findInstallDir())
 }
 
 // launchObserverAgent launches the Observer Agent to monitor spec-code drift.
