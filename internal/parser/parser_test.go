@@ -669,6 +669,54 @@ func TestComputeParentStatus_AllDraft(t *testing.T) {
 	}
 }
 
+func TestComputeParentStatus_DraftExcluded(t *testing.T) {
+	assertions := []Assertion{
+		{ID: "a1", Parent: "p1", Status: "done"},
+		{ID: "a2", Parent: "p1", Status: "draft"},
+	}
+	status := computeParentStatus("p1", assertions)
+	if status != "done" {
+		t.Errorf("expected done (draft child excluded), got %q", status)
+	}
+}
+
+func TestParseAllSpecs_DraftParentPreserved(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specContent := `---
+id: draft-parent
+created: 2026-01-01T00:00:00Z
+priority: 1
+status: draft
+---
+
+# Draft Parent
+`
+	writeFile(t, filepath.Join(specsDir, "draft-parent", "draft-parent.md"), specContent)
+
+	assertionContent := `---
+id: child-assertion
+parent: draft-parent
+created: 2026-01-01T00:00:00Z
+priority: 1
+status: done
+---
+
+# Child Assertion
+`
+	writeFile(t, filepath.Join(specsDir, "draft-parent", "assertions", "child-assertion.md"), assertionContent)
+
+	result, err := ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Specs[0].Status != "draft" {
+		t.Errorf("expected draft parent to keep draft status, got %q", result.Specs[0].Status)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // FindNextAssertion
 // ---------------------------------------------------------------------------
@@ -787,6 +835,118 @@ func TestFindNextAssertion_AllNone(t *testing.T) {
 	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
 	if next != nil {
 		t.Errorf("expected nil, got %v", next)
+	}
+}
+
+func TestFindNextAssertion_SkipsDraft(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("draft-one", "spec", "draft", "main", "2026-01-01T00:00:00Z", 1),
+		makeTestAssertion("pending", "spec", "not_started", "main", "2026-01-02T00:00:00Z", 2),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "pending" {
+		t.Errorf("expected pending, got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_SkipsDraftParentSpec(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("blocked", "draft-spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+		makeTestAssertion("available", "active-spec", "not_started", "main", "2026-01-01T00:00:00Z", 2),
+	}
+	specs := []Spec{
+		{ID: "draft-spec", Status: "draft"},
+		{ID: "active-spec", Status: "in_progress"},
+	}
+
+	next := FindNextAssertion(assertions, specs, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "available" {
+		t.Errorf("expected available, got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_SpecFilter(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("other-spec-assertion", "other", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+		makeTestAssertion("target-assertion", "target", "not_started", "main", "2026-01-01T00:00:00Z", 2),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true, SpecID: "target"})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "target-assertion" {
+		t.Errorf("expected target-assertion, got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_SkipsFreshLock(t *testing.T) {
+	freshTimestamp := strconv.FormatInt(time.Now().Unix()-60, 10)
+	assertions := []Assertion{
+		{ID: "locked", Parent: "spec", Status: "in_progress", Priority: 1,
+			Created: "2026-01-01T00:00:00Z", LockedBy: "builder-host-123-" + freshTimestamp},
+		makeTestAssertion("unlocked", "spec", "not_started", "main", "2026-01-01T00:00:00Z", 2),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "unlocked" {
+		t.Errorf("expected unlocked, got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_IncludesStaleLock(t *testing.T) {
+	staleTimestamp := strconv.FormatInt(time.Now().Unix()-10800, 10)
+	assertions := []Assertion{
+		{ID: "stale-locked", Parent: "spec", Status: "in_progress", Priority: 1,
+			Created: "2026-01-01T00:00:00Z", LockedBy: "builder-host-123-" + staleTimestamp},
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected stale-locked assertion to be returned")
+	}
+	if next.ID != "stale-locked" {
+		t.Errorf("expected stale-locked, got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_CreatedTiebreaker(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("newer", "spec", "not_started", "main", "2026-01-02T00:00:00Z", 1),
+		makeTestAssertion("older", "spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "older" {
+		t.Errorf("expected older (earlier created), got %q", next.ID)
+	}
+}
+
+func TestFindNextAssertion_IDTiebreaker(t *testing.T) {
+	assertions := []Assertion{
+		makeTestAssertion("z-last", "spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+		makeTestAssertion("a-first", "spec", "not_started", "main", "2026-01-01T00:00:00Z", 1),
+	}
+
+	next := FindNextAssertion(assertions, nil, FindOptions{AllBranches: true})
+	if next == nil {
+		t.Fatal("expected an assertion")
+	}
+	if next.ID != "a-first" {
+		t.Errorf("expected a-first (alphabetically first), got %q", next.ID)
 	}
 }
 
