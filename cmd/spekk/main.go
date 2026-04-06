@@ -142,9 +142,7 @@ func launchBuilderAgent(args []string) {
 
 // launchObserverAgent launches the Observer Agent to monitor spec-code drift.
 func launchObserverAgent(args []string) {
-	// TODO: implement via observer package
-	fmt.Fprintln(os.Stderr, "observer agent: not implemented yet")
-	os.Exit(0)
+	agent.RunObserver(args, findInstallDir())
 }
 
 // runLoop routes to the loop orchestration handlers.
