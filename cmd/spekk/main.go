@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/spekk-dev/spekk-cli/internal/parser"
+	"github.com/spekk-dev/spekk-cli/internal/status"
 )
 
 func main() {
@@ -219,9 +220,11 @@ func runCoachLoop(args []string) {
 
 // showStatus displays a comprehensive overview of all specs and assertions.
 func showStatus() {
-	// TODO: implement status display
-	fmt.Fprintln(os.Stderr, "status: not implemented yet")
-	os.Exit(0)
+	specsDir := findSpecsDir()
+	if err := status.Show(specsDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 }
 
 // showSpekk generates and displays the spec explorer web interface.
