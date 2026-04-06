@@ -12,6 +12,7 @@ import (
 	"github.com/spekk-dev/spekk-cli/internal/agent"
 	"github.com/spekk-dev/spekk-cli/internal/cli"
 	"github.com/spekk-dev/spekk-cli/internal/parser"
+	"github.com/spekk-dev/spekk-cli/internal/sandbox"
 	"github.com/spekk-dev/spekk-cli/internal/serve"
 	"github.com/spekk-dev/spekk-cli/internal/show"
 	"github.com/spekk-dev/spekk-cli/internal/status"
@@ -353,9 +354,135 @@ OPTIONS:
 // launchSandbox manages cloud sandbox environments.
 // Subcommands: create, list, status, ssh, destroy, deploy.
 func launchSandbox(args []string) {
-	// TODO: implement sandbox handler
-	fmt.Fprintln(os.Stderr, "sandbox: not implemented yet")
-	os.Exit(0)
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
+		fmt.Print(`
+spekk sandbox - Manage cloud sandbox environments
+
+USAGE:
+  spekk sandbox <subcommand> [options]
+
+SUBCOMMANDS:
+  create      Create a new sandbox droplet
+  list        List all sandbox droplets
+  status      Show status of a sandbox
+  ssh         SSH into a sandbox
+  destroy     Destroy a sandbox droplet
+  deploy      Deploy agent client to a sandbox
+
+OPTIONS:
+  --help, -h  Show this help message
+
+Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
+`)
+		return
+	}
+
+	subcommand := args[0]
+	subArgs := args[1:]
+
+	switch subcommand {
+	case "create":
+		createSandbox(subArgs)
+	case "list":
+		if err := sandbox.List(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+	case "status":
+		if len(subArgs) == 0 {
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox status <name>")
+			os.Exit(1)
+		}
+		if err := sandbox.Status(subArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+	case "ssh":
+		if len(subArgs) == 0 {
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox ssh <name> [ssh-flags...]")
+			os.Exit(1)
+		}
+		if err := sandbox.SSH(subArgs[0], subArgs[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+	case "destroy":
+		name := ""
+		force := false
+		for _, a := range subArgs {
+			if a == "--force" || a == "-f" {
+				force = true
+			} else if !strings.HasPrefix(a, "-") && name == "" {
+				name = a
+			}
+		}
+		if name == "" {
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force]")
+			os.Exit(1)
+		}
+		if err := sandbox.Destroy(name, force); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+	case "deploy":
+		if len(subArgs) == 0 {
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox deploy <name>")
+			os.Exit(1)
+		}
+		if err := sandbox.Deploy(subArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown sandbox command: %s\n", subcommand)
+		fmt.Fprintln(os.Stderr, `Run "spekk sandbox --help" for available subcommands.`)
+		os.Exit(1)
+	}
+}
+
+func createSandbox(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"name":    {Names: []string{"--name"}, Type: cli.StringFlag},
+		"region":  {Names: []string{"--region"}, Type: cli.StringFlag},
+		"size":    {Names: []string{"--size"}, Type: cli.StringFlag},
+		"project": {Names: []string{"--project"}, Type: cli.StringFlag},
+		"vpc":     {Names: []string{"--vpc"}, Type: cli.StringFlag},
+		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(`
+spekk sandbox create - Create a new sandbox droplet
+
+USAGE:
+  spekk sandbox create --name <name> [options]
+
+OPTIONS:
+  --name <name>        Sandbox name (required)
+  --region <region>    DigitalOcean region (default: nyc1)
+  --size <size>        Droplet size slug (default: s-2vcpu-4gb)
+  --project <project>  Assign to a DigitalOcean project (name or UUID)
+  --vpc <uuid>         Place droplet in a specific DigitalOcean VPC
+`)
+		return
+	}
+
+	if flags.String("name") == "" {
+		fmt.Fprintln(os.Stderr, "Error: --name is required for sandbox create")
+		os.Exit(1)
+	}
+
+	opts := sandbox.CreateOptions{
+		Name:    flags.String("name"),
+		Region:  flags.String("region"),
+		Size:    flags.String("size"),
+		Project: flags.String("project"),
+		VPC:     flags.String("vpc"),
+	}
+	if err := sandbox.Create(opts); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 }
 
 // printHelp displays the help text with all available commands.

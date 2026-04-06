@@ -3,7 +3,7 @@ id: go-sandbox-commands
 parent: golang-sandbox
 created: 2026-04-05T12:29:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: go-sandbox-api-client
 branch: feature/golang-sandbox
 ---
