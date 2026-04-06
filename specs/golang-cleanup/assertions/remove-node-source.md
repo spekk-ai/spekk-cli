@@ -3,7 +3,7 @@ id: remove-node-source
 parent: golang-cleanup
 created: 2026-04-05T12:32:00Z
 priority: 3
-status: not_started
+status: done
 depends-on: node-parser-removed
 branch: feature/golang-cleanup
 ---
