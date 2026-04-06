@@ -3,7 +3,7 @@ id: go-observer-launcher
 parent: golang-agents
 created: 2026-04-05T12:17:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: go-prompt-resolver
 branch: feature/golang-agents
 ---
