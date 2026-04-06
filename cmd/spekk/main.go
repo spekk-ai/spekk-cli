@@ -180,16 +180,12 @@ COMMANDS:
 
 // runBuilderLoop runs the automated builder loop.
 func runBuilderLoop(args []string) {
-	// TODO: implement builder loop
-	fmt.Fprintln(os.Stderr, "builder loop: not implemented yet")
-	os.Exit(0)
+	agent.RunBuilderLoop(args, findInstallDir())
 }
 
 // runCoachLoop runs the interactive coach loop.
 func runCoachLoop(args []string) {
-	// TODO: implement coach loop
-	fmt.Fprintln(os.Stderr, "coach loop: not implemented yet")
-	os.Exit(0)
+	agent.RunCoachLoop(args, findInstallDir())
 }
 
 // showStatus displays a comprehensive overview of all specs and assertions.
