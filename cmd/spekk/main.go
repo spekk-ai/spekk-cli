@@ -4,11 +4,15 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spekk-dev/spekk-cli/internal/agent"
 	"github.com/spekk-dev/spekk-cli/internal/cli"
+	"github.com/spekk-dev/spekk-cli/internal/parser"
+	"github.com/spekk-dev/spekk-cli/internal/status"
 )
 
 func main() {
@@ -60,11 +64,86 @@ func main() {
 }
 
 // runParser runs the spec parser to find the next assertion.
-// Accepts flags: --all, --spec <name>, --assertion <name>, --all-branches
+// Accepts flags: --all, --spec <name>, --assertion <name>, --all-branches, --raw, --specs-dir
 func runParser(args []string) {
-	// TODO: implement via parser package
-	fmt.Fprintln(os.Stderr, "parser: not implemented yet")
-	os.Exit(0)
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"all":        {Names: []string{"--all"}, Type: cli.BoolFlag},
+		"spec":       {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
+		"assertion":  {Names: []string{"--assertion"}, Type: cli.StringFlag},
+		"allBranch":  {Names: []string{"--all-branches"}, Type: cli.BoolFlag},
+		"raw":        {Names: []string{"--raw"}, Type: cli.BoolFlag},
+		"specsDir":   {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+	})
+
+	specsDir := flags.String("specsDir")
+	if specsDir == "" {
+		specsDir = findSpecsDir()
+	}
+
+	result, err := parser.ParseAllSpecs(specsDir)
+	if err != nil {
+		out, _ := parser.FormatError(err.Error())
+		fmt.Println(string(out))
+		os.Exit(1)
+	}
+
+	if len(result.Specs) == 0 {
+		out, _ := parser.FormatEmpty()
+		fmt.Println(string(out))
+		return
+	}
+
+	// --raw mode: output everything for downstream Node shims
+	if flags.Bool("raw") {
+		out, _ := parser.FormatRaw(result)
+		fmt.Println(string(out))
+		return
+	}
+
+	// --all mode: output full hierarchy
+	if flags.Bool("all") {
+		out, _ := parser.FormatHierarchy(result)
+		fmt.Println(string(out))
+		return
+	}
+
+	// Default: find next assertion
+	opts := parser.FindOptions{
+		AssertionID:   flags.String("assertion"),
+		SpecID:        flags.String("spec"),
+		AllBranches:   flags.Bool("allBranch"),
+		CurrentBranch: currentBranch(),
+	}
+
+	next := parser.FindNextAssertion(result.Assertions, result.Specs, opts)
+	if next == nil {
+		out, _ := parser.FormatComplete()
+		fmt.Println(string(out))
+		return
+	}
+
+	out, _ := parser.FormatNextAssertion(next, result.Specs)
+	fmt.Println(string(out))
+}
+
+// findSpecsDir locates the specs/ directory using git root.
+func findSpecsDir() string {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err == nil {
+		return filepath.Join(strings.TrimSpace(string(out)), "specs")
+	}
+	// Fallback: assume cwd
+	wd, _ := os.Getwd()
+	return filepath.Join(wd, "specs")
+}
+
+// currentBranch returns the current git branch name.
+func currentBranch() string {
+	out, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // findInstallDir returns the spekk installation directory
@@ -190,9 +269,11 @@ func runCoachLoop(args []string) {
 
 // showStatus displays a comprehensive overview of all specs and assertions.
 func showStatus() {
-	// TODO: implement status display
-	fmt.Fprintln(os.Stderr, "status: not implemented yet")
-	os.Exit(0)
+	specsDir := findSpecsDir()
+	if err := status.Show(specsDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 }
 
 // showSpekk generates and displays the spec explorer web interface.
