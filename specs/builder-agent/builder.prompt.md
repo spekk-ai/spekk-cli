@@ -101,9 +101,7 @@ The goal is a fast, trustworthy test suite — not maximum line coverage.
 
 **If assertion has tests:**
 ```bash
-npm test              # Run all tests 
-npm run test:impl     # Run implementation tests only
-npm run test:specs    # Run spec validation tests only
+go test ./...         # Run all tests
 ```
 All tests must pass before marking `done`.
 
@@ -166,7 +164,6 @@ spekk next
 ```
 
 This command MUST succeed and return valid JSON. If it fails:
-- Fix any package.json issues you may have introduced
 - Ensure no changes broke the parser structure
 - The entire system depends on this working
 
@@ -197,7 +194,7 @@ gh pr view --web 2>/dev/null || {
 - [Any important implementation decisions made]
 
 ## Test Plan
-- [ ] All new tests pass (`npm test`)
+- [ ] All new tests pass (`go test ./...`)
 - [ ] No regressions in existing functionality
 - [ ] Spec parser continues to function (`spekk next`)
 - [ ] [Any manual verification steps needed]
@@ -256,12 +253,12 @@ Your own behavior is defined in `specs/builder-agent/builder-agent.md`.
 
 ## Development Commands
 
-This project uses npm scripts for standardized development commands:
+This project is built with Go:
 
 **Testing:**
-- `npm test` - Run all tests
-- `npm run test:impl` - Run implementation tests only
-- `npm run test:specs` - Run spec validation tests only
+- `go test ./...` - Run all tests
+- `go test ./internal/parser/` - Run parser tests only
+- `go build ./cmd/spekk` - Build the binary
 
 ## Context Files
 

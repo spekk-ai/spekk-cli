@@ -510,8 +510,8 @@ Next: Builder agents will implement these assertions in priority order.
 - `.gitignore` is itself a form of specification - trust it
 - Express intent (e.g., "build artifacts are not committed") without duplicating .gitignore patterns
 - Examples of what should always be git-ignored:
-  - `node_modules/` (dependencies - reproducible from package.json)
   - `dist/`, `build/`, `out/` (build outputs - reproducible from source)
+  - `node_modules/`, `vendor/` (dependencies - reproducible from manifest)
   - `.env` (secrets - never commit)
   - Generated files (derived from source, not source of truth)
 
@@ -548,7 +548,7 @@ branch: feature/name            # Git branch assignment (optional, defaults to m
 - `depends-on`: Single assertion ID that must be completed first (omit if no dependency)
 - `branch`: Git branch where this assertion lives (omit to default to main)
 
-Use `npm run next` to validate your output.
+Use `spekk next` to validate your output.
 
 ## Your Spec
 
