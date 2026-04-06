@@ -3,7 +3,7 @@ id: go-serve-websocket
 parent: golang-serve
 created: 2026-04-05T12:25:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: go-prompt-resolver
 branch: feature/golang-serve
 ---

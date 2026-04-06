@@ -12,6 +12,7 @@ import (
 	"github.com/spekk-dev/spekk-cli/internal/agent"
 	"github.com/spekk-dev/spekk-cli/internal/cli"
 	"github.com/spekk-dev/spekk-cli/internal/parser"
+	"github.com/spekk-dev/spekk-cli/internal/serve"
 	"github.com/spekk-dev/spekk-cli/internal/show"
 	"github.com/spekk-dev/spekk-cli/internal/status"
 )
@@ -306,11 +307,47 @@ func showSpekk(args []string) {
 }
 
 // launchServe starts the WebSocket server for the browser extension.
-// Supports --port and --host flags.
+// Supports --port, --host, and --verbose flags.
 func launchServe(args []string) {
-	// TODO: implement serve handler
-	fmt.Fprintln(os.Stderr, "serve: not implemented yet")
-	os.Exit(0)
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"port":    {Names: []string{"--port", "-p"}, Type: cli.StringFlag},
+		"host":    {Names: []string{"--host"}, Type: cli.StringFlag},
+		"verbose": {Names: []string{"--verbose", "-v"}, Type: cli.BoolFlag},
+		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(`
+spekk serve - Start WebSocket server for browser extension
+
+USAGE:
+  spekk serve [OPTIONS]
+
+OPTIONS:
+  --port, -p <port>   Port to listen on (default: 3118)
+  --host <host>       Host to bind to (default: localhost)
+  --verbose, -v       Enable debug logging for WebSocket messages
+  --help, -h          Show this help message
+`)
+		return
+	}
+
+	opts := serve.Options{
+		Verbose: flags.Bool("verbose"),
+	}
+
+	if p := flags.String("port"); p != "" {
+		fmt.Sscanf(p, "%d", &opts.Port)
+	}
+	if h := flags.String("host"); h != "" {
+		opts.Host = h
+	}
+
+	installDir := findInstallDir()
+	if err := serve.Run(opts, installDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 }
 
 // launchSandbox manages cloud sandbox environments.
