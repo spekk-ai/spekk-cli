@@ -85,3 +85,7 @@ spekk-app-reference/
 
 # Temporary directory for all development artifacts
 .tmp/
+
+# Go binaries
+bin/spekk-go
+spekk
