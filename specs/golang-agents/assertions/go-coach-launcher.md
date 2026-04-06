@@ -3,8 +3,7 @@ id: go-coach-launcher
 parent: golang-agents
 created: 2026-04-05T12:15:00Z
 priority: 1
-status: in_progress
-locked-by: builder-Mac-7030-1775499208
+status: done
 depends-on: go-prompt-resolver
 branch: feature/golang-agents
 ---

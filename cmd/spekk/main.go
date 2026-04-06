@@ -4,6 +4,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/spekk-dev/spekk-cli/internal/agent"
+	"github.com/spekk-dev/spekk-cli/internal/cli"
 )
 
 func main() {
@@ -62,11 +67,72 @@ func runParser(args []string) {
 	os.Exit(0)
 }
 
+// findInstallDir returns the spekk installation directory
+// (the directory containing the running binary).
+func findInstallDir() string {
+	exe, err := os.Executable()
+	if err == nil {
+		exe, _ = filepath.EvalSymlinks(exe)
+		return filepath.Dir(filepath.Dir(exe)) // bin/spekk-go -> project root
+	}
+	// Fallback: use compile-time caller info
+	_, filename, _, _ := runtime.Caller(0)
+	return filepath.Dir(filepath.Dir(filepath.Dir(filename)))
+}
+
 // launchCoachAgent launches the Coach Agent to create and refine specs.
 func launchCoachAgent(args []string) {
-	// TODO: implement via coach package
-	fmt.Fprintln(os.Stderr, "coach agent: not implemented yet")
-	os.Exit(0)
+	installDir := findInstallDir()
+
+	// Handle help
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
+		agent.ShowHelp(installDir, "coach")
+		return
+	}
+
+	// Build activation message
+	opts := agent.LaunchOptions{
+		Agent:      "coach",
+		InstallDir: installDir,
+	}
+
+	// Check for skill subcommand
+	if len(args) > 0 {
+		sr := &cli.SkillResolver{
+			HomeDir:    homeDir(),
+			Cwd:        cwdStr(),
+			InstallDir: installDir,
+		}
+		if sr.ResolveSkill("coach", args[0]) != nil {
+			skillMsg, err := agent.BuildSkillMessage(installDir, "coach", args[0], args)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+			opts.ExtraMessage = skillMsg
+		}
+	}
+
+	message, err := agent.BuildActivationMessage(opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := agent.Launch(message); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+func homeDir() string {
+	h, _ := os.UserHomeDir()
+	return h
+}
+
+func cwdStr() string {
+	d, _ := os.Getwd()
+	return d
 }
 
 // launchBuilderAgent launches the Builder Agent to implement specs.

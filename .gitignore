@@ -91,4 +91,4 @@ spekk-app-reference/
 
 # Go binaries
 bin/spekk-go
-spekk
+/spekk
