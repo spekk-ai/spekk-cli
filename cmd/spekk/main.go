@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/spekk-dev/spekk-cli/internal/agent"
@@ -149,17 +148,41 @@ func currentBranch() string {
 	return strings.TrimSpace(string(out))
 }
 
-// findInstallDir returns the spekk installation directory
-// (the directory containing the running binary).
+// findInstallDir returns the spekk installation directory.
+// It searches for the directory containing the built-in prompt files.
 func findInstallDir() string {
+	// Check cwd first (handles go run, go build, and running from project root)
+	cwd, _ := os.Getwd()
+	if cwd != "" && isSpeckkInstallDir(cwd) {
+		return cwd
+	}
+
+	// Check relative to executable location
 	exe, err := os.Executable()
 	if err == nil {
 		exe, _ = filepath.EvalSymlinks(exe)
-		return filepath.Dir(filepath.Dir(exe)) // bin/spekk-go -> project root
+		dir := filepath.Dir(exe)
+		if isSpeckkInstallDir(dir) {
+			return dir
+		}
+		// Try parent (bin/spekk -> project root)
+		parent := filepath.Dir(dir)
+		if isSpeckkInstallDir(parent) {
+			return parent
+		}
 	}
-	// Fallback: use compile-time caller info
-	_, filename, _, _ := runtime.Caller(0)
-	return filepath.Dir(filepath.Dir(filepath.Dir(filename)))
+
+	// Fallback to cwd
+	if cwd != "" {
+		return cwd
+	}
+	return "."
+}
+
+// isSpeckkInstallDir checks if a directory contains spekk's built-in agent prompts.
+func isSpeckkInstallDir(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "specs", "coach-agent", "coach.prompt.md"))
+	return err == nil
 }
 
 // launchCoachAgent launches the Coach Agent to create and refine specs.
