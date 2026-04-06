@@ -3,7 +3,7 @@ id: go-orchestration-loops
 parent: golang-agents
 created: 2026-04-05T12:18:00Z
 priority: 2
-status: not_started
+status: in_progress
 depends-on: go-builder-launcher
 branch: feature/golang-agents
 ---
