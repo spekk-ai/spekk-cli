@@ -3,7 +3,8 @@ id: go-flag-parser
 parent: golang-cli
 created: 2026-04-05T12:11:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro-2-52600-1775495848
 depends-on: go-command-router
 branch: feature/golang-cli
 ---
