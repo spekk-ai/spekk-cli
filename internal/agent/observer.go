@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spekk-dev/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
 // ObserverFlags defines the flag set for the observer CLI.

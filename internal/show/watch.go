@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spekk-dev/spekk-cli/internal/parser"
+	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
 // sseClient script injected before </body> in watch mode.

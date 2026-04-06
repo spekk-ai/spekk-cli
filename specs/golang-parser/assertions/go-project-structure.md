@@ -13,7 +13,7 @@ A Go module is initialized at the project root with standard Go project layout.
 
 ## Success Criteria
 
-- `go.mod` exists at project root with module path `github.com/spekk-dev/spekk-cli`
+- `go.mod` exists at project root with module path `github.com/spekk-ai/spekk-cli`
 - `cmd/spekk/main.go` exists as the CLI entry point
 - `internal/parser/` package exists for parser logic
 - `go build ./cmd/spekk` compiles without errors

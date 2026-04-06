@@ -42,7 +42,7 @@ chmod +x /usr/local/bin/spekk
 ### From Source
 
 ```bash
-go install github.com/spekk-dev/spekk-cli/cmd/spekk@latest
+go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest
 ```
 
 ### Verify

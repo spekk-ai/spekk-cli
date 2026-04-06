@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	spekk "github.com/spekk-dev/spekk-cli"
-	"github.com/spekk-dev/spekk-cli/internal/agent"
-	"github.com/spekk-dev/spekk-cli/internal/cli"
-	"github.com/spekk-dev/spekk-cli/internal/parser"
-	"github.com/spekk-dev/spekk-cli/internal/sandbox"
-	"github.com/spekk-dev/spekk-cli/internal/serve"
-	"github.com/spekk-dev/spekk-cli/internal/show"
-	"github.com/spekk-dev/spekk-cli/internal/status"
+	spekk "github.com/spekk-ai/spekk-cli"
+	"github.com/spekk-ai/spekk-cli/internal/agent"
+	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/parser"
+	"github.com/spekk-ai/spekk-cli/internal/sandbox"
+	"github.com/spekk-ai/spekk-cli/internal/serve"
+	"github.com/spekk-ai/spekk-cli/internal/show"
+	"github.com/spekk-ai/spekk-cli/internal/status"
 )
 
 func main() {

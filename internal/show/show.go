@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/spekk-dev/spekk-cli/internal/parser"
+	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
 //go:embed template.html

@@ -1,4 +1,4 @@
-module github.com/spekk-dev/spekk-cli
+module github.com/spekk-ai/spekk-cli
 
 go 1.23.5
 

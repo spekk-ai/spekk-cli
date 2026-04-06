@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spekk-dev/spekk-cli/internal/parser"
+	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
 func TestScanMdFiles(t *testing.T) {

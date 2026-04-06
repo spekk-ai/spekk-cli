@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spekk-dev/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
 // ANSI color codes for console output.

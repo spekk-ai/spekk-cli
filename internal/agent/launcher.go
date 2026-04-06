@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/spekk-dev/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
 // LaunchOptions configures agent launching behavior.

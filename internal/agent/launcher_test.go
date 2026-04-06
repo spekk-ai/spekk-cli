@@ -7,7 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/spekk-dev/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
 // testEmbeddedFS creates a fake embedded FS with a base prompt for the agent.
