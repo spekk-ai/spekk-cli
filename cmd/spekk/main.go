@@ -12,6 +12,7 @@ import (
 	"github.com/spekk-dev/spekk-cli/internal/agent"
 	"github.com/spekk-dev/spekk-cli/internal/cli"
 	"github.com/spekk-dev/spekk-cli/internal/parser"
+	"github.com/spekk-dev/spekk-cli/internal/show"
 	"github.com/spekk-dev/spekk-cli/internal/status"
 )
 
@@ -279,9 +280,11 @@ func showStatus() {
 // showSpekk generates and displays the spec explorer web interface.
 // Supports --watch / -w flag.
 func showSpekk(args []string) {
-	// TODO: implement show handler
-	fmt.Fprintln(os.Stderr, "show: not implemented yet")
-	os.Exit(0)
+	specsDir := findSpecsDir()
+	if err := show.Run(specsDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 }
 
 // launchServe starts the WebSocket server for the browser extension.

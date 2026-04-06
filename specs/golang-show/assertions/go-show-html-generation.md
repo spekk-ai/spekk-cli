@@ -3,7 +3,7 @@ id: go-show-html-generation
 parent: golang-show
 created: 2026-04-05T12:22:00Z
 priority: 2
-status: in_progress
+status: done
 depends-on: go-parser-json-matches-node
 branch: feature/golang-show
 ---
