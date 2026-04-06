@@ -86,13 +86,15 @@ func findSpecsDir() string {
 // runParser runs the spec parser to find the next assertion.
 // Accepts flags: --all, --spec <name>, --assertion <name>, --all-branches
 func runParser(args []string) {
-	var showAll, allBranches bool
-	var specID, assertionID string
+	var showAll, allBranches, showRaw bool
+	var specID, assertionID, specsDirOverride string
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--all":
 			showAll = true
+		case "--raw":
+			showRaw = true
 		case "--spec", "-s":
 			if i+1 < len(args) {
 				i++
@@ -105,10 +107,18 @@ func runParser(args []string) {
 			}
 		case "--all-branches":
 			allBranches = true
+		case "--specs-dir":
+			if i+1 < len(args) {
+				i++
+				specsDirOverride = args[i]
+			}
 		}
 	}
 
-	specsDir := findSpecsDir()
+	specsDir := specsDirOverride
+	if specsDir == "" {
+		specsDir = findSpecsDir()
+	}
 
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {
@@ -119,6 +129,12 @@ func runParser(args []string) {
 
 	if len(result.Specs) == 0 && len(result.Assertions) == 0 {
 		jsonBytes, _ := parser.FormatEmpty()
+		fmt.Println(string(jsonBytes))
+		return
+	}
+
+	if showRaw {
+		jsonBytes, _ := parser.FormatRaw(result)
 		fmt.Println(string(jsonBytes))
 		return
 	}

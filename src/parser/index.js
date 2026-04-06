@@ -1,742 +1,185 @@
-import fs from 'fs';
+/**
+ * Thin shim that delegates all parsing to the Go binary (bin/spekk-go).
+ * No Node.js parser logic remains — the Go binary is the sole parser.
+ */
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Get the spekk-cli installation directory
-function getSpekkInstallationDirectory() {
-  // From parser/index.js, go up to project root: ../../
+export function getSpekkInstallationDirectory() {
   return path.join(__dirname, '../..');
 }
 
-// Get current git branch
+/**
+ * Locate the Go binary. Throws if not found.
+ */
+function getGoBinary() {
+  const installDir = getSpekkInstallationDirectory();
+  const candidates = [
+    path.join(installDir, 'bin', 'spekk-go'),
+    path.join(installDir, 'spekk-go'),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    'Go binary not found. Run "go build -o bin/spekk-go ./cmd/spekk/" to build it.'
+  );
+}
+
+/**
+ * Call the Go binary with --raw and return parsed { specs, assertions, observations }.
+ */
+export function parseAllSpecs(specsDirectory = null) {
+  const goBinary = getGoBinary();
+  const args = ['next', '--raw'];
+
+  // If a specific specs directory is provided, pass it to the Go binary
+  // so it doesn't rely on git root detection.
+  const effectiveSpecsDir = specsDirectory || path.join(process.cwd(), 'specs');
+  args.push('--specs-dir', effectiveSpecsDir);
+
+  const result = spawnSync(goBinary, args, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    encoding: 'utf8',
+  });
+
+  if (result.error) {
+    throw new Error(`Failed to execute Go binary: ${result.error.message}`);
+  }
+
+  if (result.status !== 0) {
+    const stderr = result.stderr ? result.stderr.trim() : '';
+    const stdout = result.stdout ? result.stdout.trim() : '';
+    // The Go binary outputs JSON errors to stdout
+    if (stdout) {
+      try {
+        const parsed = JSON.parse(stdout);
+        if (parsed.error) {
+          throw new Error(parsed.message);
+        }
+      } catch {
+        // Not valid JSON or no error field — fall through
+      }
+    }
+    throw new Error(stderr || stdout || 'Go binary exited with non-zero status');
+  }
+
+  const output = result.stdout.trim();
+  if (!output) {
+    return { specs: [], assertions: [], observations: [] };
+  }
+
+  const parsed = JSON.parse(output);
+
+  // The --raw output has { specs, assertions, observations }
+  return {
+    specs: parsed.specs || [],
+    assertions: parsed.assertions || [],
+    observations: parsed.observations || [],
+  };
+}
+
+/**
+ * Get current git branch.
+ */
 function getCurrentGitBranch() {
   try {
-    const branch = execSync('git branch --show-current', { 
+    const branch = execSync('git branch --show-current', {
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']  // Suppress stderr
+      stdio: ['pipe', 'pipe', 'ignore'],
     }).trim();
-    
-    if (!branch) {
-      console.warn('Warning: Not in a git repository. Defaulting to main.');
-      return 'main';
-    }
-    
-    return branch;
-  } catch (error) {
-    console.warn('Warning: Could not detect git branch. Defaulting to main.');
+    return branch || 'main';
+  } catch {
     return 'main';
   }
 }
 
-// Simple YAML frontmatter parser (since we don't have gray-matter)
-function parseFrontmatter(content) {
-  const lines = content.replace(/\r\n/g, '\n').split('\n');
-  
-  if (lines[0] !== '---') {
-    throw new Error('File must start with --- YAML frontmatter delimiter');
-  }
-  
-  let frontmatterEnd = -1;
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i] === '---') {
-      frontmatterEnd = i;
-      break;
-    }
-  }
-  
-  if (frontmatterEnd === -1) {
-    throw new Error('Missing closing --- delimiter for YAML frontmatter');
-  }
-  
-  const yamlContent = lines.slice(1, frontmatterEnd).join('\n');
-  const markdownContent = lines.slice(frontmatterEnd + 1).join('\n');
-  
-  // Enhanced YAML parser to handle arrays
-  const frontmatter = {};
-  let currentKey = null;
-  let inArray = false;
-  let arrayValues = [];
-  
-  const yamlLines = yamlContent.split('\n');
-  for (let i = 0; i < yamlLines.length; i++) {
-    const line = yamlLines[i];
-    
-    // Check if line starts an array
-    if (line.match(/^\s*-\s+(.+)$/)) {
-      const arrayMatch = line.match(/^\s*-\s+(.+)$/);
-      if (arrayMatch && currentKey) {
-        inArray = true;
-        let value = arrayMatch[1].trim();
-        // Handle value types for array items
-        if (value === 'true') value = true;
-        else if (value === 'false') value = false;
-        else if (/^\d+$/.test(value)) value = parseInt(value);
-        else if (value.startsWith('"') && value.endsWith('"')) {
-          value = value.slice(1, -1);
-        }
-        arrayValues.push(value);
-      }
-    } else {
-      // If we were in an array, save it
-      if (inArray && currentKey) {
-        // Convert kebab-case keys to camelCase for JavaScript
-        const jsKey = currentKey === 'depends-on' ? 'dependsOn' :
-                     currentKey === 'locked-by' ? 'lockedBy' : currentKey;
-        frontmatter[jsKey] = arrayValues;
-        arrayValues = [];
-        inArray = false;
-      }
-      
-      // Check for key-value pair
-      const match = line.match(/^([^:]+):\s*(.*)$/);
-      if (match) {
-        const key = match[1].trim();
-        let value = match[2].trim();
-        
-        currentKey = key;
-        
-        // If value is empty, might be start of array
-        if (!value) {
-          // Next lines might be array items
-          // Keep currentKey set so we can collect array values
-        } else {
-          // Handle different value types
-          if (value === 'true') value = true;
-          else if (value === 'false') value = false;
-          else if (/^\d+$/.test(value)) value = parseInt(value);
-          else if (/^\d+\.\d+$/.test(value)) value = parseFloat(value);
-          else if (value.startsWith('"') && value.endsWith('"')) {
-            value = value.slice(1, -1);
-          }
-          
-          // Convert kebab-case keys to camelCase for JavaScript
-          const jsKey = key === 'depends-on' ? 'dependsOn' :
-                       key === 'locked-by' ? 'lockedBy' : key;
-          frontmatter[jsKey] = value;
-          currentKey = null; // Reset if we got a value
-        }
-      }
-    }
-  }
-  
-  // Handle any remaining array
-  if (inArray && currentKey) {
-    // Convert kebab-case keys to camelCase for JavaScript
-    const jsKey = currentKey === 'depends-on' ? 'dependsOn' :
-                 currentKey === 'locked-by' ? 'lockedBy' : currentKey;
-    frontmatter[jsKey] = arrayValues;
-  }
-  
-  return { data: frontmatter, content: markdownContent };
-}
-
-// Extract title from markdown content (first H1 heading)
-function extractTitle(content) {
-  const match = content.match(/^# (.+)$/m);
-  return match ? match[1] : 'Untitled';
-}
-
-// Validate required fields
-function validateFields(data, filePath, isAssertion = false) {
-  const requiredFields = isAssertion 
-    ? ['id', 'parent', 'created', 'priority']
-    : ['id', 'created', 'priority'];
-    
-  for (const field of requiredFields) {
-    if (data[field] === undefined || data[field] === null) {
-      throw new Error(`Missing required field '${field}' in ${filePath}`);
-    }
-  }
-  
-  // Validate ID format (kebab-case)
-  const kebabCasePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
-  if (!kebabCasePattern.test(data.id)) {
-    throw new Error(`Invalid id format '${data.id}' (must be kebab-case: lowercase with hyphens, no spaces/underscores/special chars) in ${filePath}`);
-  }
-  
-  // Validate priority
-  if (![1, 2, 3].includes(data.priority)) {
-    throw new Error(`Invalid priority value '${data.priority}' (must be: 1, 2, or 3) in ${filePath}`);
-  }
-  
-  // Validate status if present
-  if (data.status && !['not_started', 'in_progress', 'done', 'draft', 'failed'].includes(data.status)) {
-    throw new Error(`Invalid status value '${data.status}' (must be: not_started, in_progress, done, draft, failed) in ${filePath}`);
-  }
-  
-  // Validate timestamp format
-  const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-  if (!timestampPattern.test(data.created)) {
-    throw new Error(`Invalid ISO 8601 timestamp in 'created' field: '${data.created}' in ${filePath}`);
-  }
-  
-  if (data.updated && !timestampPattern.test(data.updated)) {
-    throw new Error(`Invalid ISO 8601 timestamp in 'updated' field: '${data.updated}' in ${filePath}`);
-  }
-  
-  // Validate branch field
-  if (data.branch !== undefined && data.branch !== null) {
-    const branch = data.branch;
-    
-    // Type check
-    if (typeof branch !== 'string') {
-      throw new Error(`Field 'branch' must be a string in ${filePath}`);
-    }
-    
-    // Cannot start or end with /
-    if (branch.startsWith('/') || branch.endsWith('/')) {
-      throw new Error(`Field 'branch' cannot start or end with '/' in ${filePath}`);
-    }
-    
-    // Format check (valid git branch name)
-    const validBranchPattern = /^[a-zA-Z0-9][a-zA-Z0-9/_-]*$/;
-    if (!validBranchPattern.test(branch)) {
-      throw new Error(`Field 'branch' contains invalid characters in ${filePath}\nFound: "${branch}"\nGit branch names can only contain letters, numbers, slashes, hyphens, and underscores.`);
-    }
-    
-    // Warning for non-standard patterns (don't throw, just warn)
-    const standardPatterns = /^(main|master|develop|feature\/|bugfix\/|hotfix\/|release\/)/;
-    if (!standardPatterns.test(branch)) {
-      console.warn(`Warning: Field 'branch' uses non-standard pattern in ${filePath}\nFound: "${branch}"\nConsider using standard patterns: main, feature/<name>, bugfix/<name>, hotfix/<name>`);
-    }
-  }
-}
-
-// Validate depends-on field
-function validateDependsOn(data, filePath, allAssertions) {
-  // Skip if field is not present or is null (both are valid)
-  if (data.dependsOn === undefined || data.dependsOn === null) {
-    return;
-  }
-  
-  const dependsOn = data.dependsOn;
-  
-  // Type check
-  if (typeof dependsOn !== 'string') {
-    throw new Error(`Field 'depends-on' must be a string or null in ${filePath}\nFound: ${JSON.stringify(dependsOn)}`);
-  }
-  
-  // Format check (kebab-case)
-  const kebabCasePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
-  if (!kebabCasePattern.test(dependsOn)) {
-    throw new Error(`Field 'depends-on' must be kebab-case (lowercase with hyphens) in ${filePath}\nFound: "${dependsOn}"`);
-  }
-  
-  // Reference check
-  if (!allAssertions.some(a => a.id === dependsOn)) {
-    throw new Error(`Field 'depends-on' references non-existent assertion '${dependsOn}' in ${filePath}`);
-  }
-  
-  // Self-reference check
-  if (dependsOn === data.id) {
-    throw new Error(`Field 'depends-on' cannot reference itself in ${filePath}`);
-  }
-}
-
-// Detect circular dependencies
-function detectCircularDependencies(assertions) {
-  for (const assertion of assertions) {
-    if (!assertion.dependsOn) continue;
-    
-    const visited = new Set();
-    const path = [];
-    let current = assertion;
-    
-    while (current && current.dependsOn) {
-      if (visited.has(current.id)) {
-        // Found a cycle - build the cycle path
-        path.push(current.id);
-        const cycleStart = path.indexOf(current.id);
-        const cycle = path.slice(cycleStart).join(' → ');
-        throw new Error(`Circular dependency detected:\n  ${cycle}\n\nBreak the cycle by removing or changing one of the dependencies.`);
-      }
-      
-      visited.add(current.id);
-      path.push(current.id);
-      current = assertions.find(a => a.id === current.dependsOn);
-    }
-  }
-}
-
-// Validate observation fields
-function validateObservationFields(data, filePath) {
-  const requiredFields = ['id', 'created', 'type', 'severity', 'affected_specs', 'affected_files'];
-  
-  for (const field of requiredFields) {
-    if (data[field] === undefined || data[field] === null) {
-      throw new Error(`Missing required field '${field}' in ${filePath}`);
-    }
-  }
-  
-  // Validate severity
-  if (!['low', 'medium', 'high'].includes(data.severity)) {
-    throw new Error(`Invalid severity value '${data.severity}' (must be: low, medium, high) in ${filePath}`);
-  }
-  
-  // Validate arrays
-  if (!Array.isArray(data.affected_specs)) {
-    throw new Error(`Field 'affected_specs' must be an array in ${filePath}`);
-  }
-  
-  if (!Array.isArray(data.affected_files)) {
-    throw new Error(`Field 'affected_files' must be an array in ${filePath}`);
-  }
-  
-  // Validate timestamp format
-  const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-  const isoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-  
-  if (!timestampPattern.test(data.created) && !isoTimestamp.test(data.created)) {
-    throw new Error(`Invalid ISO 8601 timestamp in 'created' field: '${data.created}' in ${filePath}`);
-  }
-}
-
-// Parse observation files from observations directory
-function parseObservations(rootDirectory = null) {
-  const rootDir = rootDirectory || process.cwd();
-  const observationsDir = path.join(rootDir, 'observations');
-  
-  if (!fs.existsSync(observationsDir)) {
-    return [];
-  }
-  
-  const observations = [];
-  const observationFiles = fs.readdirSync(observationsDir).filter(file => file.endsWith('.md'));
-  
-  for (const observationFile of observationFiles) {
-    try {
-      const observationPath = path.join(observationsDir, observationFile);
-      const content = fs.readFileSync(observationPath, 'utf8');
-      
-      // Skip files that don't start with YAML frontmatter
-      if (!content.trimStart().startsWith('---')) {
-        continue;
-      }
-      
-      const { data, content: markdownContent } = parseFrontmatter(content);
-      
-      validateObservationFields(data, `observations/${observationFile}`);
-      
-      observations.push({
-        ...data,
-        file: `observations/${observationFile}`,
-        title: extractTitle(markdownContent),
-        content: content
-      });
-    } catch (error) {
-      // Log warning to stderr and continue processing
-      console.warn(`Warning: Skipping malformed observation file observations/${observationFile}: ${error.message}`);
-      continue;
-    }
-  }
-  
-  return observations;
-}
-
-// Validate folder structure requirements
-function validateFolderStructure(specsDir) {
-  // Check for flat .md files at specs/ level (not allowed unless they have no frontmatter)
-  const specsDirContents = fs.readdirSync(specsDir);
-  const flatMdFiles = specsDirContents.filter(item => {
-    const itemPath = path.join(specsDir, item);
-    try {
-      if (fs.statSync(itemPath).isFile() && item.endsWith('.md')) {
-        // Check if file has frontmatter - if not, it should be ignored
-        const content = fs.readFileSync(itemPath, 'utf8');
-        return content.trimStart().startsWith('---');
-      }
-    } catch (err) {
-      // Skip broken symlinks or files that can't be accessed
-      if (err.code === 'ENOENT') {
-        return false;
-      }
-      throw err;
-    }
-    return false;
-  });
-  
-  if (flatMdFiles.length > 0) {
-    throw new Error(`Invalid folder structure: Found flat .md files with frontmatter in specs/: ${flatMdFiles.join(', ')}. All specs must be in folders following the pattern specs/{spec-id}/{spec-id}.md`);
-  }
-  
-  // Check each spec directory has required structure
-  const specDirs = specsDirContents.filter(item => {
-    const itemPath = path.join(specsDir, item);
-    try {
-      return fs.statSync(itemPath).isDirectory();
-    } catch (err) {
-      // Skip broken symlinks or items that can't be accessed
-      if (err.code === 'ENOENT') {
-        return false;
-      }
-      throw err;
-    }
-  });
-  
-  for (const specDir of specDirs) {
-    const specDirPath = path.join(specsDir, specDir);
-    const expectedSpecFile = path.join(specDirPath, `${specDir}.md`);
-    const assertionsDir = path.join(specDirPath, 'assertions');
-    
-    // Check if this directory has any files with frontmatter (actual specs/assertions)
-    let hasSpecFiles = false;
-    
-    // Check main spec file
-    if (fs.existsSync(expectedSpecFile)) {
-      const content = fs.readFileSync(expectedSpecFile, 'utf8');
-      if (content.trimStart().startsWith('---')) {
-        hasSpecFiles = true;
-      }
-    }
-    
-    // Check for assertion files with frontmatter
-    if (fs.existsSync(assertionsDir) && fs.statSync(assertionsDir).isDirectory()) {
-      const assertionFiles = fs.readdirSync(assertionsDir).filter(file => file.endsWith('.md'));
-      for (const assertionFile of assertionFiles) {
-        const assertionPath = path.join(assertionsDir, assertionFile);
-        const content = fs.readFileSync(assertionPath, 'utf8');
-        if (content.trimStart().startsWith('---')) {
-          hasSpecFiles = true;
-          break;
-        }
-      }
-    }
-    
-    // Only validate structure if directory contains actual spec files
-    if (hasSpecFiles) {
-      // Check main spec file exists with matching name
-      if (!fs.existsSync(expectedSpecFile)) {
-        throw new Error(`Invalid folder structure: Missing main spec file specs/${specDir}/${specDir}.md`);
-      }
-      
-      // Verify main spec file has frontmatter
-      const content = fs.readFileSync(expectedSpecFile, 'utf8');
-      if (!content.trimStart().startsWith('---')) {
-        throw new Error(`Invalid folder structure: Main spec file specs/${specDir}/${specDir}.md must have YAML frontmatter`);
-      }
-      
-      // Check assertions directory exists
-      if (!fs.existsSync(assertionsDir)) {
-        console.warn(`Warning: Spec specs/${specDir}/ has no assertions/ directory — skipping.`);
-        continue;
-      }
-      
-      // Verify assertions directory is actually a directory
-      if (!fs.statSync(assertionsDir).isDirectory()) {
-        throw new Error(`Invalid folder structure: specs/${specDir}/assertions must be a directory`);
-      }
-    }
-  }
-}
-
-// Read and parse all specs and assertions from specs directory
-function parseAllSpecs(specsDirectory = null) {
-  // If no directory provided, use the current working directory
-  // This allows CLI commands to work on specs in the current directory
-  const rootDir = process.cwd();
-  const specsDir = specsDirectory || path.join(rootDir, 'specs');
-  
-  if (!fs.existsSync(specsDir)) {
-    return { specs: [], assertions: [], observations: [] };
-  }
-  
-  // Validate folder structure before parsing
-  validateFolderStructure(specsDir);
-  
-  const specs = [];
-  const assertions = [];
-  const specIds = new Map(); // Changed to Map to track file names
-  
-  const specDirs = fs.readdirSync(specsDir).filter(dir => {
-    const dirPath = path.join(specsDir, dir);
-    return fs.statSync(dirPath).isDirectory();
-  });
-  
-  for (const specDir of specDirs) {
-    const specDirPath = path.join(specsDir, specDir);
-    const specFilePath = path.join(specDirPath, `${specDir}.md`);
-    
-    // Parse spec file
-    if (fs.existsSync(specFilePath)) {
-      try {
-        const content = fs.readFileSync(specFilePath, 'utf8');
-        
-        // Skip files that don't start with YAML frontmatter
-        if (!content.trimStart().startsWith('---')) {
-          continue;
-        }
-        
-        const { data, content: markdownContent } = parseFrontmatter(content);
-        
-        validateFields(data, `specs/${specDir}/${specDir}.md`, false);
-        
-        // Check for duplicate spec IDs
-        const currentSpecFile = `specs/${specDir}/${specDir}.md`;
-        if (specIds.has(data.id)) {
-          const existingFile = specIds.get(data.id);
-          throw new Error(`Duplicate spec id '${data.id}' found in files: ${existingFile}, ${currentSpecFile}`);
-        }
-        specIds.set(data.id, currentSpecFile);
-        
-        specs.push({
-          ...data,
-          status: data.status || 'not_started',
-          branch: data.branch || 'main',
-          file: `specs/${specDir}/${specDir}.md`,
-          title: extractTitle(markdownContent),
-          content: content
-        });
-      } catch (error) {
-        console.warn(`Warning: Skipping malformed spec file specs/${specDir}/${specDir}.md: ${error.message}`);
-        continue;
-      }
-    }
-    
-    // Parse assertions
-    const assertionsDir = path.join(specDirPath, 'assertions');
-    if (fs.existsSync(assertionsDir)) {
-      const assertionIds = new Map(); // Changed to Map to track file names
-      const assertionFiles = fs.readdirSync(assertionsDir).filter(file => file.endsWith('.md'));
-      
-      for (const assertionFile of assertionFiles) {
-        try {
-          const assertionPath = path.join(assertionsDir, assertionFile);
-          const content = fs.readFileSync(assertionPath, 'utf8');
-          
-          // Skip files that don't start with YAML frontmatter
-          if (!content.trimStart().startsWith('---')) {
-            continue;
-          }
-          
-          const { data, content: markdownContent } = parseFrontmatter(content);
-          
-          validateFields(data, `specs/${specDir}/assertions/${assertionFile}`, true);
-          
-          // Check for duplicate assertion IDs within this spec
-          if (assertionIds.has(data.id)) {
-            const existingFile = assertionIds.get(data.id);
-            throw new Error(`Duplicate assertion id '${data.id}' in spec '${specDir}' found in files: ${existingFile}, ${assertionFile}`);
-          }
-          assertionIds.set(data.id, assertionFile);
-          
-          assertions.push({
-            ...data,
-            status: data.status || 'not_started',
-            branch: data.branch || 'main',
-            file: `specs/${specDir}/assertions/${assertionFile}`,
-            title: extractTitle(markdownContent),
-            content: content
-          });
-        } catch (error) {
-          console.warn(`Warning: Skipping malformed assertion file specs/${specDir}/assertions/${assertionFile}: ${error.message}`);
-          continue;
-        }
-      }
-    }
-  }
-  
-  // Validate that assertion parents exist
-  for (const assertion of assertions) {
-    if (!specIds.has(assertion.parent)) {
-      throw new Error(`Parent spec '${assertion.parent}' not found for assertion '${assertion.id}'`);
-    }
-  }
-  
-  // Validate depends-on fields (after all assertions are loaded)
-  for (const assertion of assertions) {
-    validateDependsOn(assertion, assertion.file, assertions);
-  }
-  
-  // Detect circular dependencies
-  detectCircularDependencies(assertions);
-  
-  // Update parent spec statuses based on child assertions
-  for (const spec of specs) {
-    // Only compute status if not manually set to draft
-    if (spec.status !== 'draft') {
-      const computedStatus = computeParentStatus(spec.id, assertions);
-      spec.status = computedStatus;
-    }
-  }
-  
-  // Parse observations
-  const observations = parseObservations(rootDir);
-  
-  // Validate observation references
-  // Create a set of all valid IDs (both specs and assertions)
-  const allValidIds = new Set();
-  for (const spec of specs) {
-    allValidIds.add(spec.id);
-  }
-  for (const assertion of assertions) {
-    allValidIds.add(assertion.id);
-  }
-  
-  for (const observation of observations) {
-    // Validate affected_specs references (can be spec or assertion IDs)
-    for (const specId of observation.affected_specs) {
-      if (!allValidIds.has(specId)) {
-        throw new Error(`Observation '${observation.id}' references non-existent spec/assertion '${specId}'`);
-      }
-    }
-    
-    // Validate affected_files paths
-    for (const filePath of observation.affected_files) {
-      if (path.isAbsolute(filePath)) {
-        throw new Error(`Observation '${observation.id}' contains absolute path '${filePath}' (must be relative)`);
-      }
-    }
-  }
-  
-  return { specs, assertions, observations };
-}
-
-// Compute parent spec status based on child assertions
-function computeParentStatus(parentId, assertions) {
-  const childAssertions = assertions.filter(a => a.parent === parentId);
-  
-  if (childAssertions.length === 0) {
-    return 'not_started';
-  }
-  
-  // Filter out draft children for status computation
-  const activeChildren = childAssertions.filter(a => a.status !== 'draft');
-  
-  if (activeChildren.length === 0) {
-    return 'not_started';
-  }
-  
-  // If any children are failed, parent is failed
-  if (activeChildren.some(a => a.status === 'failed')) {
-    return 'failed';
-  }
-  
-  // If all active children are done, parent is done
-  if (activeChildren.every(a => a.status === 'done')) {
-    return 'done';
-  }
-  
-  // If any children are in_progress or not_started, parent is in_progress
-  if (activeChildren.some(a => ['in_progress', 'not_started'].includes(a.status))) {
-    return 'in_progress';
-  }
-  
-  // Default to not_started
-  return 'not_started';
-}
-
-// Check if a lock is stale (>2 hours old)
+/**
+ * Check if a lock is stale (>2 hours old).
+ */
 function isLockStale(lockedBy) {
-  if (!lockedBy) return true; // No lock means it's available
-
-  // Extract timestamp from lock format: builder-{hostname}-{pid}-{timestamp}
+  if (!lockedBy) return true;
   const parts = lockedBy.split('-');
   const timestamp = parseInt(parts[parts.length - 1]);
-
-  if (isNaN(timestamp)) {
-    // Invalid timestamp format, treat as stale
-    return true;
-  }
-
+  if (isNaN(timestamp)) return true;
   const currentTime = Math.floor(Date.now() / 1000);
-  const lockAge = currentTime - timestamp;
-
-  // Stale if older than 2 hours (7200 seconds)
-  return lockAge > 7200;
+  return (currentTime - timestamp) > 7200;
 }
 
-// Find next priority assertion
-function findNextAssertion(assertions, specs = [], options = {}) {
-  // If specific assertion is requested, return it directly
+/**
+ * Find next priority assertion from parsed data.
+ * Delegates to the Go binary for the full algorithm, but this function
+ * is kept for downstream consumers that call it directly with pre-parsed data.
+ */
+export function findNextAssertion(assertions, specs = [], options = {}) {
   if (options.assertion) {
-    const targetAssertion = assertions.find(a => a.id === options.assertion);
-    if (!targetAssertion) {
+    const target = assertions.find(a => a.id === options.assertion);
+    if (!target) {
       return { error: true, message: `Assertion '${options.assertion}' not found` };
     }
-    return targetAssertion;
+    return target;
   }
 
-  // Filter to incomplete items, excluding:
-  // - Assertions with status 'done' or 'draft'
-  // - Assertions whose parent spec has status 'draft'
   let incomplete = assertions.filter(a => {
     if (['done', 'draft'].includes(a.status)) return false;
-
     const parentSpec = specs.find(s => s.id === a.parent);
     if (parentSpec?.status === 'draft') return false;
-
     return true;
   });
 
-  // Filter by branch (unless --all-branches is specified)
   if (!options.allBranches) {
-    // Allow currentBranch to be injected for testing, otherwise detect it
     const currentBranch = options.currentBranch || getCurrentGitBranch();
-    
-    // Filter to assertions with matching branch OR no branch field (for backwards compatibility)
-    const branchFiltered = incomplete.filter(a => !a.branch || a.branch === currentBranch);
-    
-    // Use filtered results
-    incomplete = branchFiltered;
+    incomplete = incomplete.filter(a => !a.branch || a.branch === currentBranch);
   }
 
-  // Filter by spec if specified
   if (options.spec) {
-    const specExists = specs.some(s => s.id === options.spec);
-    if (!specExists) {
+    if (!specs.some(s => s.id === options.spec)) {
       return { error: true, message: `Spec '${options.spec}' not found` };
     }
     incomplete = incomplete.filter(a => a.parent === options.spec);
   }
 
-  // Filter by dependency satisfaction
   incomplete = incomplete.filter(a => {
-    if (!a.dependsOn) return true;  // No dependency
-
-    const dependency = assertions.find(d => d.id === a.dependsOn);
-    return dependency && dependency.status === 'done';
+    if (!a.dependsOn) return true;
+    const dep = assertions.find(d => d.id === a.dependsOn);
+    return dep && dep.status === 'done';
   });
 
-  // Filter by lock status
-  // Skip assertions that are in_progress AND have a fresh (non-stale) lock
   incomplete = incomplete.filter(a => {
-    // If not in_progress, no lock filtering needed
     if (a.status !== 'in_progress') return true;
-
-    // If in_progress but no lock, include it (backwards compatible)
     if (!a.lockedBy) return true;
-
-    // If in_progress with a lock, check if lock is stale
     return isLockStale(a.lockedBy);
   });
 
-  if (incomplete.length === 0) {
-    return null;
-  }
+  if (incomplete.length === 0) return null;
 
-  // Sort by priority (1 highest), then by created date (oldest first), then by id
   incomplete.sort((a, b) => {
-    if (a.priority !== b.priority) {
-      return a.priority - b.priority;
-    }
-    if (a.created !== b.created) {
-      return a.created.localeCompare(b.created);
-    }
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    if (a.created !== b.created) return a.created.localeCompare(b.created);
     return a.id.localeCompare(b.id);
   });
 
   return incomplete[0];
 }
 
-// Main function
+/**
+ * Run the parser CLI — outputs JSON to stdout.
+ * This is the programmatic entry point used by cli.js.
+ */
 export function run(options = {}) {
   try {
     const { specs, assertions, observations } = parseAllSpecs(options.specsDirectory);
-    
+
     if (specs.length === 0 && assertions.length === 0) {
       console.log(JSON.stringify({
         status: 'empty',
@@ -744,8 +187,7 @@ export function run(options = {}) {
       }, null, 2));
       return;
     }
-    
-    // If --all flag is specified, return complete hierarchy
+
     if (options.all) {
       const specsWithAssertions = specs.map(spec => ({
         id: spec.id,
@@ -754,55 +196,33 @@ export function run(options = {}) {
         priority: spec.priority,
         file: spec.file,
         assertions: assertions
-          .filter(assertion => assertion.parent === spec.id)
-          .map(assertion => ({
-            id: assertion.id,
-            title: assertion.title,
-            status: assertion.status,
-            priority: assertion.priority,
-            file: assertion.file
-          }))
-          .sort((a, b) => {
-            // Sort by priority, then by creation date
-            if (a.priority !== b.priority) {
-              return a.priority - b.priority;
-            }
-            return a.id.localeCompare(b.id);
-          })
-      })).sort((a, b) => {
-        // Sort specs by priority, then by id
-        if (a.priority !== b.priority) {
-          return a.priority - b.priority;
-        }
-        return a.id.localeCompare(b.id);
-      });
-      
+          .filter(a => a.parent === spec.id)
+          .map(a => ({ id: a.id, title: a.title, status: a.status, priority: a.priority, file: a.file }))
+          .sort((a, b) => a.priority !== b.priority ? a.priority - b.priority : a.id.localeCompare(b.id))
+      })).sort((a, b) => a.priority !== b.priority ? a.priority - b.priority : a.id.localeCompare(b.id));
+
       console.log(JSON.stringify({
         type: 'hierarchy',
         specs: specsWithAssertions,
-        observations: observations
+        observations
       }, null, 2));
       return;
     }
-    
-    const nextAssertion = findNextAssertion(assertions, specs, {
+
+    const next = findNextAssertion(assertions, specs, {
       spec: options.spec,
       assertion: options.assertion,
       allBranches: options.allBranches,
-      currentBranch: options.currentBranch
+      currentBranch: options.currentBranch,
     });
 
-    // Handle error from findNextAssertion
-    if (nextAssertion && nextAssertion.error) {
-      console.log(JSON.stringify({
-        type: 'error',
-        message: nextAssertion.message
-      }, null, 2));
+    if (next?.error) {
+      console.log(JSON.stringify({ type: 'error', message: next.message }, null, 2));
       process.exit(1);
       return;
     }
 
-    if (!nextAssertion) {
+    if (!next) {
       console.log(JSON.stringify({
         type: 'complete',
         status: 'complete',
@@ -810,38 +230,25 @@ export function run(options = {}) {
       }, null, 2));
       return;
     }
-    
-    // Find the parent spec
-    const parentSpec = specs.find(s => s.id === nextAssertion.parent);
-    
+
+    const parentSpec = specs.find(s => s.id === next.parent);
     console.log(JSON.stringify({
       type: 'assertion',
-      id: nextAssertion.id,
-      parent: nextAssertion.parent,
-      file: nextAssertion.file,
-      priority: nextAssertion.priority,
-      status: nextAssertion.status,
-      branch: nextAssertion.branch,
-      created: nextAssertion.created,
-      dependsOn: nextAssertion.dependsOn,
-      lockedBy: nextAssertion.lockedBy,
-      title: nextAssertion.title,
-      content: nextAssertion.content,
-      spec: parentSpec ? {
-        id: parentSpec.id,
-        file: parentSpec.file,
-        title: parentSpec.title
-      } : null
+      id: next.id,
+      parent: next.parent,
+      file: next.file,
+      priority: next.priority,
+      status: next.status,
+      branch: next.branch,
+      created: next.created,
+      dependsOn: next.dependsOn,
+      lockedBy: next.lockedBy,
+      title: next.title,
+      content: next.content,
+      spec: parentSpec ? { id: parentSpec.id, file: parentSpec.file, title: parentSpec.title } : null,
     }, null, 2));
-    
   } catch (error) {
-    console.log(JSON.stringify({
-      error: true,
-      message: error.message
-    }, null, 2));
+    console.log(JSON.stringify({ error: true, message: error.message }, null, 2));
     process.exit(1);
   }
 }
-
-// Export the parser functions for testing
-export { parseAllSpecs, findNextAssertion, parseFrontmatter, validateFields, extractTitle, validateFolderStructure, computeParentStatus, getSpekkInstallationDirectory, parseObservations, validateObservationFields, validateDependsOn, detectCircularDependencies, getCurrentGitBranch, isLockStale };

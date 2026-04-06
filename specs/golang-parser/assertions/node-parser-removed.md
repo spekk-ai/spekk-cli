@@ -3,8 +3,7 @@ id: node-parser-removed
 parent: golang-parser
 created: 2026-04-05T12:06:00Z
 priority: 3
-status: in_progress
-locked-by: builder-Mac-16880-1775493197
+status: done
 depends-on: node-delegates-to-go
 branch: feature/golang-parser
 ---

@@ -179,6 +179,70 @@ func FormatHierarchy(result *ParseResult) ([]byte, error) {
 	return marshalJSON(out)
 }
 
+// RawSpec is a spec in raw output format (all fields exposed).
+type RawSpec struct {
+	ID       string `json:"id"`
+	Created  string `json:"created"`
+	Priority int    `json:"priority"`
+	Status   string `json:"status"`
+	Branch   string `json:"branch"`
+	File     string `json:"file"`
+	Title    string `json:"title"`
+	Content  string `json:"content"`
+}
+
+// RawAssertion is an assertion in raw output format (all fields exposed).
+type RawAssertion struct {
+	ID        string `json:"id"`
+	Parent    string `json:"parent"`
+	Created   string `json:"created"`
+	Priority  int    `json:"priority"`
+	Status    string `json:"status"`
+	Branch    string `json:"branch"`
+	DependsOn string `json:"dependsOn,omitempty"`
+	LockedBy  string `json:"lockedBy,omitempty"`
+	File      string `json:"file"`
+	Title     string `json:"title"`
+	Content   string `json:"content"`
+}
+
+// RawOutput is the raw parse result with all fields, used by downstream Node shims.
+type RawOutput struct {
+	Specs        []RawSpec         `json:"specs"`
+	Assertions   []RawAssertion    `json:"assertions"`
+	Observations []json.RawMessage `json:"observations"`
+}
+
+// FormatRaw formats the full parse result with all fields as JSON.
+func FormatRaw(result *ParseResult) ([]byte, error) {
+	rawSpecs := make([]RawSpec, len(result.Specs))
+	for i, s := range result.Specs {
+		rawSpecs[i] = RawSpec{
+			ID: s.ID, Created: s.Created, Priority: s.Priority,
+			Status: s.Status, Branch: s.Branch, File: s.File,
+			Title: s.Title, Content: s.Content,
+		}
+	}
+
+	rawAssertions := make([]RawAssertion, len(result.Assertions))
+	for i, a := range result.Assertions {
+		rawAssertions[i] = RawAssertion{
+			ID: a.ID, Parent: a.Parent, Created: a.Created,
+			Priority: a.Priority, Status: a.Status, Branch: a.Branch,
+			DependsOn: a.DependsOn, LockedBy: a.LockedBy, File: a.File,
+			Title: a.Title, Content: a.Content,
+		}
+	}
+
+	out := RawOutput{
+		Specs:        rawSpecs,
+		Assertions:   rawAssertions,
+		Observations: []json.RawMessage{},
+	}
+
+	return marshalJSON(out)
+}
+
 // FormatComplete formats the "all complete" output as JSON.
 func FormatComplete() ([]byte, error) {
 	out := CompleteOutput{

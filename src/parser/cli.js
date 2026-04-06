@@ -1,10 +1,13 @@
-import { run as parserRun, getSpekkInstallationDirectory } from './index.js';
+/**
+ * CLI entry point for the parser — delegates directly to the Go binary.
+ * No Node.js fallback; the Go binary is required.
+ */
+import { getSpekkInstallationDirectory } from './index.js';
 import { parseFlags } from '../cli/parse-flags.js';
 import { spawnSync } from 'child_process';
 import { existsSync } from 'fs';
 import path from 'path';
 
-// Parser-specific flag definitions
 const parserFlagDefs = {
   all:          { flags: ['--all'],              type: 'boolean' },
   allBranches:  { flags: ['--all-branches'],     type: 'boolean' },
@@ -12,10 +15,6 @@ const parserFlagDefs = {
   assertion:    { flags: ['--assertion'],        type: 'string'  },
 };
 
-/**
- * Find the Go binary at known locations relative to the spekk installation.
- * Returns the path if found and executable, null otherwise.
- */
 function findGoBinary() {
   const installDir = getSpekkInstallationDirectory();
   const candidates = [
@@ -31,9 +30,6 @@ function findGoBinary() {
   return null;
 }
 
-/**
- * Build CLI args from options object for delegation to Go binary.
- */
 function buildGoArgs(options) {
   const args = ['next'];
   if (options.all) args.push('--all');
@@ -43,13 +39,12 @@ function buildGoArgs(options) {
   return args;
 }
 
-/**
- * Attempt to delegate to the Go binary. Returns true if delegation
- * succeeded, false if the binary was not found (caller should fall back).
- */
-function delegateToGo(options) {
+export function run(options = {}) {
   const goBinary = findGoBinary();
-  if (!goBinary) return false;
+  if (!goBinary) {
+    console.error('Error: Go binary not found. Run "go build -o bin/spekk-go ./cmd/spekk/" to build it.');
+    process.exit(1);
+  }
 
   const goArgs = buildGoArgs(options);
   const result = spawnSync(goBinary, goArgs, {
@@ -57,20 +52,13 @@ function delegateToGo(options) {
     encoding: 'utf8',
   });
 
-  // If the binary failed to execute (e.g. permission denied, not a valid binary),
-  // fall back to Node parser.
-  if (result.error) return false;
+  if (result.error) {
+    console.error(`Error: Failed to execute Go binary: ${result.error.message}`);
+    process.exit(1);
+  }
 
   if (result.stdout) process.stdout.write(result.stdout);
   process.exit(result.status ?? 0);
-}
-
-/**
- * Run the parser — delegates to Go binary if available, otherwise uses Node parser.
- */
-export function run(options = {}) {
-  if (delegateToGo(options)) return;
-  parserRun(options);
 }
 
 // Direct invocation support
