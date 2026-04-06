@@ -278,9 +278,27 @@ func showStatus() {
 }
 
 // showSpekk generates and displays the spec explorer web interface.
-// Supports --watch / -w flag.
+// Supports --watch / -w flag for live reload.
 func showSpekk(args []string) {
 	specsDir := findSpecsDir()
+
+	// Check for --watch / -w flag
+	watch := false
+	for _, a := range args {
+		if a == "--watch" || a == "-w" {
+			watch = true
+			break
+		}
+	}
+
+	if watch {
+		if err := show.RunWatch(specsDir); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := show.Run(specsDir); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
