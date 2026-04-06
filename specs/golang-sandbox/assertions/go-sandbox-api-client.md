@@ -3,7 +3,7 @@ id: go-sandbox-api-client
 parent: golang-sandbox
 created: 2026-04-05T12:28:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: go-command-router
 branch: feature/golang-sandbox
 ---
