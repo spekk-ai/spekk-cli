@@ -4,12 +4,11 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
+	"runtime"
 
-	"github.com/spekk-dev/spekk-cli/internal/parser"
-	"github.com/spekk-dev/spekk-cli/internal/status"
+	"github.com/spekk-dev/spekk-cli/internal/agent"
+	"github.com/spekk-dev/spekk-cli/internal/cli"
 )
 
 func main() {
@@ -60,131 +59,90 @@ func main() {
 	}
 }
 
-// getCurrentGitBranch returns the current git branch name, defaulting to "main".
-func getCurrentGitBranch() string {
-	out, err := exec.Command("git", "branch", "--show-current").Output()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Warning: Not in a git repository. Defaulting to main.")
-		return "main"
-	}
-	branch := strings.TrimSpace(string(out))
-	if branch == "" {
-		return "main"
-	}
-	return branch
-}
-
-// findSpecsDir locates the specs/ directory relative to the git root or cwd.
-func findSpecsDir() string {
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		return filepath.Join(".", "specs")
-	}
-	return filepath.Join(strings.TrimSpace(string(out)), "specs")
-}
-
 // runParser runs the spec parser to find the next assertion.
 // Accepts flags: --all, --spec <name>, --assertion <name>, --all-branches
 func runParser(args []string) {
-	var showAll, allBranches, showRaw bool
-	var specID, assertionID, specsDirOverride string
+	// TODO: implement via parser package
+	fmt.Fprintln(os.Stderr, "parser: not implemented yet")
+	os.Exit(0)
+}
 
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--all":
-			showAll = true
-		case "--raw":
-			showRaw = true
-		case "--spec", "-s":
-			if i+1 < len(args) {
-				i++
-				specID = args[i]
-			}
-		case "--assertion":
-			if i+1 < len(args) {
-				i++
-				assertionID = args[i]
-			}
-		case "--all-branches":
-			allBranches = true
-		case "--specs-dir":
-			if i+1 < len(args) {
-				i++
-				specsDirOverride = args[i]
-			}
-		}
+// findInstallDir returns the spekk installation directory
+// (the directory containing the running binary).
+func findInstallDir() string {
+	exe, err := os.Executable()
+	if err == nil {
+		exe, _ = filepath.EvalSymlinks(exe)
+		return filepath.Dir(filepath.Dir(exe)) // bin/spekk-go -> project root
 	}
-
-	specsDir := specsDirOverride
-	if specsDir == "" {
-		specsDir = findSpecsDir()
-	}
-
-	result, err := parser.ParseAllSpecs(specsDir)
-	if err != nil {
-		jsonBytes, _ := parser.FormatError(err.Error())
-		fmt.Println(string(jsonBytes))
-		os.Exit(1)
-	}
-
-	if len(result.Specs) == 0 && len(result.Assertions) == 0 {
-		jsonBytes, _ := parser.FormatEmpty()
-		fmt.Println(string(jsonBytes))
-		return
-	}
-
-	if showRaw {
-		jsonBytes, _ := parser.FormatRaw(result)
-		fmt.Println(string(jsonBytes))
-		return
-	}
-
-	if showAll {
-		jsonBytes, _ := parser.FormatHierarchy(result)
-		fmt.Println(string(jsonBytes))
-		return
-	}
-
-	opts := parser.FindOptions{
-		AssertionID: assertionID,
-		SpecID:      specID,
-		AllBranches: allBranches,
-	}
-	if !allBranches {
-		opts.CurrentBranch = getCurrentGitBranch()
-	}
-
-	next := parser.FindNextAssertion(result.Assertions, result.Specs, opts)
-
-	if next == nil {
-		jsonBytes, _ := parser.FormatComplete()
-		fmt.Println(string(jsonBytes))
-		return
-	}
-
-	jsonBytes, _ := parser.FormatNextAssertion(next, result.Specs)
-	fmt.Println(string(jsonBytes))
+	// Fallback: use compile-time caller info
+	_, filename, _, _ := runtime.Caller(0)
+	return filepath.Dir(filepath.Dir(filepath.Dir(filename)))
 }
 
 // launchCoachAgent launches the Coach Agent to create and refine specs.
 func launchCoachAgent(args []string) {
-	// TODO: implement via coach package
-	fmt.Fprintln(os.Stderr, "coach agent: not implemented yet")
-	os.Exit(0)
+	installDir := findInstallDir()
+
+	// Handle help
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
+		agent.ShowHelp(installDir, "coach")
+		return
+	}
+
+	// Build activation message
+	opts := agent.LaunchOptions{
+		Agent:      "coach",
+		InstallDir: installDir,
+	}
+
+	// Check for skill subcommand
+	if len(args) > 0 {
+		sr := &cli.SkillResolver{
+			HomeDir:    homeDir(),
+			Cwd:        cwdStr(),
+			InstallDir: installDir,
+		}
+		if sr.ResolveSkill("coach", args[0]) != nil {
+			skillMsg, err := agent.BuildSkillMessage(installDir, "coach", args[0], args)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+			opts.ExtraMessage = skillMsg
+		}
+	}
+
+	message, err := agent.BuildActivationMessage(opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := agent.Launch(message); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+func homeDir() string {
+	h, _ := os.UserHomeDir()
+	return h
+}
+
+func cwdStr() string {
+	d, _ := os.Getwd()
+	return d
 }
 
 // launchBuilderAgent launches the Builder Agent to implement specs.
 func launchBuilderAgent(args []string) {
-	// TODO: implement via builder package
-	fmt.Fprintln(os.Stderr, "builder agent: not implemented yet")
-	os.Exit(0)
+	agent.RunBuilder(args, findInstallDir())
 }
 
 // launchObserverAgent launches the Observer Agent to monitor spec-code drift.
 func launchObserverAgent(args []string) {
-	// TODO: implement via observer package
-	fmt.Fprintln(os.Stderr, "observer agent: not implemented yet")
-	os.Exit(0)
+	agent.RunObserver(args, findInstallDir())
 }
 
 // runLoop routes to the loop orchestration handlers.
@@ -222,25 +180,19 @@ COMMANDS:
 
 // runBuilderLoop runs the automated builder loop.
 func runBuilderLoop(args []string) {
-	// TODO: implement builder loop
-	fmt.Fprintln(os.Stderr, "builder loop: not implemented yet")
-	os.Exit(0)
+	agent.RunBuilderLoop(args, findInstallDir())
 }
 
 // runCoachLoop runs the interactive coach loop.
 func runCoachLoop(args []string) {
-	// TODO: implement coach loop
-	fmt.Fprintln(os.Stderr, "coach loop: not implemented yet")
-	os.Exit(0)
+	agent.RunCoachLoop(args, findInstallDir())
 }
 
 // showStatus displays a comprehensive overview of all specs and assertions.
 func showStatus() {
-	specsDir := findSpecsDir()
-	if err := status.Show(specsDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
-	}
+	// TODO: implement status display
+	fmt.Fprintln(os.Stderr, "status: not implemented yet")
+	os.Exit(0)
 }
 
 // showSpekk generates and displays the spec explorer web interface.

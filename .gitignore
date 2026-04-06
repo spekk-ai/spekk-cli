@@ -86,5 +86,9 @@ spekk-app-reference/
 # Temporary directory for all development artifacts
 .tmp/
 
-# Go compiled binaries
+# Claude Code local state
+.claude/
+
+# Go binaries
 bin/spekk-go
+/spekk

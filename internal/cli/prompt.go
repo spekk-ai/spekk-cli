@@ -1,5 +1,3 @@
-// Package cli provides CLI utilities for the spekk tool, including prompt
-// resolution for coach, builder, and observer agents.
 package cli
 
 import (
@@ -9,119 +7,126 @@ import (
 	"strings"
 )
 
-// PromptSeparator is the delimiter placed between concatenated prompt layers.
-const PromptSeparator = "\n\n---\n\n"
+const promptSeparator = "\n\n---\n\n"
 
-// validAgents lists the recognised agent names.
-var validAgents = map[string]bool{
-	"coach":    true,
-	"builder":  true,
-	"observer": true,
-}
+// validAgents lists the supported agent names.
+var validAgents = []string{"coach", "builder", "observer"}
 
-// PromptResolver resolves layered agent prompts using override and extension
-// files from the local project, global home directory, and the spekk
-// installation directory.
+// PromptResolver resolves layered agent prompts.
 type PromptResolver struct {
-	// InstallDir is the root of the spekk installation (contains specs/).
+	HomeDir    string
+	Cwd        string
 	InstallDir string
-	// WorkDir is the current working directory (project root).
-	WorkDir string
-	// HomeDir is the user's home directory.
-	HomeDir string
 }
 
-// ResolvePrompt resolves the full prompt content for the given agent using
-// layered resolution:
+// NewPromptResolver creates a resolver with default paths.
+func NewPromptResolver(installDir string) *PromptResolver {
+	home, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
+	return &PromptResolver{
+		HomeDir:    home,
+		Cwd:        cwd,
+		InstallDir: installDir,
+	}
+}
+
+// isValidAgent checks if the agent name is recognized.
+func isValidAgent(name string) bool {
+	for _, a := range validAgents {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
+// basePromptPath returns the package base prompt path for an agent.
+func (r *PromptResolver) basePromptPath(agent string) string {
+	return filepath.Join(r.InstallDir, "specs", agent+"-agent", agent+".prompt.md")
+}
+
+// readIfExists reads a file if it exists, returning empty string and false if not.
+func readIfExists(path string) (string, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	return string(data), true
+}
+
+// GetPromptContent resolves the full prompt for an agent using layered resolution.
 //
-//  1. Base prompt (first match wins):
-//     - Local override:  <WorkDir>/.spekk/<agent>.prompt.override.md
-//     - Global override: <HomeDir>/.spekk/<agent>.prompt.override.md
-//     - Package base:    <InstallDir>/specs/<agent>-agent/<agent>.prompt.md
+// Base (first match wins):
+//  1. Local override: .spekk/{agent}.prompt.override.md
+//  2. Global override: ~/.spekk/{agent}.prompt.override.md
+//  3. Package base: specs/{agent}-agent/{agent}.prompt.md
 //
-//  2. Extension layers (appended in order):
-//     - Global extend: <HomeDir>/.spekk/<agent>.prompt.md
-//     - Local extend:  <WorkDir>/.spekk/<agent>.prompt.md
-//
-// Missing override/extend files are silently skipped. A missing package base
-// prompt (when no override is found) is a fatal error.
-func (pr *PromptResolver) ResolvePrompt(agent string) (string, error) {
-	if !validAgents[agent] {
-		return "", fmt.Errorf("unknown agent: %s", agent)
+// Extensions (appended in order):
+//  1. Global extend: ~/.spekk/{agent}.prompt.md
+//  2. Local extend: .spekk/{agent}.prompt.md
+func (r *PromptResolver) GetPromptContent(agent string) (string, error) {
+	if !isValidAgent(agent) {
+		return "", fmt.Errorf("Unknown agent: %s", agent)
 	}
 
-	localDir := filepath.Join(pr.WorkDir, ".spekk")
-	globalDir := filepath.Join(pr.HomeDir, ".spekk")
+	globalDir := filepath.Join(r.HomeDir, ".spekk")
+	localDir := filepath.Join(r.Cwd, ".spekk")
 
-	// Step 1: Determine base prompt (first match wins).
-	localOverridePath := filepath.Join(localDir, agent+".prompt.override.md")
-	globalOverridePath := filepath.Join(globalDir, agent+".prompt.override.md")
-	packageBasePath := filepath.Join(pr.InstallDir, "specs", agent+"-agent", agent+".prompt.md")
-
+	// Step 1: Determine base prompt
 	var base string
-	if content, err := readIfExists(localOverridePath); err == nil && content != "" {
-		base = content
-	} else if content, err := readIfExists(globalOverridePath); err == nil && content != "" {
+
+	localOverridePath := filepath.Join(localDir, agent+".prompt.override.md")
+	if content, ok := readIfExists(localOverridePath); ok {
 		base = content
 	} else {
-		content, err := readIfExists(packageBasePath)
-		if err != nil {
-			return "", fmt.Errorf("prompt file not found: %s", packageBasePath)
+		globalOverridePath := filepath.Join(globalDir, agent+".prompt.override.md")
+		if content, ok := readIfExists(globalOverridePath); ok {
+			base = content
+		} else {
+			basePath := r.basePromptPath(agent)
+			content, ok := readIfExists(basePath)
+			if !ok {
+				return "", fmt.Errorf("Prompt file not found: %s", basePath)
+			}
+			base = content
 		}
-		if content == "" {
-			return "", fmt.Errorf("prompt file not found: %s", packageBasePath)
-		}
-		base = content
 	}
 
+	// Step 2: Collect layers
 	layers := []string{base}
 
-	// Step 2: Append extension layers.
+	// Global extend
 	globalExtendPath := filepath.Join(globalDir, agent+".prompt.md")
-	if content, err := readIfExists(globalExtendPath); err == nil && content != "" {
+	if content, ok := readIfExists(globalExtendPath); ok {
 		layers = append(layers, content)
 	}
 
+	// Local extend
 	localExtendPath := filepath.Join(localDir, agent+".prompt.md")
-	if content, err := readIfExists(localExtendPath); err == nil && content != "" {
+	if content, ok := readIfExists(localExtendPath); ok {
 		layers = append(layers, content)
 	}
 
-	// Step 3: Concatenate with separator.
-	return strings.Join(layers, PromptSeparator), nil
+	// Step 3: Concatenate
+	return strings.Join(layers, promptSeparator), nil
 }
 
-// CreateActivationMessage produces the full activation message for an agent,
-// wrapping the resolved prompt with working directory and installation path
-// context.
-func (pr *PromptResolver) CreateActivationMessage(agent string) (string, error) {
-	promptContent, err := pr.ResolvePrompt(agent)
+// CreateActivationMessage builds the full activation message for an agent.
+func (r *PromptResolver) CreateActivationMessage(agent string) (string, error) {
+	promptContent, err := r.GetPromptContent(agent)
 	if err != nil {
-		return "", fmt.Errorf("error loading prompt for %s: %w", agent, err)
+		return "", err
 	}
 
 	displayName := strings.ToUpper(agent[:1]) + agent[1:]
+	workingDir, _ := os.Getwd()
 
-	msg := fmt.Sprintf(
-		"You are the %s Agent - read the prompt and follow the instructions exactly.\n\nWorking directory: %s\nSpekk installation: %s\n\nHere is your prompt:\n\n%s",
-		displayName,
-		pr.WorkDir,
-		pr.InstallDir,
-		promptContent,
-	)
+	return fmt.Sprintf(`You are the %s Agent - read the prompt and follow the instructions exactly.
 
-	return msg, nil
-}
+Working directory: %s
+Spekk installation: %s
 
-// readIfExists reads the file at path and returns its content. If the file
-// does not exist it returns ("", nil). Any other I/O error is returned.
-func readIfExists(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	return string(data), nil
+Here is your prompt:
+
+%s`, displayName, workingDir, r.InstallDir, promptContent), nil
 }
