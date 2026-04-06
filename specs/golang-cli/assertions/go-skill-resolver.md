@@ -3,8 +3,7 @@ id: go-skill-resolver
 parent: golang-cli
 created: 2026-04-05T12:13:00Z
 priority: 1
-status: in_progress
-locked-by: builder-Paris-MacBook-Pro-2-2959-1775498804
+status: done
 depends-on: go-command-router
 branch: feature/golang-cli
 ---
