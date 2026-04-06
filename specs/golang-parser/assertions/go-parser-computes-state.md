@@ -3,7 +3,8 @@ id: go-parser-computes-state
 parent: golang-parser
 created: 2026-04-05T12:03:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Mac-62551-1775485084
 depends-on: go-parser-reads-specs
 branch: feature/golang-parser
 ---
