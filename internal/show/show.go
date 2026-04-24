@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -147,15 +148,19 @@ func openBrowser(path string) error {
 		absPath = path
 	}
 
-	url := "file://" + absPath
+	u, err := url.Parse("file://" + absPath)
+	if err != nil {
+		return fmt.Errorf("failed to parse file URL: %w", err)
+	}
+	urlStr := u.String()
 
 	switch runtime.GOOS {
 	case "darwin":
-		return exec.Command("open", url).Start()
+		return exec.Command("open", urlStr).Start()
 	case "linux":
-		return exec.Command("xdg-open", url).Start()
+		return exec.Command("xdg-open", urlStr).Start()
 	case "windows":
-		return exec.Command("cmd", "/c", "start", url).Start()
+		return exec.Command("cmd", "/c", "start", urlStr).Start()
 	default:
 		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
 	}
