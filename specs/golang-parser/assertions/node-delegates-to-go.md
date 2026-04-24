@@ -5,7 +5,7 @@ created: 2026-04-05T12:05:00Z
 priority: 2
 status: done
 depends-on: go-parser-json-matches-node
-branch: feature/golang-parser
+branch: feature/golang-migration
 ---
 
 # spekk next delegates to Go binary

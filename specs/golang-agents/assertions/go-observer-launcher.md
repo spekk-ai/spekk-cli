@@ -5,7 +5,7 @@ created: 2026-04-05T12:17:00Z
 priority: 1
 status: done
 depends-on: go-prompt-resolver
-branch: feature/golang-agents
+branch: feature/golang-migration
 ---
 
 # Go observer agent launcher

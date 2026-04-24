@@ -5,7 +5,7 @@ created: 2026-04-05T12:32:00Z
 priority: 3
 status: done
 depends-on: node-parser-removed
-branch: feature/golang-cleanup
+branch: feature/golang-migration
 ---
 
 # All Node.js source code removed

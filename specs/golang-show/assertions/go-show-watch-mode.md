@@ -5,7 +5,7 @@ created: 2026-04-05T12:23:00Z
 priority: 2
 status: done
 depends-on: go-show-html-generation
-branch: feature/golang-show
+branch: feature/golang-migration
 ---
 
 # Go show watch mode with live reload

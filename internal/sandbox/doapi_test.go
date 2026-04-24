@@ -247,6 +247,21 @@ func TestFindSSHKeyByFingerprint(t *testing.T) {
 	}
 }
 
+func TestDeleteSSHKey(t *testing.T) {
+	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "DELETE" || r.URL.Path != "/v2/account/keys/42" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	defer ts.Close()
+
+	err := client.DeleteSSHKey(42)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAssignToProject(t *testing.T) {
 	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" || r.URL.Path != "/v2/projects/proj-123/resources" {

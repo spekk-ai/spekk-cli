@@ -16,5 +16,6 @@ The stdout and stderr reader goroutines in `internal/serve/serve.go` are tied to
 
 - A `context.WithCancel` is created per WebSocket connection
 - The cancel function is called on connection cleanup (both normal close and error paths)
-- Pipe-reader goroutines check `ctx.Done()` alongside their scanner loops
+- Pipe-reader goroutines call `connCancel()` via `defer` when they exit (signaling completion)
 - The Claude process wait goroutine calls cancel after the process exits
+- Goroutines unblock naturally when pipes close on process exit; the cancel function coordinates cleanup across all goroutines

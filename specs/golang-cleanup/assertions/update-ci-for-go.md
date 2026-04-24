@@ -5,7 +5,7 @@ created: 2026-04-05T12:33:00Z
 priority: 3
 status: done
 depends-on: remove-node-source
-branch: feature/golang-cleanup
+branch: feature/golang-migration
 ---
 
 # CI/CD updated for Go build and test

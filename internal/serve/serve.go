@@ -193,6 +193,7 @@ func Run(opts Options, installDir string) error {
 
 				var event map[string]interface{}
 				if err := json.Unmarshal([]byte(line), &event); err != nil {
+					debug("#%d stdout unmarshal error: %v", connID, err)
 					continue
 				}
 

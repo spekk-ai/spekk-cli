@@ -52,8 +52,8 @@ The parser returns JSON with the assertion file to work on. Read it to understan
    - Manual processes → NO (prose validation)
 
 2. **If testable, write tests first:**
-   - Create test file (e.g., `app/parser/__tests__/parser.test.js`)
-   - Link test in assertion markdown: `**Tests:** app/parser/__tests__/parser.test.js`
+   - Create test file (e.g., `internal/parser/parser_test.go`)
+   - Link test in assertion markdown: `**Tests:** internal/parser/parser_test.go`
    - Write tests that validate the assertion's success criteria
 
 3. **Implement to make tests pass**

@@ -4,7 +4,7 @@ parent: golang-parser
 created: 2026-04-05T12:00:00Z
 priority: 1
 status: done
-branch: feature/golang-parser
+branch: feature/golang-migration
 ---
 
 # Go module and project structure exists

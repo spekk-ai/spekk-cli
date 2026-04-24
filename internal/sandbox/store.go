@@ -9,13 +9,15 @@ import (
 
 // SandboxMeta holds local metadata for a sandbox.
 type SandboxMeta struct {
-	DropletID int    `json:"dropletId"`
-	IP        string `json:"ip"`
-	Region    string `json:"region"`
-	Size      string `json:"size"`
-	CreatedAt string `json:"createdAt"`
-	Status    string `json:"status"`
-	Project   string `json:"project,omitempty"`
+	DropletID  int    `json:"dropletId"`
+	IP         string `json:"ip"`
+	Region     string `json:"region"`
+	Size       string `json:"size"`
+	CreatedAt  string `json:"createdAt"`
+	Status     string `json:"status"`
+	Project    string `json:"project,omitempty"`
+	SSHKeyID   int    `json:"sshKeyId,omitempty"`
+	SSHKeyPath string `json:"sshKeyPath,omitempty"`
 }
 
 // sandboxesFile returns the path to the sandboxes metadata file.

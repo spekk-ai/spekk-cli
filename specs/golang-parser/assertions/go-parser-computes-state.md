@@ -5,7 +5,7 @@ created: 2026-04-05T12:03:00Z
 priority: 1
 status: done
 depends-on: go-parser-reads-specs
-branch: feature/golang-parser
+branch: feature/golang-migration
 ---
 
 # Go parser computes derived state

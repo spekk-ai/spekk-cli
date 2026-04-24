@@ -5,7 +5,7 @@ created: 2026-04-05T12:06:00Z
 priority: 3
 status: done
 depends-on: node-delegates-to-go
-branch: feature/golang-parser
+branch: feature/golang-migration
 ---
 
 # Node.js parser code removed

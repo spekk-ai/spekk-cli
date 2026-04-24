@@ -222,6 +222,11 @@ func (c *Client) CreateSSHKey(name, publicKey string) (*SSHKey, error) {
 	return resp.SSHKey, nil
 }
 
+// DeleteSSHKey removes an SSH key from the account by ID.
+func (c *Client) DeleteSSHKey(id int) error {
+	return c.doRequest("DELETE", fmt.Sprintf("/v2/account/keys/%d", id), nil, nil)
+}
+
 // FindSSHKeyByFingerprint searches for an SSH key by fingerprint.
 func (c *Client) FindSSHKeyByFingerprint(fingerprint string) (*SSHKey, error) {
 	keys, err := c.ListSSHKeys()

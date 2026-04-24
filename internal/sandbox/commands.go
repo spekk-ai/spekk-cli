@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -63,18 +64,32 @@ func Create(opts CreateOptions) error {
 		}
 	}
 
-	// Get SSH keys
-	fmt.Fprintln(os.Stderr, "Fetching SSH keys...")
-	sshKeys, err := client.ListSSHKeys()
+	// Generate SSH key pair
+	fmt.Fprintln(os.Stderr, "Generating SSH key pair...")
+	keyPath, err := generateSSHKeyPair(opts.Name)
 	if err != nil {
-		return fmt.Errorf("fetching SSH keys: %w", err)
+		return fmt.Errorf("generating SSH key: %w", err)
 	}
-	if len(sshKeys) == 0 {
-		return fmt.Errorf("no SSH keys found on your DigitalOcean account. Add one at https://cloud.digitalocean.com/account/security")
+
+	// Upload public key to DO
+	pubKeyData, err := os.ReadFile(keyPath + ".pub")
+	if err != nil {
+		return fmt.Errorf("reading public key: %w", err)
 	}
-	sshKeyIDs := make([]int, len(sshKeys))
-	for i, k := range sshKeys {
-		sshKeyIDs[i] = k.ID
+	keyName := fmt.Sprintf("spekk-%s", opts.Name)
+	doKey, err := client.CreateSSHKey(keyName, strings.TrimSpace(string(pubKeyData)))
+	if err != nil {
+		return fmt.Errorf("uploading SSH key to DO: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "SSH key uploaded to DigitalOcean (ID: %d)\n", doKey.ID)
+
+	// Also fetch existing account keys so user can SSH in with their own keys
+	existingKeys, _ := client.ListSSHKeys()
+	sshKeyIDs := []int{doKey.ID}
+	for _, k := range existingKeys {
+		if k.ID != doKey.ID {
+			sshKeyIDs = append(sshKeyIDs, k.ID)
+		}
 	}
 
 	// Create droplet
@@ -101,7 +116,7 @@ func Create(opts CreateOptions) error {
 	fmt.Fprintf(os.Stderr, "Droplet active at %s\n", ip)
 
 	// Wait for SSH and provisioning
-	if err := waitForProvisioning(ip); err != nil {
+	if err := waitForProvisioning(ip, keyPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\nDroplet IP: %s (ID: %d) -- not auto-destroyed, debug manually.\n", err, ip, dropletID)
 		return err
 	}
@@ -109,13 +124,13 @@ func Create(opts CreateOptions) error {
 
 	// Inject credentials
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(ip, opts.Name, agentToken); err != nil {
+	if err := injectCredentials(ip, keyPath, opts.Name, agentToken); err != nil {
 		return fmt.Errorf("injecting credentials: %w", err)
 	}
 
 	// Configure git credentials
 	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
-	if err := configureGitCredentials(ip); err != nil {
+	if err := configureGitCredentials(ip, keyPath); err != nil {
 		return fmt.Errorf("configuring git credentials: %w", err)
 	}
 
@@ -130,13 +145,15 @@ func Create(opts CreateOptions) error {
 
 	// Save metadata
 	meta := &SandboxMeta{
-		DropletID: dropletID,
-		IP:        ip,
-		Region:    opts.Region,
-		Size:      opts.Size,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		Status:    "active",
-		Project:   projectName,
+		DropletID:  dropletID,
+		IP:         ip,
+		Region:     opts.Region,
+		Size:       opts.Size,
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+		Status:     "active",
+		Project:    projectName,
+		SSHKeyID:   doKey.ID,
+		SSHKeyPath: keyPath,
 	}
 	if err := SaveSandbox(opts.Name, meta); err != nil {
 		return fmt.Errorf("saving metadata: %w", err)
@@ -221,10 +238,10 @@ func Status(name string) error {
 	fmt.Printf("Droplet status: %s\n", dropletStatus)
 
 	// SSH checks
-	provisioned := sshCheck(sandbox.IP, "test -f /opt/spekk/.provisioned && echo yes || echo no")
+	provisioned := sshCheck(sandbox, "test -f /opt/spekk/.provisioned && echo yes || echo no")
 	fmt.Printf("Provisioned: %s\n", provisioned)
 
-	agentStatus := sshCheck(sandbox.IP, "systemctl is-active spekk-agent 2>/dev/null || echo unknown")
+	agentStatus := sshCheck(sandbox, "systemctl is-active spekk-agent 2>/dev/null || echo unknown")
 	fmt.Printf("Agent service: %s\n", agentStatus)
 
 	return nil
@@ -242,7 +259,8 @@ func SSH(name string, extraArgs []string) error {
 		return fmt.Errorf("sandbox %q not found", name)
 	}
 
-	args := append([]string{fmt.Sprintf("root@%s", sandbox.IP)}, extraArgs...)
+	args := sshArgs(sandbox)
+	args = append(args, extraArgs...)
 	cmd := exec.Command("ssh", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -292,6 +310,25 @@ func Destroy(name string, force bool) error {
 		}
 	}
 
+	// Remove SSH key from DO
+	if sandbox.SSHKeyID != 0 {
+		if err := client.DeleteSSHKey(sandbox.SSHKeyID); err != nil {
+			if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 404 {
+				fmt.Fprintf(os.Stderr, "Warning: SSH key %d was already deleted.\n", sandbox.SSHKeyID)
+			} else {
+				fmt.Fprintf(os.Stderr, "Warning: could not remove SSH key from DO: %s\n", err)
+			}
+		} else {
+			fmt.Fprintln(os.Stderr, "SSH key removed from DigitalOcean.")
+		}
+	}
+
+	// Remove local SSH key files
+	if sandbox.SSHKeyPath != "" {
+		os.Remove(sandbox.SSHKeyPath)
+		os.Remove(sandbox.SSHKeyPath + ".pub")
+	}
+
 	if err := RemoveSandbox(name); err != nil {
 		return fmt.Errorf("removing metadata: %w", err)
 	}
@@ -314,14 +351,22 @@ func Deploy(name string) error {
 
 	fmt.Fprintf(os.Stderr, "Deploying agent to %s...\n", sandbox.IP)
 
-	// Run the deploy via SSH: download latest release and restart service
-	cmd := exec.Command("ssh",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
-		fmt.Sprintf("root@%s", sandbox.IP),
-		"systemctl restart spekk-agent",
-	)
+	// Download latest release binary from GitHub
+	fmt.Fprintln(os.Stderr, "Downloading latest spekk binary...")
+	downloadScript := `set -e
+cd /tmp
+LATEST=$(curl -sL https://api.github.com/repos/spekk-ai/spekk-cli/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+if [ -z "$LATEST" ]; then echo "Failed to determine latest release"; exit 1; fi
+echo "Downloading $LATEST..."
+curl -sL "https://github.com/spekk-ai/spekk-cli/releases/download/${LATEST}/spekk-linux-amd64" -o /tmp/spekk-new
+chmod +x /tmp/spekk-new
+mv /tmp/spekk-new /usr/local/bin/spekk
+echo "Installed spekk $LATEST"
+systemctl restart spekk-agent`
+
+	args := sshArgs(sandbox)
+	args = append(args, downloadScript)
+	cmd := exec.Command("ssh", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -333,6 +378,53 @@ func Deploy(name string) error {
 }
 
 // --- Helpers ---
+
+// sshArgs returns the base SSH arguments for connecting to a sandbox,
+// using the stored key if available.
+func sshArgs(sandbox *SandboxMeta) []string {
+	args := []string{
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "ConnectTimeout=10",
+	}
+	if sandbox.SSHKeyPath != "" {
+		args = append(args, "-i", sandbox.SSHKeyPath)
+	}
+	args = append(args, fmt.Sprintf("root@%s", sandbox.IP))
+	return args
+}
+
+// generateSSHKeyPair creates an ed25519 SSH key pair for a sandbox.
+// Returns the path to the private key.
+func generateSSHKeyPair(name string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("getting home dir: %w", err)
+	}
+	keysDir := filepath.Join(home, ".spekk", "keys")
+	if err := os.MkdirAll(keysDir, 0o700); err != nil {
+		return "", fmt.Errorf("creating keys dir: %w", err)
+	}
+	keyPath := filepath.Join(keysDir, name)
+
+	// Remove existing key files if any
+	os.Remove(keyPath)
+	os.Remove(keyPath + ".pub")
+
+	cmd := exec.Command("ssh-keygen", "-t", "ed25519", "-f", keyPath, "-N", "", "-C", fmt.Sprintf("spekk-%s", name))
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("ssh-keygen failed: %w", err)
+	}
+
+	// Restrict permissions on private key
+	if err := os.Chmod(keyPath, 0o600); err != nil {
+		return "", fmt.Errorf("setting key permissions: %w", err)
+	}
+
+	return keyPath, nil
+}
 
 func waitForDroplet(client *Client, dropletID int) (string, error) {
 	deadline := time.Now().Add(5 * time.Minute)
@@ -352,7 +444,7 @@ func waitForDroplet(client *Client, dropletID int) (string, error) {
 	return "", fmt.Errorf("droplet %d did not become active within 5 minutes", dropletID)
 }
 
-func waitForProvisioning(ip string) error {
+func waitForProvisioning(ip, keyPath string) error {
 	deadline := time.Now().Add(10 * time.Minute)
 
 	// Wait for SSH connectivity
@@ -367,7 +459,7 @@ func waitForProvisioning(ip string) error {
 	// Wait for provisioning marker
 	fmt.Fprintln(os.Stderr, "Waiting for cloud-init provisioning to complete...")
 	for time.Now().Before(deadline) {
-		out := runSSH(ip, "test -f /opt/spekk/.provisioned && echo ok")
+		out := runSSH(ip, keyPath, "test -f /opt/spekk/.provisioned && echo ok")
 		if strings.TrimSpace(out) == "ok" {
 			return nil
 		}
@@ -385,14 +477,17 @@ func checkTCPPort(ip string, port int) bool {
 	return true
 }
 
-func runSSH(ip, command string) string {
-	cmd := exec.Command("ssh",
+func runSSH(ip, keyPath, command string) string {
+	args := []string{
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "ConnectTimeout=10",
-		fmt.Sprintf("root@%s", ip),
-		command,
-	)
+	}
+	if keyPath != "" {
+		args = append(args, "-i", keyPath)
+	}
+	args = append(args, fmt.Sprintf("root@%s", ip), command)
+	cmd := exec.Command("ssh", args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -400,14 +495,17 @@ func runSSH(ip, command string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func sshCheck(ip, command string) string {
-	cmd := exec.Command("ssh",
+func sshCheck(sandbox *SandboxMeta, command string) string {
+	args := []string{
 		"-o", "ConnectTimeout=5",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "BatchMode=yes",
-		fmt.Sprintf("root@%s", ip),
-		command,
-	)
+	}
+	if sandbox.SSHKeyPath != "" {
+		args = append(args, "-i", sandbox.SSHKeyPath)
+	}
+	args = append(args, fmt.Sprintf("root@%s", sandbox.IP), command)
+	cmd := exec.Command("ssh", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "unknown"
@@ -415,7 +513,7 @@ func sshCheck(ip, command string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func injectCredentials(ip, name, agentToken string) error {
+func injectCredentials(ip, keyPath, name, agentToken string) error {
 	bareHost := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(os.Getenv("SPEKK_HOST"), "https://"), "http://"), "/")
 
 	envLines := []string{
@@ -437,20 +535,23 @@ ENVEOF
 chown agent:agent /etc/spekk/agent.env
 chmod 600 /etc/spekk/agent.env`, envContent)
 
-	cmd := exec.Command("ssh",
+	args := []string{
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "ConnectTimeout=10",
-		fmt.Sprintf("root@%s", ip),
-		script,
-	)
+	}
+	if keyPath != "" {
+		args = append(args, "-i", keyPath)
+	}
+	args = append(args, fmt.Sprintf("root@%s", ip), script)
+	cmd := exec.Command("ssh", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
 	}
 	return nil
 }
 
-func configureGitCredentials(ip string) error {
+func configureGitCredentials(ip, keyPath string) error {
 	ghToken := os.Getenv("GITHUB_TOKEN")
 	script := strings.Join([]string{
 		"su - agent -c 'git config --global credential.helper store'",
@@ -459,13 +560,16 @@ func configureGitCredentials(ip string) error {
 		fmt.Sprintf(`su - agent -c 'echo "%s" | gh auth login --with-token 2>/dev/null || true'`, ghToken),
 	}, " && ")
 
-	cmd := exec.Command("ssh",
+	args := []string{
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "ConnectTimeout=10",
-		fmt.Sprintf("root@%s", ip),
-		script,
-	)
+	}
+	if keyPath != "" {
+		args = append(args, "-i", keyPath)
+	}
+	args = append(args, fmt.Sprintf("root@%s", ip), script)
+	cmd := exec.Command("ssh", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
 	}

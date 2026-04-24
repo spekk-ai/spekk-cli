@@ -5,7 +5,7 @@ created: 2026-04-05T12:22:00Z
 priority: 2
 status: done
 depends-on: go-parser-json-matches-node
-branch: feature/golang-show
+branch: feature/golang-migration
 ---
 
 # Go show command generates spec explorer HTML

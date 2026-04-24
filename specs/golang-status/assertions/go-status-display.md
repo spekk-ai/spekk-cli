@@ -5,7 +5,7 @@ created: 2026-04-05T12:20:00Z
 priority: 2
 status: done
 depends-on: go-parser-json-matches-node
-branch: feature/golang-parser
+branch: feature/golang-migration
 ---
 
 # Go status command displays spec overview

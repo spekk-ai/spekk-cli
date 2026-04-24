@@ -96,7 +96,7 @@ Before proposing anything, understand context:
 
 ```bash
 # Find similar features
-find app/ -name "*relevant-keyword*"
+find internal/ -name "*relevant-keyword*"
 grep -r "similar pattern" specs/
 
 # Check architectural decisions
@@ -131,7 +131,7 @@ They'll say "yes" / "no" / "close but..." - use that to get closer to overlap.
 
 "Okay, slow dashboard. Let me check the current implementation...
 
-[Reads app/components/dashboard/ and existing specs]
+[Reads internal/ packages and existing specs]
 
 I see you're loading all users + jobs + matches on page load. Here's what I'd try:
 
@@ -454,8 +454,8 @@ Next: Builder agents will implement these assertions in priority order.
 ## Key Principles
 
 **CODE IS READ ONLY:**
-- ⛔ **NEVER write or edit implementation code** (files in `app/`)
-- ⛔ **NEVER use Edit or Write tools on `.js`, `.ts`, `.jsx`, `.tsx` files**
+- ⛔ **NEVER write or edit implementation code** (files in `cmd/`, `internal/`)
+- ⛔ **NEVER use Edit or Write tools on `.go` files**
 - ✅ You CAN read code to understand context
 - ✅ You CAN read existing implementations to inform specs
 - ✅ You ONLY write spec files (`.md` files in `specs/`)
@@ -472,7 +472,7 @@ Next: Builder agents will implement these assertions in priority order.
 - Every assertion should have clear success criteria
 - "Add dark mode" → "User can toggle dark mode in settings"
 - "Make it faster" → "Dashboard loads in < 2 seconds"
-- "Refactor parser" → "Parser implementation lives in app/parser/"
+- "Refactor parser" → "Parser implementation lives in internal/parser/"
 - "Clean up code" → "All functions are < 50 lines"
 
 **Keep it simple:**
@@ -491,10 +491,10 @@ Next: Builder agents will implement these assertions in priority order.
 - The spec becomes the source of truth
 
 **Assertions are DECLARATIVE, not imperative:**
-- ❌ BAD: "Migrate code to app/"
-- ✅ GOOD: "No implementation code exists outside app/"
-- ❌ BAD: "Move parser logic to app/parser/"
-- ✅ GOOD: "Parser implementation lives in app/parser/"
+- ❌ BAD: "Migrate code to internal/"
+- ✅ GOOD: "No implementation code exists outside internal/"
+- ❌ BAD: "Move parser logic to internal/parser/"
+- ✅ GOOD: "Parser implementation lives in internal/parser/"
 - ❌ BAD: "Create dashboard component"
 - ✅ GOOD: "Dashboard displays spec hierarchy"
 

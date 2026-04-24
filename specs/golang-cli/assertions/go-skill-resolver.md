@@ -5,7 +5,7 @@ created: 2026-04-05T12:13:00Z
 priority: 1
 status: done
 depends-on: go-command-router
-branch: feature/golang-cli
+branch: feature/golang-migration
 ---
 
 # Go skill resolver implements layered skill discovery

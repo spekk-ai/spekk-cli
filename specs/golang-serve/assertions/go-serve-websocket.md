@@ -5,7 +5,7 @@ created: 2026-04-05T12:25:00Z
 priority: 2
 status: done
 depends-on: go-prompt-resolver
-branch: feature/golang-serve
+branch: feature/golang-migration
 ---
 
 # Go serve command runs WebSocket server
@@ -17,7 +17,8 @@ The `spekk serve` command in Go starts a WebSocket server that bridges browser e
 - `spekk serve` starts WebSocket server on default port 3118
 - `spekk serve --port <n>` uses custom port
 - `spekk serve --host <host>` uses custom host
-- WebSocket accepts connections and handles message types: chat, element_selection, action_recording
+- WebSocket origin validation restricts connections to localhost, loopback, and chrome-extension origins
+- WebSocket accepts connections and handles message types: chat, element_selection, action_recording, init
 - On chat message: spawns claude process with coach prompt + message content
 - Streams claude output back to WebSocket client as response messages
 - Formats messages correctly (chat → claude input, claude output → chat response)

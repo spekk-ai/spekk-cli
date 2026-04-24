@@ -5,7 +5,7 @@ created: 2026-04-05T12:01:00Z
 priority: 1
 status: done
 depends-on: go-project-structure
-branch: feature/golang-parser
+branch: feature/golang-migration
 ---
 
 # Go parser reads and parses spec directories
