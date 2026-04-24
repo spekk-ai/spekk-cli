@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -187,10 +188,35 @@ func findSpekkBin() string {
 	return exe
 }
 
+type processHolder struct {
+	mu      sync.Mutex
+	process *os.Process
+}
+
+func (ph *processHolder) set(p *os.Process) {
+	ph.mu.Lock()
+	defer ph.mu.Unlock()
+	ph.process = p
+}
+
+func (ph *processHolder) signal(sig os.Signal) {
+	ph.mu.Lock()
+	defer ph.mu.Unlock()
+	if ph.process != nil {
+		ph.process.Signal(sig)
+	}
+}
+
+func (ph *processHolder) isSet() bool {
+	ph.mu.Lock()
+	defer ph.mu.Unlock()
+	return ph.process != nil
+}
+
 // launchClaude spawns the claude CLI with the given args and inherited stdio.
 // Returns true if claude exited successfully.
-// activeProcess receives the started process for SIGINT forwarding.
-func launchClaude(claudeArgs []string, activeProcess *(*os.Process)) (bool, error) {
+// holder receives the started process for SIGINT forwarding.
+func launchClaude(claudeArgs []string, holder *processHolder) (bool, error) {
 	cmd := exec.Command("claude", claudeArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -205,14 +231,14 @@ func launchClaude(claudeArgs []string, activeProcess *(*os.Process)) (bool, erro
 		return false, fmt.Errorf("error launching Claude Code: %w", err)
 	}
 
-	if activeProcess != nil {
-		*activeProcess = cmd.Process
+	if holder != nil {
+		holder.set(cmd.Process)
 	}
 
 	err := cmd.Wait()
 
-	if activeProcess != nil {
-		*activeProcess = nil
+	if holder != nil {
+		holder.set(nil)
 	}
 
 	if err != nil {
@@ -232,7 +258,6 @@ func RunBuilder(args []string, installDir string) {
 	cfg.InstallDir = installDir
 
 	// Handle help
-	if cfg.Interactive && false { /* placeholder */ }
 	if hasHelp(args) {
 		ShowHelp(installDir, "builder")
 		return
@@ -284,15 +309,15 @@ func RunBuilder(args []string, installDir string) {
 	}
 
 	// Non-interactive modes: manage SIGINT
-	var activeProcess *os.Process
+	active := &processHolder{}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT)
 	go func() {
 		for range sigCh {
-			if activeProcess != nil {
+			if active.isSet() {
 				colorLog(colorYellow, "\nInterrupting current build...")
-				activeProcess.Signal(syscall.SIGINT)
+				active.signal(syscall.SIGINT)
 			} else {
 				colorLog(colorYellow, "\nReceived SIGINT. Exiting gracefully...")
 				os.Exit(0)
@@ -413,7 +438,7 @@ func RunBuilder(args []string, installDir string) {
 
 		success, launchErr := launchClaude(
 			[]string{"--dangerously-skip-permissions", message},
-			&activeProcess,
+			active,
 		)
 
 		if launchErr != nil {

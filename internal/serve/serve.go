@@ -21,7 +21,23 @@ import (
 const defaultPort = 3118
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: checkOrigin,
+}
+
+func checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	if strings.HasPrefix(origin, "chrome-extension://") {
+		return true
+	}
+	for _, prefix := range []string{"http://localhost", "http://127.0.0.1", "http://[::1]"} {
+		if origin == prefix || strings.HasPrefix(origin, prefix+":") || strings.HasPrefix(origin, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // Options configures the serve command.
@@ -102,6 +118,7 @@ func Run(opts Options, installDir string) error {
 		fmt.Fprintf(os.Stderr, "[serve] Connection #%d opened (origin: %s)\n", connID, origin)
 
 		conn := &connection{id: connID, ws: ws}
+		_, connCancel := context.WithCancel(context.Background())
 
 		// Spawn Claude subprocess
 		claude := exec.Command("claude",
@@ -165,6 +182,7 @@ func Run(opts Options, installDir string) error {
 
 		// Stream Claude stdout → WebSocket
 		go func() {
+			defer connCancel()
 			scanner := bufio.NewScanner(stdoutPipe)
 			scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 			for scanner.Scan() {
@@ -234,6 +252,7 @@ func Run(opts Options, installDir string) error {
 
 		// Forward stderr as error messages
 		go func() {
+			defer connCancel()
 			scanner := bufio.NewScanner(stderrPipe)
 			for scanner.Scan() {
 				msg := strings.TrimSpace(scanner.Text())
@@ -250,6 +269,7 @@ func Run(opts Options, installDir string) error {
 
 		// Wait for Claude to exit
 		go func() {
+			defer connCancel()
 			err := claude.Wait()
 			code := 1
 			if err == nil {
@@ -283,8 +303,14 @@ func Run(opts Options, installDir string) error {
 				"message":    map[string]interface{}{"role": "user", "content": formatted},
 				"session_id": "default",
 			}
-			data, _ := json.Marshal(stdinMsg)
-			stdinPipe.Write(append(data, '\n'))
+			data, err := json.Marshal(stdinMsg)
+			if err != nil {
+				debug("#%d marshal error: %v", connID, err)
+				return
+			}
+			if _, err := stdinPipe.Write(append(data, '\n')); err != nil {
+				debug("#%d stdin write error: %v", connID, err)
+			}
 		}
 
 		// Read WebSocket messages
@@ -312,30 +338,44 @@ func Run(opts Options, installDir string) error {
 			case "chat":
 				debug("#%d <- coach:chat", connID)
 				var data chatData
-				json.Unmarshal(incoming.Data, &data)
+				if err := json.Unmarshal(incoming.Data, &data); err != nil {
+					debug("#%d chat unmarshal error: %v", connID, err)
+					continue
+				}
 				sendToClaude(formatChatMessage(data))
 
 			case "element_selection":
 				debug("#%d <- coach:elementSelection", connID)
 				var data elementSelectionData
-				json.Unmarshal(incoming.Data, &data)
+				if err := json.Unmarshal(incoming.Data, &data); err != nil {
+					debug("#%d element_selection unmarshal error: %v", connID, err)
+					continue
+				}
 				sendToClaude("[User selected an element]\n" + formatElementSelection(data))
 
 			case "action_recording":
 				debug("#%d <- coach:actionRecording", connID)
 				var data actionRecordingData
-				json.Unmarshal(incoming.Data, &data)
+				if err := json.Unmarshal(incoming.Data, &data); err != nil {
+					debug("#%d action_recording unmarshal error: %v", connID, err)
+					continue
+				}
 				sendToClaude("[User recorded browser actions]\n" + formatActionRecording(data))
 
 			case "init":
 				debug("#%d <- coach:init", connID)
 				var data initData
-				json.Unmarshal(incoming.Data, &data)
+				if err := json.Unmarshal(incoming.Data, &data); err != nil {
+					debug("#%d init unmarshal error: %v", connID, err)
+					continue
+				}
 				sendToClaude(formatInitMessage(data))
 			}
 		}
 
 		// Clean up on disconnect
+		connCancel()
+
 		connMu.Lock()
 		c, exists := connections[ws]
 		if exists {

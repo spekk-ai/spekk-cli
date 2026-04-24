@@ -85,5 +85,5 @@ func writeSandboxes(sandboxes map[string]*SandboxMeta) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(sandboxesFile(), data, 0o644)
+	return os.WriteFile(sandboxesFile(), data, 0o600)
 }

@@ -160,6 +160,24 @@ func TestBuildSkillMessage_MeetingMissingFile(t *testing.T) {
 	}
 }
 
+func TestBuildSkillMessage_MeetingPathTraversal(t *testing.T) {
+	install := t.TempDir()
+
+	skillDir := filepath.Join(install, "specs", "coach-skills-system")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
+		[]byte("# Meeting Skill"), 0o644)
+
+	_, err := BuildSkillMessage(install, "coach", "meeting",
+		[]string{"meeting", "../../etc/passwd"})
+	if err == nil {
+		t.Fatal("expected error for path traversal")
+	}
+	if !strings.Contains(err.Error(), "resolves outside working directory") {
+		t.Errorf("unexpected error: %s", err)
+	}
+}
+
 func TestBuildActivationMessage_UnknownAgent(t *testing.T) {
 	_, err := BuildActivationMessage(LaunchOptions{
 		Agent: "unknown",

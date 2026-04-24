@@ -92,6 +92,37 @@ func TestOutgoingMessageJSON(t *testing.T) {
 	}
 }
 
+func TestCheckOrigin(t *testing.T) {
+	tests := []struct {
+		name   string
+		origin string
+		want   bool
+	}{
+		{"empty origin", "", true},
+		{"localhost", "http://localhost:3000", true},
+		{"localhost no port", "http://localhost", true},
+		{"ipv4 loopback", "http://127.0.0.1:8080", true},
+		{"ipv6 loopback", "http://[::1]:8080", true},
+		{"chrome extension", "chrome-extension://abcdef123456", true},
+		{"external origin", "http://evil.com", false},
+		{"https external", "https://attacker.example.com", false},
+		{"similar name", "http://localhost.evil.com", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &http.Request{Header: http.Header{}}
+			if tt.origin != "" {
+				r.Header.Set("Origin", tt.origin)
+			}
+			got := checkOrigin(r)
+			if got != tt.want {
+				t.Errorf("checkOrigin(%q) = %v, want %v", tt.origin, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAssistantDataJSON(t *testing.T) {
 	msg := outgoingMessage{
 		Event: "coach:assistant",
