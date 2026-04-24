@@ -27,5 +27,5 @@ The Go prompt resolver loads agent prompts using the same layered resolution as 
 - Layers concatenated with `\n\n---\n\n` separator
 - Missing override/extend files silently skipped
 - Missing package base prompt is a fatal error
-- `createActivationMessage()` wraps prompt with working directory and installation path context
+- `createActivationMessage()` wraps prompt with working directory context
 - Works for all agents: coach, builder, observer

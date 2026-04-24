@@ -4,7 +4,9 @@ created: 2026-01-20T18:15:00Z
 priority: 1
 ---
 
-# Builder Agent
+# Builder Agent (SUPERSEDED)
+
+> **Superseded:** This spec describes the original Node.js implementation. See `golang-agents` for the Go replacement.
 
 ## Overview
 

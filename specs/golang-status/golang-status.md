@@ -2,6 +2,7 @@
 id: golang-status
 created: 2026-04-05T12:20:00Z
 priority: 2
+branch: feature/golang-migration
 ---
 
 # Go Status Command

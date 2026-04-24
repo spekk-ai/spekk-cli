@@ -4,7 +4,9 @@ created: 2026-01-20T15:35:00Z
 priority: 1
 ---
 
-# Spec Parser
+# Spec Parser (SUPERSEDED)
+
+> **Superseded:** This spec describes the original Node.js implementation. See `golang-parser` for the Go replacement.
 
 ## Overview
 

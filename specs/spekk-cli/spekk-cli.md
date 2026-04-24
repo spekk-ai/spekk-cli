@@ -4,7 +4,9 @@ created: 2026-01-21T19:00:00Z
 priority: 2
 ---
 
-# Spekk CLI
+# Spekk CLI (SUPERSEDED)
+
+> **Superseded:** This spec describes the original Node.js implementation. See `golang-cli` for the Go replacement.
 
 ## Overview
 
