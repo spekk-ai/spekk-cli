@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -184,11 +185,11 @@ func cwd() string {
 }
 
 func resolvePath(p string) string {
-	if strings.HasPrefix(p, "/") {
+	if filepath.IsAbs(p) {
 		return p
 	}
 	wd, _ := os.Getwd()
-	return wd + "/" + p
+	return filepath.Join(wd, p)
 }
 
 func isNotFound(err error) bool {

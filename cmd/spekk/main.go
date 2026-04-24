@@ -264,9 +264,9 @@ func runLoop(args []string) {
 
 	switch args[0] {
 	case "builder":
-		runBuilderLoop(args[1:])
+		runBuilderLoop(findInstallDir())
 	case "coach":
-		runCoachLoop(args[1:])
+		runCoachLoop(findInstallDir())
 	case "help", "--help", "-h":
 		fmt.Println(`
 spekk loop - Orchestration workflows for spec-driven development
@@ -286,13 +286,13 @@ COMMANDS:
 }
 
 // runBuilderLoop runs the automated builder loop.
-func runBuilderLoop(args []string) {
-	agent.RunBuilderLoop(args, findInstallDir())
+func runBuilderLoop(installDir string) {
+	agent.RunBuilderLoop(installDir)
 }
 
 // runCoachLoop runs the interactive coach loop.
-func runCoachLoop(args []string) {
-	agent.RunCoachLoop(args, findInstallDir())
+func runCoachLoop(installDir string) {
+	agent.RunCoachLoop(installDir)
 }
 
 // showStatus displays a comprehensive overview of all specs and assertions.

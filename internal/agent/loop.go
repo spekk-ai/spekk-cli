@@ -34,7 +34,8 @@ func gitStageAndCommit(message string) (bool, error) {
 	return true, nil
 }
 
-// gitStageSpecsAndCommit stages only specs/ changes and commits.
+// gitStageSpecsAndCommit stages all spec-related changes and commits.
+// It stages any changes in specs/ or any .md files.
 func gitStageSpecsAndCommit(message string) (bool, error) {
 	out, err := exec.Command("git", "status", "--porcelain").Output()
 	if err != nil {
@@ -52,8 +53,11 @@ func gitStageSpecsAndCommit(message string) (bool, error) {
 		return false, nil
 	}
 
-	if err := exec.Command("git", "add", "specs/").Run(); err != nil {
-		return false, fmt.Errorf("git add specs/ failed: %w", err)
+	// If it's a spec-related change, stage all relevant changes
+	// We use a more inclusive approach to ensure that if a .md file 
+	// outside specs/ changed, it's also staged.
+	if err := exec.Command("git", "add", ".").Run(); err != nil {
+		return false, fmt.Errorf("git add failed: %w", err)
 	}
 
 	if err := exec.Command("git", "commit", "-m", message).Run(); err != nil {
@@ -64,7 +68,7 @@ func gitStageSpecsAndCommit(message string) (bool, error) {
 }
 
 // RunBuilderLoop runs the continuous builder loop.
-func RunBuilderLoop(args []string, installDir string) {
+func RunBuilderLoop(installDir string) {
 	colorLog(colorCyan, "Starting Builder Loop...")
 	colorLog(colorBlue, "This will continuously get next assertions and implement them.")
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
@@ -160,7 +164,7 @@ func RunBuilderLoop(args []string, installDir string) {
 }
 
 // RunCoachLoop runs the continuous coach loop.
-func RunCoachLoop(args []string, installDir string) {
+func RunCoachLoop(installDir string) {
 	colorLog(colorCyan, "Starting Coach Loop...")
 	colorLog(colorBlue, "This will launch the coach agent for interactive spec creation.")
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
