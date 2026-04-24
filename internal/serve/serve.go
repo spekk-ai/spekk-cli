@@ -119,6 +119,7 @@ func Run(opts Options, installDir string) error {
 
 		conn := &connection{id: connID, ws: ws}
 		_, connCancel := context.WithCancel(context.Background())
+		defer connCancel()
 
 		// Spawn Claude subprocess
 		claude := exec.Command("claude",
