@@ -40,7 +40,7 @@ type NextAssertionOutput struct {
 	LockedBy  string          `json:"lockedBy,omitempty"`
 	Title     string          `json:"title"`
 	Content   string          `json:"content"`
-	Spec      *SpecRefOutput  `json:"spec"`
+	Spec      *SpecRefOutput  `json:"spec,omitempty"`
 }
 
 // SpecRefOutput is a reference to a parent spec within assertion output.
