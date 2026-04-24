@@ -34,8 +34,7 @@ func gitStageAndCommit(message string) (bool, error) {
 	return true, nil
 }
 
-// gitStageSpecsAndCommit stages all spec-related changes and commits.
-// It stages any changes in specs/ or any .md files.
+// gitStageSpecsAndCommit stages spec-related changes and commits.
 func gitStageSpecsAndCommit(message string) (bool, error) {
 	out, err := exec.Command("git", "status", "--porcelain").Output()
 	if err != nil {
@@ -47,16 +46,11 @@ func gitStageSpecsAndCommit(message string) (bool, error) {
 		return false, nil
 	}
 
-	// Check if there are spec-related changes
-	hasSpecs := strings.Contains(status, "specs/") || strings.Contains(status, ".md")
-	if !hasSpecs {
+	if !strings.Contains(status, "specs/") {
 		return false, nil
 	}
 
-	// If it's a spec-related change, stage all relevant changes
-	// We use a more inclusive approach to ensure that if a .md file 
-	// outside specs/ changed, it's also staged.
-	if err := exec.Command("git", "add", ".").Run(); err != nil {
+	if err := exec.Command("git", "add", "specs/").Run(); err != nil {
 		return false, fmt.Errorf("git add failed: %w", err)
 	}
 
