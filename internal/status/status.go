@@ -14,13 +14,14 @@ var statusIcons = map[string]string{
 	"not_started": "📋",
 	"blocked":     "⏸️",
 	"draft":       "📝",
+	"unknown":     "❓",
 }
 
 func icon(status string) string {
 	if s, ok := statusIcons[status]; ok {
 		return s
 	}
-	return statusIcons["not_started"]
+	return statusIcons["unknown"]
 }
 
 // Show displays the status overview for all specs and assertions.
