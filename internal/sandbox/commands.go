@@ -84,7 +84,10 @@ func Create(opts CreateOptions) error {
 	fmt.Fprintf(os.Stderr, "SSH key uploaded to DigitalOcean (ID: %d)\n", doKey.ID)
 
 	// Also fetch existing account keys so user can SSH in with their own keys
-	existingKeys, _ := client.ListSSHKeys()
+	existingKeys, listErr := client.ListSSHKeys()
+	if listErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not list existing SSH keys (%s); only the generated key will be authorized\n", listErr)
+	}
 	sshKeyIDs := []int{doKey.ID}
 	for _, k := range existingKeys {
 		if k.ID != doKey.ID {
@@ -102,6 +105,12 @@ func Create(opts CreateOptions) error {
 		VpcUUID: opts.VPC,
 	})
 	if err != nil {
+		// Roll back the SSH key we uploaded so it doesn't leak in the DO account
+		if delErr := client.DeleteSSHKey(doKey.ID); delErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not remove orphaned SSH key %d from DO: %s\n", doKey.ID, delErr)
+		}
+		os.Remove(keyPath)
+		os.Remove(keyPath + ".pub")
 		return fmt.Errorf("creating droplet: %w", err)
 	}
 	dropletID := droplet.ID
@@ -367,9 +376,9 @@ systemctl restart spekk-agent`
 	args := sshArgs(sandbox)
 	args = append(args, downloadScript)
 	cmd := exec.Command("ssh", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	out, err := cmd.CombinedOutput()
+	os.Stderr.Write(out)
+	if err != nil {
 		return fmt.Errorf("deploy failed: %w", err)
 	}
 
