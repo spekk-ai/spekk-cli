@@ -2,19 +2,16 @@
 id: gemfury-package-management
 created: 2026-02-05T12:00:00Z
 priority: 1
+status: done
 ---
 
-# GemFury Package Management
+# GemFury Package Management (SUPERSEDED)
+
+> **Superseded:** This spec is no longer applicable. The project has migrated from Node.js/npm to Go. Distribution now uses GitHub Releases with cross-compiled Go binaries instead of GemFury/npm. See the `golang-cleanup` spec for details.
 
 ## What Must Be True
 
-The @spekk/cli package is distributed via GemFury (npm.fury.io/thinknimble). Documentation exists for both:
-- **Users**: How to install the package from GemFury
-- **Maintainers**: How to publish new versions to GemFury
-
-## Context
-
-GemFury is used as a private npm registry for the thinknimble organization. This allows controlled distribution of the CLI tool.
+~~The @spekk/cli package is distributed via GemFury (npm.fury.io/thinknimble).~~ Distribution now uses GitHub Releases with Go binaries.
 
 ## Assertions
 

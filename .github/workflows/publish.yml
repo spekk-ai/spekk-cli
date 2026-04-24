@@ -1,41 +1,37 @@
-name: Publish to GemFury
+name: Release
 
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  publish:
+  release:
     runs-on: [self-hosted, linux]
-    container:
-      image: node:20-slim
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v5
         with:
-          node-version: '20'
-
-      - name: Install system dependencies
-        run: apt-get update && apt-get install -y curl
-
-      - name: Install dependencies
-        run: npm ci
+          go-version-file: go.mod
 
       - name: Run tests
-        run: npm test
+        run: go test ./... -count=1 -timeout 120s
 
-      - name: Pack tarball
-        run: npm pack
-
-      - name: Publish to GemFury
+      - name: Build binaries
         run: |
-          TARBALL=$(ls *.tgz)
-          RESPONSE=$(curl -sS -F "package=@${TARBALL}" "https://${GEMFURY_TOKEN}@push.fury.io/thinknimble/")
-          echo "$RESPONSE"
-          if ! echo "$RESPONSE" | grep -q "ok$"; then
-            echo "::error::GemFury publish failed: $RESPONSE"
-            exit 1
-          fi
-          echo "Successfully published ${TARBALL}"
-        env:
-          GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
+          mkdir -p dist
+          GOOS=linux   GOARCH=amd64 go build -o dist/spekk-linux-amd64   ./cmd/spekk
+          GOOS=linux   GOARCH=arm64 go build -o dist/spekk-linux-arm64   ./cmd/spekk
+          GOOS=darwin  GOARCH=amd64 go build -o dist/spekk-darwin-amd64  ./cmd/spekk
+          GOOS=darwin  GOARCH=arm64 go build -o dist/spekk-darwin-arm64  ./cmd/spekk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/spekk-*
+          generate_release_notes: true

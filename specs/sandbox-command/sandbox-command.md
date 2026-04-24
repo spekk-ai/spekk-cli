@@ -4,7 +4,9 @@ created: 2026-03-12T15:00:00Z
 priority: 1
 ---
 
-# Sandbox Command
+# Sandbox Command (SUPERSEDED)
+
+> **Superseded:** This spec describes the original Node.js implementation. See `golang-sandbox` for the Go replacement.
 
 ## Overview
 

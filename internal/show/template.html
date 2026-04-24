@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spec Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.5;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .tree-panel {
+            width: 400px;
+            padding: 20px;
+            border-right: 1px solid #e2e8f0;
+            overflow-y: auto;
+        }
+
+        .detail-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .metro-map-section {
+            display: flex;
+            flex-direction: column;
+            background: #f8fafc;
+            overflow: hidden;
+            position: relative;
+            transition: height 0.3s ease;
+            height: 300px;
+            min-height: 100px;
+            max-height: 600px;
+        }
+
+        .metro-map-section.collapsed {
+            height: 36px !important;
+            min-height: 36px !important;
+            cursor: default;
+            overflow: hidden;
+        }
+
+        .metro-map-section.no-transition {
+            transition: none !important;
+        }
+
+        .metro-map-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 20px;
+            background: #f1f5f9;
+            cursor: pointer;
+            user-select: none;
+            flex-shrink: 0;
+            height: 36px;
+        }
+
+        .metro-map-header:hover {
+            background: #e2e8f0;
+        }
+
+        .metro-map-header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .metro-map-toggle-icon {
+            font-size: 12px;
+            color: #64748b;
+            transition: transform 0.2s;
+        }
+
+        .metro-map-section.collapsed .metro-map-toggle-icon {
+            transform: rotate(-90deg);
+        }
+
+        .metro-map-header-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .metro-map-header .branch-name {
+            font-size: 12px;
+            color: #64748b;
+            font-family: 'Courier New', monospace;
+        }
+
+        .metro-map-container {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            cursor: grab;
+            background: #f8fafc;
+        }
+
+        .metro-map-container.panning {
+            cursor: grabbing;
+            user-select: none;
+        }
+
+        .metro-map-container .metro-map {
+            transition: transform 0.1s ease-out;
+        }
+
+        .metro-map-resize-handle {
+            height: 6px;
+            cursor: ns-resize;
+            background: #e2e8f0;
+            border-bottom: 1px solid #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .metro-map-resize-handle:hover {
+            background: #cbd5e1;
+        }
+
+        .metro-map-resize-handle .grip-dots {
+            display: flex;
+            gap: 3px;
+        }
+
+        .metro-map-resize-handle .grip-dots span {
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: #94a3b8;
+        }
+
+        .metro-map-section.collapsed .metro-map-resize-handle {
+            display: none;
+        }
+
+        .detail-content-section {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .header {
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #1e293b;
+            margin-bottom: 4px;
+        }
+
+        .header p {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .header .stats {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .header .hidden-count {
+            color: #94a3b8;
+            font-size: 13px;
+            font-style: italic;
+        }
+
+        .spec-tree {
+            list-style: none;
+        }
+
+        .spec-item {
+            margin-bottom: 12px;
+        }
+
+        .spec-item.completed {
+            display: none;
+        }
+
+        .spec-tree.show-completed .spec-item.completed {
+            display: block;
+        }
+
+        .toggle-container {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .toggle-container label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 14px;
+            color: #475569;
+            user-select: none;
+        }
+
+        .toggle-container input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .spec-header {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .spec-header:hover {
+            background: #e2e8f0;
+        }
+
+        .spec-header.expanded {
+            background: #dbeafe;
+        }
+
+        .spec-header.selected {
+            background: #eff6ff;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .toggle-icon {
+            margin-right: 8px;
+            font-size: 12px;
+            color: #64748b;
+            transition: transform 0.2s;
+        }
+
+        .toggle-icon.expanded {
+            transform: rotate(90deg);
+        }
+
+        .status-badge {
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-right: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-not_started {
+            background: #f8fafc;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
+        }
+        .status-not_started::before {
+            content: "\25CB";
+            font-size: 10px;
+        }
+
+        .status-in_progress {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+            animation: pulse-yellow 2s infinite;
+        }
+        .status-in_progress::before {
+            content: "\1F504";
+            font-size: 10px;
+        }
+
+        .status-failed {
+            background: #fecaca;
+            color: #dc2626;
+            border: 1px solid #ef4444;
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+        }
+        .status-failed::before {
+            content: "\274C";
+            font-size: 10px;
+        }
+
+        .status-done {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+            opacity: 0.8;
+        }
+        .status-done::before {
+            content: "\2705";
+            font-size: 10px;
+        }
+
+        .status-draft {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+        }
+        .status-draft::before {
+            content: "\23F8\FE0F";
+            font-size: 10px;
+        }
+
+        @keyframes pulse-yellow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); }
+        }
+
+        .priority-badge {
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+            margin-right: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .priority-1, .priority-2, .priority-3 {
+            background: #e2e8f0;
+            color: #1e293b;
+            border: 1px solid #cbd5e1;
+        }
+
+        .spec-title {
+            font-weight: 600;
+            flex: 1;
+        }
+
+        .assertions-list {
+            margin-top: 8px;
+            margin-left: 20px;
+            display: none;
+            list-style: none;
+        }
+
+        .assertions-list.expanded {
+            display: block;
+        }
+
+        .assertion-item {
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            background: white;
+            border-radius: 6px;
+            border-left: 3px solid #e2e8f0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .assertion-item:hover {
+            background: #f8fafc;
+            border-left-color: #3b82f6;
+        }
+
+        .assertion-item.selected {
+            background: #eff6ff;
+            border-left-color: #3b82f6;
+        }
+
+        .detail-content {
+            display: none;
+        }
+
+        .detail-content.active {
+            display: block;
+        }
+
+        .detail-header {
+            margin-bottom: 20px;
+        }
+
+        .detail-title {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+
+        .detail-meta {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+        }
+
+        .meta-item {
+            font-size: 13px;
+            color: #475569;
+            font-weight: 500;
+        }
+
+        .meta-item strong {
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .detail-status-badge {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .detail-priority-badge {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #1e293b;
+            background: #e2e8f0;
+            border: 1px solid #cbd5e1;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .detail-body {
+            font-family: Consolas, Monaco, 'Courier New', monospace;
+        }
+
+        .detail-body pre {
+            font-family: Consolas, Monaco, 'Courier New', monospace;
+            white-space: pre-wrap;
+            font-family: inherit;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #64748b;
+            margin-top: 100px;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 8px;
+            color: #374151;
+        }
+
+        .metro-map-branch {
+            width: 100%;
+            height: 100%;
+        }
+
+        .metro-map {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .metro-track {
+            fill: none;
+            stroke: #cbd5e1;
+            stroke-width: 6;
+            stroke-linecap: round;
+        }
+
+        .metro-dependency {
+            fill: none;
+            stroke-linecap: round;
+        }
+
+        .metro-station {
+            cursor: pointer;
+        }
+
+        .metro-station circle {
+            transition: fill 0.15s;
+        }
+
+        .metro-station:hover circle {
+            fill: #2563eb;
+        }
+
+        .metro-station-current circle {
+            stroke: #2563eb;
+            stroke-width: 4;
+            filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.6));
+        }
+
+        .metro-station-current .metro-label {
+            font-weight: 700 !important;
+        }
+
+        .metro-terminus {
+            cursor: default;
+            pointer-events: none;
+        }
+
+        .metro-label {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            pointer-events: none;
+        }
+
+        .metro-station-tooltip {
+            position: fixed;
+            background: #1e293b;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .metro-station-tooltip.visible {
+            opacity: 1;
+        }
+
+        .metro-station-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: #1e293b;
+        }
+
+        .no-dependencies-notice {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            color: #1e40af;
+        }
+
+        .notice-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .notice-content {
+            flex: 1;
+        }
+
+        .notice-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #1e40af;
+        }
+
+        .notice-text {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #1e40af;
+        }
+
+        .search-container {
+            margin-top: 12px;
+            position: relative;
+        }
+
+        .search-container input {
+            width: 100%;
+            padding: 8px 12px 8px 32px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #1e293b;
+            background: #f8fafc;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .search-container input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+            background: white;
+        }
+
+        .search-container .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            color: #94a3b8;
+            pointer-events: none;
+        }
+
+        .spec-item.search-hidden {
+            display: none !important;
+        }
+
+        .assertion-item.search-hidden {
+            display: none !important;
+        }
+
+        .spec-item.search-match {
+            display: block !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="tree-panel">
+            <div class="header">
+                <h1 id="header-title">Spec Explorer</h1>
+                <p class="stats" id="header-stats"></p>
+                <p class="hidden-count" id="hidden-count"></p>
+
+                <div class="toggle-container">
+                    <label>
+                        <input type="checkbox" id="toggle-completed-specs">
+                        Show completed specs
+                    </label>
+                </div>
+
+                <div class="search-container">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="spec-search" placeholder="Search specs..." autocomplete="off">
+                </div>
+            </div>
+
+            <ul class="spec-tree" id="spec-tree"></ul>
+        </div>
+
+        <div class="detail-panel">
+            <div class="metro-map-section" id="metro-map-section" style="display: none;">
+                <div class="metro-map-header" id="metro-map-toggle">
+                    <div class="metro-map-header-left">
+                        <span class="metro-map-toggle-icon">&#9660;</span>
+                        <span class="metro-map-header-title">Branch Dependencies</span>
+                        <span class="branch-name" id="metro-branch-name"></span>
+                    </div>
+                </div>
+                <div class="metro-map-container" id="metro-map-container"></div>
+                <div class="metro-map-resize-handle" id="metro-map-resize-handle">
+                    <div class="grip-dots"><span></span><span></span><span></span></div>
+                </div>
+            </div>
+
+            <div class="detail-content-section" id="detail-content-section">
+                <div class="empty-state" id="empty-state">
+                    <h3>Spec Explorer</h3>
+                    <p>Click on any spec or assertion to view details</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>window.__SPEKK_DATA__ = /*__SPEKK_DATA__*/;</script>
+
+    <script>
+    (function() {
+        'use strict';
+
+        var DATA = window.__SPEKK_DATA__;
+        if (!DATA) return;
+
+        var specs = DATA.specs || [];
+        var assertions = DATA.assertions || [];
+        var projectName = DATA.projectName || 'Project';
+
+        // Index assertions by parent
+        var assertionsByParent = {};
+        var assertionById = {};
+        for (var i = 0; i < assertions.length; i++) {
+            var a = assertions[i];
+            assertionById[a.id] = a;
+            if (!assertionsByParent[a.parent]) {
+                assertionsByParent[a.parent] = [];
+            }
+            assertionsByParent[a.parent].push(a);
+        }
+
+        // Index specs by id
+        var specById = {};
+        for (var i = 0; i < specs.length; i++) {
+            specById[specs[i].id] = specs[i];
+        }
+
+        // Set page title
+        document.title = 'Spec Explorer - ' + projectName;
+
+        // Build header
+        var headerTitle = document.getElementById('header-title');
+        headerTitle.textContent = 'Spec Tree - ' + projectName;
+
+        var headerStats = document.getElementById('header-stats');
+        headerStats.textContent = specs.length + ' specs, ' + assertions.length + ' assertions';
+
+        // Escape HTML
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            return div.innerHTML;
+        }
+
+        // Status emoji for detail badges
+        function statusEmoji(status) {
+            switch (status) {
+                case 'done': return '\u2705';
+                case 'in_progress': return '\uD83D\uDD04';
+                case 'failed': return '\u274C';
+                case 'not_started': return '\u25CB';
+                case 'draft': return '\u23F8\uFE0F';
+                default: return '\u25CB';
+            }
+        }
+
+        // Build tree panel
+        function buildTree() {
+            var treeEl = document.getElementById('spec-tree');
+            var html = '';
+
+            for (var si = 0; si < specs.length; si++) {
+                var spec = specs[si];
+                var specAssertions = assertionsByParent[spec.id] || [];
+                var searchText = spec.id + ' ' + spec.title.toLowerCase() + ' ' + spec.status + ' ' + spec.priority;
+
+                html += '<li class="spec-item" data-spec-id="' + escapeHtml(spec.id) + '" data-search-text="' + escapeHtml(searchText) + '">';
+                html += '<div class="spec-header" data-action="toggle-spec" data-spec-id="' + escapeHtml(spec.id) + '" data-show-detail="true" data-type="spec">';
+                html += '<span class="toggle-icon" id="toggle-' + escapeHtml(spec.id) + '">\u25B6</span>';
+                html += '<span class="priority-badge priority-' + spec.priority + '">' + spec.priority + '</span>';
+                html += '<span class="status-badge status-' + escapeHtml(spec.status) + '"></span>';
+                html += '<span class="spec-title">' + escapeHtml(spec.title) + '</span>';
+                html += '</div>';
+
+                html += '<ul class="assertions-list" id="assertions-' + escapeHtml(spec.id) + '">';
+                for (var ai = 0; ai < specAssertions.length; ai++) {
+                    var assertion = specAssertions[ai];
+                    var aSearchText = assertion.id + ' ' + assertion.title.toLowerCase() + ' ' + assertion.status + ' ' + assertion.priority;
+                    html += '<li class="assertion-item" data-action="show-detail" data-assertion-id="' + escapeHtml(assertion.id) + '" data-type="assertion" data-search-text="' + escapeHtml(aSearchText) + '">';
+                    html += '<div style="display: flex; align-items: center;">';
+                    html += '<span class="priority-badge priority-' + assertion.priority + '">' + assertion.priority + '</span>';
+                    html += '<span class="status-badge status-' + escapeHtml(assertion.status) + '"></span>';
+                    html += '<span>' + escapeHtml(assertion.title) + '</span>';
+                    html += '</div>';
+                    html += '</li>';
+                }
+                html += '</ul>';
+                html += '</li>';
+            }
+
+            treeEl.innerHTML = html;
+        }
+
+        // Build detail panels
+        function buildDetailPanels() {
+            var section = document.getElementById('detail-content-section');
+            var html = '<div class="empty-state" id="empty-state"><h3>Spec Explorer</h3><p>Click on any spec or assertion to view details</p></div>';
+
+            // Spec detail panels
+            for (var si = 0; si < specs.length; si++) {
+                var spec = specs[si];
+                html += '<div class="detail-content" id="detail-spec-' + escapeHtml(spec.id) + '">';
+                html += '<div class="detail-header">';
+                html += '<div class="detail-title">' + escapeHtml(spec.title) + '</div>';
+                html += '<div class="detail-meta">';
+                html += '<span class="meta-item">Status: <span class="detail-status-badge">' + statusEmoji(spec.status) + '</span></span>';
+                html += '<span class="meta-item">Priority: <span class="detail-priority-badge">' + spec.priority + '</span></span>';
+                html += '<span class="meta-item">File: <strong>' + escapeHtml(spec.file) + '</strong></span>';
+                html += '</div>';
+                html += '</div>';
+                html += '<div class="detail-body"><pre style="white-space: pre-wrap; font-family: inherit;">' + escapeHtml(spec.content) + '</pre></div>';
+                html += '</div>';
+            }
+
+            // Assertion detail panels
+            for (var ai = 0; ai < assertions.length; ai++) {
+                var assertion = assertions[ai];
+                html += '<div class="detail-content" id="detail-assertion-' + escapeHtml(assertion.id) + '" data-branch="' + escapeHtml(assertion.branch) + '">';
+                html += '<div class="detail-header">';
+                html += '<div class="detail-title">' + escapeHtml(assertion.title) + '</div>';
+                html += '<div class="detail-meta">';
+                html += '<span class="meta-item">Status: <span class="detail-status-badge">' + statusEmoji(assertion.status) + '</span></span>';
+                html += '<span class="meta-item">Priority: <span class="detail-priority-badge">' + assertion.priority + '</span></span>';
+                html += '<span class="meta-item">Parent: <strong>' + escapeHtml(assertion.parent) + '</strong></span>';
+                html += '<span class="meta-item">Branch: <strong>' + escapeHtml(assertion.branch) + '</strong></span>';
+                html += '<span class="meta-item">File: <strong>' + escapeHtml(assertion.file) + '</strong></span>';
+                if (assertion.dependsOn) {
+                    html += '<span class="meta-item">Depends On: <strong>' + escapeHtml(assertion.dependsOn) + '</strong></span>';
+                }
+                html += '</div>';
+                html += '</div>';
+                html += '<div class="detail-body"><pre style="white-space: pre-wrap; font-family: inherit;">' + escapeHtml(assertion.content) + '</pre></div>';
+                html += '</div>';
+            }
+
+            section.innerHTML = html;
+        }
+
+        // Build metro map SVGs per branch
+        var metroMapCache = {};
+
+        function getAssertionsByBranch() {
+            var byBranch = {};
+            for (var i = 0; i < assertions.length; i++) {
+                var a = assertions[i];
+                var branch = a.branch || 'main';
+                if (!byBranch[branch]) {
+                    byBranch[branch] = [];
+                }
+                byBranch[branch].push(a);
+            }
+            return byBranch;
+        }
+
+        var STATUS_COLORS = {
+            not_started: '#64748b',
+            in_progress: '#f59e0b',
+            done: '#10b981',
+            failed: '#ef4444',
+            draft: '#94a3b8'
+        };
+
+        function generateMetroMapSVG(currentAssertionId, branchAssertions) {
+            if (!branchAssertions || branchAssertions.length === 0) return '';
+
+            var LAYER_SPACING = 120;
+            var NODE_SPACING = 45;
+            var TREE_GAP = 45;
+            var PADDING_LEFT = 60;
+            var PADDING_TOP = 30;
+            var STATION_RADIUS = 8;
+            var CURRENT_RADIUS = 10;
+            var LABEL_OFFSET = 16;
+
+            // Build parent-to-children map from dependsOn
+            var childrenOf = {};
+            var branchIds = {};
+            for (var i = 0; i < branchAssertions.length; i++) {
+                branchIds[branchAssertions[i].id] = true;
+            }
+
+            for (var i = 0; i < branchAssertions.length; i++) {
+                var a = branchAssertions[i];
+                if (a.dependsOn && branchIds[a.dependsOn]) {
+                    if (!childrenOf[a.dependsOn]) {
+                        childrenOf[a.dependsOn] = [];
+                    }
+                    childrenOf[a.dependsOn].push(a.id);
+                }
+            }
+
+            // Find root nodes: no dependsOn or dependsOn not in this branch
+            var roots = [];
+            for (var i = 0; i < branchAssertions.length; i++) {
+                var a = branchAssertions[i];
+                if (!a.dependsOn || !branchIds[a.dependsOn]) {
+                    roots.push(a.id);
+                }
+            }
+
+            // Recursive tree layout
+            var positions = {};
+            var currentY = PADDING_TOP;
+
+            function layoutTree(nodeId, depth) {
+                var children = childrenOf[nodeId] || [];
+                if (children.length === 0) {
+                    var x = PADDING_LEFT + depth * LAYER_SPACING;
+                    var y = currentY;
+                    positions[nodeId] = { x: x, y: y };
+                    currentY += NODE_SPACING;
+                    return { minY: y, maxY: y };
+                }
+
+                var childBounds = [];
+                for (var i = 0; i < children.length; i++) {
+                    childBounds.push(layoutTree(children[i], depth + 1));
+                }
+
+                var firstChildMinY = childBounds[0].minY;
+                var lastChildMaxY = childBounds[childBounds.length - 1].maxY;
+                var centerY = (firstChildMinY + lastChildMaxY) / 2;
+                var x = PADDING_LEFT + depth * LAYER_SPACING;
+                positions[nodeId] = { x: x, y: centerY };
+
+                return { minY: firstChildMinY, maxY: lastChildMaxY };
+            }
+
+            for (var ri = 0; ri < roots.length; ri++) {
+                if (ri > 0) {
+                    currentY += TREE_GAP;
+                }
+                layoutTree(roots[ri], 0);
+            }
+
+            // Determine terminal nodes (leaf nodes with no children)
+            var terminalNodes = [];
+            for (var i = 0; i < branchAssertions.length; i++) {
+                var a = branchAssertions[i];
+                if (!childrenOf[a.id] || childrenOf[a.id].length === 0) {
+                    terminalNodes.push(a.id);
+                }
+            }
+
+            // Calculate SVG dimensions
+            var maxX = 0;
+            var maxY = 0;
+            for (var id in positions) {
+                if (positions[id].x > maxX) maxX = positions[id].x;
+                if (positions[id].y > maxY) maxY = positions[id].y;
+            }
+
+            // Add terminus column if multiple terminal nodes
+            var hasTerminus = terminalNodes.length > 1;
+            var terminusX = maxX + LAYER_SPACING;
+            var terminusY = 0;
+            if (hasTerminus) {
+                var sumY = 0;
+                for (var i = 0; i < terminalNodes.length; i++) {
+                    sumY += positions[terminalNodes[i]].y;
+                }
+                terminusY = sumY / terminalNodes.length;
+                maxX = terminusX;
+                if (terminusY > maxY) maxY = terminusY;
+            }
+
+            var svgWidth = maxX + 300;
+            var svgHeight = maxY + PADDING_TOP + 30;
+
+            var svg = '<svg class="metro-map" width="' + svgWidth + '" height="' + svgHeight + '" viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '">';
+
+            // Draw dependency lines
+            for (var i = 0; i < branchAssertions.length; i++) {
+                var a = branchAssertions[i];
+                if (a.dependsOn && branchIds[a.dependsOn] && positions[a.dependsOn] && positions[a.id]) {
+                    var from = positions[a.dependsOn];
+                    var to = positions[a.id];
+
+                    if (from.y === to.y) {
+                        svg += '<line class="metro-dependency" x1="' + from.x + '" y1="' + from.y + '" x2="' + to.x + '" y2="' + to.y + '" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>';
+                    } else {
+                        var midX = (from.x + to.x) / 2;
+                        var midY = (from.y + to.y) / 2;
+                        svg += '<path class="metro-dependency" d="M' + from.x + ',' + from.y + ' Q' + midX + ',' + from.y + ' ' + midX + ',' + midY + ' T' + to.x + ',' + to.y + '" fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>';
+                    }
+                }
+            }
+
+            // Draw terminus lines
+            if (hasTerminus) {
+                for (var i = 0; i < terminalNodes.length; i++) {
+                    var from = positions[terminalNodes[i]];
+                    if (from.y === terminusY) {
+                        svg += '<line class="metro-dependency" x1="' + from.x + '" y1="' + from.y + '" x2="' + terminusX + '" y2="' + terminusY + '" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>';
+                    } else {
+                        var midX = (from.x + terminusX) / 2;
+                        var midY = (from.y + terminusY) / 2;
+                        svg += '<path class="metro-dependency" d="M' + from.x + ',' + from.y + ' Q' + midX + ',' + from.y + ' ' + midX + ',' + midY + ' T' + terminusX + ',' + terminusY + '" fill="none" stroke="#94a3b8" stroke-width="3" opacity="0.4"/>';
+                    }
+                }
+
+                // Draw terminus node
+                svg += '<g class="metro-terminus">';
+                svg += '<circle cx="' + terminusX + '" cy="' + terminusY + '" r="6" fill="#cbd5e1" stroke="#94a3b8" stroke-width="2"/>';
+                svg += '<text class="metro-label" x="' + (terminusX + 12) + '" y="' + (terminusY + 4) + '" font-size="11" fill="#94a3b8" font-style="italic">Done</text>';
+                svg += '</g>';
+            }
+
+            // Draw stations
+            for (var i = 0; i < branchAssertions.length; i++) {
+                var a = branchAssertions[i];
+                var pos = positions[a.id];
+                if (!pos) continue;
+
+                var isCurrent = a.id === currentAssertionId;
+                var radius = isCurrent ? CURRENT_RADIUS : STATION_RADIUS;
+                var fillColor = STATUS_COLORS[a.status] || STATUS_COLORS.not_started;
+                var strokeWidth = isCurrent ? 4 : 3;
+                var currentClass = isCurrent ? ' metro-station-current' : '';
+
+                svg += '<g class="metro-station' + currentClass + '" data-assertion-id="' + escapeHtml(a.id) + '">';
+                svg += '<title>' + escapeHtml(a.title) + ' (' + a.status + ')</title>';
+                svg += '<circle cx="' + pos.x + '" cy="' + pos.y + '" r="' + radius + '" fill="' + fillColor + '" stroke="white" stroke-width="' + strokeWidth + '"/>';
+                // Truncate label if too long
+                var label = a.title;
+                if (label.length > 35) {
+                    label = label.substring(0, 32) + '...';
+                }
+                svg += '<text class="metro-label" x="' + (pos.x + LABEL_OFFSET) + '" y="' + (pos.y + 4) + '" font-size="11" fill="#475569">' + escapeHtml(label) + '</text>';
+                svg += '</g>';
+            }
+
+            svg += '</svg>';
+            return svg;
+        }
+
+        // Metro map state
+        var metroMapState = {
+            currentBranch: null,
+            panStates: {}
+        };
+
+        function updateMetroMap(assertionId, branch) {
+            var metroMapSection = document.getElementById('metro-map-section');
+            var container = document.getElementById('metro-map-container');
+            var branchNameEl = document.getElementById('metro-branch-name');
+
+            metroMapSection.style.display = 'flex';
+            branchNameEl.textContent = branch;
+
+            // Get all assertions for this branch
+            var byBranch = getAssertionsByBranch();
+            var branchAssertions = byBranch[branch] || [];
+
+            if (branchAssertions.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            // Check if we need to switch branches
+            if (metroMapState.currentBranch !== branch) {
+                // Generate the SVG for this branch
+                var svgHtml = generateMetroMapSVG(assertionId, branchAssertions);
+                container.innerHTML = '<div class="metro-map-branch" id="metro-map-' + branch + '" data-branch="' + branch + '">' + svgHtml + '</div>';
+                metroMapState.currentBranch = branch;
+
+                // Restore pan state if exists
+                var panState = metroMapState.panStates[branch];
+                if (panState) {
+                    var svg = container.querySelector('.metro-map');
+                    if (svg) {
+                        svg.style.transform = 'translate(' + panState.currentX + 'px, ' + panState.currentY + 'px)';
+                    }
+                }
+            }
+
+            // Update current station highlight
+            var allStations = container.querySelectorAll('.metro-station');
+            for (var i = 0; i < allStations.length; i++) {
+                var station = allStations[i];
+                var stationId = station.getAttribute('data-assertion-id');
+                var circle = station.querySelector('circle');
+                if (stationId === assertionId) {
+                    station.classList.add('metro-station-current');
+                    if (circle) {
+                        circle.setAttribute('r', '10');
+                        circle.setAttribute('stroke-width', '4');
+                    }
+                } else {
+                    station.classList.remove('metro-station-current');
+                    if (circle) {
+                        circle.setAttribute('r', '8');
+                        circle.setAttribute('stroke-width', '3');
+                    }
+                }
+            }
+        }
+
+        function hideMetroMap() {
+            var metroMapSection = document.getElementById('metro-map-section');
+            metroMapSection.style.display = 'none';
+        }
+
+        // Initialize the UI
+        buildTree();
+        buildDetailPanels();
+
+        // Mark completed specs
+        function markCompletedSpecs() {
+            var specItems = document.querySelectorAll('.spec-item');
+            for (var i = 0; i < specItems.length; i++) {
+                var specItem = specItems[i];
+                var statusBadge = specItem.querySelector('.spec-header .status-badge');
+                if (statusBadge && statusBadge.classList.contains('status-done')) {
+                    specItem.classList.add('completed');
+                }
+            }
+        }
+
+        // Initialize completed specs toggle
+        function initializeCompletedSpecsToggle() {
+            var specTree = document.getElementById('spec-tree');
+            var toggleCheckbox = document.getElementById('toggle-completed-specs');
+            var hiddenCountElement = document.getElementById('hidden-count');
+
+            markCompletedSpecs();
+
+            var showCompleted = localStorage.getItem('spekkShowCompleted') === 'true';
+            toggleCheckbox.checked = showCompleted;
+            if (showCompleted) {
+                specTree.classList.add('show-completed');
+            }
+
+            updateHiddenCount();
+
+            toggleCheckbox.addEventListener('change', function() {
+                var isChecked = this.checked;
+                localStorage.setItem('spekkShowCompleted', isChecked.toString());
+
+                if (isChecked) {
+                    specTree.classList.add('show-completed');
+                } else {
+                    specTree.classList.remove('show-completed');
+                }
+
+                updateHiddenCount();
+            });
+        }
+
+        function updateHiddenCount() {
+            var hiddenCountElement = document.getElementById('hidden-count');
+            var completedSpecs = document.querySelectorAll('.spec-item.completed');
+            var isShowing = document.getElementById('spec-tree').classList.contains('show-completed');
+
+            var completedCount = completedSpecs.length;
+
+            if (completedCount > 0 && !isShowing) {
+                hiddenCountElement.textContent = '(' + completedCount + ' completed ' + (completedCount === 1 ? 'spec' : 'specs') + ' hidden)';
+            } else {
+                hiddenCountElement.textContent = '';
+            }
+        }
+
+        // Initialize search
+        function initializeSearch() {
+            var searchInput = document.getElementById('spec-search');
+            var specTree = document.getElementById('spec-tree');
+            if (!searchInput || !specTree) return;
+
+            var searchExpandedSpecs = [];
+
+            searchInput.addEventListener('input', function() {
+                var query = this.value.trim().toLowerCase();
+                var specItems = specTree.querySelectorAll('.spec-item');
+
+                if (!query) {
+                    for (var i = 0; i < specItems.length; i++) {
+                        specItems[i].classList.remove('search-hidden');
+                        specItems[i].classList.remove('search-match');
+                        var aItems = specItems[i].querySelectorAll('.assertion-item');
+                        for (var j = 0; j < aItems.length; j++) {
+                            aItems[j].classList.remove('search-hidden');
+                        }
+                    }
+                    // Collapse specs that were auto-expanded by search
+                    for (var i = 0; i < searchExpandedSpecs.length; i++) {
+                        var specItem = searchExpandedSpecs[i];
+                        var assertionsList = specItem.querySelector('.assertions-list');
+                        var toggle = specItem.querySelector('.toggle-icon');
+                        var header = specItem.querySelector('.spec-header');
+                        if (assertionsList) { assertionsList.classList.remove('expanded'); }
+                        if (toggle) { toggle.classList.remove('expanded'); toggle.textContent = '\u25B6'; }
+                        if (header) { header.classList.remove('expanded'); }
+                    }
+                    searchExpandedSpecs = [];
+                    updateHiddenCount();
+                    return;
+                }
+
+                for (var i = 0; i < specItems.length; i++) {
+                    var specItem = specItems[i];
+                    var specSearchText = specItem.getAttribute('data-search-text') || '';
+                    var specMatches = specSearchText.indexOf(query) !== -1;
+                    var assertionItems = specItem.querySelectorAll('.assertion-item');
+                    var anyAssertionMatches = false;
+
+                    for (var j = 0; j < assertionItems.length; j++) {
+                        var assertionItem = assertionItems[j];
+                        var assertionSearchText = assertionItem.getAttribute('data-search-text') || '';
+                        var assertionMatches = assertionSearchText.indexOf(query) !== -1;
+
+                        if (assertionMatches) {
+                            assertionItem.classList.remove('search-hidden');
+                            anyAssertionMatches = true;
+                        } else {
+                            assertionItem.classList.add('search-hidden');
+                        }
+                    }
+
+                    if (specMatches || anyAssertionMatches) {
+                        specItem.classList.remove('search-hidden');
+                        specItem.classList.add('search-match');
+
+                        if (anyAssertionMatches) {
+                            var assertionsList = specItem.querySelector('.assertions-list');
+                            var toggle = specItem.querySelector('.toggle-icon');
+                            var header = specItem.querySelector('.spec-header');
+                            if (assertionsList && !assertionsList.classList.contains('expanded')) {
+                                searchExpandedSpecs.push(specItem);
+                                assertionsList.classList.add('expanded');
+                                if (toggle) { toggle.classList.add('expanded'); toggle.textContent = '\u25BC'; }
+                                if (header) { header.classList.add('expanded'); }
+                            }
+                        }
+
+                        if (specMatches && !anyAssertionMatches) {
+                            for (var j = 0; j < assertionItems.length; j++) {
+                                assertionItems[j].classList.remove('search-hidden');
+                            }
+                        }
+                    } else {
+                        specItem.classList.add('search-hidden');
+                        specItem.classList.remove('search-match');
+                    }
+                }
+            });
+        }
+
+        // Initialize metro map collapse
+        function initializeMetroMapCollapse() {
+            var metroMapSection = document.getElementById('metro-map-section');
+            var metroMapToggle = document.getElementById('metro-map-toggle');
+
+            var savedHeight = localStorage.getItem('spekkMetroMapHeight');
+            if (savedHeight) {
+                var h = parseInt(savedHeight, 10);
+                if (h >= 100 && h <= 600) {
+                    metroMapSection.style.height = h + 'px';
+                }
+            }
+
+            var isCollapsed = localStorage.getItem('spekkMetroMapCollapsed') === 'true';
+            if (isCollapsed) {
+                metroMapSection.classList.add('collapsed');
+            }
+
+            metroMapToggle.addEventListener('click', function() {
+                metroMapSection.classList.toggle('collapsed');
+                var collapsed = metroMapSection.classList.contains('collapsed');
+                localStorage.setItem('spekkMetroMapCollapsed', collapsed.toString());
+            });
+
+            initializeMetroMapResize();
+        }
+
+        // Initialize metro map resize
+        function initializeMetroMapResize() {
+            var metroMapSection = document.getElementById('metro-map-section');
+            var resizeHandle = document.getElementById('metro-map-resize-handle');
+            if (!resizeHandle || !metroMapSection) return;
+
+            var isDragging = false;
+            var startY = 0;
+            var startHeight = 0;
+
+            resizeHandle.addEventListener('mousedown', function(e) {
+                if (metroMapSection.classList.contains('collapsed')) return;
+
+                isDragging = true;
+                startY = e.clientY;
+                startHeight = metroMapSection.getBoundingClientRect().height;
+
+                metroMapSection.classList.add('no-transition');
+                document.body.style.cursor = 'ns-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+
+                var deltaY = e.clientY - startY;
+                var newHeight = startHeight + deltaY;
+                newHeight = Math.max(100, Math.min(600, newHeight));
+                metroMapSection.style.height = newHeight + 'px';
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (!isDragging) return;
+                isDragging = false;
+                metroMapSection.classList.remove('no-transition');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                var currentHeight = Math.round(metroMapSection.getBoundingClientRect().height);
+                localStorage.setItem('spekkMetroMapHeight', currentHeight.toString());
+            });
+        }
+
+        // Tooltip handling
+        var tooltip = null;
+
+        function createTooltip() {
+            if (!tooltip) {
+                tooltip = document.createElement('div');
+                tooltip.className = 'metro-station-tooltip';
+                document.body.appendChild(tooltip);
+            }
+            return tooltip;
+        }
+
+        function positionTooltip(element, tooltipEl) {
+            var rect = element.getBoundingClientRect();
+            var tooltipRect = tooltipEl.getBoundingClientRect();
+            var left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            var top = rect.top - tooltipRect.height - 10;
+            tooltipEl.style.left = left + 'px';
+            tooltipEl.style.top = top + 'px';
+        }
+
+        document.addEventListener('mouseover', function(event) {
+            var station = event.target.closest('.metro-station');
+            if (station) {
+                var titleElement = station.querySelector('title');
+                if (titleElement) {
+                    var tooltipEl = createTooltip();
+                    tooltipEl.textContent = titleElement.textContent;
+                    setTimeout(function() {
+                        positionTooltip(station, tooltipEl);
+                        tooltipEl.classList.add('visible');
+                    }, 0);
+                }
+            }
+        });
+
+        document.addEventListener('mouseout', function(event) {
+            var station = event.target.closest('.metro-station');
+            if (station) {
+                if (tooltip) {
+                    tooltip.classList.remove('visible');
+                }
+            }
+        });
+
+        // Metro map pan functionality
+        (function() {
+            var isPanning = false;
+            var startX = 0;
+            var startY = 0;
+
+            var mapContainer = document.getElementById('metro-map-container');
+            if (!mapContainer) return;
+
+            mapContainer.addEventListener('mousedown', function(e) {
+                if (e.target.closest('.metro-station')) return;
+
+                var currentBranch = metroMapState.currentBranch;
+                if (!currentBranch) return;
+
+                var svg = mapContainer.querySelector('.metro-map');
+                if (!svg) return;
+
+                isPanning = true;
+
+                if (!metroMapState.panStates[currentBranch]) {
+                    metroMapState.panStates[currentBranch] = { currentX: 0, currentY: 0 };
+                }
+                var panState = metroMapState.panStates[currentBranch];
+
+                startX = e.clientX - panState.currentX;
+                startY = e.clientY - panState.currentY;
+                mapContainer.classList.add('panning');
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isPanning) return;
+
+                var currentBranch = metroMapState.currentBranch;
+                if (!currentBranch) return;
+
+                var svg = mapContainer.querySelector('.metro-map');
+                if (!svg) return;
+
+                var panState = metroMapState.panStates[currentBranch];
+                if (!panState) return;
+
+                var newX = e.clientX - startX;
+                var newY = e.clientY - startY;
+
+                var containerRect = mapContainer.getBoundingClientRect();
+                var svgWidth = parseFloat(svg.getAttribute('width')) || containerRect.width;
+                var svgHeight = parseFloat(svg.getAttribute('height')) || containerRect.height;
+                var EDGE_MARGIN = 60;
+
+                var minX = Math.min(0, containerRect.width - svgWidth - EDGE_MARGIN);
+                var maxX = EDGE_MARGIN;
+                var minY = Math.min(0, containerRect.height - svgHeight - EDGE_MARGIN);
+                var maxY = EDGE_MARGIN;
+
+                panState.currentX = Math.max(minX, Math.min(maxX, newX));
+                panState.currentY = Math.max(minY, Math.min(maxY, newY));
+
+                svg.style.transform = 'translate(' + panState.currentX + 'px, ' + panState.currentY + 'px)';
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (isPanning) {
+                    isPanning = false;
+                    mapContainer.classList.remove('panning');
+                }
+            });
+
+            document.addEventListener('mouseleave', function() {
+                if (isPanning) {
+                    isPanning = false;
+                    mapContainer.classList.remove('panning');
+                }
+            });
+
+            mapContainer.addEventListener('wheel', function(e) {
+                var currentBranch = metroMapState.currentBranch;
+                if (!currentBranch) return;
+
+                var svg = mapContainer.querySelector('.metro-map');
+                if (!svg) return;
+
+                if (!metroMapState.panStates[currentBranch]) {
+                    metroMapState.panStates[currentBranch] = { currentX: 0, currentY: 0 };
+                }
+                var panState = metroMapState.panStates[currentBranch];
+
+                var containerRect = mapContainer.getBoundingClientRect();
+                var svgWidth = parseFloat(svg.getAttribute('width')) || containerRect.width;
+                var svgHeight = parseFloat(svg.getAttribute('height')) || containerRect.height;
+                var EDGE_MARGIN = 60;
+
+                var minX = Math.min(0, containerRect.width - svgWidth - EDGE_MARGIN);
+                var maxX = EDGE_MARGIN;
+                var minY = Math.min(0, containerRect.height - svgHeight - EDGE_MARGIN);
+                var maxY = EDGE_MARGIN;
+
+                if (e.shiftKey) {
+                    panState.currentX = Math.max(minX, Math.min(maxX, panState.currentX - e.deltaY));
+                } else {
+                    panState.currentY = Math.max(minY, Math.min(maxY, panState.currentY - e.deltaY));
+                    panState.currentX = Math.max(minX, Math.min(maxX, panState.currentX - e.deltaX));
+                }
+
+                svg.style.transform = 'translate(' + panState.currentX + 'px, ' + panState.currentY + 'px)';
+                e.preventDefault();
+            }, { passive: false });
+        })();
+
+        // Event delegation for clicks
+        document.addEventListener('click', function(event) {
+            var actionElement = event.target.closest('[data-action]');
+            if (!actionElement) return;
+            var action = actionElement.getAttribute('data-action');
+
+            if (action === 'toggle-spec') {
+                var specId = actionElement.getAttribute('data-spec-id');
+                if (specId) {
+                    toggleSpec(specId);
+                    if (actionElement.getAttribute('data-show-detail') === 'true') {
+                        showDetail(specId, 'spec', event);
+                    }
+                }
+            } else if (action === 'show-detail') {
+                var assertionId = actionElement.getAttribute('data-assertion-id');
+                var type = actionElement.getAttribute('data-type');
+                if (assertionId && type) {
+                    showDetail(assertionId, type, event);
+                }
+            }
+        });
+
+        // Metro station clicks (navigate to assertion detail)
+        document.addEventListener('click', function(event) {
+            var station = event.target.closest('.metro-station');
+            if (!station) return;
+            var assertionId = station.getAttribute('data-assertion-id');
+            if (assertionId) {
+                showDetail(assertionId, 'assertion', event);
+            }
+        });
+
+        function toggleSpec(specId) {
+            var toggle = document.getElementById('toggle-' + specId);
+            var assertionsList = document.getElementById('assertions-' + specId);
+            if (!toggle || !assertionsList) return;
+            var header = toggle.parentElement;
+
+            if (assertionsList.classList.contains('expanded')) {
+                assertionsList.classList.remove('expanded');
+                toggle.classList.remove('expanded');
+                header.classList.remove('expanded');
+                toggle.textContent = '\u25B6';
+            } else {
+                assertionsList.classList.add('expanded');
+                toggle.classList.add('expanded');
+                header.classList.add('expanded');
+                toggle.textContent = '\u25BC';
+            }
+        }
+
+        function showDetail(id, type, event) {
+            // Hide all detail content
+            var allDetails = document.querySelectorAll('.detail-content');
+            for (var i = 0; i < allDetails.length; i++) {
+                allDetails[i].classList.remove('active');
+            }
+            var emptyState = document.getElementById('empty-state');
+            if (emptyState) emptyState.style.display = 'none';
+
+            // Remove selection from all items
+            var allAssertions = document.querySelectorAll('.assertion-item');
+            for (var i = 0; i < allAssertions.length; i++) {
+                allAssertions[i].classList.remove('selected');
+            }
+
+            // Show selected content
+            var detailElement = document.getElementById('detail-' + type + '-' + id);
+            if (detailElement) {
+                detailElement.classList.add('active');
+            }
+
+            // Update metro map for assertions, hide for specs
+            if (type === 'assertion' && detailElement) {
+                var branch = detailElement.getAttribute('data-branch') || 'main';
+                updateMetroMap(id, branch);
+            } else {
+                hideMetroMap();
+            }
+
+            // Mark assertion as selected in tree view
+            if (type === 'assertion') {
+                var assertionItem = document.querySelector('.assertion-item[data-assertion-id="' + id + '"]');
+                if (assertionItem) {
+                    assertionItem.classList.add('selected');
+
+                    // Expand parent spec if collapsed
+                    var assertionsListEl = assertionItem.closest('.assertions-list');
+                    if (assertionsListEl && !assertionsListEl.classList.contains('expanded')) {
+                        var specIdFromList = assertionsListEl.id.replace('assertions-', '');
+                        var toggle = document.getElementById('toggle-' + specIdFromList);
+                        if (toggle) {
+                            var header = toggle.parentElement;
+                            assertionsListEl.classList.add('expanded');
+                            toggle.classList.add('expanded');
+                            header.classList.add('expanded');
+                            toggle.textContent = '\u25BC';
+                        }
+                    }
+                }
+            }
+
+            // Mark spec header as selected
+            if (type === 'spec') {
+                var allSpecHeaders = document.querySelectorAll('.spec-header');
+                for (var i = 0; i < allSpecHeaders.length; i++) {
+                    allSpecHeaders[i].classList.remove('selected');
+                }
+
+                var toggleElement = document.getElementById('toggle-' + id);
+                if (toggleElement) {
+                    var specHeader = toggleElement.parentElement;
+                    specHeader.classList.add('selected');
+                }
+            }
+        }
+
+        // Initialize everything
+        initializeCompletedSpecsToggle();
+        initializeMetroMapCollapse();
+        initializeSearch();
+
+    })();
+    </script>
+</body>
+</html>

@@ -4,7 +4,9 @@ created: 2026-01-22T17:00:00Z
 priority: 2
 ---
 
-# Observer Agent
+# Observer Agent (SUPERSEDED)
+
+> **Superseded:** This spec describes the original Node.js implementation. See `golang-agents` for the Go replacement.
 
 The observer agent continuously monitors the system for drift and misalignment between specifications and implementation. It acts as a quality assurance layer that identifies issues for human review and coaching.
 
