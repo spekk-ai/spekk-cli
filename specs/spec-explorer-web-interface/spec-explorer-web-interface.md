@@ -4,7 +4,9 @@ created: 2026-01-22T21:00:00Z
 priority: 2
 ---
 
-# Spec Explorer Web Interface
+# Spec Explorer Web Interface (SUPERSEDED)
+
+> **Superseded:** This spec describes the original Node.js implementation. See `golang-show` for the Go replacement.
 
 ## Overview
 

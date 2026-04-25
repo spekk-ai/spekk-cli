@@ -88,3 +88,9 @@ spekk-app-reference/
 
 # Zensical build output
 site/
+# Claude Code local state
+.claude/
+
+# Go binaries
+bin/spekk-go
+/spekk

@@ -31,9 +31,9 @@ done
 
 **Scan Areas:**
 - `specs/` directory - All specifications and assertions
-- `app/` directory - All implementation code
+- `internal/` directory - All implementation code
 - `observations/` directory - Previous observations (to avoid duplicates)
-- Root files - Package configuration, documentation
+- Root files - Module configuration, documentation
 
 ### 2. Drift Detection
 
@@ -50,8 +50,8 @@ You detect four types of drift:
 
 **Examples:**
 - Spec says "Parser outputs valid JSON" but parser returns malformed JSON
-- Spec says "No implementation code outside app/" but finds code in root
-- Spec says "CLI command `npm run observer` exists" but package.json missing it
+- Spec says "No implementation code outside internal/" but finds code in root
+- Spec says "CLI command `spekk observer` exists" but binary missing it
 
 #### Type 2: Outdated Specs
 **What:** Specifications no longer reflect current needs
@@ -112,7 +112,7 @@ affected_specs:
   - spec-id-1
   - spec-id-2
 affected_files:
-  - path/to/file1.js
+  - path/to/file1.go
   - path/to/file2.md
 ---
 
@@ -150,7 +150,7 @@ Output progress to console:
 ```
 [2026-01-22 17:30:00] Observer scan starting...
 [2026-01-22 17:30:05] Scanning specs/ - 45 files
-[2026-01-22 17:30:10] Scanning app/ - 23 files  
+[2026-01-22 17:30:10] Scanning internal/ - 23 files
 [2026-01-22 17:30:15] Found 2 potential issues
 [2026-01-22 17:30:16] Created observation: code-spec-misalignment-parser-json
 [2026-01-22 17:30:16] Created observation: outdated-spec-old-cli-structure
@@ -190,7 +190,7 @@ Your own behavior is defined in `specs/observer-agent/observer-agent.md`.
 ## Context Files
 
 - `specs/` - All specifications (read to understand system requirements)
-- `app/` - All implementation code (read to understand current state)
+- `internal/` - All implementation code (read to understand current state)
 - `observations/` - Previous observations (read to avoid duplicates)
 - `specs/coach-agent/coach.prompt.md` - How coach handles spec updates
 - `specs/builder-agent/builder.prompt.md` - How builder implements changes

@@ -14,56 +14,41 @@ Spekk CLI enables spec-driven development by:
 - **[Getting Started Guide](./docs/GETTING-STARTED.md)** - Quick introduction to Spekk
 - **[CLI Reference](./docs/CLI-REFERENCE.md)** - Complete command documentation
 - **[Coach Skills Guide](./docs/COACH-SKILLS.md)** - Detailed skill workflows
-- **[Release Notes](./docs/RELEASE-NOTES-1.2.0.md)** - Version history
 
 ## Installation
 
-### 1. Get a GemFury Token
+### From GitHub Releases (recommended)
 
-Ask a team lead for a GemFury **read** (or full access) token for the `thinknimble` org.
-
-### 2. Add the Token to Your Shell
+Download the latest binary for your platform from [GitHub Releases](https://github.com/spekk-ai/spekk-cli/releases):
 
 ```bash
-# Add to ~/.zshrc or ~/.bashrc
-export GEMFURY_SPEKK_TOKEN=your_token_here
+# macOS (Apple Silicon)
+curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-arm64 -o /usr/local/bin/spekk
+chmod +x /usr/local/bin/spekk
+
+# macOS (Intel)
+curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-amd64 -o /usr/local/bin/spekk
+chmod +x /usr/local/bin/spekk
+
+# Linux (x86_64)
+curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-amd64 -o /usr/local/bin/spekk
+chmod +x /usr/local/bin/spekk
+
+# Linux (ARM64)
+curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-arm64 -o /usr/local/bin/spekk
+chmod +x /usr/local/bin/spekk
 ```
 
-Then reload your shell config:
-```bash
-source ~/.zshrc  # or ~/.bashrc
-```
-
-### 3. Configure npm
-
-Add to your global `~/.npmrc`:
-```
-@spekk:registry=https://npm.fury.io/thinknimble/
-//npm.fury.io/thinknimble/:_authToken=${GEMFURY_SPEKK_TOKEN}
-```
-
-Or run these commands:
-```bash
-npm config set @spekk:registry https://npm.fury.io/thinknimble/
-npm config set //npm.fury.io/thinknimble/:_authToken "\$GEMFURY_SPEKK_TOKEN"
-```
-
-### 4. Install
+### From Source
 
 ```bash
-npm install -g @spekk/cli
+go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest
 ```
 
-### 5. Verify
+### Verify
 
 ```bash
 spekk --help
-```
-
-### Updating
-
-```bash
-npm update -g @spekk/cli
 ```
 
 ## Quick Start
@@ -87,13 +72,16 @@ spekk coach meeting notes.txt
 # View all specs in interactive web UI
 spekk show
 
+# Watch mode with live reload
+spekk show -w
+
 # Get comprehensive overview of all specs
 spekk status
 ```
 
 ## Customizing Agent Prompts
 
-Spekk uses a layered prompt system that lets you customize agent behavior (coach, builder, observer) at two levels without modifying the package itself.
+Spekk uses a layered prompt system that lets you customize agent behavior (coach, builder, observer) at two levels without modifying the binary.
 
 ### Extend vs Override
 
@@ -159,7 +147,7 @@ specs/
 │       └── ...
 ├── coach-agent/
 │   ├── coach-agent.md
-│   ├── coach-agent.prompt.md    # Agent instructions
+│   ├── coach.prompt.md          # Agent instructions
 │   └── assertions/
 └── ...
 ```
@@ -184,11 +172,11 @@ Describe what needs to exist/work for this to be complete.
 
 ## Success Criteria
 
-- ✅ Specific, testable criteria
-- ✅ Clear validation steps
+- Specific, testable criteria
+- Clear validation steps
 ```
 
-**Parent spec status is computed** — a parent spec's status automatically reflects its assertions' states (all done = done, any in-progress = in-progress, etc.).
+**Parent spec status is computed** -- a parent spec's status automatically reflects its assertions' states (all done = done, any in-progress = in-progress, etc.).
 
 ### Optional Fields
 
@@ -212,7 +200,7 @@ branch: feature/my-feature   # Lives on feature branch
 
 ### 3. The Parser
 
-The spec parser (`src/parser/`) reads all specs and identifies the next priority work item:
+The spec parser reads all specs and identifies the next priority work item:
 
 ```bash
 $ spekk next
@@ -282,17 +270,6 @@ spekk builder --interactive
 6. Commits changes
 7. Repeats until all assertions done (or `--once` flag set)
 
-**Lean Testing Philosophy**
-
-The builder follows a lean testing approach:
-- Tests behavior, not implementation details
-- One test per meaningful behavior
-- Deletes redundant or low-value tests
-- No tests for trivial code
-- Prefers integration tests over unit when appropriate
-
-**Result:** Fast, trustworthy test suite focused on real behavior validation.
-
 #### Coach Agent
 
 Helps create well-formed specs:
@@ -308,24 +285,6 @@ spekk coach meeting
 spekk coach meeting notes.txt
 ```
 
-**Meeting Processing Mode:**
-
-The coach can extract structured outputs from meeting transcripts:
-- **Todos** → appended to `TODOS.md`
-- **Specs** → proper spec files in `specs/`
-- **Context** → architectural decisions appended to `CONTEXT.md`
-
-All outputs are proposed before creation, then committed together in a single commit.
-
-**Interactive Mode:**
-
-The coach:
-1. Takes user feature requests
-2. Asks clarifying questions
-3. Creates detailed spec files
-4. Ensures specs follow format
-5. Commits new specs
-
 #### Observer Agent
 
 Monitors spec-code drift and detects when code changes but specs don't (or vice versa):
@@ -333,8 +292,6 @@ Monitors spec-code drift and detects when code changes but specs don't (or vice 
 ```bash
 spekk observer
 ```
-
-The observer helps keep specs and implementation synchronized.
 
 ## Commands
 
@@ -344,10 +301,13 @@ The observer helps keep specs and implementation synchronized.
 spekk              # Default: runs parser (equivalent to `spekk next`)
 spekk next         # Get next priority assertion
 spekk show         # Launch interactive web spec explorer
+spekk show -w      # Watch mode with live reload
 spekk status       # Comprehensive overview of all specs/assertions
 spekk coach        # Launch Coach Agent
 spekk builder      # Launch Builder Agent
 spekk observer     # Launch Observer Agent (monitors drift)
+spekk serve        # Start WebSocket server for browser extension
+spekk sandbox      # Manage cloud sandbox environments
 spekk loop         # Run orchestration workflows
 spekk help         # Show help message
 ```
@@ -364,14 +324,6 @@ spekk help         # Show help message
 | `--confirm`, `-c` | Ask y/n before each build |
 | `--interactive`, `-i` | Start builder in interactive mode |
 
-### Coach Subcommands
-
-```bash
-spekk coach                   # Interactive spec creation
-spekk coach meeting           # Meeting processing (prompts for transcript)
-spekk coach meeting notes.txt # Process transcript file directly
-```
-
 ### Parser Flags
 
 ```bash
@@ -379,36 +331,52 @@ spekk next                    # Get next priority assertion
 spekk next --all              # Get full spec hierarchy (JSON)
 spekk next --spec <id>        # Filter to assertions in a specific spec
 spekk next --assertion <id>   # Get details for specific assertion
+spekk next --all-branches     # Include assertions from all branches
 ```
 
 ## Directory Structure
 
 ```
 spekk-cli/
-├── src/                    # All implementation code
+├── cmd/spekk/              # CLI entry point
+│   └── main.go
+├── internal/               # Core Go packages
 │   ├── parser/            # Spec parser
-│   │   ├── index.js       # Core logic
-│   │   └── cli.js         # CLI interface
-│   ├── coach/             # Coach agent
-│   │   ├── cli.js
-│   │   └── meeting-notes-to-specs.js
-│   ├── builder/           # Builder agent
-│   │   └── cli.js
-│   └── observer/          # Observer agent
-│       └── cli.js
-├── bin/
-│   └── spekk.js          # Main CLI entry point
-├── specs/                 # All specifications
+│   ├── agent/             # Agent launchers (coach, builder, observer, loops)
+│   ├── cli/               # Flag parsing, prompt/skill resolution
+│   ├── show/              # Spec explorer web UI
+│   ├── serve/             # WebSocket server for browser extension
+│   ├── sandbox/           # Cloud sandbox management (DigitalOcean)
+│   └── status/            # Status overview display
+├── specs/                  # All specifications
 │   ├── spec-parser/
 │   ├── coach-agent/
 │   ├── builder-agent/
-│   └── spekk-cli/
-├── docs/
-│   └── RELEASE-NOTES-1.1.0.md
-└── package.json
+│   └── ...
+├── go.mod
+└── go.sum
 ```
 
-## Development Workflow
+## Development
+
+### Building
+
+```bash
+go build ./cmd/spekk
+```
+
+### Testing
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests for a specific package
+go test ./internal/parser/
+
+# Verbose output
+go test ./... -v
+```
 
 ### Creating New Features
 
@@ -430,83 +398,12 @@ spekk-cli/
    # Read the assertion file
    cat specs/spec-parser/assertions/parses-frontmatter.md
 
-   # Implement the feature
-   # ... write code ...
-
-   # Update status to done
-   # Edit frontmatter: status: not_started → status: done
+   # Implement the feature, update status to done
    ```
-
-### Processing Meeting Notes
-
-```bash
-# Launch coach in meeting mode
-spekk coach meeting
-
-# Or process a file directly
-spekk coach meeting standup-notes.txt
-```
-
-The coach will:
-1. Extract todos, specs, and context
-2. Show you what it will create
-3. Wait for approval
-4. Create files and commit together
-
-### Spec Best Practices
-
-**Good specs are:**
-- ✅ **Testable** - Clear success criteria
-- ✅ **Atomic** - One assertion per file
-- ✅ **Ordered** - Priority indicates sequence
-- ✅ **Immutable** - `created` timestamp never changes
-- ✅ **Clear** - Anyone can understand requirements
-
-**Avoid:**
-- ❌ Vague requirements ("make it better")
-- ❌ Multiple concerns in one assertion
-- ❌ Implementation details (say WHAT, not HOW)
-- ❌ Changing priorities mid-work
-
-## Status Values
-
-- **`not_started`** - Default, not yet implemented
-- **`in_progress`** - Currently being worked on
-- **`done`** - Fully implemented and validated
-- **`draft`** - Placeholder/planning (excluded from work queue)
-- **`failed`** - Confirmed implementation issue that needs fixing
-
-## Priority Levels
-
-- **1** - Highest priority (critical, blocking)
-- **2** - Medium priority (important, not blocking)
-- **3** - Lowest priority (nice to have, future)
-
-Keep it simple: only 3 levels. Forces clear prioritization decisions.
-
-## Testing
-
-```bash
-# Run all tests
-npm test
-
-# Run implementation tests only
-npm run test:impl
-
-# Run spec validation tests only
-npm run test:specs
-```
-
-The spec system follows a **lean testing philosophy**:
-- Tests validate behavior, not implementation details
-- One test per meaningful behavior (avoid redundancy)
-- No tests for trivial code (getters, simple pass-throughs)
-- Integration tests over unit tests when appropriate
-- Fast, trustworthy suite over maximum coverage
 
 ## Requirements
 
-- **Node.js** 18+ (ES modules support)
+- **Go** 1.23+ (for building from source)
 - **Claude CLI** (for builder/coach/observer agents)
 - **Git** (for automated commits)
 
@@ -519,34 +416,6 @@ The spec system follows a **lean testing philosophy**:
 4. Iterate continuously (keep specs updated)
 
 The specs are the source of truth. Code is the implementation of specs. Tests prove specs are satisfied.
-
-## What's New in 1.2.0
-
-### Coordinator Skill 🎯
-- **`spekk coach coordinate`** — Dependency-aware work planning with branch assignments
-- Analyzes draft assertions and identifies prerequisite relationships
-- Groups related work into feature branches
-- Adds `depends-on` and `branch` fields to assertion YAML
-- Builder respects git branches (use `--all-branches` to see all work)
-
-### Skills Architecture Overhaul
-- Skills are now **markdown files** (no more JS classes)
-- Easier to create, read, and extend
-- All existing skills converted to markdown format
-- Location: `specs/coach-skills-system/`
-
-### CLI Fixes
-- Fixed subcommands properly inlining skill markdown content
-- Coordinator and meeting skills work reliably via CLI
-
-See `docs/RELEASE-NOTES-1.2.0.md` for full details.
-
-## More Information
-
-- **Main spec**: `specs/spec-parser/spec-parser.md`
-- **Coach agent**: `specs/coach-agent/coach-agent.prompt.md`
-- **Builder agent**: `specs/builder-agent/builder-agent.prompt.md`
-- **CLI spec**: `specs/spekk-cli/spekk-cli.md`
 
 ## License
 

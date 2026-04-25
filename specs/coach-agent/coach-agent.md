@@ -4,7 +4,9 @@ created: 2026-01-20T17:00:00Z
 priority: 3
 ---
 
-# Coach Agent
+# Coach Agent (SUPERSEDED)
+
+> **Superseded:** This spec describes the original Node.js implementation. See `golang-agents` for the Go replacement.
 
 ## Overview
 
