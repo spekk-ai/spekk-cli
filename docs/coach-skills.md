@@ -2,30 +2,51 @@
 icon: lucide/graduation-cap
 ---
 
-# Coach Skills
+# Skills
 
-The coach has specialized skills for common development tasks. Skills are markdown files that the coach reads and follows as workflow instructions.
+Skills are markdown workflow files that agents read and follow. Both the **coach** and **builder** support skills.
 
 ## How skills work
 
-1. **Trigger detection** -- Coach detects keywords in your input
-2. **Skill activation** -- Coach reads the skill markdown file
-3. **Workflow execution** -- Coach follows the workflow steps
-4. **Validation** -- Coach validates output against success criteria
+1. **Activation** -- You invoke a skill via the CLI (e.g., `spekk coach meeting`)
+2. **Resolution** -- Spekk finds the skill file using layered discovery
+3. **Injection** -- The skill content is inlined into the agent's prompt
+4. **Execution** -- The agent follows the workflow steps
+5. **Validation** -- The agent validates output against success criteria
 
-Skills live in `specs/coach-skills-system/`.
+### Skill discovery
+
+Skills are resolved from three locations, checked in order (first match wins):
+
+| Priority | Location | Scope |
+|----------|----------|-------|
+| 1 | `.spekk/skills/{agent}/` | **Local** -- project-specific skills |
+| 2 | `~/.spekk/skills/{agent}/` | **Global** -- your personal skills |
+| 3 | Package built-ins | **Default** -- ships with Spekk |
+
+Where `{agent}` is `coach` or `builder`.
+
+A local skill with the same name as a built-in skill will shadow it, letting you customize behavior per-project.
+
+### Skill matching
+
+When you run `spekk coach meeting`, the resolver tries three strategies:
+
+1. **Filename match** -- looks for `meeting.md` in each skill directory
+2. **Legacy alias** -- maps `meeting` → `meeting-notes-to-specs-skill.md`
+3. **Frontmatter ID** -- scans all `.md` files for a `id: meeting` field in YAML frontmatter
 
 ---
 
-## Meeting notes to specs
+## Built-in coach skills
+
+### Meeting notes to specs
 
 Process meeting transcripts into structured outputs.
 
 **CLI:** `spekk coach meeting [file]`
 
-**Triggers:** "meeting notes", "meeting transcript", "process meeting", "standup notes"
-
-### What it extracts
+**Aliases:** `meeting` → `meeting-notes-to-specs-skill`
 
 === "Todos"
 
@@ -62,7 +83,7 @@ Process meeting transcripts into structured outputs.
     We decided to use Redis instead of in-memory storage because...
     ```
 
-### Workflow
+#### Workflow
 
 1. Provide meeting transcript (paste or file)
 2. Coach categorizes: action items → todos, feature requests → specs, decisions → context
@@ -72,19 +93,19 @@ Process meeting transcripts into structured outputs.
 
 ---
 
-## Coordinator
+### Coordinator
 
 Create a dependency-aware work plan with branch assignments.
 
 **CLI:** `spekk coach coordinate`
 
-**Triggers:** "plan the work", "dependency graph", "coordinate development", "organize branches"
+**Aliases:** `coordinate` → `coordinator-skill`
 
-### What it does
+#### What it does
 
 Analyzes all `draft` and `not_started` assertions, identifies prerequisites, groups related work into feature branches, and updates YAML frontmatter.
 
-### Example output
+#### Example output
 
 ```
 Dependency Analysis
@@ -105,7 +126,7 @@ main (isolated work):
   update-button-styles (no dependencies)
 ```
 
-### YAML changes
+#### YAML changes
 
 Before:
 
@@ -135,22 +156,24 @@ After updating, the coordinator validates with the parser to catch errors before
 
 ---
 
-## Business model validator
+### Business model validator
 
 Assess startup or business ideas through structured questions.
 
-**CLI:** `spekk coach` (interactive -- trigger by asking)
+**CLI:** `spekk coach validate`
+
+**Aliases:** `validate` → `business-model-validator-skill`
 
 **Triggers:** "validate business model", "startup validation", "is this viable"
 
-### How it works
+#### How it works
 
 1. Asks structured questions (problem, market, solution, competition, business model)
 2. Scores responses across dimensions
 3. Provides a quantitative health score
 4. Identifies risks and opportunities
 
-### Example
+#### Example
 
 ```
 Business Model Health Score: 72/100
@@ -172,7 +195,20 @@ Recommendations:
 
 ## Creating custom skills
 
-Create a markdown file in `specs/coach-skills-system/`:
+Create a markdown file in your local or global skills directory:
+
+```bash
+# Local (this project only)
+.spekk/skills/coach/my-skill.md
+
+# Global (all projects)
+~/.spekk/skills/coach/my-skill.md
+
+# Builder skills work the same way
+.spekk/skills/builder/my-skill.md
+```
+
+### Skill file format
 
 ```markdown
 ---
@@ -201,7 +237,12 @@ Brief description of what this skill does.
 - Success criterion 2
 ```
 
-The coach automatically detects and uses any skill file in that directory.
+Once created, invoke it directly:
+
+```bash
+spekk coach my-skill
+spekk builder my-skill
+```
 
 ### Tips for good skills
 

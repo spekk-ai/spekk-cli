@@ -83,20 +83,6 @@ Choose whichever fits your team.
 
 ---
 
-## Environment variables
-
-### `GEMFURY_SPEKK_TOKEN`
-
-Authentication token for the private npm registry.
-
-```bash
-export GEMFURY_SPEKK_TOKEN=your_token_here
-```
-
-Required for `npm install -g @spekk/cli`.
-
----
-
 ## Project structure
 
 Spekk expects specs in a `specs/` directory at the project root:
@@ -109,11 +95,31 @@ your-project/
 │   │   └── assertions/
 │   │       └── assertion-name.md
 │   └── ...
-├── .spekk/                 # Local prompt customizations
-│   ├── builder.prompt.md
-│   └── coach.prompt.md
+├── .spekk/                 # Local customizations
+│   ├── builder.prompt.md   # Extend builder prompt
+│   ├── coach.prompt.md     # Extend coach prompt
+│   └── skills/             # Custom skills
+│       ├── coach/
+│       │   └── my-skill.md
+│       └── builder/
+│           └── my-skill.md
 ├── TODOS.md                # Meeting-extracted action items
 └── CONTEXT.md              # Architecture decisions
 ```
 
 The spec directory structure is detected automatically -- no configuration needed.
+
+---
+
+## Environment variables
+
+Sandbox commands require the following environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `DO_API_TOKEN` | DigitalOcean API token for provisioning droplets |
+| `GITHUB_TOKEN` | GitHub token for agent access to repositories |
+| `AWS_ACCESS_KEY_ID` | AWS credentials for sandbox services |
+| `AWS_SECRET_ACCESS_KEY` | AWS credentials for sandbox services |
+| `AWS_DEFAULT_REGION` | AWS region (e.g. `us-east-1`) |
+| `SPEKK_HOST` | Spekk API host for sandbox registration |

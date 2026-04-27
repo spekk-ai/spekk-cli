@@ -30,18 +30,40 @@ graph LR
 
 ## Quick start
 
+=== "macOS (Apple Silicon)"
+
+    ```bash
+    curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-arm64 -o /usr/local/bin/spekk
+    chmod +x /usr/local/bin/spekk
+    ```
+
+=== "macOS (Intel)"
+
+    ```bash
+    curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-amd64 -o /usr/local/bin/spekk
+    chmod +x /usr/local/bin/spekk
+    ```
+
+=== "Linux (x86_64)"
+
+    ```bash
+    curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-amd64 -o /usr/local/bin/spekk
+    chmod +x /usr/local/bin/spekk
+    ```
+
+=== "Linux (ARM64)"
+
+    ```bash
+    curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-arm64 -o /usr/local/bin/spekk
+    chmod +x /usr/local/bin/spekk
+    ```
+
+Then start building:
+
 ```bash
-# Install
-npm install -g @spekk/cli
-
-# Create a spec with the coach
-spekk coach
-
-# See what's next
-spekk next
-
-# Build it
-spekk builder --once
+spekk coach       # Create a spec
+spekk next        # See what's next
+spekk builder     # Build it
 ```
 
 [Get started](getting-started.md){ .md-button .md-button--primary }
@@ -58,6 +80,8 @@ spekk builder --once
 | `spekk coach` | Launch the coach agent to create specs |
 | `spekk status` | Comprehensive overview of all specs |
 | `spekk show` | Interactive web-based spec explorer |
+| `spekk serve` | WebSocket server for browser extension |
+| `spekk sandbox` | Manage cloud sandbox environments |
 
 ---
 

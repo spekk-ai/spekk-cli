@@ -49,9 +49,17 @@ nav = [
   { "Getting Started" = "getting-started.md" },
   { "Concepts" = "concepts.md" },
   { "CLI Reference" = "cli-reference.md" },
-  { "Coach Skills" = "coach-skills.md" },
+  { "Skills" = "coach-skills.md" },
   { "Configuration" = "configuration.md" },
-  { "Release Notes" = "release-notes/index.md" },
+  { "Release Notes" = [
+    "release-notes/index.md",
+    { "1.4.0 — Layered Prompts, Sandboxes, WebSocket Server" = "release-notes/RELEASE-NOTES-1.4.0.md" },
+    { "1.3.0 — Cloud Sandboxes" = "release-notes/RELEASE-NOTES-1.3.0.md" },
+    { "1.2.4 — Live Reload + Searchbar" = "release-notes/RELEASE-NOTES-1.2.4.md" },
+    { "1.2.1 — Dependency Visualization" = "release-notes/RELEASE-NOTES-1.2.1.md" },
+    { "1.2.0 — Coordinator Skill & Skills Architecture" = "release-notes/RELEASE-NOTES-1.2.0.md" },
+    { "1.1.0 — Builder CLI Flags" = "release-notes/RELEASE-NOTES-1.1.0.md" },
+  ] },
 ]
 
 # With the "extra_css" option you can add your own CSS styling to customize
