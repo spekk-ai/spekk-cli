@@ -19,8 +19,9 @@ import (
 )
 
 func main() {
-	// Set embedded prompts so agents work when binary is installed outside source tree
+	// Set embedded assets so agents and skills work when binary is installed outside source tree
 	cli.DefaultEmbeddedFS = spekk.PromptFS
+	cli.DefaultEmbeddedSkillFS = spekk.PromptFS
 
 	args := os.Args[1:]
 

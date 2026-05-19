@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 )
 
 func setupSkillDirs(t *testing.T, agent string) (home, cwd, install string) {
@@ -203,5 +204,174 @@ func TestResolveSkill_CoordinateAlias(t *testing.T) {
 	}
 	if skill.Name != "coordinator-skill" {
 		t.Errorf("expected coordinator-skill, got %s", skill.Name)
+	}
+}
+
+func TestResolveSkill_EmbeddedFallback(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/coach-skills-system/coordinator-skill.md": &fstest.MapFile{
+			Data: []byte("# Embedded Coordinator"),
+		},
+	}
+
+	r := &SkillResolver{
+		HomeDir:    t.TempDir(),
+		Cwd:        t.TempDir(),
+		InstallDir: t.TempDir(),
+		EmbeddedFS: efs,
+	}
+
+	skill := r.ResolveSkill("coach", "coordinator-skill")
+	if skill == nil {
+		t.Fatal("expected embedded skill")
+	}
+	if skill.Content != "# Embedded Coordinator" {
+		t.Errorf("unexpected content: %s", skill.Content)
+	}
+	if skill.Source != "(embedded)" {
+		t.Errorf("expected source (embedded), got %s", skill.Source)
+	}
+}
+
+func TestResolveSkill_EmbeddedAliasResolution(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/coach-skills-system/coordinator-skill.md": &fstest.MapFile{
+			Data: []byte("# Embedded Coordinator"),
+		},
+	}
+
+	r := &SkillResolver{
+		HomeDir:    t.TempDir(),
+		Cwd:        t.TempDir(),
+		InstallDir: t.TempDir(),
+		EmbeddedFS: efs,
+	}
+
+	// "coordinate" is a legacy alias for "coordinator-skill"
+	skill := r.ResolveSkill("coach", "coordinate")
+	if skill == nil {
+		t.Fatal("expected embedded skill via alias")
+	}
+	if skill.Name != "coordinator-skill" {
+		t.Errorf("expected coordinator-skill, got %s", skill.Name)
+	}
+}
+
+func TestResolveSkill_FilesystemShadowsEmbedded(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/coach-skills-system/coordinator-skill.md": &fstest.MapFile{
+			Data: []byte("# Embedded Version"),
+		},
+	}
+
+	home, cwd, install := setupSkillDirs(t, "coach")
+	localDir := filepath.Join(cwd, ".spekk", "skills", "coach")
+	writeSkillFile(t, localDir, "coordinator-skill.md", "# Local Version")
+
+	r := &SkillResolver{
+		HomeDir:    home,
+		Cwd:        cwd,
+		InstallDir: install,
+		EmbeddedFS: efs,
+	}
+
+	skill := r.ResolveSkill("coach", "coordinator-skill")
+	if skill == nil {
+		t.Fatal("expected skill")
+	}
+	if skill.Content != "# Local Version" {
+		t.Error("filesystem should shadow embedded")
+	}
+	if skill.Source == "(embedded)" {
+		t.Error("source should not be embedded when filesystem has the skill")
+	}
+}
+
+func TestListSkills_IncludesEmbedded(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/coach-skills-system/coordinator-skill.md": &fstest.MapFile{
+			Data: []byte("# Coordinator"),
+		},
+		"specs/coach-skills-system/meeting-notes-to-specs-skill.md": &fstest.MapFile{
+			Data: []byte("# Meeting"),
+		},
+	}
+
+	r := &SkillResolver{
+		HomeDir:    t.TempDir(),
+		Cwd:        t.TempDir(),
+		InstallDir: t.TempDir(),
+		EmbeddedFS: efs,
+	}
+
+	skills := r.ListSkills("coach")
+	names := map[string]bool{}
+	for _, s := range skills {
+		names[s.Name] = true
+	}
+
+	if !names["coordinator-skill"] {
+		t.Error("expected coordinator-skill in list")
+	}
+	if !names["meeting-notes-to-specs-skill"] {
+		t.Error("expected meeting-notes-to-specs-skill in list")
+	}
+}
+
+func TestListSkills_FilesystemShadowsEmbedded(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/coach-skills-system/coordinator-skill.md": &fstest.MapFile{
+			Data: []byte("# Embedded"),
+		},
+	}
+
+	home, cwd, install := setupSkillDirs(t, "coach")
+	localDir := filepath.Join(cwd, ".spekk", "skills", "coach")
+	writeSkillFile(t, localDir, "coordinator-skill.md", "# Local")
+
+	r := &SkillResolver{
+		HomeDir:    home,
+		Cwd:        cwd,
+		InstallDir: install,
+		EmbeddedFS: efs,
+	}
+
+	skills := r.ListSkills("coach")
+	for _, s := range skills {
+		if s.Name == "coordinator-skill" {
+			if s.Source == "(embedded)" {
+				t.Error("filesystem should shadow embedded in ListSkills")
+			}
+			return
+		}
+	}
+	t.Error("expected coordinator-skill in list")
+}
+
+func TestResolveSkill_DefaultEmbeddedSkillFS(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/coach-skills-system/coordinator-skill.md": &fstest.MapFile{
+			Data: []byte("# Default Embedded"),
+		},
+	}
+
+	// Set the package-level default
+	old := DefaultEmbeddedSkillFS
+	DefaultEmbeddedSkillFS = efs
+	defer func() { DefaultEmbeddedSkillFS = old }()
+
+	r := &SkillResolver{
+		HomeDir:    t.TempDir(),
+		Cwd:        t.TempDir(),
+		InstallDir: t.TempDir(),
+		// EmbeddedFS not set — should fall back to DefaultEmbeddedSkillFS
+	}
+
+	skill := r.ResolveSkill("coach", "coordinator-skill")
+	if skill == nil {
+		t.Fatal("expected skill from DefaultEmbeddedSkillFS")
+	}
+	if skill.Content != "# Default Embedded" {
+		t.Errorf("unexpected content: %s", skill.Content)
 	}
 }

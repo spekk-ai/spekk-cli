@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,11 +23,16 @@ var packageSkillDirNames = map[string]string{
 	"builder": "specs/builder-skills",
 }
 
+// DefaultEmbeddedSkillFS is the embedded filesystem containing built-in skill files.
+// Set this from main() before any skill resolution occurs.
+var DefaultEmbeddedSkillFS fs.FS
+
 // SkillResolver discovers and loads skill files using layered resolution.
 type SkillResolver struct {
 	HomeDir    string
 	Cwd        string
 	InstallDir string
+	EmbeddedFS fs.FS // override for testing; falls back to DefaultEmbeddedSkillFS
 }
 
 // NewSkillResolver creates a resolver with default paths.
@@ -57,6 +63,15 @@ func (r *SkillResolver) skillDirs(agent string) []string {
 		dirs = append(dirs, filepath.Join(r.InstallDir, relDir))
 	}
 	return dirs
+}
+
+// embeddedFS returns the embedded filesystem to use, preferring the
+// instance field over the package-level default.
+func (r *SkillResolver) embeddedFS() fs.FS {
+	if r.EmbeddedFS != nil {
+		return r.EmbeddedFS
+	}
+	return DefaultEmbeddedSkillFS
 }
 
 // parseFrontmatterID extracts the `id` field from YAML frontmatter.
@@ -133,6 +148,60 @@ func (r *SkillResolver) ResolveSkill(agent, subcommand string) *Skill {
 		}
 	}
 
+	// Fallback: check embedded FS
+	if skill := r.resolveFromEmbedded(agent, resolvedName, subcommand); skill != nil {
+		return skill
+	}
+
+	return nil
+}
+
+// resolveFromEmbedded searches the embedded filesystem for a skill.
+func (r *SkillResolver) resolveFromEmbedded(agent, resolvedName, subcommand string) *Skill {
+	efs := r.embeddedFS()
+	if efs == nil {
+		return nil
+	}
+	relDir, ok := packageSkillDirNames[agent]
+	if !ok {
+		return nil
+	}
+
+	// Direct filename match
+	path := relDir + "/" + resolvedName + ".md"
+	if data, err := fs.ReadFile(efs, path); err == nil {
+		return &Skill{Name: resolvedName, Content: string(data), Source: "(embedded)"}
+	}
+
+	// Try original subcommand name if alias resolved
+	if subcommand != resolvedName {
+		path = relDir + "/" + subcommand + ".md"
+		if data, err := fs.ReadFile(efs, path); err == nil {
+			return &Skill{Name: subcommand, Content: string(data), Source: "(embedded)"}
+		}
+	}
+
+	// Scan embedded dir for frontmatter id match
+	entries, err := fs.ReadDir(efs, relDir)
+	if err != nil {
+		return nil
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		data, err := fs.ReadFile(efs, relDir+"/"+entry.Name())
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		fmID := parseFrontmatterID(content)
+		if fmID == resolvedName || fmID == subcommand {
+			stem := strings.TrimSuffix(entry.Name(), ".md")
+			return &Skill{Name: stem, Content: content, Source: "(embedded)"}
+		}
+	}
+
 	return nil
 }
 
@@ -172,6 +241,27 @@ func (r *SkillResolver) ListSkills(agent string) []SkillEntry {
 			}
 			seen[stem] = true
 			skills = append(skills, SkillEntry{Name: stem, Source: dir})
+		}
+	}
+
+	// Fallback: merge skills from embedded FS (filesystem still shadows)
+	efs := r.embeddedFS()
+	if efs != nil {
+		if relDir, ok := packageSkillDirNames[agent]; ok {
+			entries, err := fs.ReadDir(efs, relDir)
+			if err == nil {
+				for _, entry := range entries {
+					if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+						continue
+					}
+					stem := strings.TrimSuffix(entry.Name(), ".md")
+					if seen[stem] {
+						continue
+					}
+					seen[stem] = true
+					skills = append(skills, SkillEntry{Name: stem, Source: "(embedded)"})
+				}
+			}
 		}
 	}
 
