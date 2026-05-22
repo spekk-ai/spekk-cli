@@ -3,9 +3,10 @@ id: install-fetches-from-official-registry
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: install-command-parses-args
 branch: feature/skill-install-system
+locked-by: builder-Paris-MacBook-Pro-50904-1779478654
 ---
 
 # Install Fetches from Official Registry by Default
