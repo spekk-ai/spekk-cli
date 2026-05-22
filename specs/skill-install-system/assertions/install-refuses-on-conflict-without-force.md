@@ -3,7 +3,8 @@ id: install-refuses-on-conflict-without-force
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro.local-58936-1779479119
 depends-on: install-fetches-from-official-registry
 branch: feature/skill-install-system
 ---
