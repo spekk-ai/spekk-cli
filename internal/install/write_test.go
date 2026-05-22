@@ -137,6 +137,104 @@ func TestPerformInstall_GlobalScopeWritesUnderHomeAndIsResolvable(t *testing.T) 
 	}
 }
 
+func TestPerformInstall_RefusesWhenDestExistsWithoutForceAndSkipsFetch(t *testing.T) {
+	cwd := t.TempDir()
+	dest, _ := Destination(cwd, "/home/u", ScopeLocal, "coach", "meeting-notes")
+	original := []byte("local customizations — do not clobber\n")
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(dest, original, 0644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	fetchCalls := 0
+	urlCalls := 0
+	_, err := PerformInstall(InstallRequest{
+		Cwd:     cwd,
+		HomeDir: "/home/u",
+		Scope:   ScopeLocal,
+		Agent:   "coach",
+		Skill:   "meeting-notes",
+		Force:   false,
+		FetchFn: func(agent, skill string) ([]byte, error) {
+			fetchCalls++
+			return []byte("remote"), nil
+		},
+		FetchURL: func(url string) ([]byte, error) {
+			urlCalls++
+			return []byte("remote"), nil
+		},
+	})
+	if err == nil {
+		t.Fatal("expected conflict error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, dest) {
+		t.Errorf("error should name absolute conflicting path %q, got: %s", dest, msg)
+	}
+	if !strings.Contains(msg, "--force") {
+		t.Errorf("error should mention --force, got: %s", msg)
+	}
+	if fetchCalls != 0 || urlCalls != 0 {
+		t.Errorf("no HTTP fetch should occur on conflict; got fetchCalls=%d urlCalls=%d", fetchCalls, urlCalls)
+	}
+
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read existing file: %v", err)
+	}
+	if string(got) != string(original) {
+		t.Errorf("existing file was modified on conflict: got %q want %q", got, original)
+	}
+}
+
+func TestPerformInstall_ForceOverwritesForRegistryAndSource(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+	}{
+		{name: "registry", source: ""},
+		{name: "source", source: "https://example.com/foo.md"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cwd := t.TempDir()
+			dest, _ := Destination(cwd, "/home/u", ScopeLocal, "coach", "meeting-notes")
+			if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+			if err := os.WriteFile(dest, []byte("stale\n"), 0644); err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+
+			fresh := []byte("fresh content\n")
+			_, err := PerformInstall(InstallRequest{
+				Cwd:      cwd,
+				HomeDir:  "/home/u",
+				Scope:    ScopeLocal,
+				Agent:    "coach",
+				Skill:    "meeting-notes",
+				Source:   tc.source,
+				Force:    true,
+				FetchFn:  func(agent, skill string) ([]byte, error) { return fresh, nil },
+				FetchURL: func(url string) ([]byte, error) { return fresh, nil },
+			})
+			if err != nil {
+				t.Fatalf("PerformInstall with --force: %v", err)
+			}
+
+			got, err := os.ReadFile(dest)
+			if err != nil {
+				t.Fatalf("read after force: %v", err)
+			}
+			if string(got) != string(fresh) {
+				t.Errorf("force did not overwrite: got %q want %q", got, fresh)
+			}
+		})
+	}
+}
+
 func TestRunInstall_DefaultsToLocalAndPrintsAbsolutePath(t *testing.T) {
 	cwd := t.TempDir()
 	body := []byte("---\nid: meeting-notes\n---\n# m\n")

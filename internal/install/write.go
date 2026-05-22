@@ -75,10 +75,21 @@ type InstallRequest struct {
 // PerformInstall fetches the skill body, writes it to the scope-resolved
 // destination, and returns the one-line confirmation message that the CLI
 // should print to stdout.
+//
+// When the destination already exists and --force is not set, the function
+// returns an error WITHOUT making any HTTP request — existence is checked
+// before fetching so failed installs don't burn network calls or registry
+// rate limit.
 func PerformInstall(req InstallRequest) (string, error) {
 	dest, err := Destination(req.Cwd, req.HomeDir, req.Scope, req.Agent, req.Skill)
 	if err != nil {
 		return "", err
+	}
+
+	if !req.Force {
+		if _, err := os.Stat(dest); err == nil {
+			return "", fmt.Errorf("file already exists at %s (pass --force to overwrite)", dest)
+		}
 	}
 
 	var body []byte
