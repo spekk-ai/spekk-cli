@@ -3,7 +3,8 @@ id: install-command-parses-args
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro-46286-1779478404
 branch: feature/skill-install-system
 ---
 
