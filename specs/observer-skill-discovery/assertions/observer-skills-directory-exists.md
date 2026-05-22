@@ -3,8 +3,9 @@ id: observer-skills-directory-exists
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: not_started
+status: in_progress
 branch: feature/observer-skill-discovery
+locked-by: builder-Paris-MacBook-Pro-60401-1779479206
 ---
 
 # Observer Skills Package Directory Exists With Coverage-Gap Seed
