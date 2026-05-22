@@ -64,6 +64,9 @@ func main() {
 	case "install":
 		runInstall(args[1:])
 
+	case "uninstall":
+		runUninstall(args[1:])
+
 	case "skills":
 		runSkills(args[1:])
 
@@ -581,6 +584,34 @@ func runInstall(args []string) {
 	fmt.Println(msg)
 }
 
+// runUninstall handles `spekk uninstall <agent> <skill> [--global|--local]`.
+func runUninstall(args []string) {
+	opts, err := install.ParseUninstallArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n\n", err)
+		fmt.Fprint(os.Stderr, install.UninstallUsageText)
+		os.Exit(1)
+	}
+	if opts.Help {
+		fmt.Print(install.UninstallUsageText)
+		return
+	}
+
+	home, _ := os.UserHomeDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	removed, err := install.Uninstall(cwd, home, opts.Scope, opts.Agent, opts.Skill)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("removed %s/%s ← %s\n", opts.Agent, opts.Skill, removed)
+}
+
 // runSkills handles `spekk skills <subcommand>`. Today the only subcommand
 // is `list`, which wraps SkillResolver.ListSkills and prints each entry's
 // name and source directory (or "(embedded)").
@@ -643,6 +674,7 @@ COMMANDS:
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
   install   Install a skill for an agent (coach/builder/observer)
+  uninstall Remove an installed skill from local or global scope
   skills    Inspect skills available to an agent (list)
   loop      Run orchestration workflows (builder/coach loops)
   help      Show this help message

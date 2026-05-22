@@ -72,3 +72,81 @@ func TestUninstall_RefusesToTouchOutsideScopeDir(t *testing.T) {
 		t.Errorf("uninstall touched a file outside the scope dir: %v", statErr)
 	}
 }
+
+func TestUninstall_GlobalScopeUsesHomeDir(t *testing.T) {
+	home := t.TempDir()
+	dest, _ := Destination("/some/cwd", home, ScopeGlobal, "coach", "meeting-notes")
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(dest, []byte("body"), 0644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	removed, err := Uninstall("/some/cwd", home, ScopeGlobal, "coach", "meeting-notes")
+	if err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	wantPrefix := filepath.Join(home, ".spekk", "skills", "coach")
+	if !strings.HasPrefix(removed, wantPrefix) {
+		t.Errorf("global scope: removed path %q should be under %q", removed, wantPrefix)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Errorf("file still exists after global uninstall: %v", err)
+	}
+}
+
+func TestParseUninstallArgs_DefaultLocalScope(t *testing.T) {
+	opts, err := ParseUninstallArgs([]string{"coach", "meeting-notes"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opts.Agent != "coach" || opts.Skill != "meeting-notes" {
+		t.Errorf("positionals: agent=%q skill=%q", opts.Agent, opts.Skill)
+	}
+	if opts.Scope != ScopeLocal {
+		t.Errorf("scope: want local, got %s", opts.Scope)
+	}
+}
+
+func TestParseUninstallArgs_GlobalScope(t *testing.T) {
+	opts, err := ParseUninstallArgs([]string{"coach", "meeting-notes", "--global"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opts.Scope != ScopeGlobal {
+		t.Errorf("scope: want global, got %s", opts.Scope)
+	}
+}
+
+func TestParseUninstallArgs_GlobalAndLocalConflict(t *testing.T) {
+	_, err := ParseUninstallArgs([]string{"coach", "foo", "--global", "--local"})
+	if err == nil {
+		t.Fatal("expected error for --global + --local")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "mutually exclusive") {
+		t.Errorf("error should explain mutual exclusion, got: %s", err)
+	}
+}
+
+func TestParseUninstallArgs_MissingSkill(t *testing.T) {
+	_, err := ParseUninstallArgs([]string{"coach"})
+	if err == nil {
+		t.Fatal("expected error when <skill> is omitted")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "skill") {
+		t.Errorf("error should mention missing skill, got: %s", err)
+	}
+}
+
+func TestParseUninstallArgs_UnknownAgent(t *testing.T) {
+	_, err := ParseUninstallArgs([]string{"bogus", "foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown agent")
+	}
+	for _, valid := range ValidAgents {
+		if !strings.Contains(err.Error(), valid) {
+			t.Errorf("error should list valid agent %q, got: %s", valid, err)
+		}
+	}
+}

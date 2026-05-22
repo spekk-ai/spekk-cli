@@ -1,11 +1,110 @@
 package install
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
+
+// UninstallOptions holds parsed `spekk uninstall` arguments.
+type UninstallOptions struct {
+	Agent string
+	Skill string
+	Scope Scope
+	Help  bool
+}
+
+var uninstallFlags = cli.FlagSet{
+	"global": {Names: []string{"--global"}, Type: cli.BoolFlag},
+	"local":  {Names: []string{"--local"}, Type: cli.BoolFlag},
+	"help":   {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+}
+
+var uninstallFlagNames = map[string]bool{
+	"--global": true,
+	"--local":  true,
+	"--help":   true,
+	"-h":       true,
+}
+
+// ParseUninstallArgs parses `spekk uninstall <agent> <skill> [--global|--local]`.
+func ParseUninstallArgs(args []string) (*UninstallOptions, error) {
+	parsed := cli.ParseFlags(args, uninstallFlags)
+
+	opts := &UninstallOptions{
+		Help: parsed.Bool("help"),
+	}
+
+	global := parsed.Bool("global")
+	local := parsed.Bool("local")
+	if global && local {
+		return nil, errors.New("--global and --local are mutually exclusive")
+	}
+	if global {
+		opts.Scope = ScopeGlobal
+	} else {
+		opts.Scope = ScopeLocal
+	}
+
+	if opts.Help {
+		return opts, nil
+	}
+
+	positionals := extractUninstallPositionals(args)
+
+	if len(positionals) == 0 {
+		return nil, errors.New("missing <agent> argument")
+	}
+	opts.Agent = positionals[0]
+	if !isValidAgent(opts.Agent) {
+		return nil, unknownAgentError(opts.Agent)
+	}
+
+	if len(positionals) < 2 {
+		return nil, errors.New("missing <skill> argument")
+	}
+	opts.Skill = positionals[1]
+
+	return opts, nil
+}
+
+func extractUninstallPositionals(args []string) []string {
+	var positionals []string
+	for _, a := range args {
+		if uninstallFlagNames[a] {
+			continue
+		}
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		positionals = append(positionals, a)
+	}
+	return positionals
+}
+
+// UninstallUsageText is the help text printed for `spekk uninstall --help`.
+const UninstallUsageText = `spekk uninstall - Remove an installed skill
+
+USAGE:
+  spekk uninstall <agent> <skill> [--global|--local]
+
+ARGUMENTS:
+  <agent>   One of: coach, builder, observer
+  <skill>   Name of the skill to remove
+
+OPTIONS:
+  --global    Remove from ~/.spekk/skills/<agent>/ (user-wide)
+  --local     Remove from <cwd>/.spekk/skills/<agent>/ (default)
+  --help, -h  Show this help message
+
+EXAMPLES:
+  spekk uninstall coach meeting-notes
+  spekk uninstall builder my-skill --global
+`
 
 // Uninstall deletes the skill file at the scope-resolved destination for
 // (agent, skill). Returns the absolute path that was removed (for the
