@@ -64,7 +64,7 @@ func BuildObserverOptionsMessage(cfg ObserverConfig) string {
 func RunObserver(args []string, installDir string) {
 	// Handle help
 	if hasHelp(args) {
-		showObserverHelp()
+		ShowHelp(installDir, "observer")
 		return
 	}
 
@@ -138,21 +138,3 @@ func RunObserver(args []string, installDir string) {
 	}
 }
 
-func showObserverHelp() {
-	fmt.Print(`
-spekk observer - Intelligent spec-code drift monitoring with Claude
-
-USAGE:
-  spekk observer [OPTIONS]
-
-OPTIONS:
-  --interval <seconds>   Preferred scan interval (Claude agent can adjust)
-  --quiet                Preference for minimal output (Claude agent decides)
-  --help, -h             Show this help message
-
-EXAMPLES:
-  spekk observer                    # Launch Claude agent observer
-  spekk observer --interval 60      # Observer with 60s interval preference
-  spekk observer --quiet            # Observer with quiet preference
-`)
-}

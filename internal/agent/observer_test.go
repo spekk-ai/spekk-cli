@@ -248,3 +248,29 @@ func mustGetwd(t *testing.T) string {
 	}
 	return wd
 }
+
+// TestObserverHelp_UsesSharedHelper verifies the observer help path produces
+// the same shape of output as ShowHelp (dynamic skill list + observer-specific
+// options) rather than the old hardcoded string.
+func TestObserverHelp_UsesSharedHelper(t *testing.T) {
+	install := setupObserverSkill(t, "coverage-gap", "# Coverage Gap")
+
+	for _, flag := range []string{"--help", "-h", "help"} {
+		t.Run(flag, func(t *testing.T) {
+			out := buildHelpText(install, "observer")
+			if !strings.Contains(out, "AVAILABLE SKILLS:") {
+				t.Errorf("%s: help missing AVAILABLE SKILLS section", flag)
+			}
+			if !strings.Contains(out, "coverage-gap") {
+				t.Errorf("%s: help missing dynamically discovered skill", flag)
+			}
+			if !strings.Contains(out, "--interval") || !strings.Contains(out, "--quiet") {
+				t.Errorf("%s: help missing observer-specific options", flag)
+			}
+			// Sanity check: hasHelp() detects this arg.
+			if !hasHelp([]string{flag}) {
+				t.Errorf("hasHelp should detect %q", flag)
+			}
+		})
+	}
+}
