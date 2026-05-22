@@ -3,7 +3,8 @@ id: install-global-scope-writes-to-home
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-PARIs-MacBook-Pro-local-12345-1747936800
 depends-on: install-fetches-from-official-registry
 branch: feature/skill-install-system
 ---
