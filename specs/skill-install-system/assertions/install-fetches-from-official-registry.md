@@ -4,6 +4,8 @@ parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
 status: not_started
+depends-on: install-command-parses-args
+branch: feature/skill-install-system
 ---
 
 # Install Fetches from Official Registry by Default

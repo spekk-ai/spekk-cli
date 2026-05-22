@@ -4,6 +4,7 @@ parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
 status: not_started
+branch: feature/skill-install-system
 ---
 
 # Install Command Parses Agent, Skill, and Flags

@@ -4,6 +4,8 @@ parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 2
 status: not_started
+depends-on: install-fetches-from-official-registry
+branch: feature/skill-install-system
 ---
 
 # `spekk install --list` Shows the Remote Registry

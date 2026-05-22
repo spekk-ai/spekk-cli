@@ -4,6 +4,7 @@ parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 2
 status: not_started
+branch: feature/observer-skill-discovery
 ---
 
 # Observation Output Contract Is Documented And Followed

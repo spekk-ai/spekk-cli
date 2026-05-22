@@ -4,6 +4,8 @@ parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 2
 status: not_started
+depends-on: install-default-scope-is-local
+branch: feature/skill-install-system
 ---
 
 # Install Module Has Unit Tests

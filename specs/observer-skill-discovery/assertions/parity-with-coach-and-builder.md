@@ -5,6 +5,7 @@ created: 2026-05-22T12:00:00Z
 priority: 3
 status: not_started
 depends-on: run-observer-detects-skill
+branch: feature/observer-skill-discovery
 ---
 
 # Observer Has Skill Parity With Coach and Builder
