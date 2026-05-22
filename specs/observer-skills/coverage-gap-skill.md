@@ -1,5 +1,6 @@
 ---
 id: coverage-gap
+description: Inverse-drift scan that finds implementation code in internal/ with no spec or assertion referencing it
 created: 2026-05-22T12:00:00Z
 priority: 2
 ---
