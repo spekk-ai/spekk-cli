@@ -3,9 +3,10 @@ id: install-default-scope-is-local
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: install-fetches-from-official-registry
 branch: feature/skill-install-system
+locked-by: builder-Paris-MacBook-Pro.local-53774-1779478819
 ---
 
 # Install Defaults to Local Scope
