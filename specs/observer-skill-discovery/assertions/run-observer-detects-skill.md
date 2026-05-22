@@ -3,9 +3,10 @@ id: run-observer-detects-skill
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: skill-resolver-includes-observer
 branch: feature/observer-skill-discovery
+locked-by: builder-Paris-MacBook-Pro.local-48805-1779478538
 ---
 
 # RunObserver Detects and Activates Skills
