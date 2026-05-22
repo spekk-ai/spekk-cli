@@ -3,7 +3,7 @@ id: observer-help-lists-skills
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: skill-resolver-includes-observer
 branch: feature/observer-skill-discovery
 ---
@@ -13,6 +13,8 @@ branch: feature/observer-skill-discovery
 ## Description
 
 `spekk observer --help` lists available observer skills from all layers (local, global, package, embedded) by delegating to the shared `ShowHelp` helper in `internal/agent/launcher.go`, the same pattern coach and builder use.
+
+**Tests:** internal/agent/launcher_test.go, internal/agent/observer_test.go
 
 ## Success Criteria
 

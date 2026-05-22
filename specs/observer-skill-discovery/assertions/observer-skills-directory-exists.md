@@ -3,7 +3,7 @@ id: observer-skills-directory-exists
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: not_started
+status: done
 branch: feature/observer-skill-discovery
 ---
 
@@ -12,6 +12,8 @@ branch: feature/observer-skill-discovery
 ## Description
 
 `specs/observer-skills/` exists as the package-shipped skill directory for observer, containing the `coverage-gap` seed skill. This skill provides a different lens from the default observer loop — instead of checking spec→code (what specs declare vs. what's implemented), it checks code→spec (what code exists with no spec backing it).
+
+**Tests:** embedded_test.go
 
 ## Success Criteria
 

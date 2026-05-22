@@ -14,13 +14,15 @@ var legacyAliases = map[string]map[string]string{
 		"meeting":    "meeting-notes-to-specs-skill",
 		"coordinate": "coordinator-skill",
 	},
-	"builder": {},
+	"builder":  {},
+	"observer": {},
 }
 
 // packageSkillDirNames maps agent → relative directory under installDir.
 var packageSkillDirNames = map[string]string{
-	"coach":   "specs/coach-skills-system",
-	"builder": "specs/builder-skills",
+	"coach":    "specs/coach-skills-system",
+	"builder":  "specs/builder-skills",
+	"observer": "specs/observer-skills",
 }
 
 // DefaultEmbeddedSkillFS is the embedded filesystem containing built-in skill files.

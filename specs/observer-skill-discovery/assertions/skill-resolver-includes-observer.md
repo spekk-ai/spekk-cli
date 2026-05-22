@@ -3,7 +3,7 @@ id: skill-resolver-includes-observer
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/observer-skill-discovery
 ---
 
@@ -21,3 +21,5 @@ branch: feature/observer-skill-discovery
 - `SkillResolver.ListSkills("observer")` returns observer skills with proper layer-based shadowing (local shadows global shadows package)
 - `legacyAliases` map contains an `"observer"` key (may be empty) so `ListAliases("observer")` never returns nil
 - Embedded FS fallback also works for observer (skills baked into the binary are discoverable)
+
+**Tests:** internal/cli/skill_test.go

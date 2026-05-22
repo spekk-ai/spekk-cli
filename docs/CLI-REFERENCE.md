@@ -265,10 +265,14 @@ Monitor spec-code drift.
 Detect when code changes but specs don't (or vice versa).
 
 ```bash
-spekk observer
+spekk observer                     # Launch default observer loop
+spekk observer <skill>             # Launch observer with a skill active
+spekk observer --interval 60       # Suggest a 60s scan interval
+spekk observer --quiet             # Prefer minimal output
+spekk observer --help              # List available observer skills
 ```
 
-Helps keep specs and implementation synchronized.
+Observer supports the same layered skill discovery as coach and builder. Drop a skill markdown file at `.spekk/skills/observer/` (project) or `~/.spekk/skills/observer/` (global) and it becomes invocable as `spekk observer <skill>`. See [Customizing Agent Skills](../README.md#customizing-agent-skills) in the README for the full pattern.
 
 ---
 
@@ -305,6 +309,7 @@ Show help for specific command.
 ```bash
 spekk coach --help
 spekk builder --help
+spekk observer --help
 spekk next --help
 ```
 

@@ -3,7 +3,7 @@ id: run-observer-detects-skill
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: skill-resolver-includes-observer
 branch: feature/observer-skill-discovery
 ---
@@ -22,3 +22,5 @@ When a user runs `spekk observer <skill-name> [args...]` and `<skill-name>` reso
 - If no skill is provided or the first arg starts with `-` (flag) or doesn't match any skill, observer falls back to its existing flag-parsing behavior (`--interval`, `--quiet`)
 - Skill invocation does not break existing observer flag behavior — `spekk observer --interval 60` still works
 - Tests exist in `internal/agent/` verifying both the skill-found and skill-not-found paths for observer
+
+**Tests:** internal/agent/observer_test.go

@@ -186,3 +186,92 @@ func TestBuildActivationMessage_UnknownAgent(t *testing.T) {
 		t.Fatal("expected error for unknown agent")
 	}
 }
+
+// TestBuildHelpText_ObserverWithSkills verifies observer help includes
+// the dynamic skill list AND observer-specific options/examples.
+func TestBuildHelpText_ObserverWithSkills(t *testing.T) {
+	install := t.TempDir()
+	skillDir := filepath.Join(install, "specs", "observer-skills")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "coverage-gap.md"), []byte("# Coverage Gap"), 0o644)
+
+	// Isolate cwd/home so local/global layers don't shadow.
+	isolated := t.TempDir()
+	t.Setenv("HOME", isolated)
+	origWd, _ := os.Getwd()
+	os.Chdir(isolated)
+	t.Cleanup(func() { os.Chdir(origWd) })
+
+	out := buildHelpText(install, "observer")
+
+	if !strings.Contains(out, "AVAILABLE SKILLS:") {
+		t.Error("help should contain AVAILABLE SKILLS section")
+	}
+	if !strings.Contains(out, "coverage-gap") {
+		t.Error("help should list discovered observer skill")
+	}
+	if !strings.Contains(out, "--interval") {
+		t.Error("help should document observer's --interval option")
+	}
+	if !strings.Contains(out, "--quiet") {
+		t.Error("help should document observer's --quiet option")
+	}
+	if !strings.Contains(out, "spekk observer") {
+		t.Error("help should reference the observer command")
+	}
+}
+
+// TestBuildHelpText_ObserverNoSkills verifies the no-skills fallback.
+func TestBuildHelpText_ObserverNoSkills(t *testing.T) {
+	install := t.TempDir()
+
+	isolated := t.TempDir()
+	t.Setenv("HOME", isolated)
+	origWd, _ := os.Getwd()
+	os.Chdir(isolated)
+	t.Cleanup(func() { os.Chdir(origWd) })
+
+	out := buildHelpText(install, "observer")
+
+	if !strings.Contains(out, "(none found)") {
+		t.Error("help should show (none found) when no skills exist")
+	}
+	if !strings.Contains(out, "--interval") || !strings.Contains(out, "--quiet") {
+		t.Error("observer-specific options must appear even when no skills exist")
+	}
+}
+
+// TestBuildHelpText_ObserverSkillsDeduped verifies skills shadowed by a
+// higher-priority layer appear only once.
+func TestBuildHelpText_ObserverSkillsDeduped(t *testing.T) {
+	install := t.TempDir()
+	pkgDir := filepath.Join(install, "specs", "observer-skills")
+	os.MkdirAll(pkgDir, 0o755)
+	os.WriteFile(filepath.Join(pkgDir, "coverage-gap.md"), []byte("# pkg"), 0o644)
+
+	isolated := t.TempDir()
+	t.Setenv("HOME", isolated)
+	origWd, _ := os.Getwd()
+	os.Chdir(isolated)
+	t.Cleanup(func() { os.Chdir(origWd) })
+
+	// Local layer shadows the package layer for the same skill name.
+	localDir := filepath.Join(isolated, ".spekk", "skills", "observer")
+	os.MkdirAll(localDir, 0o755)
+	os.WriteFile(filepath.Join(localDir, "coverage-gap.md"), []byte("# local"), 0o644)
+
+	out := buildHelpText(install, "observer")
+	// Isolate the AVAILABLE SKILLS section — the EXAMPLES section may also
+	// reference the skill name, which is not a duplicate listing.
+	skillsSection := out
+	if idx := strings.Index(out, "AVAILABLE SKILLS:"); idx >= 0 {
+		skillsSection = out[idx:]
+	}
+	if end := strings.Index(skillsSection, "OPTIONS:"); end >= 0 {
+		skillsSection = skillsSection[:end]
+	}
+	if strings.Count(skillsSection, "coverage-gap") != 1 {
+		t.Errorf("expected coverage-gap to appear once in skills section, got %d:\n%s",
+			strings.Count(skillsSection, "coverage-gap"), skillsSection)
+	}
+}
