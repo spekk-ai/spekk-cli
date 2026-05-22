@@ -3,7 +3,8 @@ id: skill-resolver-includes-observer
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro.local-45706-1779478368
 branch: feature/observer-skill-discovery
 ---
 
