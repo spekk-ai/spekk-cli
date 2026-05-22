@@ -3,8 +3,9 @@ id: observation-output-contract
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: not_started
+status: in_progress
 branch: feature/observer-skill-discovery
+locked-by: builder-Paris-MacBook-Pro.local-52677-1779478757
 ---
 
 # Observation Output Contract Is Documented And Followed
