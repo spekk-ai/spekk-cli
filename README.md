@@ -79,6 +79,53 @@ spekk show -w
 spekk status
 ```
 
+## Installing Skills
+
+Agents (coach, builder, observer) load skills from a layered set of directories: project-local (`<cwd>/.spekk/skills/<agent>/`), global (`~/.spekk/skills/<agent>/`), and the embedded defaults baked into the binary. The `spekk install` command fetches skills from the official registry — [`github.com/spekk-ai/spekk-skills`](https://github.com/spekk-ai/spekk-skills) — and drops them into one of those directories.
+
+### Common Invocations
+
+```bash
+# Install from the registry into the current project (.spekk/skills/<agent>/)
+spekk install coach meeting-notes
+
+# Install globally so every project on your machine can see it (~/.spekk/skills/<agent>/)
+spekk install coach meeting-notes --global
+
+# Install from an arbitrary URL instead of the registry
+spekk install coach my-skill --source https://example.com/skills/my-skill.md
+
+# Uninstall (mirror of install — pick --local or --global to match where it lives)
+spekk uninstall coach meeting-notes
+```
+
+To list everything available to an agent (local + global + embedded):
+
+```bash
+spekk skills list coach
+```
+
+### Overwriting Existing Skills
+
+If a skill file already exists at the destination, `spekk install` refuses to clobber it. Pass `--force` to overwrite:
+
+```bash
+spekk install coach meeting-notes --force
+```
+
+### Self-Hosted Mirrors
+
+The default registry is `github.com/spekk-ai/spekk-skills`. To point `spekk install` at a fork or internal mirror, set these environment variables before running the command:
+
+- `SPEKK_SKILLS_RAW_BASE` — base URL for raw skill content (default: `https://raw.githubusercontent.com/spekk-ai/spekk-skills/main`)
+- `SPEKK_SKILLS_API_BASE` — base URL for the directory-listing contents API used by `spekk install --list <agent>` (default: `https://api.github.com/repos/spekk-ai/spekk-skills/contents`)
+
+```bash
+export SPEKK_SKILLS_RAW_BASE=https://raw.githubusercontent.com/my-org/internal-skills/main
+export SPEKK_SKILLS_API_BASE=https://api.github.com/repos/my-org/internal-skills/contents
+spekk install coach my-skill
+```
+
 ## Customizing Agent Prompts
 
 Spekk uses a layered prompt system that lets you customize agent behavior (coach, builder, observer) at two levels without modifying the binary.

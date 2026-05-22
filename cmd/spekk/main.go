@@ -657,9 +657,9 @@ func runSkillsList(args []string) {
 	fmt.Print(install.FormatSkillsList(agent, skills))
 }
 
-// printHelp displays the help text with all available commands.
-func printHelp() {
-	fmt.Print(`
+// helpText is the top-level help printed for `spekk help`. Exposed as a
+// constant so tests can verify the commands table without exec'ing the binary.
+const helpText = `
 spekk - Spec-driven development CLI
 
 USAGE:
@@ -687,5 +687,9 @@ FLAGS for "next":
   --spec <name>     Filter by spec name
   --assertion <id>  Filter by assertion ID
   --all-branches    Include assertions from all branches
-`)
+`
+
+// printHelp displays the help text with all available commands.
+func printHelp() {
+	fmt.Print(helpText)
 }
