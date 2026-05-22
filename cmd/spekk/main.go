@@ -536,8 +536,30 @@ func runInstall(args []string) {
 		fmt.Printf("install --list %s (not yet implemented)\n", opts.List)
 		return
 	}
-	fmt.Printf("install agent=%s skill=%s scope=%s source=%s force=%v (not yet implemented)\n",
-		opts.Agent, opts.Skill, opts.Scope, opts.Source, opts.Force)
+
+	home, _ := os.UserHomeDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	msg, err := install.PerformInstall(install.InstallRequest{
+		Cwd:      cwd,
+		HomeDir:  home,
+		Scope:    opts.Scope,
+		Agent:    opts.Agent,
+		Skill:    opts.Skill,
+		Source:   opts.Source,
+		Force:    opts.Force,
+		FetchFn:  install.FetchSkill,
+		FetchURL: install.FetchURL,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(msg)
 }
 
 // printHelp displays the help text with all available commands.

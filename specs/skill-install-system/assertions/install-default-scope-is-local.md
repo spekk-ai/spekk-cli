@@ -3,10 +3,9 @@ id: install-default-scope-is-local
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: install-fetches-from-official-registry
 branch: feature/skill-install-system
-locked-by: builder-Paris-MacBook-Pro.local-53774-1779478819
 ---
 
 # Install Defaults to Local Scope
@@ -22,3 +21,5 @@ When neither `--global` nor `--local` is passed, `spekk install` writes the skil
 - The file is written with mode 0644
 - The command prints a one-line confirmation that includes the absolute path written
 - The command exits 0 on success
+
+**Tests:** internal/install/write_test.go
