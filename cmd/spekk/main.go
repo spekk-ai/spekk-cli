@@ -11,6 +11,7 @@ import (
 	spekk "github.com/spekk-ai/spekk-cli"
 	"github.com/spekk-ai/spekk-cli/internal/agent"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/install"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 	"github.com/spekk-ai/spekk-cli/internal/sandbox"
 	"github.com/spekk-ai/spekk-cli/internal/serve"
@@ -59,6 +60,9 @@ func main() {
 
 	case "sandbox":
 		launchSandbox(args[1:])
+
+	case "install":
+		runInstall(args[1:])
 
 	case "help", "--help", "-h":
 		printHelp()
@@ -511,6 +515,31 @@ OPTIONS:
 	}
 }
 
+// runInstall parses arguments for `spekk install`. The actual fetch/write
+// behavior is implemented by other assertions in the skill-install-system
+// spec; this entry point currently validates arguments and prints usage.
+func runInstall(args []string) {
+	opts, err := install.ParseArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n\n", err)
+		fmt.Fprint(os.Stderr, install.UsageText)
+		os.Exit(1)
+	}
+	if opts.Help {
+		fmt.Print(install.UsageText)
+		return
+	}
+	// Subsequent assertions wire up registry fetch, source fetch, scope
+	// resolution, and conflict handling. For now, echo the parsed options
+	// so users (and tests) can see args were understood.
+	if opts.List != "" {
+		fmt.Printf("install --list %s (not yet implemented)\n", opts.List)
+		return
+	}
+	fmt.Printf("install agent=%s skill=%s scope=%s source=%s force=%v (not yet implemented)\n",
+		opts.Agent, opts.Skill, opts.Scope, opts.Source, opts.Force)
+}
+
 // printHelp displays the help text with all available commands.
 func printHelp() {
 	fmt.Print(`
@@ -527,6 +556,7 @@ COMMANDS:
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
+  install   Install a skill for an agent (coach/builder/observer)
   loop      Run orchestration workflows (builder/coach loops)
   help      Show this help message
 
