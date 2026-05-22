@@ -544,12 +544,25 @@ func runInstall(args []string) {
 		os.Exit(1)
 	}
 
+	skill := opts.Skill
+	if opts.Source != "" {
+		skill, err = install.ResolveSourceSkill(opts.Source, opts.Skill)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+	} else if skill == "" {
+		fmt.Fprintf(os.Stderr, "Error: missing <skill> argument\n\n")
+		fmt.Fprint(os.Stderr, install.UsageText)
+		os.Exit(1)
+	}
+
 	msg, err := install.PerformInstall(install.InstallRequest{
 		Cwd:      cwd,
 		HomeDir:  home,
 		Scope:    opts.Scope,
 		Agent:    opts.Agent,
-		Skill:    opts.Skill,
+		Skill:    skill,
 		Source:   opts.Source,
 		Force:    opts.Force,
 		FetchFn:  install.FetchSkill,

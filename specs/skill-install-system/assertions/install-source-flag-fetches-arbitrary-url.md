@@ -3,8 +3,7 @@ id: install-source-flag-fetches-arbitrary-url
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-Paris-MacBook-Pro.local-61083-1779479243
+status: done
 depends-on: install-fetches-from-official-registry
 branch: feature/skill-install-system
 ---
@@ -24,3 +23,5 @@ branch: feature/skill-install-system
 - URLs without `http://` or `https://` scheme are rejected
 - Malformed URLs (parse errors, no host) are rejected with a clear message
 - The fetched body is written verbatim — no validation that it's "really" markdown, no Content-Type sniffing
+
+**Tests:** internal/install/source_test.go
