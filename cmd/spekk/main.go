@@ -64,6 +64,9 @@ func main() {
 	case "install":
 		runInstall(args[1:])
 
+	case "skills":
+		runSkills(args[1:])
+
 	case "help", "--help", "-h":
 		printHelp()
 
@@ -578,6 +581,51 @@ func runInstall(args []string) {
 	fmt.Println(msg)
 }
 
+// runSkills handles `spekk skills <subcommand>`. Today the only subcommand
+// is `list`, which wraps SkillResolver.ListSkills and prints each entry's
+// name and source directory (or "(embedded)").
+func runSkills(args []string) {
+	if len(args) == 0 {
+		fmt.Print(install.SkillsUsageText)
+		return
+	}
+
+	switch args[0] {
+	case "help", "--help", "-h":
+		fmt.Print(install.SkillsUsageText)
+		return
+	case "list":
+		runSkillsList(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown skills subcommand: %s\n\n", args[0])
+		fmt.Fprint(os.Stderr, install.SkillsUsageText)
+		os.Exit(1)
+	}
+}
+
+// runSkillsList handles `spekk skills list <agent>`.
+func runSkillsList(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "Error: missing <agent> argument\n\n")
+		fmt.Fprint(os.Stderr, install.SkillsUsageText)
+		os.Exit(1)
+	}
+	agent := args[0]
+	if err := install.ValidateSkillsAgent(agent); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	installDir := findInstallDir()
+	r := &cli.SkillResolver{
+		HomeDir:    homeDir(),
+		Cwd:        cwdStr(),
+		InstallDir: installDir,
+	}
+	skills := r.ListSkills(agent)
+	fmt.Print(install.FormatSkillsList(agent, skills))
+}
+
 // printHelp displays the help text with all available commands.
 func printHelp() {
 	fmt.Print(`
@@ -595,6 +643,7 @@ COMMANDS:
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
   install   Install a skill for an agent (coach/builder/observer)
+  skills    Inspect skills available to an agent (list)
   loop      Run orchestration workflows (builder/coach loops)
   help      Show this help message
 

@@ -3,10 +3,9 @@ id: skills-list-shows-all-scopes
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: in_progress
+status: done
 depends-on: install-command-parses-args
 branch: feature/skill-install-system
-locked-by: builder-Paris-MacBook-Pro.local-72035-1779479956
 ---
 
 # `spekk skills list` Shows Skills Across All Scopes
@@ -24,3 +23,5 @@ locked-by: builder-Paris-MacBook-Pro.local-72035-1779479956
 - Passing an unknown agent is rejected with the same validation as install
 - When no skills are available for the agent, prints a "no skills found" message and exits 0
 - `spekk skills` (no subcommand) prints usage listing `list`
+
+**Tests:** internal/install/skills_test.go
