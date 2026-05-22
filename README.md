@@ -131,6 +131,58 @@ This completely replaces the base coach prompt for this project. Any extend file
 
 The `.spekk/` directory can be committed to your repo so the whole team shares the same prompt customizations, or added to `.gitignore` if you prefer individual configuration. Choose whichever approach fits your team.
 
+## Customizing Agent Skills
+
+Spekk discovers agent skills from a layered set of directories, mirroring the prompt system. Skills work identically across all three agents (coach, builder, observer): same directory layout, same resolution order, same CLI invocation pattern.
+
+### Resolution Order (first match wins)
+
+| Layer | Path | Purpose |
+|-------|------|---------|
+| Local | `.spekk/skills/<agent>/*.md` | Project-specific skills |
+| Global | `~/.spekk/skills/<agent>/*.md` | User's personal skills across all projects |
+| Package | Ships with spekk (embedded) | Built-in skills |
+
+A local skill shadows a global skill of the same name; a global skill shadows a package skill.
+
+### Invocation
+
+Any skill discovered in those directories becomes invocable as the first positional argument:
+
+```bash
+spekk coach my-skill
+spekk builder my-skill
+spekk observer my-skill
+```
+
+The skill's full markdown content is inlined into the agent's activation message — no code changes required to add a new skill.
+
+### Example: Adding a Project-Specific Observer Skill
+
+Create `.spekk/skills/observer/check-todos.md`:
+
+```markdown
+---
+id: check-todos
+---
+
+# Check TODOs Skill
+
+Scan the codebase for TODO comments older than 30 days and report them as observations.
+```
+
+Then run:
+
+```bash
+spekk observer check-todos
+```
+
+The same pattern works for coach (`.spekk/skills/coach/`) and builder (`.spekk/skills/builder/`).
+
+### Dynamic Help
+
+`spekk <agent> --help` lists every discovered skill, so users see local, global, and package skills together in one place.
+
 ## How It Works
 
 ### 1. Spec Structure

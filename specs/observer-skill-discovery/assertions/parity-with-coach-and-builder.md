@@ -3,8 +3,7 @@ id: parity-with-coach-and-builder
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 3
-status: in_progress
-locked-by: builder-Paris-MacBook-Pro.local-65787-1779479531
+status: done
 depends-on: run-observer-detects-skill
 branch: feature/observer-skill-discovery
 ---
