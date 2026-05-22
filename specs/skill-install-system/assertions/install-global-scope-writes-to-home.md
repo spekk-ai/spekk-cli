@@ -3,8 +3,7 @@ id: install-global-scope-writes-to-home
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-PARIs-MacBook-Pro-local-12345-1747936800
+status: done
 depends-on: install-fetches-from-official-registry
 branch: feature/skill-install-system
 ---
@@ -21,3 +20,5 @@ branch: feature/skill-install-system
 - The home-side `.spekk/skills/<agent>/` tree is created with mode 0755 if missing
 - A globally-installed skill is discoverable via `SkillResolver.ResolveSkill(agent, "my-skill")` without code changes to the resolver
 - The command prints the absolute path under the user's home dir on success
+
+**Tests:** internal/install/write_test.go (`TestPerformInstall_GlobalScopeWritesUnderHomeAndIsResolvable`)
