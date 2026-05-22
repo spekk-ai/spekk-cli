@@ -529,19 +529,22 @@ func runInstall(args []string) {
 		fmt.Print(install.UsageText)
 		return
 	}
-	// Subsequent assertions wire up registry fetch, source fetch, scope
-	// resolution, and conflict handling. For now, echo the parsed options
-	// so users (and tests) can see args were understood.
-	if opts.List != "" {
-		fmt.Printf("install --list %s (not yet implemented)\n", opts.List)
-		return
-	}
 
 	home, _ := os.UserHomeDir()
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
+	}
+
+	if opts.List != "" {
+		skills, err := install.ListRemoteSkills(opts.List, cwd, home, install.FetchListRaw)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		fmt.Print(install.FormatList(opts.List, skills))
+		return
 	}
 
 	skill := opts.Skill

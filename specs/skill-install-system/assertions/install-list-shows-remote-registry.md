@@ -3,13 +3,14 @@ id: install-list-shows-remote-registry
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: in_progress
+status: done
 depends-on: install-fetches-from-official-registry
 branch: feature/skill-install-system
-locked-by: builder-Paris-MacBook-Pro.local-65115-1779479498
 ---
 
 # `spekk install --list` Shows the Remote Registry
+
+**Tests:** internal/install/list_test.go
 
 ## Description
 
