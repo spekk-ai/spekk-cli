@@ -68,6 +68,45 @@ func RunObserver(args []string, installDir string) {
 		return
 	}
 
+	// Skill subcommand: check the first positional arg against the observer skill resolver
+	// before parsing flags as monitoring options.
+	skillName := ExtractSkillArgFromFlagSet(args, ObserverFlags)
+	if skillName != "" {
+		sr := &cli.SkillResolver{
+			HomeDir:    homeDir(),
+			Cwd:        cwd(),
+			InstallDir: installDir,
+		}
+		if sr.ResolveSkill("observer", skillName) != nil {
+			fmt.Println("Launching Observer Agent with skill:", skillName)
+			wd, _ := os.Getwd()
+			fmt.Println("Working directory:", wd)
+			fmt.Println()
+
+			skillMsg, err := BuildSkillMessage(installDir, "observer", skillName, args)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+
+			opts := LaunchOptions{
+				Agent:        "observer",
+				InstallDir:   installDir,
+				ExtraMessage: skillMsg,
+			}
+			message, err := BuildActivationMessage(opts)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+			if err := Launch(message); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+	}
+
 	cfg, err := ParseObserverFlags(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
