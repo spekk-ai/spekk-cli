@@ -3,7 +3,8 @@ id: observer-help-lists-skills
 parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro.local-55362-1779478913
 depends-on: skill-resolver-includes-observer
 branch: feature/observer-skill-discovery
 ---
