@@ -3,9 +3,10 @@ id: skills-list-shows-all-scopes
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: not_started
+status: in_progress
 depends-on: install-command-parses-args
 branch: feature/skill-install-system
+locked-by: builder-Paris-MacBook-Pro.local-72035-1779479956
 ---
 
 # `spekk skills list` Shows Skills Across All Scopes
