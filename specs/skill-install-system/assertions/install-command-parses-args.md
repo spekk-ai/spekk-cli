@@ -3,9 +3,12 @@ id: install-command-parses-args
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/skill-install-system
 ---
+
+**Tests:** internal/install/args_test.go
+
 
 # Install Command Parses Agent, Skill, and Flags
 

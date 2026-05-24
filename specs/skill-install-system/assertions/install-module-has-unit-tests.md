@@ -3,7 +3,7 @@ id: install-module-has-unit-tests
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: install-default-scope-is-local
 branch: feature/skill-install-system
 ---
@@ -28,3 +28,5 @@ The install/uninstall/list logic lives in `internal/install/` and has unit tests
 - A test exercises the `--global` + `--local` mutual-exclusion error
 - All tests pass under `go test ./internal/install/...`
 - No test makes a real network call
+
+**Tests:** internal/install/args_test.go, internal/install/fetch_test.go, internal/install/list_test.go, internal/install/source_test.go, internal/install/uninstall_test.go, internal/install/write_test.go

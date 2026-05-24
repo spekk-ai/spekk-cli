@@ -3,7 +3,7 @@ id: install-refuses-on-conflict-without-force
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: install-fetches-from-official-registry
 branch: feature/skill-install-system
 ---
@@ -22,3 +22,5 @@ If the destination file already exists at the chosen scope, install fails with a
 - The existing file is left unchanged on conflict
 - With `--force`, the existing file is overwritten with the freshly fetched content
 - `--force` works for both registry installs and `--source` installs
+
+**Tests:** internal/install/write_test.go

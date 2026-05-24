@@ -3,12 +3,14 @@ id: help-and-readme-document-install
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 3
-status: not_started
+status: done
 depends-on: install-command-parses-args
 branch: feature/skill-install-system
 ---
 
 # Help Output and README Document the Install System
+
+**Tests:** cmd/spekk/help_test.go, internal/install/args_test.go (`TestParseArgs_Help`), internal/install/skills_test.go (`TestSkillsUsageText_DocumentsList`)
 
 ## Description
 

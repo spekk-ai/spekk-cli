@@ -3,7 +3,7 @@ id: skills-list-shows-all-scopes
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: install-command-parses-args
 branch: feature/skill-install-system
 ---
@@ -23,3 +23,5 @@ branch: feature/skill-install-system
 - Passing an unknown agent is rejected with the same validation as install
 - When no skills are available for the agent, prints a "no skills found" message and exits 0
 - `spekk skills` (no subcommand) prints usage listing `list`
+
+**Tests:** internal/install/skills_test.go

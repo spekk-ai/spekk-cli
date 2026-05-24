@@ -3,10 +3,12 @@ id: uninstall-removes-skill-file
 parent: skill-install-system
 created: 2026-05-22T12:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: install-command-parses-args
 branch: feature/skill-install-system
 ---
+
+**Tests:** internal/install/uninstall_test.go
 
 # Uninstall Removes the Skill File from the Chosen Scope
 
