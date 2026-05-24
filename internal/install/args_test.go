@@ -141,3 +141,15 @@ func TestParseArgs_ListFlagRejectsUnknownAgent(t *testing.T) {
 		t.Fatal("expected error for --list bogus")
 	}
 }
+
+func TestParseArgs_ListFlagRejectsStrayPositionals(t *testing.T) {
+	// `spekk install --list coach foo` is almost certainly a typo; the `foo`
+	// must not be silently dropped.
+	_, err := ParseArgs([]string{"--list", "coach", "foo"})
+	if err == nil {
+		t.Fatal("expected error when --list is combined with positional args")
+	}
+	if !strings.Contains(err.Error(), "foo") {
+		t.Errorf("error should name the stray positional, got: %s", err)
+	}
+}

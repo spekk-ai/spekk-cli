@@ -55,16 +55,19 @@ func TestUninstall_RefusesToTouchOutsideScopeDir(t *testing.T) {
 		t.Fatalf("seed outside file: %v", err)
 	}
 
-	// Skill name with traversal segments — resolves outside the agent dir.
+	// Skill name with traversal segments — would resolve outside the agent dir.
 	_, err := Uninstall(cwd, "/home/u", ScopeLocal, "coach", "../../../outside")
 	if err == nil {
 		t.Fatal("expected error when target escapes scope directory")
 	}
-	// Must be the scope-guard rejection, NOT a "not installed" error — that
-	// would pass even if the guard was missing, since the traversed path
-	// happens to be empty in a tempdir.
-	if !strings.Contains(strings.ToLower(err.Error()), "scope") {
-		t.Errorf("error should mention scope-directory refusal, got: %s", err)
+	// Must be refused for a path-safety reason, NOT a "not installed" error —
+	// "not installed" would pass even if the guard was missing, since the
+	// traversed path happens to be empty in a tempdir. The name is rejected at
+	// validation (invalid skill name) before the scope guard is even reached;
+	// either path-safety rejection is acceptable, but "not installed" is not.
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "scope") && !strings.Contains(msg, "invalid skill name") {
+		t.Errorf("error should be a path-safety refusal (scope or invalid skill name), got: %s", err)
 	}
 
 	// The outside file must still exist.

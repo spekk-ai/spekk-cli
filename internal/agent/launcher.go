@@ -184,7 +184,10 @@ func buildHelpText(installDir, agent string) string {
 		skillLines = "  (none found)"
 	}
 
-	displayName := strings.ToUpper(agent[:1]) + agent[1:]
+	displayName := agent
+	if agent != "" {
+		displayName = strings.ToUpper(agent[:1]) + agent[1:]
+	}
 
 	extras := agentHelpExtras[agent]
 	optionsBlock := extras.Options + "  --help, -h             Show this help message"

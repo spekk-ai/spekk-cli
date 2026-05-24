@@ -17,6 +17,9 @@ func Destination(cwd, home string, scope Scope, agent, skill string) (string, er
 	if skill == "" {
 		return "", errors.New("skill is required")
 	}
+	if err := validateSkillName(skill); err != nil {
+		return "", err
+	}
 
 	var root string
 	switch scope {

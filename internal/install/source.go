@@ -12,11 +12,15 @@ import (
 //
 // If skillArg is non-empty, it wins outright — the URL's basename is ignored,
 // matching the assertion's rule that `--source` install destinations use the
-// positional `<skill>` arg.
+// positional `<skill>` arg. The arg is still validated as a single path
+// segment (see validateSkillName).
 //
 // If skillArg is empty, the name is derived from the URL's path basename with
-// any `.md` suffix stripped. An empty/unusable basename (e.g. URL ends in `/`)
-// yields an error asking the caller to pass `<skill>` explicitly.
+// any `.md` suffix stripped. Note that path.Base strips a trailing slash, so
+// `https://x.com/a/` derives `a` rather than erroring. A genuinely empty or
+// unusable basename (e.g. the URL path is just `/`), or one that isn't a plain
+// path segment (e.g. `..`), yields an error asking the caller to pass
+// `<skill>` explicitly.
 //
 // In every case, rawURL must parse and have an http(s) scheme and a host;
 // otherwise this function returns a descriptive error and skillArg is not
@@ -26,6 +30,9 @@ func ResolveSourceSkill(rawURL, skillArg string) (string, error) {
 		return "", err
 	}
 	if skillArg != "" {
+		if err := validateSkillName(skillArg); err != nil {
+			return "", err
+		}
 		return skillArg, nil
 	}
 
@@ -37,6 +44,11 @@ func ResolveSourceSkill(rawURL, skillArg string) (string, error) {
 	derived := strings.TrimSuffix(base, ".md")
 	if derived == "" {
 		return "", fmt.Errorf("cannot derive skill name from URL %q: pass an explicit <skill> argument", rawURL)
+	}
+	// A basename like ".." survives path.Base; reject it (and anything else
+	// that isn't a plain segment) so the derived name can't escape the dir.
+	if err := validateSkillName(derived); err != nil {
+		return "", fmt.Errorf("cannot derive skill name from URL %q: %w (pass an explicit <skill> argument)", rawURL, err)
 	}
 	return derived, nil
 }

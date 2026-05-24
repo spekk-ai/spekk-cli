@@ -268,3 +268,53 @@ func TestRunInstall_DefaultsToLocalAndPrintsAbsolutePath(t *testing.T) {
 		t.Errorf("file content mismatch: got %q want %q", got, body)
 	}
 }
+
+func TestDestination_RejectsPathTraversalSkillNames(t *testing.T) {
+	bad := []string{"../../../etc/evil", "..", ".", "a/b", `a\b`, "foo/../bar"}
+	for _, skill := range bad {
+		if _, err := Destination("/home/u/proj", "/home/u", ScopeLocal, "coach", skill); err == nil {
+			t.Errorf("Destination(%q) should be rejected, got nil error", skill)
+		}
+	}
+}
+
+func TestPerformInstall_RefusesTraversalNameWithoutFetchingOrWriting(t *testing.T) {
+	cwd := t.TempDir()
+	// A file the install must never reach by escaping the skills dir.
+	outside := filepath.Join(cwd, "victim.md")
+	if err := os.WriteFile(outside, []byte("untouched\n"), 0644); err != nil {
+		t.Fatalf("seed outside file: %v", err)
+	}
+
+	fetchCalls := 0
+	urlCalls := 0
+	_, err := PerformInstall(InstallRequest{
+		Cwd:     cwd,
+		HomeDir: "/home/u",
+		Scope:   ScopeLocal,
+		Agent:   "coach",
+		Skill:   "../../victim", // would resolve to <cwd>/victim.md without the guard
+		Force:   true,           // force must NOT bypass the name guard
+		FetchFn: func(agent, skill string) ([]byte, error) {
+			fetchCalls++
+			return []byte("malicious"), nil
+		},
+		FetchURL: func(url string) ([]byte, error) {
+			urlCalls++
+			return []byte("malicious"), nil
+		},
+	})
+	if err == nil {
+		t.Fatal("expected traversal skill name to be rejected, got nil")
+	}
+	if fetchCalls != 0 || urlCalls != 0 {
+		t.Errorf("no fetch should occur for an invalid name; got fetchCalls=%d urlCalls=%d", fetchCalls, urlCalls)
+	}
+	got, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatalf("outside file should still exist: %v", err)
+	}
+	if string(got) != "untouched\n" {
+		t.Errorf("outside file was clobbered: got %q", got)
+	}
+}

@@ -57,6 +57,29 @@ func TestResolveSourceSkill_RejectsUnusableBasenameAsksForExplicitSkill(t *testi
 	}
 }
 
+func TestResolveSourceSkill_RejectsTraversalInExplicitSkillArg(t *testing.T) {
+	// skillArg "wins" over the URL basename, but it must still be a safe
+	// single path segment — it becomes the destination filename.
+	bad := []string{"../../escape", "a/b", ".."}
+	for _, arg := range bad {
+		_, err := ResolveSourceSkill("https://example.com/foo.md", arg)
+		if err == nil {
+			t.Errorf("explicit skill arg %q should be rejected, got nil", arg)
+		}
+	}
+}
+
+func TestResolveSourceSkill_RejectsTraversalDerivedFromURL(t *testing.T) {
+	// A URL whose basename is ".." would otherwise derive ".." as the name.
+	_, err := ResolveSourceSkill("https://example.com/a/..", "")
+	if err == nil {
+		t.Fatal("expected error for `..` derived basename")
+	}
+	if !strings.Contains(err.Error(), "<skill>") {
+		t.Errorf("error should ask for <skill> argument, got: %s", err)
+	}
+}
+
 func TestResolveSourceSkill_RejectsNonHTTPSchemes(t *testing.T) {
 	cases := []string{
 		"file:///etc/passwd",

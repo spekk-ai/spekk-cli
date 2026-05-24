@@ -6,6 +6,7 @@ package install
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
@@ -64,16 +65,25 @@ var installFlags = cli.FlagSet{
 	"help":   {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
-// flagNames is every flag token consumed by installFlags, used to skip
-// flag tokens when extracting positional args.
-var flagNames = map[string]bool{
-	"--global": true,
-	"--local":  true,
-	"--source": true,
-	"--force":  true,
-	"--list":   true,
-	"--help":   true,
-	"-h":       true,
+// flagNames is every flag token consumed by installFlags, and stringFlagNames
+// is the subset whose token is followed by a value. Both are derived from
+// installFlags at init so they can't drift when a flag is added or changed —
+// extractPositionals relies on them to skip flag tokens (and their values)
+// when pulling out positional args.
+var (
+	flagNames       = map[string]bool{}
+	stringFlagNames = map[string]bool{}
+)
+
+func init() {
+	for _, def := range installFlags {
+		for _, name := range def.Names {
+			flagNames[name] = true
+			if def.Type == cli.StringFlag {
+				stringFlagNames[name] = true
+			}
+		}
+	}
 }
 
 // ParseArgs parses the arguments passed to `spekk install`.
@@ -108,10 +118,15 @@ func ParseArgs(args []string) (*Options, error) {
 	positionals := extractPositionals(args)
 
 	// --list takes precedence over positional agent/skill — it's a
-	// discovery mode that bypasses install.
+	// discovery mode that bypasses install. Reject stray positionals so a
+	// typo like `spekk install --list coach foo` fails loudly instead of
+	// silently dropping `foo`.
 	if opts.List != "" {
 		if !isValidAgent(opts.List) {
 			return nil, unknownAgentError(opts.List)
+		}
+		if len(positionals) > 0 {
+			return nil, fmt.Errorf("--list takes no positional arguments (got %s); did you mean `spekk install --list %s`?", strings.Join(positionals, " "), opts.List)
 		}
 		return opts, nil
 	}
@@ -135,14 +150,10 @@ func ParseArgs(args []string) (*Options, error) {
 // extractPositionals returns the non-flag arguments, skipping any value
 // that immediately follows a string-typed flag.
 func extractPositionals(args []string) []string {
-	stringFlags := map[string]bool{
-		"--source": true,
-		"--list":   true,
-	}
 	var positionals []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if stringFlags[a] {
+		if stringFlagNames[a] {
 			i++ // skip value
 			continue
 		}
@@ -165,6 +176,27 @@ func isValidAgent(name string) bool {
 		}
 	}
 	return false
+}
+
+// validateSkillName rejects skill names that aren't a single safe path
+// segment. A skill maps directly to `<scope>/.spekk/skills/<agent>/<skill>.md`,
+// so any name containing a path separator, a `.`/`..` segment, or other path
+// trickery could escape the skills directory and write or delete an arbitrary
+// file. This is the chokepoint that both install (via Destination) and
+// --source name derivation (via ResolveSourceSkill) rely on.
+func validateSkillName(skill string) error {
+	if skill == "" {
+		return errors.New("skill name is empty")
+	}
+	if strings.ContainsAny(skill, `/\`) {
+		return fmt.Errorf("invalid skill name %q: must not contain path separators", skill)
+	}
+	// filepath.Clean collapses `.`/`..`; if the cleaned form differs from the
+	// input, the name isn't a plain single component.
+	if skill == "." || skill == ".." || filepath.Clean(skill) != skill {
+		return fmt.Errorf("invalid skill name %q: must be a single path segment", skill)
+	}
+	return nil
 }
 
 func unknownAgentError(name string) error {
