@@ -94,3 +94,4 @@ site/
 # Go binaries
 bin/spekk-go
 /spekk
+dist/
