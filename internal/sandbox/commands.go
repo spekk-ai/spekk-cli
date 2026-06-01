@@ -95,14 +95,29 @@ func Create(opts CreateOptions) error {
 		}
 	}
 
+	// Fetch the release artifacts (binary + cloud-init) before creating any
+	// billable resources, so a bad/missing release fails fast.
+	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
+	artifacts, err := fetchReleaseArtifacts("latest")
+	if err != nil {
+		client.DeleteSSHKey(doKey.ID)
+		os.Remove(keyPath)
+		os.Remove(keyPath + ".pub")
+		return fmt.Errorf("fetching release artifacts: %w", err)
+	}
+	defer os.Remove(artifacts.BinaryPath)
+	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
+	cloudInit := renderCloudInit(artifacts.CloudInit, strings.TrimSpace(string(pubKeyData)))
+
 	// Create droplet
 	fmt.Fprintf(os.Stderr, "Creating droplet %q in %s (%s)...\n", dropletName, opts.Region, opts.Size)
 	droplet, err := client.CreateDroplet(CreateDropletRequest{
-		Name:    dropletName,
-		Region:  opts.Region,
-		Size:    opts.Size,
-		SSHKeys: sshKeyIDs,
-		VpcUUID: opts.VPC,
+		Name:     dropletName,
+		Region:   opts.Region,
+		Size:     opts.Size,
+		SSHKeys:  sshKeyIDs,
+		VpcUUID:  opts.VPC,
+		UserData: cloudInit,
 	})
 	if err != nil {
 		// Roll back the SSH key we uploaded so it doesn't leak in the DO account
@@ -141,6 +156,12 @@ func Create(opts CreateOptions) error {
 	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
 	if err := configureGitCredentials(ip, keyPath); err != nil {
 		return fmt.Errorf("configuring git credentials: %w", err)
+	}
+
+	// Deploy the agent binary and start its service
+	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
+	if err := deployAgent(ip, keyPath, artifacts); err != nil {
+		return fmt.Errorf("deploying agent: %w", err)
 	}
 
 	// Assign to project
@@ -359,30 +380,78 @@ func Deploy(name string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Deploying agent to %s...\n", sandbox.IP)
-
-	// Download latest release binary from GitHub
-	fmt.Fprintln(os.Stderr, "Downloading latest spekk binary...")
-	downloadScript := `set -e
-cd /tmp
-LATEST=$(curl -sL https://api.github.com/repos/spekk-ai/spekk-cli/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-if [ -z "$LATEST" ]; then echo "Failed to determine latest release"; exit 1; fi
-echo "Downloading $LATEST..."
-curl -sL "https://github.com/spekk-ai/spekk-cli/releases/download/${LATEST}/spekk-linux-amd64" -o /tmp/spekk-new
-chmod +x /tmp/spekk-new
-mv /tmp/spekk-new /usr/local/bin/spekk
-echo "Installed spekk $LATEST"
-systemctl restart spekk-agent`
-
-	args := sshArgs(sandbox)
-	args = append(args, downloadScript)
-	cmd := exec.Command("ssh", args...)
-	out, err := cmd.CombinedOutput()
-	os.Stderr.Write(out)
+	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
+	artifacts, err := fetchReleaseArtifacts("latest")
 	if err != nil {
+		return fmt.Errorf("fetching release artifacts: %w", err)
+	}
+	defer os.Remove(artifacts.BinaryPath)
+
+	if err := deployAgent(sandbox.IP, sandbox.SSHKeyPath, artifacts); err != nil {
 		return fmt.Errorf("deploy failed: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Agent redeployed to %q.\n", name)
+	fmt.Fprintf(os.Stderr, "Agent %s deployed to %q.\n", artifacts.Version, name)
+	return nil
+}
+
+// spekkAgentUnit is the systemd unit installed on each sandbox. It is the single
+// source of truth for the service definition (matches the release cloud-init).
+const spekkAgentUnit = `[Unit]
+Description=Spekk Agent Client
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agent
+WorkingDirectory=/opt/spekk
+EnvironmentFile=/etc/spekk/agent.env
+ExecStart=/opt/spekk/agent-client
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/spekk/agent.log
+StandardError=append:/var/log/spekk/agent.log
+
+[Install]
+WantedBy=multi-user.target
+`
+
+// deployAgent copies the agent binary to /opt/spekk/agent-client, installs the
+// systemd unit, and (re)starts the service. Shared by Create and Deploy.
+func deployAgent(ip, keyPath string, artifacts *releaseArtifacts) error {
+	// Copy the binary up via scp.
+	scp := []string{
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "ConnectTimeout=10",
+	}
+	if keyPath != "" {
+		scp = append(scp, "-i", keyPath)
+	}
+	scp = append(scp, artifacts.BinaryPath, fmt.Sprintf("root@%s:/opt/spekk/agent-client", ip))
+	if out, err := exec.Command("scp", scp...).CombinedOutput(); err != nil {
+		return fmt.Errorf("copying binary: %s\n%s", err, string(out))
+	}
+
+	// Install the unit, fix ownership, and start the service. The agent needs to
+	// own /opt/spekk so it can create its WORKSPACE (/opt/spekk/workspace) at runtime.
+	script := fmt.Sprintf(`set -e
+chmod +x /opt/spekk/agent-client
+mkdir -p /opt/spekk/workspace
+chown -R agent:agent /opt/spekk
+mkdir -p /var/log/spekk
+chown agent:agent /var/log/spekk
+cat > /etc/systemd/system/spekk-agent.service << 'UNITEOF'
+%s
+UNITEOF
+systemctl daemon-reload
+systemctl enable spekk-agent
+systemctl restart spekk-agent`, spekkAgentUnit)
+
+	if out, err := runSSHCombined(ip, keyPath, script); err != nil {
+		return fmt.Errorf("installing service: %s\n%s", err, out)
+	}
 	return nil
 }
 
@@ -486,7 +555,8 @@ func checkTCPPort(ip string, port int) bool {
 	return true
 }
 
-func runSSH(ip, keyPath, command string) string {
+// rootSSHArgs builds the ssh arguments to reach root@ip, appending command.
+func rootSSHArgs(ip, keyPath, command string) []string {
 	args := []string{
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
@@ -495,13 +565,22 @@ func runSSH(ip, keyPath, command string) string {
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
-	args = append(args, fmt.Sprintf("root@%s", ip), command)
-	cmd := exec.Command("ssh", args...)
-	out, err := cmd.Output()
+	return append(args, fmt.Sprintf("root@%s", ip), command)
+}
+
+// runSSH runs command on the host and returns trimmed stdout, or "" on error.
+func runSSH(ip, keyPath, command string) string {
+	out, err := exec.Command("ssh", rootSSHArgs(ip, keyPath, command)...).Output()
 	if err != nil {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// runSSHCombined runs command on the host, returning combined output and any error.
+func runSSHCombined(ip, keyPath, command string) (string, error) {
+	out, err := exec.Command("ssh", rootSSHArgs(ip, keyPath, command)...).CombinedOutput()
+	return string(out), err
 }
 
 func sshCheck(sandbox *SandboxMeta, command string) string {
