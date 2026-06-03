@@ -3,9 +3,8 @@ id: gemfury-publish
 parent: release-flow
 created: 2026-06-03T18:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: cross-compile-binaries
-locked-by: builder-Paris-MacBook-Pro-2-72567-1780528741
 branch: temporary-target
 ---
 
