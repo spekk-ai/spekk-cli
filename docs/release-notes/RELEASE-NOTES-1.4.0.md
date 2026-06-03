@@ -59,6 +59,8 @@ New `spekk serve` command that starts a WebSocket server for the browser extensi
 
 ## Upgrade
 
+Download the latest binary from [GitHub Releases](https://github.com/spekk-ai/spekk-cli/releases) or build from source:
+
 ```bash
-npm install @spekk/cli@1.4.0
+go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest
 ```

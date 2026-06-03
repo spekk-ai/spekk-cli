@@ -30,7 +30,6 @@ jobs:
           GOOS=darwin  GOARCH=arm64 go build -o dist/spekk-darwin-arm64  ./cmd/spekk
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/spekk-*
