@@ -2,6 +2,8 @@ package sandbox
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -176,6 +178,73 @@ func TestValidateSandboxName(t *testing.T) {
 		if err := ValidateSandboxName(name); err == nil {
 			t.Errorf("ValidateSandboxName(%q) = nil, want error", name)
 		}
+	}
+}
+
+func TestSSHHostKeyOpts(t *testing.T) {
+	tmpDir := t.TempDir()
+	name := "test-host-key-sandbox"
+	khDir := filepath.Join(tmpDir, "known_hosts")
+	khFile := filepath.Join(khDir, name)
+
+	// Override KnownHostsFile to use temp directory
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	// Verify the known_hosts path uses our temp dir
+	got := KnownHostsFile(name)
+	want := filepath.Join(tmpDir, ".spekk", "known_hosts", name)
+	if got != want {
+		t.Fatalf("KnownHostsFile(%q) = %q, want %q", name, got, want)
+	}
+
+	// First connection: no known_hosts file exists, should use accept-new
+	opts := sshHostKeyOpts(name)
+	joined := strings.Join(opts, " ")
+	if !strings.Contains(joined, "StrictHostKeyChecking=accept-new") {
+		t.Errorf("first connection should use accept-new, got: %v", opts)
+	}
+	if !strings.Contains(joined, "UserKnownHostsFile=") {
+		t.Errorf("should specify UserKnownHostsFile, got: %v", opts)
+	}
+	if strings.Contains(joined, "/dev/null") {
+		t.Errorf("should NOT use /dev/null, got: %v", opts)
+	}
+
+	// Simulate a known_hosts file being created (as SSH would after first connection)
+	os.MkdirAll(khDir, 0o700)
+	// Use the actual path from KnownHostsFile since it goes through ~/.spekk/
+	actualKhFile := KnownHostsFile(name)
+	os.MkdirAll(filepath.Dir(actualKhFile), 0o700)
+	os.WriteFile(actualKhFile, []byte("192.168.1.1 ssh-ed25519 AAAA...\n"), 0o600)
+
+	// Subsequent connection: known_hosts exists, should use strict checking
+	opts = sshHostKeyOpts(name)
+	joined = strings.Join(opts, " ")
+	if !strings.Contains(joined, "StrictHostKeyChecking=yes") {
+		t.Errorf("subsequent connection should use strict checking, got: %v", opts)
+	}
+	if strings.Contains(joined, "accept-new") {
+		t.Errorf("subsequent connection should NOT use accept-new, got: %v", opts)
+	}
+
+	// sshArgs should include host key opts and not the old insecure flags
+	sandbox := &SandboxMeta{IP: "192.168.1.1", SSHKeyPath: "/tmp/key"}
+	args := sshArgs(sandbox, name)
+	argsStr := strings.Join(args, " ")
+	if strings.Contains(argsStr, "StrictHostKeyChecking=no") {
+		t.Errorf("sshArgs should not use StrictHostKeyChecking=no, got: %v", args)
+	}
+	if strings.Contains(argsStr, "UserKnownHostsFile=/dev/null") {
+		t.Errorf("sshArgs should not use UserKnownHostsFile=/dev/null, got: %v", args)
+	}
+
+	// Destroy cleanup: known_hosts file should be removable
+	_ = khFile // suppress unused warning
+	os.Remove(actualKhFile)
+	if _, err := os.Stat(actualKhFile); !os.IsNotExist(err) {
+		t.Errorf("known_hosts file should be removed after cleanup")
 	}
 }
 

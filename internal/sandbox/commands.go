@@ -142,7 +142,7 @@ func Create(opts CreateOptions) error {
 	fmt.Fprintf(os.Stderr, "Droplet active at %s\n", ip)
 
 	// Wait for SSH and provisioning
-	if err := waitForProvisioning(ip, keyPath); err != nil {
+	if err := waitForProvisioning(ip, keyPath, opts.Name); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\nDroplet IP: %s (ID: %d) -- not auto-destroyed, debug manually.\n", err, ip, dropletID)
 		return err
 	}
@@ -156,7 +156,7 @@ func Create(opts CreateOptions) error {
 
 	// Configure git credentials
 	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
-	if err := configureGitCredentials(ip, keyPath); err != nil {
+	if err := configureGitCredentials(ip, keyPath, opts.Name); err != nil {
 		return fmt.Errorf("configuring git credentials: %w", err)
 	}
 
@@ -264,10 +264,10 @@ func Status(name string) error {
 	fmt.Printf("Droplet status: %s\n", dropletStatus)
 
 	// SSH checks
-	provisioned := sshCheck(sandbox, "test -f /opt/spekk/.provisioned && echo yes || echo no")
+	provisioned := sshCheck(sandbox, name, "test -f /opt/spekk/.provisioned && echo yes || echo no")
 	fmt.Printf("Provisioned: %s\n", provisioned)
 
-	agentStatus := sshCheck(sandbox, "systemctl is-active spekk-agent 2>/dev/null || echo unknown")
+	agentStatus := sshCheck(sandbox, name, "systemctl is-active spekk-agent 2>/dev/null || echo unknown")
 	fmt.Printf("Agent service: %s\n", agentStatus)
 
 	return nil
@@ -285,7 +285,7 @@ func SSH(name string, extraArgs []string) error {
 		return fmt.Errorf("sandbox %q not found", name)
 	}
 
-	args := sshArgs(sandbox)
+	args := sshArgs(sandbox, name)
 	args = append(args, extraArgs...)
 	cmd := exec.Command("ssh", args...)
 	cmd.Stdin = os.Stdin
@@ -355,6 +355,9 @@ func Destroy(name string, force bool) error {
 		os.Remove(sandbox.SSHKeyPath + ".pub")
 	}
 
+	// Remove per-sandbox known_hosts file
+	os.Remove(KnownHostsFile(name))
+
 	if err := RemoveSandbox(name); err != nil {
 		return fmt.Errorf("removing metadata: %w", err)
 	}
@@ -390,7 +393,7 @@ mv /tmp/spekk-new /usr/local/bin/spekk
 echo "Installed spekk $LATEST"
 systemctl restart spekk-agent`
 
-	args := sshArgs(sandbox)
+	args := sshArgs(sandbox, name)
 	args = append(args, downloadScript)
 	cmd := exec.Command("ssh", args...)
 	out, err := cmd.CombinedOutput()
@@ -405,14 +408,37 @@ systemctl restart spekk-agent`
 
 // --- Helpers ---
 
+// KnownHostsFile returns the path to the per-sandbox known_hosts file.
+func KnownHostsFile(name string) string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".spekk", "known_hosts", name)
+}
+
+// sshHostKeyOpts returns SSH options for host key verification.
+// On first connection (no known_hosts file), it uses accept-new to record the key.
+// On subsequent connections, it uses strict verification against the stored key.
+func sshHostKeyOpts(name string) []string {
+	khFile := KnownHostsFile(name)
+	if _, err := os.Stat(khFile); err == nil {
+		// Known hosts file exists — verify host key strictly
+		return []string{
+			"-o", "StrictHostKeyChecking=yes",
+			"-o", fmt.Sprintf("UserKnownHostsFile=%s", khFile),
+		}
+	}
+	// First connection — accept and record the key
+	os.MkdirAll(filepath.Dir(khFile), 0o700)
+	return []string{
+		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", fmt.Sprintf("UserKnownHostsFile=%s", khFile),
+	}
+}
+
 // sshArgs returns the base SSH arguments for connecting to a sandbox,
 // using the stored key if available.
-func sshArgs(sandbox *SandboxMeta) []string {
-	args := []string{
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
-	}
+func sshArgs(sandbox *SandboxMeta, name string) []string {
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
 	if sandbox.SSHKeyPath != "" {
 		args = append(args, "-i", sandbox.SSHKeyPath)
 	}
@@ -470,7 +496,7 @@ func waitForDroplet(client *Client, dropletID int) (string, error) {
 	return "", fmt.Errorf("droplet %d did not become active within 5 minutes", dropletID)
 }
 
-func waitForProvisioning(ip, keyPath string) error {
+func waitForProvisioning(ip, keyPath, name string) error {
 	deadline := time.Now().Add(10 * time.Minute)
 
 	// Wait for SSH connectivity
@@ -485,7 +511,7 @@ func waitForProvisioning(ip, keyPath string) error {
 	// Wait for provisioning marker
 	fmt.Fprintln(os.Stderr, "Waiting for cloud-init provisioning to complete...")
 	for time.Now().Before(deadline) {
-		out := runSSH(ip, keyPath, "test -f /opt/spekk/.provisioned && echo ok")
+		out := runSSH(ip, keyPath, name, "test -f /opt/spekk/.provisioned && echo ok")
 		if strings.TrimSpace(out) == "ok" {
 			return nil
 		}
@@ -503,12 +529,9 @@ func checkTCPPort(ip string, port int) bool {
 	return true
 }
 
-func runSSH(ip, keyPath, command string) string {
-	args := []string{
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
-	}
+func runSSH(ip, keyPath, name, command string) string {
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
@@ -521,12 +544,9 @@ func runSSH(ip, keyPath, command string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func sshCheck(sandbox *SandboxMeta, command string) string {
-	args := []string{
-		"-o", "ConnectTimeout=5",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "BatchMode=yes",
-	}
+func sshCheck(sandbox *SandboxMeta, name, command string) string {
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=5", "-o", "BatchMode=yes")
 	if sandbox.SSHKeyPath != "" {
 		args = append(args, "-i", sandbox.SSHKeyPath)
 	}
@@ -565,11 +585,8 @@ func injectCredentials(ip, keyPath, name, agentToken string) error {
 		encoded,
 	)
 
-	args := []string{
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
-	}
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
@@ -610,7 +627,7 @@ func buildInjectScript(envContent string) string {
 	)
 }
 
-func configureGitCredentials(ip, keyPath string) error {
+func configureGitCredentials(ip, keyPath, name string) error {
 	ghToken := os.Getenv("GITHUB_TOKEN")
 
 	// Base64-encode the token to avoid interpolating it into shell strings.
@@ -625,11 +642,8 @@ echo "${TOKEN}" | su - agent -c 'gh auth login --with-token 2>/dev/null || true'
 		encodedToken,
 	)
 
-	args := []string{
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
-	}
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
