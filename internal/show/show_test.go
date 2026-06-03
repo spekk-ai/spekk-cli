@@ -70,6 +70,18 @@ func TestTemplateContainsPlaceholder(t *testing.T) {
 	}
 }
 
+func TestTemplateSanitizesMarkdown(t *testing.T) {
+	// DOMPurify must be loaded
+	if !strings.Contains(templateHTML, "dompurify") {
+		t.Error("template must include DOMPurify library")
+	}
+
+	// Every marked.parse() call must be wrapped in DOMPurify.sanitize()
+	if strings.Count(templateHTML, "marked.parse(") != strings.Count(templateHTML, "DOMPurify.sanitize(marked.parse(") {
+		t.Error("all marked.parse() calls must be wrapped with DOMPurify.sanitize()")
+	}
+}
+
 func TestRunWritesHTML(t *testing.T) {
 	dir := t.TempDir()
 	specsDir := filepath.Join(dir, "specs")

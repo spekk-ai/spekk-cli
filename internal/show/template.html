@@ -766,6 +766,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
     <script>window.__SPEKK_DATA__ = /*__SPEKK_DATA__*/;</script>
 
     <script>
@@ -880,7 +881,7 @@
                 html += '<span class="meta-item">File: <strong>' + escapeHtml(spec.file) + '</strong></span>';
                 html += '</div>';
                 html += '</div>';
-                html += '<div class="detail-body markdown-body">' + marked.parse(spec.content || '') + '</div>';
+                html += '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(spec.content || '')) + '</div>';
                 html += '</div>';
             }
 
@@ -901,7 +902,7 @@
                 }
                 html += '</div>';
                 html += '</div>';
-                html += '<div class="detail-body markdown-body">' + marked.parse(assertion.content || '') + '</div>';
+                html += '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(assertion.content || '')) + '</div>';
                 html += '</div>';
             }
 
