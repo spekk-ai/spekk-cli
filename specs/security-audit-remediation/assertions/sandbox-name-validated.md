@@ -3,11 +3,13 @@ id: sandbox-name-validated
 parent: security-audit-remediation
 created: 2026-06-03T12:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/spekk-sandbox-vulnrabilities
 ---
 
 # Sandbox name is validated before use in shell commands
+
+**Tests:** internal/sandbox/commands_test.go
 
 The user-supplied `--name` flag for sandbox commands is validated to contain only safe characters before being embedded in any shell command or environment variable. A malicious name cannot inject shell commands or break out of string contexts.
 

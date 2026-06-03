@@ -9,9 +9,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
+
+var sandboxNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// ValidateSandboxName checks that a sandbox name contains only safe characters.
+// Valid names match ^[a-z0-9][a-z0-9-]*$ (lowercase alphanumeric and hyphens,
+// must start with alphanumeric). This prevents shell injection when the name
+// is used in commands or environment variables.
+func ValidateSandboxName(name string) error {
+	if name == "" {
+		return fmt.Errorf("sandbox name cannot be empty")
+	}
+	if !sandboxNameRe.MatchString(name) {
+		return fmt.Errorf("invalid sandbox name %q: must match [a-z0-9][a-z0-9-]* (lowercase alphanumeric and hyphens, starting with alphanumeric)", name)
+	}
+	return nil
+}
 
 // CreateOptions holds flags for the create subcommand.
 type CreateOptions struct {

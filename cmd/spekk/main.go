@@ -429,6 +429,10 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox status <name>")
 			os.Exit(1)
 		}
+		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
 		if err := sandbox.Status(subArgs[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
@@ -436,6 +440,10 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 	case "ssh":
 		if len(subArgs) == 0 {
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox ssh <name> [ssh-flags...]")
+			os.Exit(1)
+		}
+		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 		if err := sandbox.SSH(subArgs[0], subArgs[1:]); err != nil {
@@ -456,6 +464,10 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force]")
 			os.Exit(1)
 		}
+		if err := sandbox.ValidateSandboxName(name); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
 		if err := sandbox.Destroy(name, force); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
@@ -463,6 +475,10 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 	case "deploy":
 		if len(subArgs) == 0 {
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox deploy <name>")
+			os.Exit(1)
+		}
+		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 		if err := sandbox.Deploy(subArgs[0]); err != nil {
@@ -505,6 +521,11 @@ OPTIONS:
 
 	if flags.String("name") == "" {
 		fmt.Fprintln(os.Stderr, "Error: --name is required for sandbox create")
+		os.Exit(1)
+	}
+
+	if err := sandbox.ValidateSandboxName(flags.String("name")); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
 

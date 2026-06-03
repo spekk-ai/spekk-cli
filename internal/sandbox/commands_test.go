@@ -150,6 +150,35 @@ func TestBuildGitCredentialScript_NoShellInterpolation(t *testing.T) {
 	}
 }
 
+func TestValidateSandboxName(t *testing.T) {
+	valid := []string{"my-sandbox", "prod1", "a", "test-env-2", "abc123"}
+	for _, name := range valid {
+		if err := ValidateSandboxName(name); err != nil {
+			t.Errorf("ValidateSandboxName(%q) = %v, want nil", name, err)
+		}
+	}
+
+	invalid := []string{
+		"",
+		"; rm -rf /",
+		"$(whoami)",
+		"name\nmalicious",
+		"-starts-with-dash",
+		"Has Spaces",
+		"has`backtick",
+		"UPPERCASE",
+		"with;semicolon",
+		"with'quote",
+		`with"doublequote`,
+		"with$dollar",
+	}
+	for _, name := range invalid {
+		if err := ValidateSandboxName(name); err == nil {
+			t.Errorf("ValidateSandboxName(%q) = nil, want error", name)
+		}
+	}
+}
+
 // isBase64Safe checks if a value happens to be valid base64 characters only,
 // meaning it could appear in the script as part of the encoded payload
 // without being a shell injection risk.
