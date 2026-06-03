@@ -3,7 +3,7 @@ id: absolute-paths-rejected-in-transcript-handler
 parent: security-audit-remediation
 created: 2026-06-03T12:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/spekk-sandbox-vulnrabilities
 ---
 
@@ -19,3 +19,5 @@ The `BuildSkillMessage` function in `internal/agent/launcher.go` validates trans
 - `spekk coach meeting notes.txt` (relative, within working directory) still works
 - Absolute paths within the working directory (e.g., `/current/working/dir/notes.txt`) still work
 - Tests cover absolute paths outside working directory, relative traversal paths, and legitimate paths
+
+**Tests:** `internal/agent/launcher_test.go`

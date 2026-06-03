@@ -103,9 +103,11 @@ func TestBuildSkillMessage_MeetingWithTranscript(t *testing.T) {
 	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
 		[]byte("# Meeting Skill"), 0o644)
 
-	// Create transcript file
-	transcriptFile := filepath.Join(t.TempDir(), "notes.txt")
+	// Create transcript file inside the current working directory
+	wd, _ := os.Getwd()
+	transcriptFile := filepath.Join(wd, "test-meeting-notes.txt")
 	os.WriteFile(transcriptFile, []byte("Meeting notes content here"), 0o644)
+	t.Cleanup(func() { os.Remove(transcriptFile) })
 
 	msg, err := BuildSkillMessage(install, "coach", "meeting",
 		[]string{"meeting", transcriptFile})
@@ -150,8 +152,9 @@ func TestBuildSkillMessage_MeetingMissingFile(t *testing.T) {
 	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
 		[]byte("# Meeting Skill"), 0o644)
 
+	// Use a relative path within cwd that doesn't exist to test the "file not found" path
 	_, err := BuildSkillMessage(install, "coach", "meeting",
-		[]string{"meeting", "/nonexistent/file.txt"})
+		[]string{"meeting", "nonexistent-file.txt"})
 	if err == nil {
 		t.Fatal("expected error for missing transcript file")
 	}
@@ -175,6 +178,48 @@ func TestBuildSkillMessage_MeetingPathTraversal(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "resolves outside working directory") {
 		t.Errorf("unexpected error: %s", err)
+	}
+}
+
+func TestBuildSkillMessage_MeetingAbsolutePathOutsideWorkDir(t *testing.T) {
+	install := t.TempDir()
+
+	skillDir := filepath.Join(install, "specs", "coach-skills-system")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
+		[]byte("# Meeting Skill"), 0o644)
+
+	_, err := BuildSkillMessage(install, "coach", "meeting",
+		[]string{"meeting", "/etc/passwd"})
+	if err == nil {
+		t.Fatal("expected error for absolute path outside working directory")
+	}
+	if !strings.Contains(err.Error(), "resolves outside working directory") {
+		t.Errorf("unexpected error: %s", err)
+	}
+}
+
+func TestBuildSkillMessage_MeetingAbsolutePathInsideWorkDir(t *testing.T) {
+	install := t.TempDir()
+
+	skillDir := filepath.Join(install, "specs", "coach-skills-system")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
+		[]byte("# Meeting Skill"), 0o644)
+
+	// Create a transcript file inside the current working directory
+	wd, _ := os.Getwd()
+	transcriptFile := filepath.Join(wd, "test-transcript.txt")
+	os.WriteFile(transcriptFile, []byte("Transcript content"), 0o644)
+	t.Cleanup(func() { os.Remove(transcriptFile) })
+
+	msg, err := BuildSkillMessage(install, "coach", "meeting",
+		[]string{"meeting", transcriptFile})
+	if err != nil {
+		t.Fatalf("absolute path within working dir should be allowed: %s", err)
+	}
+	if !strings.Contains(msg, "Transcript content") {
+		t.Error("should contain transcript content")
 	}
 }
 

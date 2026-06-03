@@ -66,11 +66,9 @@ func BuildSkillMessage(installDir, agent, subcommand string, args []string) (str
 	if subcommand == "meeting" && len(args) > 1 {
 		transcriptFile := args[1]
 		resolvedPath := resolvePath(transcriptFile)
-		if !filepath.IsAbs(transcriptFile) {
-			wd, _ := os.Getwd()
-			if wd != "" && !strings.HasPrefix(resolvedPath, wd+string(filepath.Separator)) {
-				return "", fmt.Errorf("path %q resolves outside working directory", transcriptFile)
-			}
+		wd, _ := os.Getwd()
+		if wd != "" && !strings.HasPrefix(resolvedPath, wd+string(filepath.Separator)) {
+			return "", fmt.Errorf("path %q resolves outside working directory", transcriptFile)
 		}
 		data, err := os.ReadFile(resolvedPath)
 		if err != nil {
@@ -228,7 +226,7 @@ func cwd() string {
 
 func resolvePath(p string) string {
 	if filepath.IsAbs(p) {
-		return p
+		return filepath.Clean(p)
 	}
 	wd, _ := os.Getwd()
 	return filepath.Join(wd, p)
