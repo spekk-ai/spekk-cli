@@ -3,10 +3,9 @@ id: cross-compile-binaries
 parent: release-flow
 created: 2026-06-03T18:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: version-embedding
 branch: temporary-target
-locked-by: builder-Paris-MacBook-Pro-2.local-63231-1780528555
 ---
 
 # Build produces 6 platform/arch binaries
