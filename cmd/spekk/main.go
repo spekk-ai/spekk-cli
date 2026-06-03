@@ -16,9 +16,16 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/serve"
 	"github.com/spekk-ai/spekk-cli/internal/show"
 	"github.com/spekk-ai/spekk-cli/internal/status"
+	pkgversion "github.com/spekk-ai/spekk-cli/internal/version"
 )
 
+// version is set at build time via: go build -ldflags "-X main.version=1.2.3"
+var version = "dev"
+
 func main() {
+	// Propagate build-time version to shared package for use by other packages
+	pkgversion.Version = version
+
 	// Set embedded assets so agents and skills work when binary is installed outside source tree
 	cli.DefaultEmbeddedFS = spekk.EmbeddedFS
 	cli.DefaultEmbeddedSkillFS = spekk.EmbeddedFS
@@ -59,6 +66,9 @@ func main() {
 
 	case "sandbox":
 		launchSandbox(args[1:])
+
+	case "version", "--version", "-v":
+		fmt.Println(version)
 
 	case "help", "--help", "-h":
 		printHelp()
