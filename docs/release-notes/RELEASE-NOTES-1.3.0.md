@@ -15,8 +15,8 @@ New `spekk sandbox` command for provisioning and managing DigitalOcean droplet-b
 
 ## Architecture
 
-- **`src/sandbox/do-api.js`** — DigitalOcean API client (native fetch)
-- **`src/sandbox/store.js`** — Local metadata store persisting sandbox records to `~/.spekk/sandboxes.json`
-- **`src/sandbox/templates.js`** — Bundled template loader for `cloud-init.yaml`
-- **`src/sandbox/create.js`** — Full create workflow: droplet creation, polling, SSH setup, credential injection, agent deployment
-- **`src/sandbox/cli.js`** — Command router with subcommand dispatch and help output
+- **`internal/sandbox/doapi.go`** — DigitalOcean API client
+- **`internal/sandbox/store.go`** — Local metadata store persisting sandbox records to `~/.spekk/sandboxes.json`
+- **`internal/sandbox/templates.go`** — Bundled template loader for `cloud-init.yaml`
+- **`internal/sandbox/create.go`** — Full create workflow: droplet creation, polling, SSH setup, credential injection, agent deployment
+- **`internal/cli/sandbox.go`** — Command router with subcommand dispatch and help output

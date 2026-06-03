@@ -12,7 +12,7 @@ import (
 func TestEmbeddedFS_ObserverCoverageGapSkill(t *testing.T) {
 	const path = "specs/observer-skills/coverage-gap-skill.md"
 
-	data, err := fs.ReadFile(PromptFS, path)
+	data, err := fs.ReadFile(EmbeddedFS, path)
 	if err != nil {
 		t.Fatalf("expected %s in embedded FS: %v", path, err)
 	}

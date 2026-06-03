@@ -86,6 +86,8 @@ spekk-app-reference/
 # Temporary directory for all development artifacts
 .tmp/
 
+# Zensical build output
+site/
 # Claude Code local state
 .claude/
 

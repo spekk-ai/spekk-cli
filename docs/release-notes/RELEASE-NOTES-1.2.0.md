@@ -136,7 +136,7 @@ All existing skills converted to markdown:
 2. **Meeting Notes to Specs** — `meeting-notes-to-specs-skill.md`
 3. **Coordinator** — `coordinator-skill.md` (new!)
 
-See `docs/COACH-SKILLS.md` for detailed documentation.
+See `docs/coach-skills.md` for detailed documentation.
 
 ---
 
@@ -157,10 +157,10 @@ spekk coach coordinate
 
 Convert them from JS classes to markdown files:
 
-1. Create `specs/coach-skills-system/my-skill.md`
+1. Create `.spekk/skills/coach/my-skill.md`
 2. Add YAML frontmatter with `id` and `created`
 3. Add sections: Triggers, Workflow, Validation
-4. Delete the old `.js` file
+4. Delete the old skill file
 
 The coach will automatically detect and use markdown skills.
 
@@ -179,13 +179,13 @@ The coordinator adds new YAML fields to assertions. After running `spekk coach c
 
 ```bash
 # Tests pass
-npm test
+go test ./...
 
 # Coordinator launches
 spekk coach coordinate
 
 # Skills documentation is current
-cat docs/COACH-SKILLS.md
+cat docs/coach-skills.md
 
 # Parser respects branch filtering
 spekk next
