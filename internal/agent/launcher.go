@@ -66,9 +66,12 @@ func BuildSkillMessage(installDir, agent, subcommand string, args []string) (str
 	if subcommand == "meeting" && len(args) > 1 {
 		transcriptFile := args[1]
 		resolvedPath := resolvePath(transcriptFile)
-		wd, _ := os.Getwd()
-		if wd != "" && !strings.HasPrefix(resolvedPath, wd+string(filepath.Separator)) {
-			return "", fmt.Errorf("path %q resolves outside working directory", transcriptFile)
+		info, err := os.Stat(resolvedPath)
+		if err != nil {
+			return "", fmt.Errorf("Transcript file not found: %s", resolvedPath)
+		}
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("path is not a regular file: %s", resolvedPath)
 		}
 		data, err := os.ReadFile(resolvedPath)
 		if err != nil {
@@ -225,6 +228,12 @@ func cwd() string {
 }
 
 func resolvePath(p string) string {
+	if strings.HasPrefix(p, "~/") || p == "~" {
+		home := homeDir()
+		if home != "" {
+			p = filepath.Join(home, p[1:])
+		}
+	}
 	if filepath.IsAbs(p) {
 		return filepath.Clean(p)
 	}

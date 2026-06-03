@@ -163,24 +163,6 @@ func TestBuildSkillMessage_MeetingMissingFile(t *testing.T) {
 	}
 }
 
-func TestBuildSkillMessage_MeetingPathTraversal(t *testing.T) {
-	install := t.TempDir()
-
-	skillDir := filepath.Join(install, "specs", "coach-skills-system")
-	os.MkdirAll(skillDir, 0o755)
-	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
-		[]byte("# Meeting Skill"), 0o644)
-
-	_, err := BuildSkillMessage(install, "coach", "meeting",
-		[]string{"meeting", "../../etc/passwd"})
-	if err == nil {
-		t.Fatal("expected error for path traversal")
-	}
-	if !strings.Contains(err.Error(), "resolves outside working directory") {
-		t.Errorf("unexpected error: %s", err)
-	}
-}
-
 func TestBuildSkillMessage_MeetingAbsolutePathOutsideWorkDir(t *testing.T) {
 	install := t.TempDir()
 
@@ -189,17 +171,22 @@ func TestBuildSkillMessage_MeetingAbsolutePathOutsideWorkDir(t *testing.T) {
 	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
 		[]byte("# Meeting Skill"), 0o644)
 
-	_, err := BuildSkillMessage(install, "coach", "meeting",
-		[]string{"meeting", "/etc/passwd"})
-	if err == nil {
-		t.Fatal("expected error for absolute path outside working directory")
+	// Create a transcript file outside the working directory
+	outsideDir := t.TempDir()
+	transcriptFile := filepath.Join(outsideDir, "notes.txt")
+	os.WriteFile(transcriptFile, []byte("Outside workdir content"), 0o644)
+
+	msg, err := BuildSkillMessage(install, "coach", "meeting",
+		[]string{"meeting", transcriptFile})
+	if err != nil {
+		t.Fatalf("absolute path outside working dir should be allowed: %s", err)
 	}
-	if !strings.Contains(err.Error(), "resolves outside working directory") {
-		t.Errorf("unexpected error: %s", err)
+	if !strings.Contains(msg, "Outside workdir content") {
+		t.Error("should contain transcript content from outside workdir")
 	}
 }
 
-func TestBuildSkillMessage_MeetingAbsolutePathInsideWorkDir(t *testing.T) {
+func TestBuildSkillMessage_MeetingRelativePathOutsideWorkDir(t *testing.T) {
 	install := t.TempDir()
 
 	skillDir := filepath.Join(install, "specs", "coach-skills-system")
@@ -207,19 +194,65 @@ func TestBuildSkillMessage_MeetingAbsolutePathInsideWorkDir(t *testing.T) {
 	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
 		[]byte("# Meeting Skill"), 0o644)
 
-	// Create a transcript file inside the current working directory
-	wd, _ := os.Getwd()
-	transcriptFile := filepath.Join(wd, "test-transcript.txt")
-	os.WriteFile(transcriptFile, []byte("Transcript content"), 0o644)
-	t.Cleanup(func() { os.Remove(transcriptFile) })
+	// Create a file in a sibling directory via relative path
+	siblingDir := t.TempDir()
+	transcriptFile := filepath.Join(siblingDir, "sibling-notes.txt")
+	os.WriteFile(transcriptFile, []byte("Sibling content"), 0o644)
 
+	// Use the absolute path (relative traversal depends on cwd)
 	msg, err := BuildSkillMessage(install, "coach", "meeting",
 		[]string{"meeting", transcriptFile})
 	if err != nil {
-		t.Fatalf("absolute path within working dir should be allowed: %s", err)
+		t.Fatalf("path outside working dir should be allowed: %s", err)
 	}
-	if !strings.Contains(msg, "Transcript content") {
-		t.Error("should contain transcript content")
+	if !strings.Contains(msg, "Sibling content") {
+		t.Error("should contain transcript content from sibling dir")
+	}
+}
+
+func TestBuildSkillMessage_MeetingTildeExpansion(t *testing.T) {
+	install := t.TempDir()
+
+	skillDir := filepath.Join(install, "specs", "coach-skills-system")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
+		[]byte("# Meeting Skill"), 0o644)
+
+	// Create a file in a temp dir that we pretend is home
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	transcriptFile := filepath.Join(fakeHome, "Downloads", "notes.txt")
+	os.MkdirAll(filepath.Join(fakeHome, "Downloads"), 0o755)
+	os.WriteFile(transcriptFile, []byte("Home dir content"), 0o644)
+
+	msg, err := BuildSkillMessage(install, "coach", "meeting",
+		[]string{"meeting", "~/Downloads/notes.txt"})
+	if err != nil {
+		t.Fatalf("tilde path should be expanded and allowed: %s", err)
+	}
+	if !strings.Contains(msg, "Home dir content") {
+		t.Error("should contain transcript content from tilde-expanded path")
+	}
+}
+
+func TestBuildSkillMessage_MeetingDirectoryPath(t *testing.T) {
+	install := t.TempDir()
+
+	skillDir := filepath.Join(install, "specs", "coach-skills-system")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "meeting-notes-to-specs-skill.md"),
+		[]byte("# Meeting Skill"), 0o644)
+
+	// Use a directory path instead of a file
+	dirPath := t.TempDir()
+
+	_, err := BuildSkillMessage(install, "coach", "meeting",
+		[]string{"meeting", dirPath})
+	if err == nil {
+		t.Fatal("expected error for directory path")
+	}
+	if !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("unexpected error: %s", err)
 	}
 }
 
