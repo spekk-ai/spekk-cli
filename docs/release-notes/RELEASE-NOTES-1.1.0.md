@@ -96,7 +96,7 @@ Run these to verify everything works:
 
 ```bash
 # 1. Tests pass
-npm test
+go test ./...
 
 # 2. Builder help shows all flags
 spekk builder --help
