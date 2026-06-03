@@ -3,13 +3,14 @@ id: self-update-command
 parent: release-flow
 created: 2026-06-03T18:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-Paris-MacBook-Pro-2-97752-1780529301
+status: done
 depends-on: gemfury-publish
 branch: temporary-target
 ---
 
 # `spekk update` downloads and replaces the running binary
+
+**Tests:** internal/update/update_test.go
 
 The CLI can self-update by fetching the latest version from Gemfury and replacing itself in-place.
 

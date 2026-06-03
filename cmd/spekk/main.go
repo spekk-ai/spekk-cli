@@ -16,6 +16,7 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/serve"
 	"github.com/spekk-ai/spekk-cli/internal/show"
 	"github.com/spekk-ai/spekk-cli/internal/status"
+	"github.com/spekk-ai/spekk-cli/internal/update"
 	pkgversion "github.com/spekk-ai/spekk-cli/internal/version"
 )
 
@@ -66,6 +67,9 @@ func main() {
 
 	case "sandbox":
 		launchSandbox(args[1:])
+
+	case "update":
+		runUpdate(args[1:])
 
 	case "version", "--version", "-v":
 		fmt.Println(version)
@@ -521,6 +525,38 @@ OPTIONS:
 	}
 }
 
+// runUpdate performs a self-update check and optional install.
+func runUpdate(args []string) {
+	checkOnly := false
+	for _, a := range args {
+		if a == "--check" || a == "-c" {
+			checkOnly = true
+		}
+		if a == "--help" || a == "-h" {
+			fmt.Print(`
+spekk update - Self-update the spekk CLI binary
+
+USAGE:
+  spekk update [OPTIONS]
+
+OPTIONS:
+  --check, -c   Check for available updates without installing
+  --help, -h    Show this help message
+
+ENVIRONMENT:
+  GEMFURY_TOKEN     API token for Gemfury authentication (required)
+  GEMFURY_ACCOUNT   Gemfury account name (default: spekk)
+`)
+			return
+		}
+	}
+
+	if err := update.Run(checkOnly); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
 // printHelp displays the help text with all available commands.
 func printHelp() {
 	fmt.Print(`
@@ -538,6 +574,7 @@ COMMANDS:
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
   loop      Run orchestration workflows (builder/coach loops)
+  update    Self-update the spekk CLI to the latest version (--check to preview)
   help      Show this help message
 
 DEFAULT:
