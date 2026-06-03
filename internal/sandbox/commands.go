@@ -537,12 +537,16 @@ func injectCredentials(ip, keyPath, name, agentToken string) error {
 		"SPEKK_AGENT_NAME=spekk-" + name,
 	}
 
-	envContent := strings.Join(envLines, "\n")
-	script := fmt.Sprintf(`cat > /etc/spekk/agent.env << 'ENVEOF'
-%s
-ENVEOF
-chown agent:agent /etc/spekk/agent.env
-chmod 600 /etc/spekk/agent.env`, envContent)
+	envContent := strings.Join(envLines, "\n") + "\n"
+
+	// Base64-encode the env content in Go to avoid any shell interpolation.
+	// The remote side decodes it, so credential values with newlines, quotes,
+	// or heredoc terminators cannot break out of the intended context.
+	encoded := base64.StdEncoding.EncodeToString([]byte(envContent))
+	script := fmt.Sprintf(
+		`echo '%s' | base64 -d > /etc/spekk/agent.env && chown agent:agent /etc/spekk/agent.env && chmod 600 /etc/spekk/agent.env`,
+		encoded,
+	)
 
 	args := []string{
 		"-o", "StrictHostKeyChecking=no",
@@ -560,14 +564,49 @@ chmod 600 /etc/spekk/agent.env`, envContent)
 	return nil
 }
 
+// buildEnvContent constructs the env file content for credential injection.
+// Exported for testing.
+func buildEnvContent(envVars map[string]string, name, agentToken, spekkHost string) string {
+	bareHost := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(spekkHost, "https://"), "http://"), "/")
+
+	envLines := []string{
+		"AWS_ACCESS_KEY_ID=" + envVars["AWS_ACCESS_KEY_ID"],
+		"AWS_SECRET_ACCESS_KEY=" + envVars["AWS_SECRET_ACCESS_KEY"],
+		"AWS_DEFAULT_REGION=" + envVars["AWS_DEFAULT_REGION"],
+		"GITHUB_TOKEN=" + envVars["GITHUB_TOKEN"],
+		"SPEKK_HOST=" + bareHost,
+		"SPEKK_AGENT_TOKEN=" + agentToken,
+		"CLAUDE_CODE_USE_BEDROCK=1",
+		"WORKSPACE=/opt/spekk/workspace",
+		"SPEKK_AGENT_NAME=spekk-" + name,
+	}
+	return strings.Join(envLines, "\n") + "\n"
+}
+
+// buildInjectScript produces the SSH command string for injecting credentials.
+// It base64-encodes the content to prevent shell injection. Exported for testing.
+func buildInjectScript(envContent string) string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(envContent))
+	return fmt.Sprintf(
+		`echo '%s' | base64 -d > /etc/spekk/agent.env && chown agent:agent /etc/spekk/agent.env && chmod 600 /etc/spekk/agent.env`,
+		encoded,
+	)
+}
+
 func configureGitCredentials(ip, keyPath string) error {
 	ghToken := os.Getenv("GITHUB_TOKEN")
-	script := strings.Join([]string{
-		"su - agent -c 'git config --global credential.helper store'",
-		fmt.Sprintf(`su - agent -c 'echo "https://x-access-token:%s@github.com" > ~/.git-credentials'`, ghToken),
-		"su - agent -c 'chmod 600 ~/.git-credentials'",
-		fmt.Sprintf(`su - agent -c 'echo "%s" | gh auth login --with-token 2>/dev/null || true'`, ghToken),
-	}, " && ")
+
+	// Base64-encode the token to avoid interpolating it into shell strings.
+	// The remote script decodes it and writes files without shell interpretation.
+	encodedToken := base64.StdEncoding.EncodeToString([]byte(ghToken))
+	script := fmt.Sprintf(`set -e
+TOKEN=$(echo '%s' | base64 -d)
+su - agent -c 'git config --global credential.helper store'
+su - agent -c "cat > ~/.git-credentials" <<< "https://x-access-token:${TOKEN}@github.com"
+su - agent -c 'chmod 600 ~/.git-credentials'
+echo "${TOKEN}" | su - agent -c 'gh auth login --with-token 2>/dev/null || true'`,
+		encodedToken,
+	)
 
 	args := []string{
 		"-o", "StrictHostKeyChecking=no",
@@ -583,6 +622,20 @@ func configureGitCredentials(ip, keyPath string) error {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
 	}
 	return nil
+}
+
+// buildGitCredentialScript produces the SSH command string for configuring git credentials.
+// It base64-encodes the token to prevent shell injection. Exported for testing.
+func buildGitCredentialScript(ghToken string) string {
+	encodedToken := base64.StdEncoding.EncodeToString([]byte(ghToken))
+	return fmt.Sprintf(`set -e
+TOKEN=$(echo '%s' | base64 -d)
+su - agent -c 'git config --global credential.helper store'
+su - agent -c "cat > ~/.git-credentials" <<< "https://x-access-token:${TOKEN}@github.com"
+su - agent -c 'chmod 600 ~/.git-credentials'
+echo "${TOKEN}" | su - agent -c 'gh auth login --with-token 2>/dev/null || true'`,
+		encodedToken,
+	)
 }
 
 func resolveProject(client *Client, projectValue string) (string, string, error) {

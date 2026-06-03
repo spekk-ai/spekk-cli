@@ -3,7 +3,7 @@ id: sandbox-credentials-use-safe-transport
 parent: security-audit-remediation
 created: 2026-06-03T12:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/spekk-sandbox-vulnrabilities
 ---
 
@@ -19,3 +19,5 @@ The `injectCredentials` and `configureGitCredentials` functions in `internal/san
 - An AWS_SECRET_ACCESS_KEY containing `\nENVEOF\nmalicious_command` does not break out of the heredoc
 - Existing sandbox create/destroy workflows still function correctly after the change
 - Tests cover injection attempts for both functions
+
+**Tests:** internal/sandbox/commands_test.go
