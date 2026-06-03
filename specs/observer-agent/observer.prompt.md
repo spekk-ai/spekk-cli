@@ -58,7 +58,7 @@ You detect four types of drift:
 **What:** Specifications no longer reflect current needs
 
 **Detection Methods:**
-- Find specs marked "done" but referenced code has changed significantly
+- Find specs whose assertions are all "done" but referenced code has changed significantly (note: spec status is derived from child assertions — specs do NOT have an explicit `status` field)
 - Identify specs referencing removed/deprecated functionality
 - Detect specs with irrelevant success criteria
 - Flag specs much older than recent code changes
