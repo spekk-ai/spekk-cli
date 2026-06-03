@@ -3,7 +3,7 @@ id: skill-content-cannot-break-wrapper-tags
 parent: security-audit-remediation
 created: 2026-06-03T12:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: sandbox-credentials-use-safe-transport
 branch: feature/spekk-sandbox-vulnrabilities
 ---

@@ -60,7 +60,7 @@ func BuildSkillMessage(installDir, agent, subcommand string, args []string) (str
 	sb.WriteString("\n\n---\n\n**Skill Activation: `spekk " + agent + " " + subcommand + "`**\n\n")
 	sb.WriteString("The user has launched you with a skill active via `spekk " + agent + " " + subcommand + "`.\n")
 	sb.WriteString("Follow the inlined skill workflow below immediately — do not wait for trigger detection.\n")
-	sb.WriteString("\n<skill-content>\n" + skill.Content + "\n</skill-content>\n")
+	sb.WriteString("\n<skill-content>\n" + sanitizeSkillContent(skill.Content) + "\n</skill-content>\n")
 
 	// Handle meeting-specific transcript argument
 	if subcommand == "meeting" && len(args) > 1 {
@@ -230,6 +230,33 @@ func resolvePath(p string) string {
 	}
 	wd, _ := os.Getwd()
 	return filepath.Join(wd, p)
+}
+
+// sanitizeSkillContent strips any closing </skill-content> tags (case-insensitive)
+// from skill markdown to prevent content from breaking out of the wrapper boundary.
+func sanitizeSkillContent(content string) string {
+	// Case-insensitive match for </skill-content> with optional whitespace
+	lower := strings.ToLower(content)
+	var result strings.Builder
+	result.Grow(len(content))
+	i := 0
+	for i < len(content) {
+		idx := strings.Index(lower[i:], "</skill-content")
+		if idx == -1 {
+			result.WriteString(content[i:])
+			break
+		}
+		result.WriteString(content[i : i+idx])
+		// Find the end of this tag (closing >)
+		tagEnd := strings.IndexByte(content[i+idx:], '>')
+		if tagEnd == -1 {
+			// No closing >, skip the rest as a partial tag
+			break
+		}
+		// Skip the entire tag
+		i = i + idx + tagEnd + 1
+	}
+	return result.String()
 }
 
 func isNotFound(err error) bool {
