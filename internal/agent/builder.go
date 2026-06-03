@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -14,6 +15,22 @@ import (
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
+
+// specIDRe matches valid spec/assertion IDs: lowercase alphanumeric and hyphens.
+var specIDRe = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+// ValidateSpecOrAssertionID checks that a spec or assertion ID contains only
+// valid characters (lowercase letters, digits, hyphens). This prevents prompt
+// injection when IDs are interpolated into activation messages.
+func ValidateSpecOrAssertionID(flagName, value string) error {
+	if value == "" {
+		return nil
+	}
+	if !specIDRe.MatchString(value) {
+		return fmt.Errorf("invalid %s value %q: must contain only lowercase letters, digits, and hyphens (a-z, 0-9, -)", flagName, value)
+	}
+	return nil
+}
 
 // ANSI color codes for console output.
 const (
@@ -262,6 +279,16 @@ func launchClaude(claudeArgs []string, holder *processHolder) (bool, error) {
 func RunBuilder(args []string, installDir string) {
 	cfg := ParseBuilderFlags(args)
 	cfg.InstallDir = installDir
+
+	// Validate spec/assertion flags before any interpolation
+	if err := ValidateSpecOrAssertionID("--spec", cfg.Spec); err != nil {
+		colorLog(colorRed, fmt.Sprintf("Error: %s", err))
+		os.Exit(1)
+	}
+	if err := ValidateSpecOrAssertionID("--assertion", cfg.Assertion); err != nil {
+		colorLog(colorRed, fmt.Sprintf("Error: %s", err))
+		os.Exit(1)
+	}
 
 	// Handle help
 	if hasHelp(args) {

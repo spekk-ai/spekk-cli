@@ -3,7 +3,7 @@ id: spec-assertion-flags-validated
 parent: security-audit-remediation
 created: 2026-06-03T12:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/spekk-sandbox-vulnrabilities
 ---
 
