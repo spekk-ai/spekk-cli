@@ -3,7 +3,8 @@ id: ssh-connections-verify-host-keys
 parent: security-audit-remediation
 created: 2026-06-03T12:00:00Z
 priority: 2
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro-2-92595-1780513772
 depends-on: sandbox-name-validated
 branch: feature/spekk-sandbox-vulnrabilities
 ---
