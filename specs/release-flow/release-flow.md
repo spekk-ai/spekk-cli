@@ -20,3 +20,4 @@ Cross-compile the spekk CLI for ARM and AMD on macOS, Linux, and Windows, publis
 2. `cross-compile-binaries` — Build produces 6 platform/arch binaries (depends on 1)
 3. `gemfury-publish` — Release script uploads versioned artifacts to Gemfury (depends on 2)
 4. `self-update-command` — `spekk update` downloads and replaces the running binary (depends on 3)
+5. `ci-release-pipeline` — CI workflow cross-compiles, embeds version, and publishes to Gemfury on tag push (depends on 4)
