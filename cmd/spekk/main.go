@@ -71,7 +71,7 @@ func main() {
 	case "update":
 		runUpdate(args[1:])
 
-	case "version", "--version", "-v":
+	case "version", "--version":
 		fmt.Println(version)
 
 	case "help", "--help", "-h":

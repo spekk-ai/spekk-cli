@@ -194,6 +194,11 @@ func TestDownloadAndReplace(t *testing.T) {
 
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			// Verify auth header is used instead of token in URL
+			user, _, ok := req.BasicAuth()
+			if !ok || user != "test-token" {
+				t.Error("expected basic auth with token on download request")
+			}
 			return &http.Response{
 				StatusCode: 200,
 				Body:       io.NopCloser(bytes.NewReader(newContent)),
@@ -208,7 +213,7 @@ func TestDownloadAndReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := downloadAndReplace("https://example.com/binary", binPath)
+	err := downloadAndReplace("https://example.com/binary", "test-token", binPath)
 	if err != nil {
 		t.Fatalf("downloadAndReplace failed: %v", err)
 	}

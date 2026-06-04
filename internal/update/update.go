@@ -68,7 +68,7 @@ func Run(checkOnly bool) error {
 	fmt.Printf("Updating %s → %s ...\n", current, latest)
 
 	binaryName := BinaryName(runtime.GOOS, runtime.GOARCH, latest)
-	downloadURL := fmt.Sprintf("https://%s@fury.io/%s/%s", token, account, binaryName)
+	downloadURL := fmt.Sprintf("https://fury.io/%s/%s", account, binaryName)
 
 	exePath, err := os.Executable()
 	if err != nil {
@@ -79,7 +79,7 @@ func Run(checkOnly bool) error {
 		return fmt.Errorf("cannot resolve executable path: %w", err)
 	}
 
-	if err := downloadAndReplace(downloadURL, exePath); err != nil {
+	if err := downloadAndReplace(downloadURL, token, exePath); err != nil {
 		return fmt.Errorf("update failed: %w", err)
 	}
 
@@ -146,11 +146,12 @@ func LatestVersionFromNames(names []string, goos, goarch string) string {
 	return versions[0]
 }
 
-func downloadAndReplace(url, destPath string) error {
+func downloadAndReplace(url, token, destPath string) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
+	req.SetBasicAuth(token, "")
 
 	resp, err := Client.Do(req)
 	if err != nil {
