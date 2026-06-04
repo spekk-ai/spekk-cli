@@ -3,7 +3,8 @@ id: github-release-publish
 parent: release-flow
 created: 2026-06-04T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro-2-42014-1780585222
 depends-on: cross-compile-binaries
 branch: temporary-target
 ---
