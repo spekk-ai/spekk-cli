@@ -139,18 +139,18 @@ func TestFetchLatestReleaseAPIError(t *testing.T) {
 }
 
 func TestRunMissingToken(t *testing.T) {
-	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_SPEKK_TOKEN", "")
 	err := Run(false)
 	if err == nil {
-		t.Fatal("expected error for missing GITHUB_TOKEN")
+		t.Fatal("expected error for missing GH_SPEKK_TOKEN")
 	}
-	if !bytes.Contains([]byte(err.Error()), []byte("GITHUB_TOKEN")) {
-		t.Errorf("error should mention GITHUB_TOKEN, got: %v", err)
+	if !bytes.Contains([]byte(err.Error()), []byte("GH_SPEKK_TOKEN")) {
+		t.Errorf("error should mention GH_SPEKK_TOKEN, got: %v", err)
 	}
 }
 
 func TestRunDevBuild(t *testing.T) {
-	t.Setenv("GITHUB_TOKEN", "test-token")
+	t.Setenv("GH_SPEKK_TOKEN", "test-token")
 	original := version.Version
 	version.Version = "dev"
 	defer func() { version.Version = original }()

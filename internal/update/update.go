@@ -43,9 +43,9 @@ type asset struct {
 // Run performs the self-update. If checkOnly is true, it prints the available
 // version without installing.
 func Run(checkOnly bool) error {
-	token := os.Getenv("GITHUB_TOKEN")
+	token := os.Getenv("GH_SPEKK_TOKEN")
 	if token == "" {
-		return fmt.Errorf("GITHUB_TOKEN environment variable is required\nSet this to a fine-grained PAT with contents:read on %s/%s", repoOwner, repoName)
+		return fmt.Errorf("GH_SPEKK_TOKEN environment variable is required\nSet this to a fine-grained PAT with contents:read on %s/%s", repoOwner, repoName)
 	}
 
 	current := version.Version

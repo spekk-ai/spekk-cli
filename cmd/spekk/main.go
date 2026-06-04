@@ -544,7 +544,7 @@ OPTIONS:
   --help, -h    Show this help message
 
 ENVIRONMENT:
-  GITHUB_TOKEN   Fine-grained PAT with contents:read on spekk-ai/spekk-cli (required)
+  GH_SPEKK_TOKEN   Fine-grained PAT with contents:read on spekk-ai/spekk-cli (required)
 `)
 			return
 		}
