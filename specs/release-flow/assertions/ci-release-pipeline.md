@@ -3,9 +3,10 @@ id: ci-release-pipeline
 parent: release-flow
 created: 2026-06-04T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: self-update-command
 branch: temporary-target
+locked-by: builder-Paris-MacBook-Pro-2-43830-1780581814
 ---
 
 # CI workflow automates the full release pipeline
