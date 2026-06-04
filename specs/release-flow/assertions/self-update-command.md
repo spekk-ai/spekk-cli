@@ -3,7 +3,7 @@ id: self-update-command
 parent: release-flow
 created: 2026-06-03T18:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: github-release-publish
 branch: temporary-target
 ---

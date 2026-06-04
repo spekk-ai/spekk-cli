@@ -64,49 +64,20 @@ func TestIsNewer(t *testing.T) {
 	}
 }
 
-func TestBinaryName(t *testing.T) {
-	tests := []struct {
-		goos, goarch, ver string
-		want              string
-	}{
-		{"darwin", "arm64", "1.0.0", "spekk-darwin-arm64-v1.0.0"},
-		{"linux", "amd64", "2.1.3", "spekk-linux-amd64-v2.1.3"},
-		{"windows", "amd64", "1.0.0", "spekk-windows-amd64-v1.0.0.exe"},
-	}
-
-	for _, tt := range tests {
-		got := BinaryName(tt.goos, tt.goarch, tt.ver)
-		if got != tt.want {
-			t.Errorf("BinaryName(%q, %q, %q) = %q, want %q", tt.goos, tt.goarch, tt.ver, got, tt.want)
-		}
-	}
-}
-
-func TestLatestVersionFromNames(t *testing.T) {
-	names := []string{
-		"spekk-darwin-arm64-v1.0.0",
-		"spekk-darwin-arm64-v1.2.0",
-		"spekk-darwin-arm64-v1.1.0",
-		"spekk-linux-amd64-v1.3.0",
-		"spekk-darwin-amd64-v2.0.0",
-		"spekk-windows-amd64-v1.0.0.exe",
-	}
-
+func TestAssetName(t *testing.T) {
 	tests := []struct {
 		goos, goarch string
 		want         string
 	}{
-		{"darwin", "arm64", "1.2.0"},
-		{"linux", "amd64", "1.3.0"},
-		{"darwin", "amd64", "2.0.0"},
-		{"windows", "amd64", "1.0.0"},
-		{"linux", "arm64", ""}, // no matching artifacts
+		{"darwin", "arm64", "spekk-darwin-arm64"},
+		{"linux", "amd64", "spekk-linux-amd64"},
+		{"windows", "amd64", "spekk-windows-amd64.exe"},
 	}
 
 	for _, tt := range tests {
-		got := LatestVersionFromNames(names, tt.goos, tt.goarch)
+		got := AssetName(tt.goos, tt.goarch)
 		if got != tt.want {
-			t.Errorf("LatestVersionFromNames(..., %q, %q) = %q, want %q", tt.goos, tt.goarch, got, tt.want)
+			t.Errorf("AssetName(%q, %q) = %q, want %q", tt.goos, tt.goarch, got, tt.want)
 		}
 	}
 }
@@ -118,18 +89,16 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-func TestFetchLatestVersion(t *testing.T) {
+func TestFetchLatestRelease(t *testing.T) {
 	original := Client
 	defer func() { Client = original }()
 
-	body := `[{"name":"spekk-darwin-arm64-v1.0.0"},{"name":"spekk-darwin-arm64-v1.2.0"},{"name":"spekk-linux-amd64-v1.1.0"}]`
+	body := `{"tag_name":"v1.2.0","assets":[{"name":"spekk-darwin-arm64","browser_download_url":"https://github.com/spekk-ai/spekk-cli/releases/download/v1.2.0/spekk-darwin-arm64"},{"name":"spekk-linux-amd64","browser_download_url":"https://github.com/spekk-ai/spekk-cli/releases/download/v1.2.0/spekk-linux-amd64"}]}`
 
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			// Verify auth
-			user, pass, ok := req.BasicAuth()
-			if !ok || user != "test-user" || pass != "test-token" {
-				t.Error("expected basic auth with user:token")
+			if got := req.Header.Get("Authorization"); got != "token test-token" {
+				t.Errorf("Authorization = %q, want %q", got, "token test-token")
 			}
 			return &http.Response{
 				StatusCode: 200,
@@ -138,16 +107,19 @@ func TestFetchLatestVersion(t *testing.T) {
 		}),
 	}
 
-	ver, err := FetchLatestVersion("test-user", "test-token", "thinknimble", "darwin", "arm64")
+	release, err := FetchLatestRelease("test-token")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if ver != "1.2.0" {
-		t.Errorf("got %q, want %q", ver, "1.2.0")
+	if release.TagName != "v1.2.0" {
+		t.Errorf("TagName = %q, want %q", release.TagName, "v1.2.0")
+	}
+	if len(release.Assets) != 2 {
+		t.Fatalf("got %d assets, want 2", len(release.Assets))
 	}
 }
 
-func TestFetchLatestVersionAPIError(t *testing.T) {
+func TestFetchLatestReleaseAPIError(t *testing.T) {
 	original := Client
 	defer func() { Client = original }()
 
@@ -155,38 +127,30 @@ func TestFetchLatestVersionAPIError(t *testing.T) {
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: 401,
-				Body:       io.NopCloser(bytes.NewBufferString("Unauthorized")),
+				Body:       io.NopCloser(bytes.NewBufferString("Bad credentials")),
 			}, nil
 		}),
 	}
 
-	_, err := FetchLatestVersion("bad-user", "bad-token", "thinknimble", "darwin", "arm64")
+	_, err := FetchLatestRelease("bad-token")
 	if err == nil {
 		t.Fatal("expected error for 401 response")
 	}
 }
 
-func TestRunMissingUser(t *testing.T) {
-	t.Setenv("GEMFURY_USER", "")
-	t.Setenv("GEMFURY_TOKEN", "test-token")
-	err := Run(false)
-	if err == nil || err.Error() != "GEMFURY_USER environment variable is required\nSet this to your personal Gemfury username" {
-		t.Errorf("expected user error, got: %v", err)
-	}
-}
-
 func TestRunMissingToken(t *testing.T) {
-	t.Setenv("GEMFURY_USER", "test-user")
-	t.Setenv("GEMFURY_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
 	err := Run(false)
-	if err == nil || err.Error() != "GEMFURY_TOKEN environment variable is required\nGet your token from https://manage.fury.io" {
-		t.Errorf("expected token error, got: %v", err)
+	if err == nil {
+		t.Fatal("expected error for missing GITHUB_TOKEN")
+	}
+	if !bytes.Contains([]byte(err.Error()), []byte("GITHUB_TOKEN")) {
+		t.Errorf("error should mention GITHUB_TOKEN, got: %v", err)
 	}
 }
 
 func TestRunDevBuild(t *testing.T) {
-	t.Setenv("GEMFURY_USER", "test-user")
-	t.Setenv("GEMFURY_TOKEN", "test-token")
+	t.Setenv("GITHUB_TOKEN", "test-token")
 	original := version.Version
 	version.Version = "dev"
 	defer func() { version.Version = original }()
@@ -205,10 +169,8 @@ func TestDownloadAndReplace(t *testing.T) {
 
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			// Verify auth header uses user:token
-			user, pass, ok := req.BasicAuth()
-			if !ok || user != "test-user" || pass != "test-token" {
-				t.Error("expected basic auth with user:token on download request")
+			if got := req.Header.Get("Authorization"); got != "token test-token" {
+				t.Errorf("Authorization = %q, want %q", got, "token test-token")
 			}
 			return &http.Response{
 				StatusCode: 200,
@@ -217,14 +179,13 @@ func TestDownloadAndReplace(t *testing.T) {
 		}),
 	}
 
-	// Create a temp "binary" to replace
 	dir := t.TempDir()
 	binPath := filepath.Join(dir, "spekk")
 	if err := os.WriteFile(binPath, []byte("old-binary"), 0755); err != nil {
 		t.Fatal(err)
 	}
 
-	err := downloadAndReplace("https://example.com/binary", "test-user", "test-token", binPath)
+	err := downloadAndReplace("https://example.com/binary", "test-token", binPath)
 	if err != nil {
 		t.Fatalf("downloadAndReplace failed: %v", err)
 	}
@@ -237,7 +198,6 @@ func TestDownloadAndReplace(t *testing.T) {
 		t.Errorf("binary content = %q, want %q", got, newContent)
 	}
 
-	// Verify executable permission
 	info, _ := os.Stat(binPath)
 	if runtime.GOOS != "windows" && info.Mode()&0111 == 0 {
 		t.Error("binary should be executable")

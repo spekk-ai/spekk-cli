@@ -1,5 +1,5 @@
 // Package update implements self-update functionality for the spekk CLI.
-// It checks Gemfury for newer versions and replaces the running binary in-place.
+// It checks GitHub Releases for newer versions and replaces the running binary in-place.
 package update
 
 import (
@@ -9,41 +9,43 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/version"
 )
 
-const defaultAccount = "thinknimble"
+const (
+	repoOwner = "spekk-ai"
+	repoName  = "spekk-cli"
+)
 
 // HTTPClient abstracts HTTP requests for testability.
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// Client is the HTTP client used for Gemfury API calls. Override in tests.
+// Client is the HTTP client used for GitHub API calls. Override in tests.
 var Client HTTPClient = http.DefaultClient
+
+// releaseResponse represents the GitHub Releases API response (subset of fields).
+type releaseResponse struct {
+	TagName string  `json:"tag_name"`
+	Assets  []asset `json:"assets"`
+}
+
+type asset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
 
 // Run performs the self-update. If checkOnly is true, it prints the available
 // version without installing.
 func Run(checkOnly bool) error {
-	user := os.Getenv("GEMFURY_USER")
-	if user == "" {
-		return fmt.Errorf("GEMFURY_USER environment variable is required\nSet this to your personal Gemfury username")
-	}
-
-	token := os.Getenv("GEMFURY_TOKEN")
+	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
-		return fmt.Errorf("GEMFURY_TOKEN environment variable is required\nGet your token from https://manage.fury.io")
-	}
-
-	account := os.Getenv("GEMFURY_ACCOUNT")
-	if account == "" {
-		account = defaultAccount
+		return fmt.Errorf("GITHUB_TOKEN environment variable is required\nSet this to a fine-grained PAT with contents:read on %s/%s", repoOwner, repoName)
 	}
 
 	current := version.Version
@@ -51,13 +53,14 @@ func Run(checkOnly bool) error {
 		return fmt.Errorf("cannot update a development build; install a released version first")
 	}
 
-	latest, err := FetchLatestVersion(user, token, account, runtime.GOOS, runtime.GOARCH)
+	release, err := FetchLatestRelease(token)
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %w", err)
 	}
 
+	latest := strings.TrimPrefix(release.TagName, "v")
 	if latest == "" {
-		return fmt.Errorf("no releases found for %s/%s on Gemfury", runtime.GOOS, runtime.GOARCH)
+		return fmt.Errorf("no releases found on GitHub")
 	}
 
 	if !IsNewer(latest, current) {
@@ -72,8 +75,17 @@ func Run(checkOnly bool) error {
 
 	fmt.Printf("Updating %s → %s ...\n", current, latest)
 
-	binaryName := BinaryName(runtime.GOOS, runtime.GOARCH, latest)
-	downloadURL := fmt.Sprintf("https://fury.io/%s/%s", account, binaryName)
+	assetName := AssetName(runtime.GOOS, runtime.GOARCH)
+	downloadURL := ""
+	for _, a := range release.Assets {
+		if a.Name == assetName {
+			downloadURL = a.BrowserDownloadURL
+			break
+		}
+	}
+	if downloadURL == "" {
+		return fmt.Errorf("no binary found for %s/%s in release %s", runtime.GOOS, runtime.GOARCH, release.TagName)
+	}
 
 	exePath, err := os.Executable()
 	if err != nil {
@@ -84,7 +96,7 @@ func Run(checkOnly bool) error {
 		return fmt.Errorf("cannot resolve executable path: %w", err)
 	}
 
-	if err := downloadAndReplace(downloadURL, user, token, exePath); err != nil {
+	if err := downloadAndReplace(downloadURL, token, exePath); err != nil {
 		return fmt.Errorf("update failed: %w", err)
 	}
 
@@ -92,71 +104,41 @@ func Run(checkOnly bool) error {
 	return nil
 }
 
-// FetchLatestVersion queries the Gemfury API for the latest version available
-// for the given OS and architecture.
-func FetchLatestVersion(user, token, account, goos, goarch string) (string, error) {
-	url := fmt.Sprintf("https://api.fury.io/v1/users/%s/packages", account)
+// FetchLatestRelease queries the GitHub Releases API for the latest release.
+func FetchLatestRelease(token string) (*releaseResponse, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	req.SetBasicAuth(user, token)
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := Client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("network error: %w", err)
+		return nil, fmt.Errorf("network error: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("Gemfury API returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("GitHub API returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var packages []struct {
-		Name string `json:"name"`
+	var release releaseResponse
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, fmt.Errorf("failed to parse GitHub response: %w", err)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&packages); err != nil {
-		return "", fmt.Errorf("failed to parse Gemfury response: %w", err)
-	}
-
-	var names []string
-	for _, p := range packages {
-		names = append(names, p.Name)
-	}
-	return LatestVersionFromNames(names, goos, goarch), nil
+	return &release, nil
 }
 
-// LatestVersionFromNames extracts the latest version from a list of artifact names
-// matching the pattern spekk-{os}-{arch}-v{version}.
-func LatestVersionFromNames(names []string, goos, goarch string) string {
-	pattern := fmt.Sprintf(`^spekk-%s-%s-v(.+?)(?:\.exe)?$`, regexp.QuoteMeta(goos), regexp.QuoteMeta(goarch))
-	re := regexp.MustCompile(pattern)
-
-	var versions []string
-	for _, name := range names {
-		if m := re.FindStringSubmatch(name); m != nil {
-			versions = append(versions, m[1])
-		}
-	}
-
-	if len(versions) == 0 {
-		return ""
-	}
-
-	sort.Slice(versions, func(i, j int) bool {
-		return IsNewer(versions[i], versions[j])
-	})
-
-	return versions[0]
-}
-
-func downloadAndReplace(url, user, token, destPath string) error {
+func downloadAndReplace(url, token, destPath string) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
-	req.SetBasicAuth(user, token)
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/octet-stream")
 
 	resp, err := Client.Do(req)
 	if err != nil {
@@ -212,9 +194,9 @@ func downloadAndReplace(url, user, token, destPath string) error {
 	return nil
 }
 
-// BinaryName returns the expected Gemfury artifact name for a given platform and version.
-func BinaryName(goos, goarch, ver string) string {
-	name := fmt.Sprintf("spekk-%s-%s-v%s", goos, goarch, ver)
+// AssetName returns the expected GitHub Release asset name for a given platform.
+func AssetName(goos, goarch string) string {
+	name := fmt.Sprintf("spekk-%s-%s", goos, goarch)
 	if goos == "windows" {
 		name += ".exe"
 	}

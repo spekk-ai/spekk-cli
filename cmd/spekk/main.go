@@ -544,9 +544,7 @@ OPTIONS:
   --help, -h    Show this help message
 
 ENVIRONMENT:
-  GEMFURY_USER      Gemfury username (required)
-  GEMFURY_TOKEN     API token for Gemfury authentication (required)
-  GEMFURY_ACCOUNT   Gemfury team/account name (default: thinknimble)
+  GITHUB_TOKEN   Fine-grained PAT with contents:read on spekk-ai/spekk-cli (required)
 `)
 			return
 		}
