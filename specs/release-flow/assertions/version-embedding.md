@@ -15,5 +15,5 @@ The spekk binary has a version baked in at build time via `ldflags` and exposes 
 
 - A `version` variable exists in the main package (default: `"dev"`)
 - `go build -ldflags "-X main.version=1.2.3"` sets the version at compile time
-- `spekk --version` and `spekk version` print the version and exit
+- `spekk --version` and `spekk version` print the version and exit (no `-v` alias — reserved for `--verbose`)
 - Version string is accessible from other packages that need it (e.g., self-update, user-agent headers)

@@ -18,6 +18,7 @@ The CLI can self-update by fetching the latest version from Gemfury and replacin
 
 - `spekk update` checks Gemfury for the latest available version
 - If a newer version exists, downloads the correct binary for the current OS/architecture
+- Authentication uses HTTP basic auth header — token is never embedded in URLs (prevents leaking on redirects)
 - Replaces the currently running binary in-place (handles file locking on Windows)
 - Prints before/after version on success
 - Skips update if already on latest version
