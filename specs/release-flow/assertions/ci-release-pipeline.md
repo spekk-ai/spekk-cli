@@ -3,7 +3,8 @@ id: ci-release-pipeline
 parent: release-flow
 created: 2026-06-04T12:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro-2.local-92033-1780585635
 depends-on: self-update-command
 branch: temporary-target
 ---
