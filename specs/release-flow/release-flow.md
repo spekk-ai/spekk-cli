@@ -20,5 +20,5 @@ Cross-compile the spekk CLI for ARM and AMD on macOS, Linux, and Windows, publis
 1. `version-embedding` — Binary embeds a version string via ldflags, exposed by `spekk --version`
 2. `cross-compile-binaries` — Build produces 6 platform/arch binaries (depends on 1)
 3. `github-release-publish` — CI uploads versioned binaries to GitHub Releases on tag push (depends on 2)
-4. `self-update-command` — `spekk update` fetches latest release from GitHub API with `GITHUB_TOKEN` (depends on 3)
+4. `self-update-command` — `spekk update` fetches latest release from GitHub API with `GH_SPEKK_TOKEN` (depends on 3)
 5. `ci-release-pipeline` — CI workflow automates the full build → test → release pipeline (depends on 4)
