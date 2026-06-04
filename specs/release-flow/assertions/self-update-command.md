@@ -3,25 +3,25 @@ id: self-update-command
 parent: release-flow
 created: 2026-06-03T18:00:00Z
 priority: 1
-status: done
-depends-on: gemfury-publish
+status: in_progress
+depends-on: github-release-publish
 branch: temporary-target
 ---
 
 # `spekk update` downloads and replaces the running binary
 
-**Tests:** internal/update/update_test.go
-
-The CLI can self-update by fetching the latest version from Gemfury and replacing itself in-place.
+The CLI self-updates by fetching the latest release from the GitHub Releases API, authenticated with a fine-grained PAT.
 
 ## Success Criteria
 
-- `spekk update` checks Gemfury for the latest available version
-- If a newer version exists, downloads the correct binary for the current OS/architecture
-- Authentication uses HTTP basic auth header — token is never embedded in URLs (prevents leaking on redirects)
+- `spekk update` queries `api.github.com/repos/spekk-ai/spekk-cli/releases/latest` for the newest version
+- Authentication uses `GITHUB_TOKEN` environment variable (fine-grained PAT with `contents:read`)
+- Token is sent via `Authorization: token <PAT>` header — never embedded in URLs
+- If a newer version exists, downloads the correct binary asset for the current OS/architecture
 - Replaces the currently running binary in-place (handles file locking on Windows)
 - Prints before/after version on success
 - Skips update if already on latest version
-- Requires `GEMFURY_USER` and `GEMFURY_TOKEN` environment variables for authentication
+- Requires `GITHUB_TOKEN` environment variable
 - Fails gracefully with clear error if token is missing, network is down, or permissions prevent replacement
 - `spekk update --check` shows available version without installing
+- No Gemfury references remain in `internal/update/`
