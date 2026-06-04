@@ -17,7 +17,7 @@ A release script packages and pushes the cross-compiled binaries to Gemfury so t
 - Release script uploads all 6 binaries to a Gemfury private repository
 - Artifacts are versioned (e.g., `spekk-darwin-arm64-v1.2.3`)
 - Upload requires a `GEMFURY_TOKEN` environment variable
-- Upload authenticates via HTTP basic auth header (`-u TOKEN:`), not token-in-URL
+- Upload authenticates via token-in-URL (`push.fury.io` requires this pattern)
 - Script fails clearly if token is missing or upload fails
 - Published artifacts are downloadable via authenticated Gemfury URL
 - Old versions remain available (no overwrite unless explicit)

@@ -70,8 +70,7 @@ for platform in "${PLATFORMS[@]}"; do
 
     echo "Uploading ${versioned} ..."
     if ! curl -sSf -F "package=@${DIST}/${versioned}" \
-        -u "${GEMFURY_TOKEN}:" \
-        "https://push.fury.io/${GEMFURY_ACCOUNT}/"; then
+        "https://${GEMFURY_TOKEN}@push.fury.io/${GEMFURY_ACCOUNT}/"; then
         echo "ERROR: Failed to upload ${versioned}" >&2
         failed=1
     fi
