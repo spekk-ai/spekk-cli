@@ -6,7 +6,7 @@ DIST    := dist
 
 PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64
 
-.PHONY: build build-all release clean
+.PHONY: build build-all clean
 
 # Build for the current platform
 build:
@@ -24,10 +24,6 @@ build-all:
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -ldflags "$(LDFLAGS)" -o $$output $(SRC) || exit 1; \
 	done
 	@echo "All binaries built in $(DIST)/"
-
-# Build and upload to Gemfury (requires GEMFURY_TOKEN)
-release:
-	VERSION=$(VERSION) ./scripts/release.sh
 
 clean:
 	rm -rf $(DIST)
