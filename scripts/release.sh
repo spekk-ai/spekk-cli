@@ -4,13 +4,14 @@ set -euo pipefail
 # Release script: builds cross-compiled binaries and uploads them to Gemfury
 #
 # Required environment variables:
+#   GEMFURY_USER    - Gemfury username (personal login)
 #   GEMFURY_TOKEN   - API token for Gemfury authentication
 #
 # Optional environment variables:
-#   GEMFURY_ACCOUNT - Gemfury account name (default: spekk)
+#   GEMFURY_ACCOUNT - Gemfury team/account name (default: thinknimble)
 #   VERSION         - Version to embed and tag artifacts with (default: git describe)
 
-GEMFURY_ACCOUNT="${GEMFURY_ACCOUNT:-spekk}"
+GEMFURY_ACCOUNT="${GEMFURY_ACCOUNT:-thinknimble}"
 VERSION="${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
 DIST="dist"
 BINARY="spekk"
@@ -24,6 +25,12 @@ PLATFORMS=(
 )
 
 # --- Validation ---
+
+if [ -z "${GEMFURY_USER:-}" ]; then
+    echo "ERROR: GEMFURY_USER environment variable is required" >&2
+    echo "Set this to your personal Gemfury username" >&2
+    exit 1
+fi
 
 if [ -z "${GEMFURY_TOKEN:-}" ]; then
     echo "ERROR: GEMFURY_TOKEN environment variable is required" >&2
@@ -70,7 +77,7 @@ for platform in "${PLATFORMS[@]}"; do
 
     echo "Uploading ${versioned} ..."
     if ! curl -sSf -F "package=@${DIST}/${versioned}" \
-        "https://${GEMFURY_TOKEN}@push.fury.io/${GEMFURY_ACCOUNT}/"; then
+        "https://${GEMFURY_USER}:${GEMFURY_TOKEN}@push.fury.io/${GEMFURY_ACCOUNT}/"; then
         echo "ERROR: Failed to upload ${versioned}" >&2
         failed=1
     fi

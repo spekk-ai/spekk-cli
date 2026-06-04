@@ -36,20 +36,20 @@ assert_contains() {
 
 echo "=== Release Script Tests ==="
 
-# --- Test 1: Missing GEMFURY_TOKEN ---
+# --- Test 1: Missing GEMFURY_USER ---
 echo ""
-echo "Test 1: Fails when GEMFURY_TOKEN is not set"
+echo "Test 1: Fails when GEMFURY_USER is not set"
 exit_code=0
-output=$(env -u GEMFURY_TOKEN bash "$RELEASE_SCRIPT" 2>&1) || exit_code=$?
+output=$(env -u GEMFURY_USER GEMFURY_TOKEN=fake bash "$RELEASE_SCRIPT" 2>&1) || exit_code=$?
 
 assert_eq "exits with non-zero" "1" "$exit_code"
-assert_contains "error mentions GEMFURY_TOKEN" "GEMFURY_TOKEN" "$output"
+assert_contains "error mentions GEMFURY_USER" "GEMFURY_USER" "$output"
 
-# --- Test 2: Empty GEMFURY_TOKEN ---
+# --- Test 2: Missing GEMFURY_TOKEN ---
 echo ""
-echo "Test 2: Fails when GEMFURY_TOKEN is empty"
+echo "Test 2: Fails when GEMFURY_TOKEN is not set"
 exit_code=0
-output=$(GEMFURY_TOKEN="" bash "$RELEASE_SCRIPT" 2>&1) || exit_code=$?
+output=$(GEMFURY_USER=fake env -u GEMFURY_TOKEN bash "$RELEASE_SCRIPT" 2>&1) || exit_code=$?
 
 assert_eq "exits with non-zero" "1" "$exit_code"
 assert_contains "error mentions GEMFURY_TOKEN" "GEMFURY_TOKEN" "$output"

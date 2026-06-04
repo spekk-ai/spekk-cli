@@ -18,7 +18,7 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/version"
 )
 
-const defaultAccount = "spekk"
+const defaultAccount = "thinknimble"
 
 // HTTPClient abstracts HTTP requests for testability.
 type HTTPClient interface {
@@ -31,6 +31,11 @@ var Client HTTPClient = http.DefaultClient
 // Run performs the self-update. If checkOnly is true, it prints the available
 // version without installing.
 func Run(checkOnly bool) error {
+	user := os.Getenv("GEMFURY_USER")
+	if user == "" {
+		return fmt.Errorf("GEMFURY_USER environment variable is required\nSet this to your personal Gemfury username")
+	}
+
 	token := os.Getenv("GEMFURY_TOKEN")
 	if token == "" {
 		return fmt.Errorf("GEMFURY_TOKEN environment variable is required\nGet your token from https://manage.fury.io")
@@ -46,7 +51,7 @@ func Run(checkOnly bool) error {
 		return fmt.Errorf("cannot update a development build; install a released version first")
 	}
 
-	latest, err := FetchLatestVersion(token, account, runtime.GOOS, runtime.GOARCH)
+	latest, err := FetchLatestVersion(user, token, account, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %w", err)
 	}
@@ -79,7 +84,7 @@ func Run(checkOnly bool) error {
 		return fmt.Errorf("cannot resolve executable path: %w", err)
 	}
 
-	if err := downloadAndReplace(downloadURL, token, exePath); err != nil {
+	if err := downloadAndReplace(downloadURL, user, token, exePath); err != nil {
 		return fmt.Errorf("update failed: %w", err)
 	}
 
@@ -89,13 +94,13 @@ func Run(checkOnly bool) error {
 
 // FetchLatestVersion queries the Gemfury API for the latest version available
 // for the given OS and architecture.
-func FetchLatestVersion(token, account, goos, goarch string) (string, error) {
+func FetchLatestVersion(user, token, account, goos, goarch string) (string, error) {
 	url := fmt.Sprintf("https://api.fury.io/v1/users/%s/packages", account)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", err
 	}
-	req.SetBasicAuth(token, "")
+	req.SetBasicAuth(user, token)
 
 	resp, err := Client.Do(req)
 	if err != nil {
@@ -146,12 +151,12 @@ func LatestVersionFromNames(names []string, goos, goarch string) string {
 	return versions[0]
 }
 
-func downloadAndReplace(url, token, destPath string) error {
+func downloadAndReplace(url, user, token, destPath string) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
-	req.SetBasicAuth(token, "")
+	req.SetBasicAuth(user, token)
 
 	resp, err := Client.Do(req)
 	if err != nil {

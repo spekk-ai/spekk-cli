@@ -22,6 +22,6 @@ The CLI can self-update by fetching the latest version from Gemfury and replacin
 - Replaces the currently running binary in-place (handles file locking on Windows)
 - Prints before/after version on success
 - Skips update if already on latest version
-- Requires `GEMFURY_TOKEN` environment variable for authentication
+- Requires `GEMFURY_USER` and `GEMFURY_TOKEN` environment variables for authentication
 - Fails gracefully with clear error if token is missing, network is down, or permissions prevent replacement
 - `spekk update --check` shows available version without installing

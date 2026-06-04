@@ -127,9 +127,9 @@ func TestFetchLatestVersion(t *testing.T) {
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			// Verify auth
-			user, _, ok := req.BasicAuth()
-			if !ok || user != "test-token" {
-				t.Error("expected basic auth with token")
+			user, pass, ok := req.BasicAuth()
+			if !ok || user != "test-user" || pass != "test-token" {
+				t.Error("expected basic auth with user:token")
 			}
 			return &http.Response{
 				StatusCode: 200,
@@ -138,7 +138,7 @@ func TestFetchLatestVersion(t *testing.T) {
 		}),
 	}
 
-	ver, err := FetchLatestVersion("test-token", "spekk", "darwin", "arm64")
+	ver, err := FetchLatestVersion("test-user", "test-token", "thinknimble", "darwin", "arm64")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -160,13 +160,23 @@ func TestFetchLatestVersionAPIError(t *testing.T) {
 		}),
 	}
 
-	_, err := FetchLatestVersion("bad-token", "spekk", "darwin", "arm64")
+	_, err := FetchLatestVersion("bad-user", "bad-token", "thinknimble", "darwin", "arm64")
 	if err == nil {
 		t.Fatal("expected error for 401 response")
 	}
 }
 
+func TestRunMissingUser(t *testing.T) {
+	t.Setenv("GEMFURY_USER", "")
+	t.Setenv("GEMFURY_TOKEN", "test-token")
+	err := Run(false)
+	if err == nil || err.Error() != "GEMFURY_USER environment variable is required\nSet this to your personal Gemfury username" {
+		t.Errorf("expected user error, got: %v", err)
+	}
+}
+
 func TestRunMissingToken(t *testing.T) {
+	t.Setenv("GEMFURY_USER", "test-user")
 	t.Setenv("GEMFURY_TOKEN", "")
 	err := Run(false)
 	if err == nil || err.Error() != "GEMFURY_TOKEN environment variable is required\nGet your token from https://manage.fury.io" {
@@ -175,6 +185,7 @@ func TestRunMissingToken(t *testing.T) {
 }
 
 func TestRunDevBuild(t *testing.T) {
+	t.Setenv("GEMFURY_USER", "test-user")
 	t.Setenv("GEMFURY_TOKEN", "test-token")
 	original := version.Version
 	version.Version = "dev"
@@ -194,10 +205,10 @@ func TestDownloadAndReplace(t *testing.T) {
 
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			// Verify auth header is used instead of token in URL
-			user, _, ok := req.BasicAuth()
-			if !ok || user != "test-token" {
-				t.Error("expected basic auth with token on download request")
+			// Verify auth header uses user:token
+			user, pass, ok := req.BasicAuth()
+			if !ok || user != "test-user" || pass != "test-token" {
+				t.Error("expected basic auth with user:token on download request")
 			}
 			return &http.Response{
 				StatusCode: 200,
@@ -213,7 +224,7 @@ func TestDownloadAndReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := downloadAndReplace("https://example.com/binary", "test-token", binPath)
+	err := downloadAndReplace("https://example.com/binary", "test-user", "test-token", binPath)
 	if err != nil {
 		t.Fatalf("downloadAndReplace failed: %v", err)
 	}
