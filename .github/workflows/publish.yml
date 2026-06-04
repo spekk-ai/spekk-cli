@@ -33,9 +33,8 @@ jobs:
       - name: Build all platform binaries
         run: make build-all VERSION=${{ steps.version.outputs.version }}
 
-      - name: Publish to Gemfury
-        env:
-          GEMFURY_USER: ${{ secrets.GEMFURY_USER }}
-          GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: make release
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/spekk-*
+          fail_on_unmatched_files: true
