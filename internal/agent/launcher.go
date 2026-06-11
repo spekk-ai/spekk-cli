@@ -60,17 +60,18 @@ func BuildSkillMessage(installDir, agent, subcommand string, args []string) (str
 	sb.WriteString("\n\n---\n\n**Skill Activation: `spekk " + agent + " " + subcommand + "`**\n\n")
 	sb.WriteString("The user has launched you with a skill active via `spekk " + agent + " " + subcommand + "`.\n")
 	sb.WriteString("Follow the inlined skill workflow below immediately — do not wait for trigger detection.\n")
-	sb.WriteString("\n<skill-content>\n" + skill.Content + "\n</skill-content>\n")
+	sb.WriteString("\n<skill-content>\n" + sanitizeSkillContent(skill.Content) + "\n</skill-content>\n")
 
 	// Handle meeting-specific transcript argument
 	if subcommand == "meeting" && len(args) > 1 {
 		transcriptFile := args[1]
 		resolvedPath := resolvePath(transcriptFile)
-		if !filepath.IsAbs(transcriptFile) {
-			wd, _ := os.Getwd()
-			if wd != "" && !strings.HasPrefix(resolvedPath, wd+string(filepath.Separator)) {
-				return "", fmt.Errorf("path %q resolves outside working directory", transcriptFile)
-			}
+		info, err := os.Stat(resolvedPath)
+		if err != nil {
+			return "", fmt.Errorf("Transcript file not found: %s", resolvedPath)
+		}
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("path is not a regular file: %s", resolvedPath)
 		}
 		data, err := os.ReadFile(resolvedPath)
 		if err != nil {
@@ -191,11 +192,43 @@ func cwd() string {
 }
 
 func resolvePath(p string) string {
+	if strings.HasPrefix(p, "~/") || p == "~" {
+		home := homeDir()
+		if home != "" {
+			p = filepath.Join(home, p[1:])
+		}
+	}
 	if filepath.IsAbs(p) {
-		return p
+		return filepath.Clean(p)
 	}
 	wd, _ := os.Getwd()
 	return filepath.Join(wd, p)
+}
+
+// sanitizeSkillContent strips any closing </skill-content> tags (case-insensitive)
+// from skill markdown to prevent content from breaking out of the wrapper boundary.
+func sanitizeSkillContent(content string) string {
+	lower := strings.ToLower(content)
+	var result strings.Builder
+	result.Grow(len(content))
+	i := 0
+	for i < len(content) {
+		idx := strings.Index(lower[i:], "</skill-content")
+		if idx == -1 {
+			result.WriteString(content[i:])
+			break
+		}
+		result.WriteString(content[i : i+idx])
+		// Find the end of this tag (closing >)
+		tagEnd := strings.IndexByte(content[i+idx:], '>')
+		if tagEnd == -1 {
+			// No closing >, skip the rest as a partial tag
+			break
+		}
+		// Skip the entire tag
+		i = i + idx + tagEnd + 1
+	}
+	return result.String()
 }
 
 func isNotFound(err error) bool {
