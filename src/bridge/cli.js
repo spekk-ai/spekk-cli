@@ -74,7 +74,7 @@ function getServerUrl(flagServer) {
   if (flagServer) return flagServer;
   if (process.env.SPEKK_SERVER_URL) return process.env.SPEKK_SERVER_URL;
   // Default to prod
-  return 'wss://app.spekk.dev';
+  return 'wss://app.spekk.ai';
 }
 
 /**
@@ -220,7 +220,7 @@ export async function run(args) {
         console.log(dim('  bridge-app not found, falling back to CLI bridge'));
       } else {
         const env = { ...process.env, NODE_ENV: 'development' };
-        if (serverUrl !== 'wss://app.spekk.dev') {
+        if (serverUrl !== 'wss://app.spekk.ai') {
           env.SPEKK_SERVER_URL = serverUrl;
         }
         const electronPath = path.join(bridgeAppDir, 'node_modules', '.bin', 'electron');
