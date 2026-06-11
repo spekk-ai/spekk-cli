@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -139,5 +140,68 @@ func TestAssistantDataJSON(t *testing.T) {
 	}
 	if dataMap["session_id"] != "s1" {
 		t.Errorf("expected session_id s1, got %v", dataMap["session_id"])
+	}
+}
+
+func TestGenerateNonce(t *testing.T) {
+	nonce, err := generateNonce()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should be 64 hex chars (32 bytes)
+	if len(nonce) != 64 {
+		t.Errorf("nonce length = %d, want 64", len(nonce))
+	}
+
+	// Should be valid hex
+	if _, err := hex.DecodeString(nonce); err != nil {
+		t.Errorf("nonce is not valid hex: %v", err)
+	}
+
+	// Two nonces should be different
+	nonce2, _ := generateNonce()
+	if nonce == nonce2 {
+		t.Error("two generated nonces should differ")
+	}
+}
+
+func TestNonceValidation(t *testing.T) {
+	validNonce := "abc123def456"
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("nonce") != validNonce {
+			http.Error(w, "Forbidden: invalid or missing session nonce", http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	tests := []struct {
+		name       string
+		query      string
+		wantStatus int
+	}{
+		{"valid nonce", "?nonce=" + validNonce, http.StatusOK},
+		{"missing nonce", "", http.StatusForbidden},
+		{"wrong nonce", "?nonce=wrongvalue", http.StatusForbidden},
+		{"empty nonce value", "?nonce=", http.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := http.Get(ts.URL + "/" + tt.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != tt.wantStatus {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tt.wantStatus)
+			}
+		})
 	}
 }
