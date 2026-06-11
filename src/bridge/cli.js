@@ -20,7 +20,7 @@ const FLAG_DEFS = {
 /**
  * Normalize a server URL to a filesystem-safe key for token storage.
  * ws://localhost:8000 → localhost_8000
- * wss://staging.spekk.ai → staging.spekk.ai
+ * wss://app.spekk.ai → app.spekk.ai
  */
 function normalizeServerHost(url) {
   return (url || '')
