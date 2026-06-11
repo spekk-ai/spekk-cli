@@ -237,6 +237,11 @@ func (r *SkillResolver) ListSkills(agent string) []SkillEntry {
 				continue
 			}
 			stem := strings.TrimSuffix(entry.Name(), ".md")
+			// Skip the spec doc that shares its directory's name
+			// (e.g. specs/coach-skills-system/coach-skills-system.md)
+			if stem == filepath.Base(dir) {
+				continue
+			}
 			if seen[stem] {
 				continue
 			}

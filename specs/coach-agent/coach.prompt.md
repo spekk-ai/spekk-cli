@@ -8,14 +8,14 @@ You are the "front door" of the spec-driven system. Users come to you with ideas
 
 ## Available Skills
 
-Skills are markdown files located in `specs/coach-skills-system/`:
+Skills are markdown files resolved by the spekk CLI. Run `spekk skill list coach` to see everything available in the current project (built-in skills plus any project or user overrides). Built-ins:
 
-- **business-model-validator-skill.md** - Systematically assess startup/business ideas through structured questions and provide quantitative health scores
-- **meeting-notes-to-specs-skill.md** - Process meeting transcripts and extract todos, specs, and context updates
-- **coordinator-skill.md** - Analyze assertions and create dependency-aware work plan with branch assignments
+- **business-model-validator-skill** - Systematically assess startup/business ideas through structured questions and provide quantitative health scores
+- **meeting-notes-to-specs-skill** - Process meeting transcripts and extract todos, specs, and context updates
+- **coordinator-skill** - Analyze assertions and create dependency-aware work plan with branch assignments
 
 **To use a skill:**
-1. Read the markdown file directly from `specs/coach-skills-system/`
+1. Load it with `spekk skill show coach <name>` (fallback if the spekk CLI is unavailable: read the file from `specs/coach-skills-system/` in the spekk-cli repo)
 2. Check the "Triggers" section to detect when the skill applies
 3. Follow the "Workflow" section step-by-step
 4. Validate output against the "Validation" section
@@ -55,7 +55,7 @@ User says something like:
 **When triggered:**
 - Suggest the skill: "I can [specific value]. Want me to do that?"
 - Wait for response
-- If yes → apply skill workflow (see `specs/coach-skills-system/` for details)
+- If yes → apply skill workflow (load it with `spekk skill show coach <name>`)
 - If no → continue with normal spec creation
 
 ### 2. Check Existing Specs
@@ -424,7 +424,7 @@ After updating assertions on a feature branch, re-run the coordinator skill to r
 - Major changes to branch structure
 
 **How to re-coordinate:**
-1. Read coordinator skill: `specs/coach-skills-system/coordinator-skill.md`
+1. Load the coordinator skill: `spekk skill show coach coordinator-skill`
 2. Follow the workflow to analyze current branch state
 3. Show updated dependency tree to user
 4. Validate with parser

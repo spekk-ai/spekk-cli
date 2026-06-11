@@ -3,16 +3,10 @@
 ## Quick install (macOS / Linux)
 
 ```bash
-# Detect platform and download the latest release
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-BINARY="spekk-${OS}-${ARCH}"
-
-curl -sL "https://github.com/spekk-ai/spekk-cli/releases/latest/download/${BINARY}" \
-  -o spekk && chmod +x spekk && sudo mv spekk /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-Verify:
+The script detects your platform, downloads the latest release, and installs to `/usr/local/bin` (override with `SPEKK_INSTALL_DIR`). Verify:
 
 ```bash
 spekk version

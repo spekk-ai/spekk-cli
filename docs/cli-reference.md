@@ -8,6 +8,18 @@ Complete reference for all Spekk CLI commands.
 
 ---
 
+## `spekk init`
+
+Set up a project for spec-driven development.
+
+```bash
+spekk init
+```
+
+Creates a `specs/` directory (at the git root if in a repository, otherwise in the current directory) with a short README explaining the format. Does nothing if `specs/` already exists. This is the first command to run in a new project — follow it with `spekk coach` to draft your first spec.
+
+---
+
 ## `spekk next`
 
 Show the next priority assertion to work on.
@@ -328,6 +340,56 @@ Download and deploy the latest agent binary to an existing sandbox.
 ```bash
 spekk sandbox deploy my-sandbox
 ```
+
+---
+
+## `spekk prompt`
+
+Print an agent's resolved prompt to stdout.
+
+```bash
+spekk prompt coach       # Print the coach prompt
+spekk prompt builder     # Print the builder prompt
+spekk prompt observer    # Print the observer prompt
+```
+
+The prompt is resolved through the standard layers (`.spekk/` overrides and extensions, then the embedded base), so the output is exactly what `spekk <agent>` would launch with. Useful for piping into other tools, or for agents installed via `spekk install`, which fetch their instructions this way at session start.
+
+---
+
+## `spekk skill`
+
+Discover and print agent skills.
+
+```bash
+spekk skill list coach                     # List skills and their source
+spekk skill show coach coordinator-skill   # Print a skill's content
+```
+
+Skills resolve through layers: `.spekk/skills/<agent>/` (project), then `~/.spekk/skills/<agent>/` (user), then the skills built into the binary.
+
+---
+
+## `spekk install`
+
+Install spekk agents (coach, builder, observer) into a coding assistant as subagents.
+
+```bash
+spekk install --target claude-code   # ~/.claude/agents/
+spekk install --target copilot       # ~/.copilot/agents/ (VS Code)
+spekk install --target cursor        # ~/.cursor/agents/
+spekk install --target opencode      # ~/.config/opencode/agents/
+spekk install --target codex         # ~/.codex/prompts/ (global only)
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--target <tool>` | Host tool to install into (required) |
+| `--project` | Install into the current project instead of globally |
+
+Installs thin shims that fetch their full instructions from the binary at session start via `spekk prompt <agent>`, so they never go stale — updating spekk updates every installed agent. For tools not listed, wire `spekk prompt <agent>` into the tool's custom-agent or rules mechanism directly.
 
 ---
 
