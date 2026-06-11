@@ -8,7 +8,7 @@ Spekk turns a `specs/` directory in your repo into a work queue for AI agents:
 - `spekk next` parses them and returns the next ready assertion — dependency- and branch-aware
 - The **coach** agent turns messy feature requests and meeting notes into well-formed specs
 - The **builder** agent picks up assertions and implements them until they're true
-- Works from Claude Code out of the box, or [any coding assistant](#use-spekk-from-your-coding-assistant)
+- Works inside [your existing coding assistant](#use-spekk-from-your-coding-assistant) — Claude Code, Copilot, Cursor, OpenCode, Codex — or standalone from the terminal
 
 ## Install
 
@@ -20,30 +20,31 @@ Or with Go: `go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest` — or d
 
 ## Quick Start
 
+The workflow is three commands:
+
 ```bash
-# Find next priority assertion to work on
-spekk next
+cd your-project
+spekk init       # 1. create the specs/ directory
+spekk coach      # 2. draft specs with the coach agent
+spekk builder    # 3. implement the next ready assertion
+```
 
-# Launch builder (implements specs continuously)
-spekk builder
+**Using Claude Code?** `spekk coach` and `spekk builder` launch it directly with the agent loaded — the commands above are all you need.
 
-# Launch builder for one assertion then exit
-spekk builder --once
+**Using another assistant (Copilot, Cursor, OpenCode, Codex)?** Register the agents as subagents and run the same workflow from inside it:
 
-# Launch coach (creates specs interactively)
-spekk coach
+```bash
+spekk install --target cursor    # or: claude-code, copilot, opencode, codex
+```
 
-# Process meeting notes into specs/todos/context
-spekk coach meeting notes.txt
+Then ask **spekk-coach** to draft specs and **spekk-builder** to implement them, right in your normal session. See [Use Spekk from Your Coding Assistant](#use-spekk-from-your-coding-assistant) for details.
 
-# View all specs in interactive web UI
-spekk show
+Either way, these work from any terminal:
 
-# Watch mode with live reload
-spekk show -w
-
-# Get comprehensive overview of all specs
-spekk status
+```bash
+spekk next       # print the next ready assertion (dependency-aware)
+spekk status     # overview of all specs and assertions
+spekk show -w    # interactive spec explorer with live reload
 ```
 
 **Full documentation:** [Getting started](./docs/getting-started.md) · [Concepts](./docs/concepts.md) · [CLI reference](./docs/cli-reference.md) · [Configuration](./docs/configuration.md) · [Coach skills](./docs/coach-skills.md)

@@ -8,6 +8,18 @@ Complete reference for all Spekk CLI commands.
 
 ---
 
+## `spekk init`
+
+Set up a project for spec-driven development.
+
+```bash
+spekk init
+```
+
+Creates a `specs/` directory (at the git root if in a repository, otherwise in the current directory) with a short README explaining the format. Does nothing if `specs/` already exists. This is the first command to run in a new project — follow it with `spekk coach` to draft your first spec.
+
+---
+
 ## `spekk next`
 
 Show the next priority assertion to work on.

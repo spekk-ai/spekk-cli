@@ -116,7 +116,8 @@ If the `+"`spekk`"+` command is not found, tell the user to install spekk
 workflow without it.
 
 If the project has no specs/ directory, it does not use spekk: say so
-briefly, mention that `+"`spekk`"+` can set one up, and otherwise stand down.
+briefly, mention that `+"`spekk init`"+` can set one up, and otherwise stand
+down.
 `, display, agent, agent)
 }
 

@@ -42,6 +42,9 @@ func main() {
 	command := args[0]
 
 	switch command {
+	case "init":
+		runInit(args[1:])
+
 	case "next":
 		runParser(args[1:])
 
@@ -584,6 +587,76 @@ OPTIONS:
 	}
 }
 
+// specsReadme is written by spekk init so the new specs/ directory is
+// non-empty (git tracks it) and explains itself to readers.
+const specsReadme = `# Specs
+
+This directory is a work queue for AI agents, managed with
+[spekk](https://github.com/spekk-ai/spekk-cli).
+
+Each spec is a folder containing a markdown file that states what must be
+true, plus an assertions/ folder breaking that down into small, testable
+assertions:
+
+    specs/
+      my-feature/
+        my-feature.md          # what must be true, and why
+        assertions/
+          first-assertion.md   # one small, verifiable step
+
+Common commands:
+
+    spekk coach      # draft and refine specs with the coach agent
+    spekk builder    # implement the next ready assertion
+    spekk next       # print the next ready assertion
+    spekk status     # overview of all specs and assertions
+`
+
+// runInit creates the specs/ directory so a project can start using spekk.
+func runInit(args []string) {
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			fmt.Print(`
+spekk init - Set up a project for spec-driven development
+
+USAGE:
+  spekk init
+
+Creates a specs/ directory (at the git root if in a repository, otherwise
+in the current directory) with a short README explaining the format.
+Does nothing if specs/ already exists.
+`)
+			return
+		}
+	}
+
+	specsDir := findSpecsDir()
+	if info, err := os.Stat(specsDir); err == nil && info.IsDir() {
+		fmt.Printf("specs/ already exists at %s — you're set.\n", specsDir)
+		fmt.Println(`Run "spekk coach" to draft a spec, or "spekk next" to see what's ready.`)
+		return
+	}
+
+	if err := os.MkdirAll(specsDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: creating %s: %s\n", specsDir, err)
+		os.Exit(1)
+	}
+	readmePath := filepath.Join(specsDir, "README.md")
+	if err := os.WriteFile(readmePath, []byte(specsReadme), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Created %s\n", specsDir)
+	fmt.Println(`
+Next steps:
+  spekk coach      # draft your first spec with the coach agent
+  spekk builder    # implement the next ready assertion
+
+Using a different coding assistant? Register the agents with it:
+  spekk install --target claude-code|copilot|cursor|opencode|codex`)
+}
+
 // runPrompt prints the layered-resolved prompt for an agent to stdout.
 func runPrompt(args []string) {
 	usage := `
@@ -747,6 +820,7 @@ USAGE:
   spekk [COMMAND]
 
 COMMANDS:
+  init      Set up a project for spec-driven development (creates specs/)
   show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
   serve     Start WebSocket server for browser extension (--port, --host)
