@@ -29,7 +29,7 @@ BINARY="spekk-darwin-arm64"  # ← change this for your platform
 # Fetch the asset download URL from the latest release
 ASSET_URL=$(curl -sL -H "Authorization: token $GH_SPEKK_TOKEN" \
   https://api.github.com/repos/spekk-ai/spekk-cli/releases/latest \
-  | grep -A3 "\"name\": \"$BINARY\"" | grep '"url"' | cut -d'"' -f4)
+  | python3 -c "import sys,json; assets=json.load(sys.stdin).get('assets',[]); print(next(a['url'] for a in assets if a['name']=='$BINARY'))")
 
 # Download the binary
 curl -sL -H "Authorization: token $GH_SPEKK_TOKEN" -H "Accept: application/octet-stream" \
