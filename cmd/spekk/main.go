@@ -98,12 +98,12 @@ func main() {
 // Accepts flags: --all, --spec <name>, --assertion <name>, --all-branches, --raw, --specs-dir
 func runParser(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
-		"all":        {Names: []string{"--all"}, Type: cli.BoolFlag},
-		"spec":       {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
-		"assertion":  {Names: []string{"--assertion"}, Type: cli.StringFlag},
-		"allBranch":  {Names: []string{"--all-branches"}, Type: cli.BoolFlag},
-		"raw":        {Names: []string{"--raw"}, Type: cli.BoolFlag},
-		"specsDir":   {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+		"all":       {Names: []string{"--all"}, Type: cli.BoolFlag},
+		"spec":      {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
+		"assertion": {Names: []string{"--assertion"}, Type: cli.StringFlag},
+		"allBranch": {Names: []string{"--all-branches"}, Type: cli.BoolFlag},
+		"raw":       {Names: []string{"--raw"}, Type: cli.BoolFlag},
+		"specsDir":  {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
 	})
 
 	specsDir := flags.String("specsDir")

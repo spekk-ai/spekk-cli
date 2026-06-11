@@ -53,14 +53,14 @@ var targets = map[string]target{
 		globalDir:  func(home string) string { return filepath.Join(home, ".claude", "agents") },
 		projectDir: filepath.Join(".claude", "agents"),
 		frontmatter: func(agent string) string {
-			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %s\n---\n", agent, descriptions[agent])
+			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
 		},
 	},
 	"opencode": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".config", "opencode", "agents") },
 		projectDir: filepath.Join(".opencode", "agents"),
 		frontmatter: func(agent string) string {
-			return fmt.Sprintf("---\ndescription: %s\nmode: subagent\n---\n", descriptions[agent])
+			return fmt.Sprintf("---\ndescription: %q\nmode: subagent\n---\n", descriptions[agent])
 		},
 	},
 	"codex": {
@@ -75,14 +75,14 @@ var targets = map[string]target{
 		projectDir: filepath.Join(".github", "agents"),
 		fileExt:    ".agent.md",
 		frontmatter: func(agent string) string {
-			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %s\n---\n", agent, descriptions[agent])
+			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
 		},
 	},
 	"cursor": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".cursor", "agents") },
 		projectDir: filepath.Join(".cursor", "agents"),
 		frontmatter: func(agent string) string {
-			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %s\n---\n", agent, descriptions[agent])
+			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
 		},
 	},
 }

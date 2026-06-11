@@ -28,8 +28,8 @@ func TestInstallClaudeCodeGlobal(t *testing.T) {
 		if !strings.HasPrefix(content, "---\nname: spekk-"+agent+"\n") {
 			t.Errorf("%s: frontmatter should start with name field, got:\n%s", agent, content[:80])
 		}
-		if !strings.Contains(content, "description: ") {
-			t.Errorf("%s: missing description", agent)
+		if !strings.Contains(content, `description: "`) {
+			t.Errorf("%s: description must be a quoted YAML scalar", agent)
 		}
 		if !strings.Contains(content, "specs/ directory") {
 			t.Errorf("%s: description should scope to specs/ directory", agent)

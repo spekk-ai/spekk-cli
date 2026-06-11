@@ -163,6 +163,35 @@ func TestListSkills_Deduplication(t *testing.T) {
 	}
 }
 
+func TestListSkills_SkipsSpecDoc(t *testing.T) {
+	home, cwd, install := setupSkillDirs(t, "coach")
+
+	// The package skill dir contains the spec doc named after the
+	// directory itself (e.g. coach-skills-system/coach-skills-system.md);
+	// it must not be listed as a skill.
+	pkgDir := filepath.Join(install, "specs", "coach-skills-system")
+	writeSkillFile(t, pkgDir, "coach-skills-system.md", "# Spec doc, not a skill")
+	writeSkillFile(t, pkgDir, "real-skill.md", "# Real Skill")
+
+	r := newSkillResolver(home, cwd, install)
+	skills := r.ListSkills("coach")
+
+	for _, s := range skills {
+		if s.Name == "coach-skills-system" {
+			t.Errorf("spec doc should not be listed as a skill: %v", skills)
+		}
+	}
+	found := false
+	for _, s := range skills {
+		if s.Name == "real-skill" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("real-skill should be listed, got: %v", skills)
+	}
+}
+
 func TestListSkills_EmptyDirs(t *testing.T) {
 	r := newSkillResolver(t.TempDir(), t.TempDir(), t.TempDir())
 	skills := r.ListSkills("coach")

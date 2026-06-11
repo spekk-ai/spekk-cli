@@ -14,6 +14,7 @@ branch: feat/agent-install
 ## Success Criteria
 
 - `spekk skill list coach` prints one line per available skill: the skill name and its source (the resolving directory, or `embedded`), using `SkillResolver.ListSkills`.
+- The listing excludes the spec doc that shares its directory's name (e.g. `coach-skills-system.md` inside `specs/coach-skills-system/`) — only actual skills are listed.
 - `spekk skill show coach <name>` prints the skill's markdown content to stdout, using `SkillResolver.ResolveSkill` (which honors the layer order: `.spekk/skills/<agent>/` → `~/.spekk/skills/<agent>/` → install dir → embedded FS).
 - Unknown skill name prints an error to stderr and exits 1.
 - Missing arguments print usage to stderr and exit 1.
