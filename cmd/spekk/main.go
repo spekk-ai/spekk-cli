@@ -11,6 +11,7 @@ import (
 	spekk "github.com/spekk-ai/spekk-cli"
 	"github.com/spekk-ai/spekk-cli/internal/agent"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/install"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 	"github.com/spekk-ai/spekk-cli/internal/sandbox"
 	"github.com/spekk-ai/spekk-cli/internal/serve"
@@ -67,6 +68,15 @@ func main() {
 
 	case "sandbox":
 		launchSandbox(args[1:])
+
+	case "prompt":
+		runPrompt(args[1:])
+
+	case "skill":
+		runSkill(args[1:])
+
+	case "install":
+		runInstall(args[1:])
 
 	case "update":
 		runUpdate(args[1:])
@@ -574,6 +584,147 @@ OPTIONS:
 	}
 }
 
+// runPrompt prints the layered-resolved prompt for an agent to stdout.
+func runPrompt(args []string) {
+	usage := `
+spekk prompt - Print an agent's resolved prompt to stdout
+
+USAGE:
+  spekk prompt <agent>
+
+AGENTS:
+  coach, builder, observer
+
+The prompt is resolved through the standard layers (.spekk/ overrides and
+extensions, then the embedded base), so the output is exactly what
+"spekk <agent>" would launch with. Useful for piping into other tools or
+for host-assistant shims installed via "spekk install".
+`
+	if len(args) == 0 {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(1)
+	}
+	if args[0] == "--help" || args[0] == "-h" {
+		fmt.Print(usage)
+		return
+	}
+
+	resolver := cli.NewPromptResolver()
+	content, err := resolver.GetPromptContent(args[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s (valid agents: coach, builder, observer)\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(content)
+}
+
+// runSkill exposes layered skill discovery: list and show.
+func runSkill(args []string) {
+	usage := `
+spekk skill - Discover and print agent skills
+
+USAGE:
+  spekk skill list <agent>          List available skills and their source layer
+  spekk skill show <agent> <name>   Print a skill's content to stdout
+
+AGENTS:
+  coach, builder
+
+Skills resolve through layers: .spekk/skills/<agent>/ (project), then
+~/.spekk/skills/<agent>/ (user), then the skills built into the binary.
+`
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
+		if len(args) == 0 {
+			fmt.Fprint(os.Stderr, usage)
+			os.Exit(1)
+		}
+		fmt.Print(usage)
+		return
+	}
+
+	resolver := cli.NewSkillResolver(findInstallDir())
+
+	switch args[0] {
+	case "list":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: spekk skill list <agent>")
+			os.Exit(1)
+		}
+		for _, entry := range resolver.ListSkills(args[1]) {
+			fmt.Printf("%-40s %s\n", entry.Name, entry.Source)
+		}
+
+	case "show":
+		if len(args) < 3 {
+			fmt.Fprintln(os.Stderr, "Usage: spekk skill show <agent> <name>")
+			os.Exit(1)
+		}
+		skill := resolver.ResolveSkill(args[1], args[2])
+		if skill == nil {
+			fmt.Fprintf(os.Stderr, "Error: skill %q not found for agent %q (try \"spekk skill list %s\")\n", args[2], args[1], args[1])
+			os.Exit(1)
+		}
+		fmt.Println(skill.Content)
+
+	default:
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(1)
+	}
+}
+
+// runInstall writes thin shim subagents into a host coding assistant.
+func runInstall(args []string) {
+	usage := `
+spekk install - Install spekk agents into a coding assistant
+
+USAGE:
+  spekk install --target <tool> [--project]
+
+TARGETS:
+  claude-code (alias: claude)   ~/.claude/agents/
+  opencode                      ~/.config/opencode/agents/
+  codex                         ~/.codex/prompts/ (global only)
+
+OPTIONS:
+  --target <tool>   Host tool to install into (required)
+  --project         Install into the current project instead of globally
+  --help, -h        Show this help message
+
+Installs thin shims for the coach, builder, and observer agents. Shims
+fetch their full instructions from this binary at session start via
+"spekk prompt <agent>", so they never go stale — updating spekk updates
+every installed agent.
+`
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			fmt.Print(usage)
+			return
+		}
+	}
+
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"target":  {Names: []string{"--target", "-t"}, Type: cli.StringFlag},
+		"project": {Names: []string{"--project"}, Type: cli.BoolFlag},
+	})
+
+	if flags.String("target") == "" {
+		fmt.Fprintf(os.Stderr, "Error: --target is required (valid targets: %s)\n", strings.Join(install.ValidTargets(), ", "))
+		os.Exit(1)
+	}
+
+	written, err := install.Install(install.Options{
+		Target:  flags.String("target"),
+		Project: flags.Bool("project"),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	for _, path := range written {
+		fmt.Println("installed:", path)
+	}
+}
+
 // printHelp displays the help text with all available commands.
 func printHelp() {
 	fmt.Print(`
@@ -591,6 +742,9 @@ COMMANDS:
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
   loop      Run orchestration workflows (builder/coach loops)
+  prompt    Print an agent's resolved prompt to stdout
+  skill     List and print agent skills (list, show)
+  install   Install spekk agents into a coding assistant (--target)
   update    Self-update the spekk CLI to the latest version (--check to preview)
   version   Print the current version
   help      Show this help message
