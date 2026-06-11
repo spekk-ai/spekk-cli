@@ -7,32 +7,35 @@ import (
 	"testing"
 )
 
-func TestInstallClaudeCodeGlobal(t *testing.T) {
+// TestInstall_ShimContent verifies the full shim contract on the claude-code
+// target, and that re-installing overwrites cleanly.
+func TestInstall_ShimContent(t *testing.T) {
 	home := t.TempDir()
-	written, err := Install(Options{Target: "claude-code", HomeDir: home})
+	opts := Options{Target: "claude-code", HomeDir: home}
+
+	written, err := Install(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(written) != 3 {
-		t.Fatalf("got %d files, want 3", len(written))
+		t.Fatalf("got %d files, want 3 (coach, builder, observer)", len(written))
 	}
 
-	wantDir := filepath.Join(home, ".claude", "agents")
 	for _, agent := range []string{"coach", "builder", "observer"} {
-		path := filepath.Join(wantDir, "spekk-"+agent+".md")
+		path := filepath.Join(home, ".claude", "agents", "spekk-"+agent+".md")
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("expected %s to exist: %v", path, err)
 		}
 		content := string(data)
 		if !strings.HasPrefix(content, "---\nname: spekk-"+agent+"\n") {
-			t.Errorf("%s: frontmatter should start with name field, got:\n%s", agent, content[:80])
+			t.Errorf("%s: frontmatter should start with name field", agent)
 		}
 		if !strings.Contains(content, `description: "`) {
 			t.Errorf("%s: description must be a quoted YAML scalar", agent)
 		}
 		if !strings.Contains(content, "specs/ directory") {
-			t.Errorf("%s: description should scope to specs/ directory", agent)
+			t.Errorf("%s: description should scope delegation to specs/ projects", agent)
 		}
 		if !strings.Contains(content, "`spekk prompt "+agent+"`") {
 			t.Errorf("%s: body must instruct running spekk prompt", agent)
@@ -41,138 +44,87 @@ func TestInstallClaudeCodeGlobal(t *testing.T) {
 			t.Errorf("%s: body must link install instructions for missing binary", agent)
 		}
 	}
-}
 
-func TestInstallClaudeAlias(t *testing.T) {
-	home := t.TempDir()
-	written, err := Install(Options{Target: "claude", HomeDir: home})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(written[0], filepath.Join(".claude", "agents")) {
-		t.Errorf("alias claude should resolve to claude-code paths, got %s", written[0])
+	// Idempotent: re-install overwrites without error
+	if _, err := Install(opts); err != nil {
+		t.Fatalf("re-install should succeed: %v", err)
 	}
 }
 
-func TestInstallClaudeCodeProject(t *testing.T) {
-	cwd := t.TempDir()
-	written, err := Install(Options{Target: "claude-code", Project: true, Cwd: cwd})
-	if err != nil {
-		t.Fatal(err)
+// TestInstall_Targets verifies per-target paths, extensions, and
+// frontmatter variations for both global and project scopes.
+func TestInstall_Targets(t *testing.T) {
+	tests := []struct {
+		target   string
+		project  bool
+		wantDir  []string // joined under home or cwd
+		wantFile string
+		contains string
+		excludes string
+	}{
+		{"claude", false, []string{".claude", "agents"}, "spekk-coach.md", "name: spekk-coach", ""},
+		{"claude-code", true, []string{".claude", "agents"}, "spekk-coach.md", "", ""},
+		{"copilot", false, []string{".copilot", "agents"}, "spekk-coach.agent.md", "name: spekk-coach", ""},
+		{"copilot", true, []string{".github", "agents"}, "spekk-coach.agent.md", "", ""},
+		{"cursor", false, []string{".cursor", "agents"}, "spekk-coach.md", "name: spekk-coach", ""},
+		{"cursor", true, []string{".cursor", "agents"}, "spekk-coach.md", "", ""},
+		{"opencode", false, []string{".config", "opencode", "agents"}, "spekk-coach.md", "mode: subagent", "name:"},
+		{"opencode", true, []string{".opencode", "agents"}, "spekk-coach.md", "", ""},
+		{"codex", false, []string{".codex", "prompts"}, "spekk-coach.md", "", "---"},
 	}
-	wantDir := filepath.Join(cwd, ".claude", "agents")
-	for _, path := range written {
-		if filepath.Dir(path) != wantDir {
-			t.Errorf("project install wrote to %s, want dir %s", path, wantDir)
+
+	for _, tt := range tests {
+		name := tt.target
+		if tt.project {
+			name += "/project"
 		}
+		t.Run(name, func(t *testing.T) {
+			base := t.TempDir()
+			opts := Options{Target: tt.target, Project: tt.project}
+			if tt.project {
+				opts.Cwd = base
+			} else {
+				opts.HomeDir = base
+			}
+
+			written, err := Install(opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			wantPath := filepath.Join(append([]string{base}, append(tt.wantDir, tt.wantFile)...)...)
+			found := false
+			for _, p := range written {
+				if p == wantPath {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("expected %s in written paths %v", wantPath, written)
+			}
+
+			data, err := os.ReadFile(wantPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			content := string(data)
+			if tt.contains != "" && !strings.Contains(content, tt.contains) {
+				t.Errorf("content should contain %q", tt.contains)
+			}
+			if tt.excludes != "" && strings.Contains(content, tt.excludes) {
+				t.Errorf("content should not contain %q", tt.excludes)
+			}
+		})
 	}
 }
 
-func TestInstallOpenCode(t *testing.T) {
-	home := t.TempDir()
-	written, err := Install(Options{Target: "opencode", HomeDir: home})
-	if err != nil {
-		t.Fatal(err)
+func TestInstall_Errors(t *testing.T) {
+	// codex does not support project installs
+	if _, err := Install(Options{Target: "codex", Project: true, Cwd: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "--project") {
+		t.Errorf("codex --project should error explaining --project, got: %v", err)
 	}
-	wantDir := filepath.Join(home, ".config", "opencode", "agents")
-	if filepath.Dir(written[0]) != wantDir {
-		t.Fatalf("wrote to %s, want dir %s", written[0], wantDir)
-	}
-	data, _ := os.ReadFile(written[0])
-	content := string(data)
-	if !strings.Contains(content, "mode: subagent") {
-		t.Error("opencode frontmatter must set mode: subagent")
-	}
-	if strings.Contains(content, "name:") {
-		t.Error("opencode frontmatter should not set name (filename is the agent name)")
-	}
-}
 
-func TestInstallCodexGlobal(t *testing.T) {
-	home := t.TempDir()
-	written, err := Install(Options{Target: "codex", HomeDir: home})
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantDir := filepath.Join(home, ".codex", "prompts")
-	if filepath.Dir(written[0]) != wantDir {
-		t.Fatalf("wrote to %s, want dir %s", written[0], wantDir)
-	}
-	data, _ := os.ReadFile(written[0])
-	if strings.HasPrefix(string(data), "---") {
-		t.Error("codex shims should have no frontmatter")
-	}
-}
-
-func TestInstallCopilot(t *testing.T) {
-	home := t.TempDir()
-	written, err := Install(Options{Target: "copilot", HomeDir: home})
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantDir := filepath.Join(home, ".copilot", "agents")
-	if filepath.Dir(written[0]) != wantDir {
-		t.Fatalf("wrote to %s, want dir %s", written[0], wantDir)
-	}
-	if !strings.HasSuffix(written[0], ".agent.md") {
-		t.Errorf("copilot shims must use .agent.md extension, got %s", written[0])
-	}
-	data, _ := os.ReadFile(written[0])
-	if !strings.Contains(string(data), "name: spekk-") {
-		t.Error("copilot frontmatter must set name")
-	}
-}
-
-func TestInstallCopilotProject(t *testing.T) {
-	cwd := t.TempDir()
-	written, err := Install(Options{Target: "copilot", Project: true, Cwd: cwd})
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantDir := filepath.Join(cwd, ".github", "agents")
-	if filepath.Dir(written[0]) != wantDir {
-		t.Errorf("project install wrote to %s, want dir %s", written[0], wantDir)
-	}
-}
-
-func TestInstallCursor(t *testing.T) {
-	home := t.TempDir()
-	written, err := Install(Options{Target: "cursor", HomeDir: home})
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantDir := filepath.Join(home, ".cursor", "agents")
-	if filepath.Dir(written[0]) != wantDir {
-		t.Fatalf("wrote to %s, want dir %s", written[0], wantDir)
-	}
-	if !strings.HasSuffix(written[0], ".md") || strings.HasSuffix(written[0], ".agent.md") {
-		t.Errorf("cursor shims use plain .md, got %s", written[0])
-	}
-}
-
-func TestInstallCursorProject(t *testing.T) {
-	cwd := t.TempDir()
-	written, err := Install(Options{Target: "cursor", Project: true, Cwd: cwd})
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantDir := filepath.Join(cwd, ".cursor", "agents")
-	if filepath.Dir(written[0]) != wantDir {
-		t.Errorf("project install wrote to %s, want dir %s", written[0], wantDir)
-	}
-}
-
-func TestInstallCodexProjectUnsupported(t *testing.T) {
-	_, err := Install(Options{Target: "codex", Project: true, Cwd: t.TempDir()})
-	if err == nil {
-		t.Fatal("expected error for codex --project")
-	}
-	if !strings.Contains(err.Error(), "--project") {
-		t.Errorf("error should explain --project is unsupported, got: %v", err)
-	}
-}
-
-func TestInstallUnknownTarget(t *testing.T) {
+	// unknown target lists valid targets and the prompt fallback
 	_, err := Install(Options{Target: "vim", HomeDir: t.TempDir()})
 	if err == nil {
 		t.Fatal("expected error for unknown target")
@@ -182,19 +134,7 @@ func TestInstallUnknownTarget(t *testing.T) {
 			t.Errorf("error should list valid target %q, got: %v", want, err)
 		}
 	}
-}
-
-func TestInstallIdempotent(t *testing.T) {
-	home := t.TempDir()
-	if _, err := Install(Options{Target: "claude-code", HomeDir: home}); err != nil {
-		t.Fatal(err)
-	}
-	// Second install overwrites without error
-	written, err := Install(Options{Target: "claude-code", HomeDir: home})
-	if err != nil {
-		t.Fatalf("re-install should succeed: %v", err)
-	}
-	if len(written) != 3 {
-		t.Fatalf("got %d files, want 3", len(written))
+	if !strings.Contains(err.Error(), "spekk prompt") {
+		t.Errorf("error should point at spekk prompt fallback, got: %v", err)
 	}
 }
