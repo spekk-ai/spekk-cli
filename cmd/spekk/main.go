@@ -542,9 +542,6 @@ USAGE:
 OPTIONS:
   --check, -c   Check for available updates without installing
   --help, -h    Show this help message
-
-ENVIRONMENT:
-  GH_SPEKK_TOKEN   Fine-grained PAT with contents:read on spekk-ai/spekk-cli (required)
 `)
 			return
 		}

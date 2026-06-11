@@ -97,8 +97,8 @@ func TestFetchLatestRelease(t *testing.T) {
 
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if got := req.Header.Get("Authorization"); got != "token test-token" {
-				t.Errorf("Authorization = %q, want %q", got, "token test-token")
+			if got := req.Header.Get("Authorization"); got != "" {
+				t.Errorf("unexpected Authorization header: %q", got)
 			}
 			return &http.Response{
 				StatusCode: 200,
@@ -107,7 +107,7 @@ func TestFetchLatestRelease(t *testing.T) {
 		}),
 	}
 
-	release, err := FetchLatestRelease("test-token")
+	release, err := FetchLatestRelease()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,31 +126,19 @@ func TestFetchLatestReleaseAPIError(t *testing.T) {
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
-				StatusCode: 401,
-				Body:       io.NopCloser(bytes.NewBufferString("Bad credentials")),
+				StatusCode: 404,
+				Body:       io.NopCloser(bytes.NewBufferString("Not Found")),
 			}, nil
 		}),
 	}
 
-	_, err := FetchLatestRelease("bad-token")
+	_, err := FetchLatestRelease()
 	if err == nil {
-		t.Fatal("expected error for 401 response")
-	}
-}
-
-func TestRunMissingToken(t *testing.T) {
-	t.Setenv("GH_SPEKK_TOKEN", "")
-	err := Run(false)
-	if err == nil {
-		t.Fatal("expected error for missing GH_SPEKK_TOKEN")
-	}
-	if !bytes.Contains([]byte(err.Error()), []byte("GH_SPEKK_TOKEN")) {
-		t.Errorf("error should mention GH_SPEKK_TOKEN, got: %v", err)
+		t.Fatal("expected error for 404 response")
 	}
 }
 
 func TestRunDevBuild(t *testing.T) {
-	t.Setenv("GH_SPEKK_TOKEN", "test-token")
 	original := version.Version
 	version.Version = "dev"
 	defer func() { version.Version = original }()
@@ -169,8 +157,8 @@ func TestDownloadAndReplace(t *testing.T) {
 
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if got := req.Header.Get("Authorization"); got != "token test-token" {
-				t.Errorf("Authorization = %q, want %q", got, "token test-token")
+			if got := req.Header.Get("Authorization"); got != "" {
+				t.Errorf("unexpected Authorization header: %q", got)
 			}
 			return &http.Response{
 				StatusCode: 200,
@@ -185,7 +173,7 @@ func TestDownloadAndReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := downloadAndReplace("https://example.com/binary", "test-token", binPath)
+	err := downloadAndReplace("https://example.com/binary", binPath)
 	if err != nil {
 		t.Fatalf("downloadAndReplace failed: %v", err)
 	}

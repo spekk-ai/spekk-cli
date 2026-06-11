@@ -43,17 +43,12 @@ type asset struct {
 // Run performs the self-update. If checkOnly is true, it prints the available
 // version without installing.
 func Run(checkOnly bool) error {
-	token := os.Getenv("GH_SPEKK_TOKEN")
-	if token == "" {
-		return fmt.Errorf("GH_SPEKK_TOKEN environment variable is required\nSet this to a fine-grained PAT with contents:read on %s/%s", repoOwner, repoName)
-	}
-
 	current := version.Version
 	if current == "dev" {
 		return fmt.Errorf("cannot update a development build; install a released version first")
 	}
 
-	release, err := FetchLatestRelease(token)
+	release, err := FetchLatestRelease()
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %w", err)
 	}
@@ -96,7 +91,7 @@ func Run(checkOnly bool) error {
 		return fmt.Errorf("cannot resolve executable path: %w", err)
 	}
 
-	if err := downloadAndReplace(downloadURL, token, exePath); err != nil {
+	if err := downloadAndReplace(downloadURL, exePath); err != nil {
 		return fmt.Errorf("update failed: %w", err)
 	}
 
@@ -105,13 +100,12 @@ func Run(checkOnly bool) error {
 }
 
 // FetchLatestRelease queries the GitHub Releases API for the latest release.
-func FetchLatestRelease(token string) (*releaseResponse, error) {
+func FetchLatestRelease() (*releaseResponse, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "token "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := Client.Do(req)
@@ -132,12 +126,11 @@ func FetchLatestRelease(token string) (*releaseResponse, error) {
 	return &release, nil
 }
 
-func downloadAndReplace(url, token, destPath string) error {
+func downloadAndReplace(url, destPath string) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "token "+token)
 	req.Header.Set("Accept", "application/octet-stream")
 
 	resp, err := Client.Do(req)
