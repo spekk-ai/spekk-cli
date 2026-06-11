@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['exp-*']
   workflow_dispatch:
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
         id: version
         run: |
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "version=${GITHUB_REF_NAME#exp-}" >> "$GITHUB_OUTPUT"
           else
             echo "version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" >> "$GITHUB_OUTPUT"
           fi
@@ -38,3 +38,5 @@ jobs:
         with:
           files: dist/spekk-*
           fail_on_unmatched_files: true
+          prerelease: true
+          generate_release_notes: true
