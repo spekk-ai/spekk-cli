@@ -1,5 +1,9 @@
 # Contributing to Spekk CLI
 
+## Pull Requests
+
+PRs are welcome but reviewed at the maintainers' discretion. We are a small team and may close PRs without detailed explanation. If you're planning significant work, open an issue first to discuss it — that saves everyone time.
+
 ## Development Setup
 
 ### Prerequisites

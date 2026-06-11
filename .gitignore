@@ -91,6 +91,11 @@ site/
 # Claude Code local state
 .claude/
 
+# Local development directories (not for public repo)
+personal/
+observations/
+projects/
+
 # Go binaries
 bin/spekk-go
 /spekk

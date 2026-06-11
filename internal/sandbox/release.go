@@ -11,13 +11,8 @@ import (
 )
 
 const (
-	// releaseRepo publishes the sandbox release artifacts (agent binary and
-	// cloud-init template). Infrastructure lives in spekk-app, not here.
-	releaseRepo = "spekk-ai/spekk-app"
-
-	// Asset names expected on each sandbox release.
-	binaryAssetName    = "sandbox"
-	cloudInitAssetName = "cloud-init.yaml"
+	releaseRepo     = "spekk-ai/spekk-cli"
+	binaryAssetName = "sandbox-linux-amd64"
 
 	// cloudInitKeyPlaceholder is the line in the template that is replaced with
 	// the sandbox's generated public key.
@@ -68,15 +63,7 @@ func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 	if err != nil {
 		return nil, err
 	}
-	cloudInitID, err := assetID(rel, cloudInitAssetName)
-	if err != nil {
-		return nil, err
-	}
 
-	cloudInit, err := downloadAsset(token, cloudInitID)
-	if err != nil {
-		return nil, fmt.Errorf("downloading %s: %w", cloudInitAssetName, err)
-	}
 	binary, err := downloadAsset(token, binaryID)
 	if err != nil {
 		return nil, fmt.Errorf("downloading %s: %w", binaryAssetName, err)
@@ -98,7 +85,7 @@ func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 
 	return &releaseArtifacts{
 		Version:    rel.TagName,
-		CloudInit:  cloudInit,
+		CloudInit:  cloudInitTemplate,
 		BinaryPath: f.Name(),
 	}, nil
 }
