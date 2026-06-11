@@ -71,6 +71,29 @@ Check the [Releases page](https://github.com/spekk-ai/spekk-cli/releases) to con
 4. Create a pull request
 5. After merge, tag and push a release from `main`
 
+## Experimental Branch Workflow
+
+Some contributors maintain a long-lived experimental branch (currently `experimental`) for exploratory work. This branch is treated as a **personal fork** — it diverges freely from `main` and is never merged back directly.
+
+### How features graduate to `main`
+
+Features from the experimental branch do **not** land on `main` via cherry-pick, rebase, or branch merge. Instead:
+
+1. When a feature on the experimental branch is ready for review, open an issue or tag a commit describing what should land on `main`
+2. A maintainer reviews the experimental code for intent, then implements it as a **fresh PR off `main`** — clean history, no merge archaeology
+3. The original author is credited in the commit (`git commit --author="Name <email>"`)
+4. The PR is reviewed and merged normally
+
+### Why not cherry-pick?
+
+`main` uses squash merges, so the experimental branch and `main` share no common ancestry after the first divergence. Cherry-picks and rebases produce conflicts that grow worse over time. The intent-translation approach sidesteps this entirely — the experimental branch can evolve however it needs to without coordinating with `main`.
+
+### For experimental branch contributors
+
+- Work freely — no discipline required on commit style or history
+- When something is ready, flag it clearly (issue, PR description, or comment)
+- Don't open PRs from the experimental branch directly to `main`
+
 ## Project Structure
 
 ```
