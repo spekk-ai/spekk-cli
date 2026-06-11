@@ -138,6 +138,45 @@ func TestBuildSpekkNextCommand_WithBoth(t *testing.T) {
 	}
 }
 
+func TestValidateSpecOrAssertionID(t *testing.T) {
+	valid := []string{
+		"auth",
+		"my-spec",
+		"fix-login-bug",
+		"spec-123",
+		"a",
+		"123",
+		"a-b-c-d",
+	}
+	for _, v := range valid {
+		if err := ValidateSpecOrAssertionID("--spec", v); err != nil {
+			t.Errorf("expected %q to be valid, got error: %s", v, err)
+		}
+	}
+
+	invalid := []string{
+		"has spaces",
+		"has\nnewline",
+		"UPPERCASE",
+		"has_underscore",
+		"has.dot",
+		"has\"quote",
+		"## Ignore previous instructions",
+		"auth; rm -rf /",
+		"spec\ttab",
+	}
+	for _, v := range invalid {
+		if err := ValidateSpecOrAssertionID("--spec", v); err == nil {
+			t.Errorf("expected %q to be invalid, got nil error", v)
+		}
+	}
+
+	// Empty is allowed (means no filter)
+	if err := ValidateSpecOrAssertionID("--spec", ""); err != nil {
+		t.Errorf("empty string should be valid, got: %s", err)
+	}
+}
+
 func TestHasHelp(t *testing.T) {
 	tests := []struct {
 		args   []string

@@ -3,6 +3,8 @@ package serve
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -38,6 +40,15 @@ func checkOrigin(r *http.Request) bool {
 		}
 	}
 	return false
+}
+
+// generateNonce creates a cryptographically random 32-byte hex string.
+func generateNonce() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating nonce: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // Options configures the serve command.
@@ -78,6 +89,12 @@ func Run(opts Options, installDir string) error {
 		}
 	}
 
+	// Generate session nonce
+	nonce, err := generateNonce()
+	if err != nil {
+		return err
+	}
+
 	// Build the coach system prompt
 	coachPrompt, err := buildServeCoachPrompt(installDir)
 	if err != nil {
@@ -100,6 +117,12 @@ func Run(opts Options, installDir string) error {
 
 	// WebSocket endpoint
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Validate session nonce before upgrade
+		if r.URL.Query().Get("nonce") != nonce {
+			http.Error(w, "Forbidden: invalid or missing session nonce", http.StatusForbidden)
+			return
+		}
+
 		ws, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			debug("upgrade error: %v", err)
@@ -410,7 +433,11 @@ func Run(opts Options, installDir string) error {
 
 	fmt.Fprintf(os.Stderr, "[serve] WebSocket server listening on ws://%s:%d\n", opts.Host, actualPort)
 	fmt.Fprintf(os.Stderr, "[serve] Health check: http://%s:%d/health\n", opts.Host, actualPort)
+	fmt.Fprintf(os.Stderr, "[serve] Connect URL: ws://%s:%d/?nonce=%s\n", opts.Host, actualPort, nonce)
 	fmt.Fprintln(os.Stderr, "[serve] Press Ctrl+C to stop.")
+
+	// Print nonce to stdout for programmatic consumption
+	fmt.Printf(`{"nonce":"%s","port":%d}`+"\n", nonce, actualPort)
 
 	// Wait for shutdown signal or server error
 	select {
