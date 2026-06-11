@@ -297,6 +297,7 @@ spekk observer
 
 ```bash
 spekk              # Default: runs parser (equivalent to `spekk next`)
+spekk init         # Set up a project (creates specs/)
 spekk next         # Get next priority assertion
 spekk show         # Launch interactive web spec explorer
 spekk show -w      # Watch mode with live reload
@@ -304,9 +305,14 @@ spekk status       # Comprehensive overview of all specs/assertions
 spekk coach        # Launch Coach Agent
 spekk builder      # Launch Builder Agent
 spekk observer     # Launch Observer Agent (monitors drift)
+spekk install      # Install agents into a coding assistant (--target)
+spekk prompt       # Print an agent's resolved prompt
+spekk skill        # List and print agent skills (list, show)
 spekk serve        # Start WebSocket server for browser extension
 spekk sandbox      # Manage cloud sandbox environments
 spekk loop         # Run orchestration workflows
+spekk update       # Self-update to the latest release
+spekk version      # Print the current version
 spekk help         # Show help message
 ```
 
@@ -332,78 +338,15 @@ spekk next --assertion <id>   # Get details for specific assertion
 spekk next --all-branches     # Include assertions from all branches
 ```
 
-## Directory Structure
+## Contributing
 
-```
-spekk-cli/
-├── cmd/spekk/              # CLI entry point
-│   └── main.go
-├── internal/               # Core Go packages
-│   ├── parser/            # Spec parser
-│   ├── agent/             # Agent launchers (coach, builder, observer, loops)
-│   ├── cli/               # Flag parsing, prompt/skill resolution
-│   ├── show/              # Spec explorer web UI
-│   ├── serve/             # WebSocket server for browser extension
-│   ├── sandbox/           # Cloud sandbox management (DigitalOcean)
-│   └── status/            # Status overview display
-├── specs/                  # All specifications
-│   ├── spec-parser/
-│   ├── coach-agent/
-│   ├── builder-agent/
-│   └── ...
-├── go.mod
-└── go.sum
-```
-
-## Development
-
-### Building
-
-```bash
-go build ./cmd/spekk
-```
-
-### Testing
-
-```bash
-# Run all tests
-go test ./...
-
-# Run tests for a specific package
-go test ./internal/parser/
-
-# Verbose output
-go test ./... -v
-```
-
-### Creating New Features
-
-1. **Write the spec** (or use coach agent):
-   ```bash
-   spekk coach
-   ```
-
-2. **Implement via builder**:
-   ```bash
-   spekk builder
-   ```
-
-3. **Or implement manually**:
-   ```bash
-   # Check what's next
-   spekk next
-
-   # Read the assertion file
-   cat specs/spec-parser/assertions/parses-frontmatter.md
-
-   # Implement the feature, update status to done
-   ```
+Development setup, project structure, testing, and the release process are documented in [CONTRIBUTING.md](./CONTRIBUTING.md). This repo is built with spekk itself — `spekk next` shows what's ready to work on.
 
 ## Requirements
 
-- **Go** 1.23+ (for building from source)
-- **Claude CLI** (for builder/coach/observer agents)
-- **Git** (for automated commits)
+- **Git** (for branch-aware parsing and automated commits)
+- **Claude CLI** — only for the standalone `spekk coach` / `spekk builder` / `spekk observer` launchers; not needed when using the agents [from another assistant](#use-spekk-from-your-coding-assistant)
+- **Go** 1.23+ — only for building from source
 
 ## Philosophy
 
@@ -417,4 +360,4 @@ The specs are the source of truth. Code is the implementation of specs. Tests pr
 
 ## License
 
-MIT
+[Apache 2.0](./LICENSE)
