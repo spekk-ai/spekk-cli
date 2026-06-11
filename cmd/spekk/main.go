@@ -17,9 +17,17 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/serve"
 	"github.com/spekk-ai/spekk-cli/internal/show"
 	"github.com/spekk-ai/spekk-cli/internal/status"
+	"github.com/spekk-ai/spekk-cli/internal/update"
+	pkgversion "github.com/spekk-ai/spekk-cli/internal/version"
 )
 
+// version is set at build time via: go build -ldflags "-X main.version=1.2.3"
+var version = "dev"
+
 func main() {
+	// Propagate build-time version to shared package for use by other packages
+	pkgversion.Version = version
+
 	// Set embedded assets so agents and skills work when binary is installed outside source tree
 	cli.DefaultEmbeddedFS = spekk.EmbeddedFS
 	cli.DefaultEmbeddedSkillFS = spekk.EmbeddedFS
@@ -69,6 +77,12 @@ func main() {
 
 	case "skills":
 		runSkills(args[1:])
+
+	case "update":
+		runUpdate(args[1:])
+
+	case "version", "--version":
+		fmt.Println(version)
 
 	case "help", "--help", "-h":
 		printHelp()
@@ -657,6 +671,37 @@ func runSkillsList(args []string) {
 	fmt.Print(install.FormatSkillsList(agent, skills))
 }
 
+// runUpdate performs a self-update check and optional install.
+func runUpdate(args []string) {
+	checkOnly := false
+	for _, a := range args {
+		if a == "--check" || a == "-c" {
+			checkOnly = true
+		}
+		if a == "--help" || a == "-h" {
+			fmt.Print(`
+spekk update - Self-update the spekk CLI binary
+
+USAGE:
+  spekk update [OPTIONS]
+
+OPTIONS:
+  --check, -c   Check for available updates without installing
+  --help, -h    Show this help message
+
+ENVIRONMENT:
+  GH_SPEKK_TOKEN   Fine-grained PAT with contents:read on spekk-ai/spekk-cli (required)
+`)
+			return
+		}
+	}
+
+	if err := update.Run(checkOnly); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
 // helpText is the top-level help printed for `spekk help`. Exposed as a
 // constant so tests can verify the commands table without exec'ing the binary.
 const helpText = `
@@ -677,6 +722,7 @@ COMMANDS:
   uninstall Remove an installed skill from local or global scope
   skills    Inspect skills available to an agent (list)
   loop      Run orchestration workflows (builder/coach loops)
+  update    Self-update the spekk CLI to the latest version (--check to preview)
   help      Show this help message
 
 DEFAULT:
