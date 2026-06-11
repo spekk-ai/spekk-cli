@@ -44,6 +44,7 @@ type Options struct {
 type target struct {
 	globalDir   func(home string) string
 	projectDir  string // empty means --project is unsupported
+	fileExt     string // defaults to ".md"
 	frontmatter func(agent string) string
 }
 
@@ -67,6 +68,21 @@ var targets = map[string]target{
 		projectDir: "",
 		frontmatter: func(agent string) string {
 			return ""
+		},
+	},
+	"copilot": {
+		globalDir:  func(home string) string { return filepath.Join(home, ".copilot", "agents") },
+		projectDir: filepath.Join(".github", "agents"),
+		fileExt:    ".agent.md",
+		frontmatter: func(agent string) string {
+			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %s\n---\n", agent, descriptions[agent])
+		},
+	},
+	"cursor": {
+		globalDir:  func(home string) string { return filepath.Join(home, ".cursor", "agents") },
+		projectDir: filepath.Join(".cursor", "agents"),
+		frontmatter: func(agent string) string {
+			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %s\n---\n", agent, descriptions[agent])
 		},
 	},
 }
@@ -113,7 +129,7 @@ func Install(opts Options) ([]string, error) {
 	}
 	t, ok := targets[name]
 	if !ok {
-		return nil, fmt.Errorf("unknown target %q: valid targets are %s", opts.Target, strings.Join(ValidTargets(), ", "))
+		return nil, fmt.Errorf("unknown target %q: valid targets are %s\nFor other tools, use \"spekk prompt <agent>\" directly — see \"spekk install --help\"", opts.Target, strings.Join(ValidTargets(), ", "))
 	}
 
 	var dir string
@@ -144,9 +160,14 @@ func Install(opts Options) ([]string, error) {
 		return nil, fmt.Errorf("creating %s: %w", dir, err)
 	}
 
+	ext := t.fileExt
+	if ext == "" {
+		ext = ".md"
+	}
+
 	var written []string
 	for _, agent := range agents {
-		path := filepath.Join(dir, "spekk-"+agent+".md")
+		path := filepath.Join(dir, "spekk-"+agent+ext)
 		content := t.frontmatter(agent) + shimBody(agent)
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			return nil, fmt.Errorf("writing %s: %w", path, err)

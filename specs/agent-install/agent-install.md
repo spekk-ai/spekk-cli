@@ -28,12 +28,14 @@ The binary remains the single source of truth for prompts and skills:
 - Installed agents must degrade gracefully: if the project has no `specs/` directory or the `spekk` binary is missing, say so briefly and stand down. Never push the workflow on a project that hasn't opted in.
 - No new dotfiles are created. Built-in skills are served from the embedded FS.
 
-## Supported targets (v1)
+## Supported targets
 
 | Target | Global location | Project location (`--project`) |
 |--------|----------------|-------------------------------|
 | `claude-code` (alias `claude`) | `~/.claude/agents/spekk-<agent>.md` | `.claude/agents/spekk-<agent>.md` |
+| `copilot` | `~/.copilot/agents/spekk-<agent>.agent.md` | `.github/agents/spekk-<agent>.agent.md` |
+| `cursor` | `~/.cursor/agents/spekk-<agent>.md` | `.cursor/agents/spekk-<agent>.md` |
 | `opencode` | `~/.config/opencode/agents/spekk-<agent>.md` | `.opencode/agents/spekk-<agent>.md` |
 | `codex` | `~/.codex/prompts/spekk-<agent>.md` | not supported (error) |
 
-Additional targets are added by extending the target registry in `internal/install`.
+The target list is intentionally limited to tools we can actually test. The long tail is served by guidance instead of integrations: `spekk install --help`, the unknown-target error, and the README all point to `spekk prompt <agent>` as the universal mechanism (wire it into the tool's custom-agent/rules mechanism or `AGENTS.md`). Additional targets are added by extending the registry in `internal/install`.

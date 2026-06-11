@@ -104,6 +104,64 @@ func TestInstallCodexGlobal(t *testing.T) {
 	}
 }
 
+func TestInstallCopilot(t *testing.T) {
+	home := t.TempDir()
+	written, err := Install(Options{Target: "copilot", HomeDir: home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDir := filepath.Join(home, ".copilot", "agents")
+	if filepath.Dir(written[0]) != wantDir {
+		t.Fatalf("wrote to %s, want dir %s", written[0], wantDir)
+	}
+	if !strings.HasSuffix(written[0], ".agent.md") {
+		t.Errorf("copilot shims must use .agent.md extension, got %s", written[0])
+	}
+	data, _ := os.ReadFile(written[0])
+	if !strings.Contains(string(data), "name: spekk-") {
+		t.Error("copilot frontmatter must set name")
+	}
+}
+
+func TestInstallCopilotProject(t *testing.T) {
+	cwd := t.TempDir()
+	written, err := Install(Options{Target: "copilot", Project: true, Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDir := filepath.Join(cwd, ".github", "agents")
+	if filepath.Dir(written[0]) != wantDir {
+		t.Errorf("project install wrote to %s, want dir %s", written[0], wantDir)
+	}
+}
+
+func TestInstallCursor(t *testing.T) {
+	home := t.TempDir()
+	written, err := Install(Options{Target: "cursor", HomeDir: home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDir := filepath.Join(home, ".cursor", "agents")
+	if filepath.Dir(written[0]) != wantDir {
+		t.Fatalf("wrote to %s, want dir %s", written[0], wantDir)
+	}
+	if !strings.HasSuffix(written[0], ".md") || strings.HasSuffix(written[0], ".agent.md") {
+		t.Errorf("cursor shims use plain .md, got %s", written[0])
+	}
+}
+
+func TestInstallCursorProject(t *testing.T) {
+	cwd := t.TempDir()
+	written, err := Install(Options{Target: "cursor", Project: true, Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDir := filepath.Join(cwd, ".cursor", "agents")
+	if filepath.Dir(written[0]) != wantDir {
+		t.Errorf("project install wrote to %s, want dir %s", written[0], wantDir)
+	}
+}
+
 func TestInstallCodexProjectUnsupported(t *testing.T) {
 	_, err := Install(Options{Target: "codex", Project: true, Cwd: t.TempDir()})
 	if err == nil {

@@ -79,6 +79,34 @@ spekk show -w
 spekk status
 ```
 
+## Use Spekk from Your Coding Assistant
+
+`spekk coach` and `spekk builder` launch Claude Code, but the agents work from any coding assistant. `spekk install` registers them as subagents in your preferred tool:
+
+```bash
+spekk install --target claude-code   # ~/.claude/agents/
+spekk install --target copilot      # ~/.copilot/agents/ (VS Code)
+spekk install --target cursor       # ~/.cursor/agents/
+spekk install --target opencode     # ~/.config/opencode/agents/
+spekk install --target codex        # ~/.codex/prompts/
+```
+
+This writes thin shims that fetch their instructions from the `spekk` binary at session start (via `spekk prompt <agent>`), so installed agents always match your binary version — updating spekk updates every tool at once. Add `--project` to install into the current repo instead of globally.
+
+The agents are designed to be unintrusive: they only engage in projects that have a `specs/` directory, and stay dormant everywhere else.
+
+### Any other tool
+
+If your assistant isn't listed, you don't need an installer — any tool that can run a shell command (or accept pasted text) can use spekk:
+
+```bash
+spekk prompt coach      # print the full coach prompt
+spekk prompt builder    # print the full builder prompt
+spekk skill list coach  # list available coach skills
+```
+
+Wire `spekk prompt <agent>` into your tool's custom-agent, rules, or system-prompt mechanism. If your tool reads `AGENTS.md`, a single line like *"For spec-driven development tasks, run `spekk prompt coach` (or `builder`) and follow those instructions"* is enough.
+
 ## Customizing Agent Prompts
 
 Spekk uses a layered prompt system that lets you customize agent behavior (coach, builder, observer) at two levels without modifying the binary.

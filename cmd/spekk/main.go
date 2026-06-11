@@ -682,6 +682,8 @@ USAGE:
 
 TARGETS:
   claude-code (alias: claude)   ~/.claude/agents/
+  copilot                       ~/.copilot/agents/ (project: .github/agents/)
+  cursor                        ~/.cursor/agents/
   opencode                      ~/.config/opencode/agents/
   codex                         ~/.codex/prompts/ (global only)
 
@@ -694,6 +696,17 @@ Installs thin shims for the coach, builder, and observer agents. Shims
 fetch their full instructions from this binary at session start via
 "spekk prompt <agent>", so they never go stale — updating spekk updates
 every installed agent.
+
+OTHER TOOLS:
+  Any assistant that can run shell commands can use spekk without an
+  installer. Point it at the prompt directly:
+
+    spekk prompt coach        # print the coach prompt
+    spekk prompt builder      # print the builder prompt
+
+  Wire that into your tool's custom-agent or rules mechanism (many tools
+  also read AGENTS.md — paste a line there telling the agent to run
+  "spekk prompt <agent>" when doing spec-driven work).
 `
 	for _, a := range args {
 		if a == "--help" || a == "-h" {
