@@ -1,55 +1,22 @@
 # Spekk CLI
 
-**Spec-driven development CLI tool** for managing specifications and automating development workflows with AI agents.
+**Spec-driven development for AI coding agents.** Describe what must be true in plain-markdown specs; let agents make it true.
 
-## Overview
+Spekk turns a `specs/` directory in your repo into a work queue for AI agents:
 
-Spekk CLI enables spec-driven development by:
-- **Parsing** specification files to identify what needs to be built
-- **Orchestrating** AI agents (Coach and Builder) to create and implement specs
-- **Automating** the development workflow loop
+- **Specs** are markdown files stating what must be true, broken into small, testable **assertions**
+- `spekk next` parses them and returns the next ready assertion — dependency- and branch-aware
+- The **coach** agent turns messy feature requests and meeting notes into well-formed specs
+- The **builder** agent picks up assertions and implements them until they're true
+- Works from Claude Code out of the box, or [any coding assistant](#use-spekk-from-your-coding-assistant)
 
-## Documentation
-
-- **[Getting Started Guide](./docs/GETTING-STARTED.md)** - Quick introduction to Spekk
-- **[CLI Reference](./docs/CLI-REFERENCE.md)** - Complete command documentation
-- **[Coach Skills Guide](./docs/COACH-SKILLS.md)** - Detailed skill workflows
-
-## Installation
-
-### From GitHub Releases (recommended)
-
-Download the latest binary for your platform from [GitHub Releases](https://github.com/spekk-ai/spekk-cli/releases):
+## Install
 
 ```bash
-# macOS (Apple Silicon)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-arm64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
-
-# macOS (Intel)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-amd64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
-
-# Linux (x86_64)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-amd64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
-
-# Linux (ARM64)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-arm64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
+curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-### From Source
-
-```bash
-go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest
-```
-
-### Verify
-
-```bash
-spekk --help
-```
+Or with Go: `go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest` — or download a binary (including Windows) from [releases](https://github.com/spekk-ai/spekk-cli/releases/latest).
 
 ## Quick Start
 
@@ -78,6 +45,8 @@ spekk show -w
 # Get comprehensive overview of all specs
 spekk status
 ```
+
+**Full documentation:** [Getting started](./docs/getting-started.md) · [Concepts](./docs/concepts.md) · [CLI reference](./docs/cli-reference.md) · [Configuration](./docs/configuration.md) · [Coach skills](./docs/coach-skills.md)
 
 ## Use Spekk from Your Coding Assistant
 
