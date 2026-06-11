@@ -375,3 +375,133 @@ func TestResolveSkill_DefaultEmbeddedSkillFS(t *testing.T) {
 		t.Errorf("unexpected content: %s", skill.Content)
 	}
 }
+
+func TestSkillDirs_ObserverIncludesPackageDir(t *testing.T) {
+	home, cwd, install := setupSkillDirs(t, "observer")
+	r := newSkillResolver(home, cwd, install)
+
+	dirs := r.skillDirs("observer")
+
+	expected := []string{
+		filepath.Join(cwd, ".spekk", "skills", "observer"),
+		filepath.Join(home, ".spekk", "skills", "observer"),
+		filepath.Join(install, "specs", "observer-skills"),
+	}
+	if len(dirs) != len(expected) {
+		t.Fatalf("expected %d dirs, got %d: %v", len(expected), len(dirs), dirs)
+	}
+	for i, want := range expected {
+		if dirs[i] != want {
+			t.Errorf("dir[%d]: expected %s, got %s", i, want, dirs[i])
+		}
+	}
+}
+
+func TestResolveSkill_ObserverLayeredShadowing(t *testing.T) {
+	home, cwd, install := setupSkillDirs(t, "observer")
+
+	pkgDir := filepath.Join(install, "specs", "observer-skills")
+	writeSkillFile(t, pkgDir, "coverage-gap.md", "# Package Coverage Gap")
+
+	globalDir := filepath.Join(home, ".spekk", "skills", "observer")
+	writeSkillFile(t, globalDir, "coverage-gap.md", "# Global Coverage Gap")
+
+	localDir := filepath.Join(cwd, ".spekk", "skills", "observer")
+	writeSkillFile(t, localDir, "coverage-gap.md", "# Local Coverage Gap")
+
+	r := newSkillResolver(home, cwd, install)
+	skill := r.ResolveSkill("observer", "coverage-gap")
+
+	if skill == nil {
+		t.Fatal("expected skill")
+	}
+	if skill.Content != "# Local Coverage Gap" {
+		t.Errorf("local should shadow global+package, got: %s", skill.Content)
+	}
+	if skill.Source != localDir {
+		t.Errorf("expected local source, got %s", skill.Source)
+	}
+}
+
+func TestResolveSkill_ObserverPackageFallback(t *testing.T) {
+	home, cwd, install := setupSkillDirs(t, "observer")
+	pkgDir := filepath.Join(install, "specs", "observer-skills")
+	writeSkillFile(t, pkgDir, "coverage-gap.md", "# Package Coverage Gap")
+
+	r := newSkillResolver(home, cwd, install)
+	skill := r.ResolveSkill("observer", "coverage-gap")
+
+	if skill == nil {
+		t.Fatal("expected package observer skill")
+	}
+	if skill.Source != pkgDir {
+		t.Errorf("expected package source, got %s", skill.Source)
+	}
+}
+
+func TestListSkills_ObserverShadowing(t *testing.T) {
+	home, cwd, install := setupSkillDirs(t, "observer")
+
+	pkgDir := filepath.Join(install, "specs", "observer-skills")
+	writeSkillFile(t, pkgDir, "shared.md", "# Package")
+	writeSkillFile(t, pkgDir, "pkg-only.md", "# Pkg Only")
+
+	globalDir := filepath.Join(home, ".spekk", "skills", "observer")
+	writeSkillFile(t, globalDir, "shared.md", "# Global")
+	writeSkillFile(t, globalDir, "global-only.md", "# Global Only")
+
+	localDir := filepath.Join(cwd, ".spekk", "skills", "observer")
+	writeSkillFile(t, localDir, "shared.md", "# Local")
+	writeSkillFile(t, localDir, "local-only.md", "# Local Only")
+
+	r := newSkillResolver(home, cwd, install)
+	skills := r.ListSkills("observer")
+
+	names := map[string]string{} // name -> source
+	for _, s := range skills {
+		names[s.Name] = s.Source
+	}
+
+	if names["shared"] != localDir {
+		t.Errorf("shared should resolve to local, got source %s", names["shared"])
+	}
+	for _, want := range []string{"shared", "local-only", "global-only", "pkg-only"} {
+		if _, ok := names[want]; !ok {
+			t.Errorf("expected %s in observer skill list", want)
+		}
+	}
+}
+
+func TestListAliases_ObserverNotNil(t *testing.T) {
+	r := newSkillResolver(t.TempDir(), t.TempDir(), t.TempDir())
+	aliases := r.ListAliases("observer")
+	if aliases == nil {
+		t.Fatal("ListAliases(\"observer\") must not return nil")
+	}
+}
+
+func TestResolveSkill_ObserverEmbeddedFallback(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/observer-skills/coverage-gap.md": &fstest.MapFile{
+			Data: []byte("# Embedded Coverage Gap"),
+		},
+	}
+
+	r := &SkillResolver{
+		HomeDir:    t.TempDir(),
+		Cwd:        t.TempDir(),
+		InstallDir: t.TempDir(),
+		EmbeddedFS: efs,
+	}
+
+	skill := r.ResolveSkill("observer", "coverage-gap")
+	if skill == nil {
+		t.Fatal("expected embedded observer skill")
+	}
+	if skill.Content != "# Embedded Coverage Gap" {
+		t.Errorf("unexpected content: %s", skill.Content)
+	}
+	if skill.Source != "(embedded)" {
+		t.Errorf("expected (embedded) source, got %s", skill.Source)
+	}
+}

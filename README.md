@@ -79,6 +79,53 @@ spekk show -w
 spekk status
 ```
 
+## Installing Skills
+
+Agents (coach, builder, observer) load skills from a layered set of directories: project-local (`<cwd>/.spekk/skills/<agent>/`), global (`~/.spekk/skills/<agent>/`), and the embedded defaults baked into the binary. The `spekk install` command fetches skills from the official registry — [`github.com/spekk-ai/spekk-skills`](https://github.com/spekk-ai/spekk-skills) — and drops them into one of those directories.
+
+### Common Invocations
+
+```bash
+# Install from the registry into the current project (.spekk/skills/<agent>/)
+spekk install coach meeting-notes
+
+# Install globally so every project on your machine can see it (~/.spekk/skills/<agent>/)
+spekk install coach meeting-notes --global
+
+# Install from an arbitrary URL instead of the registry
+spekk install coach my-skill --source https://example.com/skills/my-skill.md
+
+# Uninstall (mirror of install — pick --local or --global to match where it lives)
+spekk uninstall coach meeting-notes
+```
+
+To list everything available to an agent (local + global + embedded):
+
+```bash
+spekk skills list coach
+```
+
+### Overwriting Existing Skills
+
+If a skill file already exists at the destination, `spekk install` refuses to clobber it. Pass `--force` to overwrite:
+
+```bash
+spekk install coach meeting-notes --force
+```
+
+### Self-Hosted Mirrors
+
+The default registry is `github.com/spekk-ai/spekk-skills`. To point `spekk install` at a fork or internal mirror, set these environment variables before running the command:
+
+- `SPEKK_SKILLS_RAW_BASE` — base URL for raw skill content (default: `https://raw.githubusercontent.com/spekk-ai/spekk-skills/main`)
+- `SPEKK_SKILLS_API_BASE` — base URL for the directory-listing contents API used by `spekk install --list <agent>` (default: `https://api.github.com/repos/spekk-ai/spekk-skills/contents`)
+
+```bash
+export SPEKK_SKILLS_RAW_BASE=https://raw.githubusercontent.com/my-org/internal-skills/main
+export SPEKK_SKILLS_API_BASE=https://api.github.com/repos/my-org/internal-skills/contents
+spekk install coach my-skill
+```
+
 ## Customizing Agent Prompts
 
 Spekk uses a layered prompt system that lets you customize agent behavior (coach, builder, observer) at two levels without modifying the binary.
@@ -130,6 +177,58 @@ This completely replaces the base coach prompt for this project. Any extend file
 ### Version Control
 
 The `.spekk/` directory can be committed to your repo so the whole team shares the same prompt customizations, or added to `.gitignore` if you prefer individual configuration. Choose whichever approach fits your team.
+
+## Customizing Agent Skills
+
+Spekk discovers agent skills from a layered set of directories, mirroring the prompt system. Skills work identically across all three agents (coach, builder, observer): same directory layout, same resolution order, same CLI invocation pattern.
+
+### Resolution Order (first match wins)
+
+| Layer | Path | Purpose |
+|-------|------|---------|
+| Local | `.spekk/skills/<agent>/*.md` | Project-specific skills |
+| Global | `~/.spekk/skills/<agent>/*.md` | User's personal skills across all projects |
+| Package | Ships with spekk (embedded) | Built-in skills |
+
+A local skill shadows a global skill of the same name; a global skill shadows a package skill.
+
+### Invocation
+
+Any skill discovered in those directories becomes invocable as the first positional argument:
+
+```bash
+spekk coach my-skill
+spekk builder my-skill
+spekk observer my-skill
+```
+
+The skill's full markdown content is inlined into the agent's activation message — no code changes required to add a new skill.
+
+### Example: Adding a Project-Specific Observer Skill
+
+Create `.spekk/skills/observer/check-todos.md`:
+
+```markdown
+---
+id: check-todos
+---
+
+# Check TODOs Skill
+
+Scan the codebase for TODO comments older than 30 days and report them as observations.
+```
+
+Then run:
+
+```bash
+spekk observer check-todos
+```
+
+The same pattern works for coach (`.spekk/skills/coach/`) and builder (`.spekk/skills/builder/`).
+
+### Dynamic Help
+
+`spekk <agent> --help` lists every discovered skill, so users see local, global, and package skills together in one place.
 
 ## How It Works
 

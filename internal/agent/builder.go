@@ -69,10 +69,16 @@ func ParseBuilderFlags(args []string) BuilderConfig {
 // ExtractSkillArg returns the first positional (non-flag) argument
 // from the args list, skipping known builder flags and their values.
 func ExtractSkillArg(args []string) string {
+	return ExtractSkillArgFromFlagSet(args, BuilderFlags)
+}
+
+// ExtractSkillArgFromFlagSet returns the first positional (non-flag) argument
+// from the args list, skipping known flags (and string-flag values) for the given flag set.
+func ExtractSkillArgFromFlagSet(args []string, flags cli.FlagSet) string {
 	flagStrings := make(map[string]bool)
 	stringFlags := make(map[string]bool)
 
-	for _, def := range BuilderFlags {
+	for _, def := range flags {
 		for _, f := range def.Names {
 			flagStrings[f] = true
 			if def.Type == cli.StringFlag {

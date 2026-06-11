@@ -127,8 +127,34 @@ func Launch(message string) error {
 	return nil
 }
 
+// agentHelpExtras supplies agent-specific OPTIONS and EXAMPLES blocks
+// that get inserted into the shared help template. Agents not listed here
+// fall back to the default skill-only template.
+var agentHelpExtras = map[string]struct {
+	Options  string
+	Examples string
+}{
+	"observer": {
+		Options: `  --interval <seconds>   Preferred scan interval (Claude agent can adjust)
+  --quiet                Preference for minimal output (Claude agent decides)
+`,
+		Examples: `  spekk observer                          # Launch interactive observer
+  spekk observer coverage-gap             # Launch observer with coverage-gap skill
+  spekk observer --interval 60            # Observer with 60s interval preference
+  spekk observer --quiet                  # Observer with quiet preference
+`,
+	},
+}
+
 // ShowHelp displays agent help with available skills.
 func ShowHelp(installDir, agent string) {
+	fmt.Print(buildHelpText(installDir, agent))
+}
+
+// buildHelpText constructs the help string for an agent: dynamic skill listing
+// (from all resolver layers, deduped) plus agent-specific options/examples
+// when registered in agentHelpExtras.
+func buildHelpText(installDir, agent string) string {
 	sr := &cli.SkillResolver{
 		HomeDir:    homeDir(),
 		Cwd:        cwd(),
@@ -138,7 +164,6 @@ func ShowHelp(installDir, agent string) {
 	skills := sr.ListSkills(agent)
 	aliases := sr.ListAliases(agent)
 
-	// Build reverse alias map
 	reverseAliases := make(map[string]string)
 	for alias, stem := range aliases {
 		reverseAliases[stem] = alias
@@ -159,9 +184,23 @@ func ShowHelp(installDir, agent string) {
 		skillLines = "  (none found)"
 	}
 
-	displayName := strings.ToUpper(agent[:1]) + agent[1:]
+	displayName := agent
+	if agent != "" {
+		displayName = strings.ToUpper(agent[:1]) + agent[1:]
+	}
 
-	fmt.Printf(`
+	extras := agentHelpExtras[agent]
+	optionsBlock := extras.Options + "  --help, -h             Show this help message"
+
+	examplesBlock := extras.Examples
+	if examplesBlock == "" {
+		examplesBlock = fmt.Sprintf(`  spekk %s                          # Launch interactive %s
+  spekk %s meeting                  # Launch %s with meeting skill active
+  spekk %s meeting notes.txt        # Process a transcript file
+`, agent, agent, agent, agent, agent)
+	}
+
+	return fmt.Sprintf(`
 spekk %s - Launch the %s Agent
 
 USAGE:
@@ -171,13 +210,10 @@ AVAILABLE SKILLS:
 %s
 
 OPTIONS:
-  --help, -h       Show this help message
+%s
 
 EXAMPLES:
-  spekk %s                          # Launch interactive %s
-  spekk %s meeting                  # Launch %s with meeting skill active
-  spekk %s meeting notes.txt        # Process a transcript file
-`, agent, displayName, agent, skillLines, agent, agent, agent, agent, agent)
+%s`, agent, displayName, agent, skillLines, optionsBlock, examplesBlock)
 }
 
 func homeDir() string {
