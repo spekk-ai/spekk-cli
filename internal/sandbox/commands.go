@@ -9,9 +9,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
+
+var sandboxNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// ValidateSandboxName checks that a sandbox name contains only safe characters.
+// Valid names match ^[a-z0-9][a-z0-9-]*$ (lowercase alphanumeric and hyphens,
+// must start with alphanumeric). This prevents shell injection when the name
+// is used in commands or environment variables.
+func ValidateSandboxName(name string) error {
+	if name == "" {
+		return fmt.Errorf("sandbox name cannot be empty")
+	}
+	if !sandboxNameRe.MatchString(name) {
+		return fmt.Errorf("invalid sandbox name %q: must match [a-z0-9][a-z0-9-]* (lowercase alphanumeric and hyphens, starting with alphanumeric)", name)
+	}
+	return nil
+}
 
 // CreateOptions holds flags for the create subcommand.
 type CreateOptions struct {
@@ -140,7 +157,7 @@ func Create(opts CreateOptions) error {
 	fmt.Fprintf(os.Stderr, "Droplet active at %s\n", ip)
 
 	// Wait for SSH and provisioning
-	if err := waitForProvisioning(ip, keyPath); err != nil {
+	if err := waitForProvisioning(ip, keyPath, opts.Name); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\nDroplet IP: %s (ID: %d) -- not auto-destroyed, debug manually.\n", err, ip, dropletID)
 		return err
 	}
@@ -154,13 +171,13 @@ func Create(opts CreateOptions) error {
 
 	// Configure git credentials
 	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
-	if err := configureGitCredentials(ip, keyPath); err != nil {
+	if err := configureGitCredentials(ip, keyPath, opts.Name); err != nil {
 		return fmt.Errorf("configuring git credentials: %w", err)
 	}
 
 	// Deploy the agent binary and start its service
 	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
-	if err := deployAgent(ip, keyPath, artifacts); err != nil {
+	if err := deployAgent(ip, keyPath, opts.Name, artifacts); err != nil {
 		return fmt.Errorf("deploying agent: %w", err)
 	}
 
@@ -268,10 +285,10 @@ func Status(name string) error {
 	fmt.Printf("Droplet status: %s\n", dropletStatus)
 
 	// SSH checks
-	provisioned := sshCheck(sandbox, "test -f /opt/spekk/.provisioned && echo yes || echo no")
+	provisioned := sshCheck(sandbox, name, "test -f /opt/spekk/.provisioned && echo yes || echo no")
 	fmt.Printf("Provisioned: %s\n", provisioned)
 
-	agentStatus := sshCheck(sandbox, "systemctl is-active spekk-agent 2>/dev/null || echo unknown")
+	agentStatus := sshCheck(sandbox, name, "systemctl is-active spekk-agent 2>/dev/null || echo unknown")
 	fmt.Printf("Agent service: %s\n", agentStatus)
 
 	return nil
@@ -289,7 +306,7 @@ func SSH(name string, extraArgs []string) error {
 		return fmt.Errorf("sandbox %q not found", name)
 	}
 
-	args := sshArgs(sandbox)
+	args := sshArgs(sandbox, name)
 	args = append(args, extraArgs...)
 	cmd := exec.Command("ssh", args...)
 	cmd.Stdin = os.Stdin
@@ -359,6 +376,9 @@ func Destroy(name string, force bool) error {
 		os.Remove(sandbox.SSHKeyPath + ".pub")
 	}
 
+	// Remove per-sandbox known_hosts file
+	os.Remove(KnownHostsFile(name))
+
 	if err := RemoveSandbox(name); err != nil {
 		return fmt.Errorf("removing metadata: %w", err)
 	}
@@ -387,7 +407,7 @@ func Deploy(name string) error {
 	}
 	defer os.Remove(artifacts.BinaryPath)
 
-	if err := deployAgent(sandbox.IP, sandbox.SSHKeyPath, artifacts); err != nil {
+	if err := deployAgent(sandbox.IP, sandbox.SSHKeyPath, name, artifacts); err != nil {
 		return fmt.Errorf("deploy failed: %w", err)
 	}
 
@@ -419,13 +439,10 @@ WantedBy=multi-user.target
 
 // deployAgent copies the agent binary to /opt/spekk/agent-client, installs the
 // systemd unit, and (re)starts the service. Shared by Create and Deploy.
-func deployAgent(ip, keyPath string, artifacts *releaseArtifacts) error {
+func deployAgent(ip, keyPath, name string, artifacts *releaseArtifacts) error {
 	// Copy the binary up via scp.
-	scp := []string{
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
-	}
+	scp := sshHostKeyOpts(name)
+	scp = append(scp, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		scp = append(scp, "-i", keyPath)
 	}
@@ -449,7 +466,7 @@ systemctl daemon-reload
 systemctl enable spekk-agent
 systemctl restart spekk-agent`, spekkAgentUnit)
 
-	if out, err := runSSHCombined(ip, keyPath, script); err != nil {
+	if out, err := runSSHCombined(ip, keyPath, name, script); err != nil {
 		return fmt.Errorf("installing service: %s\n%s", err, out)
 	}
 	return nil
@@ -457,14 +474,37 @@ systemctl restart spekk-agent`, spekkAgentUnit)
 
 // --- Helpers ---
 
+// KnownHostsFile returns the path to the per-sandbox known_hosts file.
+func KnownHostsFile(name string) string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".spekk", "known_hosts", name)
+}
+
+// sshHostKeyOpts returns SSH options for host key verification.
+// On first connection (no known_hosts file), it uses accept-new to record the key.
+// On subsequent connections, it uses strict verification against the stored key.
+func sshHostKeyOpts(name string) []string {
+	khFile := KnownHostsFile(name)
+	if _, err := os.Stat(khFile); err == nil {
+		// Known hosts file exists — verify host key strictly
+		return []string{
+			"-o", "StrictHostKeyChecking=yes",
+			"-o", fmt.Sprintf("UserKnownHostsFile=%s", khFile),
+		}
+	}
+	// First connection — accept and record the key
+	os.MkdirAll(filepath.Dir(khFile), 0o700)
+	return []string{
+		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", fmt.Sprintf("UserKnownHostsFile=%s", khFile),
+	}
+}
+
 // sshArgs returns the base SSH arguments for connecting to a sandbox,
 // using the stored key if available.
-func sshArgs(sandbox *SandboxMeta) []string {
-	args := []string{
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
-	}
+func sshArgs(sandbox *SandboxMeta, name string) []string {
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
 	if sandbox.SSHKeyPath != "" {
 		args = append(args, "-i", sandbox.SSHKeyPath)
 	}
@@ -522,7 +562,7 @@ func waitForDroplet(client *Client, dropletID int) (string, error) {
 	return "", fmt.Errorf("droplet %d did not become active within 5 minutes", dropletID)
 }
 
-func waitForProvisioning(ip, keyPath string) error {
+func waitForProvisioning(ip, keyPath, name string) error {
 	deadline := time.Now().Add(10 * time.Minute)
 
 	// Wait for SSH connectivity
@@ -537,7 +577,7 @@ func waitForProvisioning(ip, keyPath string) error {
 	// Wait for provisioning marker
 	fmt.Fprintln(os.Stderr, "Waiting for cloud-init provisioning to complete...")
 	for time.Now().Before(deadline) {
-		out := runSSH(ip, keyPath, "test -f /opt/spekk/.provisioned && echo ok")
+		out := runSSH(ip, keyPath, name, "test -f /opt/spekk/.provisioned && echo ok")
 		if strings.TrimSpace(out) == "ok" {
 			return nil
 		}
@@ -555,22 +595,15 @@ func checkTCPPort(ip string, port int) bool {
 	return true
 }
 
-// rootSSHArgs builds the ssh arguments to reach root@ip, appending command.
-func rootSSHArgs(ip, keyPath, command string) []string {
-	args := []string{
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
-	}
+// runSSH runs command on the host and returns trimmed stdout, or "" on error.
+func runSSH(ip, keyPath, name, command string) string {
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
-	return append(args, fmt.Sprintf("root@%s", ip), command)
-}
-
-// runSSH runs command on the host and returns trimmed stdout, or "" on error.
-func runSSH(ip, keyPath, command string) string {
-	out, err := exec.Command("ssh", rootSSHArgs(ip, keyPath, command)...).Output()
+	args = append(args, fmt.Sprintf("root@%s", ip), command)
+	out, err := exec.Command("ssh", args...).Output()
 	if err != nil {
 		return ""
 	}
@@ -578,17 +611,20 @@ func runSSH(ip, keyPath, command string) string {
 }
 
 // runSSHCombined runs command on the host, returning combined output and any error.
-func runSSHCombined(ip, keyPath, command string) (string, error) {
-	out, err := exec.Command("ssh", rootSSHArgs(ip, keyPath, command)...).CombinedOutput()
+func runSSHCombined(ip, keyPath, name, command string) (string, error) {
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
+	if keyPath != "" {
+		args = append(args, "-i", keyPath)
+	}
+	args = append(args, fmt.Sprintf("root@%s", ip), command)
+	out, err := exec.Command("ssh", args...).CombinedOutput()
 	return string(out), err
 }
 
-func sshCheck(sandbox *SandboxMeta, command string) string {
-	args := []string{
-		"-o", "ConnectTimeout=5",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "BatchMode=yes",
-	}
+func sshCheck(sandbox *SandboxMeta, name, command string) string {
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=5", "-o", "BatchMode=yes")
 	if sandbox.SSHKeyPath != "" {
 		args = append(args, "-i", sandbox.SSHKeyPath)
 	}
@@ -602,32 +638,19 @@ func sshCheck(sandbox *SandboxMeta, command string) string {
 }
 
 func injectCredentials(ip, keyPath, name, agentToken string) error {
-	bareHost := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(os.Getenv("SPEKK_HOST"), "https://"), "http://"), "/")
-
-	envLines := []string{
-		"AWS_ACCESS_KEY_ID=" + os.Getenv("AWS_ACCESS_KEY_ID"),
-		"AWS_SECRET_ACCESS_KEY=" + os.Getenv("AWS_SECRET_ACCESS_KEY"),
-		"AWS_DEFAULT_REGION=" + os.Getenv("AWS_DEFAULT_REGION"),
-		"GITHUB_TOKEN=" + os.Getenv("GITHUB_TOKEN"),
-		"SPEKK_HOST=" + bareHost,
-		"SPEKK_AGENT_TOKEN=" + agentToken,
-		"CLAUDE_CODE_USE_BEDROCK=1",
-		"WORKSPACE=/opt/spekk/workspace",
-		"SPEKK_AGENT_NAME=spekk-" + name,
+	envVars := map[string]string{
+		"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
+		"AWS_SECRET_ACCESS_KEY": os.Getenv("AWS_SECRET_ACCESS_KEY"),
+		"AWS_DEFAULT_REGION":    os.Getenv("AWS_DEFAULT_REGION"),
+		"GITHUB_TOKEN":          os.Getenv("GITHUB_TOKEN"),
 	}
+	spekkHost := os.Getenv("SPEKK_HOST")
 
-	envContent := strings.Join(envLines, "\n")
-	script := fmt.Sprintf(`cat > /etc/spekk/agent.env << 'ENVEOF'
-%s
-ENVEOF
-chown agent:agent /etc/spekk/agent.env
-chmod 600 /etc/spekk/agent.env`, envContent)
+	envContent := buildEnvContent(envVars, name, agentToken, spekkHost)
+	script := buildInjectScript(envContent)
 
-	args := []string{
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
-	}
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
@@ -639,20 +662,42 @@ chmod 600 /etc/spekk/agent.env`, envContent)
 	return nil
 }
 
-func configureGitCredentials(ip, keyPath string) error {
-	ghToken := os.Getenv("GITHUB_TOKEN")
-	script := strings.Join([]string{
-		"su - agent -c 'git config --global credential.helper store'",
-		fmt.Sprintf(`su - agent -c 'echo "https://x-access-token:%s@github.com" > ~/.git-credentials'`, ghToken),
-		"su - agent -c 'chmod 600 ~/.git-credentials'",
-		fmt.Sprintf(`su - agent -c 'echo "%s" | gh auth login --with-token 2>/dev/null || true'`, ghToken),
-	}, " && ")
+// buildEnvContent constructs the env file content for credential injection.
+// Exported for testing.
+func buildEnvContent(envVars map[string]string, name, agentToken, spekkHost string) string {
+	bareHost := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(spekkHost, "https://"), "http://"), "/")
 
-	args := []string{
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
+	envLines := []string{
+		"AWS_ACCESS_KEY_ID=" + envVars["AWS_ACCESS_KEY_ID"],
+		"AWS_SECRET_ACCESS_KEY=" + envVars["AWS_SECRET_ACCESS_KEY"],
+		"AWS_DEFAULT_REGION=" + envVars["AWS_DEFAULT_REGION"],
+		"GITHUB_TOKEN=" + envVars["GITHUB_TOKEN"],
+		"SPEKK_HOST=" + bareHost,
+		"SPEKK_AGENT_TOKEN=" + agentToken,
+		"CLAUDE_CODE_USE_BEDROCK=1",
+		"WORKSPACE=/opt/spekk/workspace",
+		"SPEKK_AGENT_NAME=spekk-" + name,
 	}
+	return strings.Join(envLines, "\n") + "\n"
+}
+
+// buildInjectScript produces the SSH command string for injecting credentials.
+// It base64-encodes the content to prevent shell injection. Exported for testing.
+func buildInjectScript(envContent string) string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(envContent))
+	return fmt.Sprintf(
+		`echo '%s' | base64 -d > /etc/spekk/agent.env && chown agent:agent /etc/spekk/agent.env && chmod 600 /etc/spekk/agent.env`,
+		encoded,
+	)
+}
+
+func configureGitCredentials(ip, keyPath, name string) error {
+	ghToken := os.Getenv("GITHUB_TOKEN")
+
+	script := buildGitCredentialScript(ghToken)
+
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
@@ -662,6 +707,20 @@ func configureGitCredentials(ip, keyPath string) error {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
 	}
 	return nil
+}
+
+// buildGitCredentialScript produces the SSH command string for configuring git credentials.
+// It base64-encodes the token to prevent shell injection. Exported for testing.
+func buildGitCredentialScript(ghToken string) string {
+	encodedToken := base64.StdEncoding.EncodeToString([]byte(ghToken))
+	return fmt.Sprintf(`set -e
+TOKEN=$(echo '%s' | base64 -d)
+su - agent -c 'git config --global credential.helper store'
+su - agent -c "cat > ~/.git-credentials" <<< "https://x-access-token:${TOKEN}@github.com"
+su - agent -c 'chmod 600 ~/.git-credentials'
+echo "${TOKEN}" | su - agent -c 'gh auth login --with-token 2>/dev/null || true'`,
+		encodedToken,
+	)
 }
 
 func resolveProject(client *Client, projectValue string) (string, string, error) {
