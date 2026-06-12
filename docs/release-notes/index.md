@@ -8,9 +8,9 @@ What's new in each version of Spekk CLI.
 
 ---
 
-## [1.7.1 -- Update Permission Fix](RELEASE-NOTES-1.7.1.md)
+## [1.8.0 -- Sudo-Free Installs and Updates](RELEASE-NOTES-1.8.0.md)
 
-`spekk update` now fails fast with clear guidance when the install directory isn't writable (e.g. a sudo install to `/usr/local/bin`), instead of a raw permission error after starting the download.
+`install.sh` now defaults to user-owned `~/.local/bin`, so `spekk update` works without sudo. The installer warns (with the exact fix) when the directory isn't on `PATH`, and `spekk update` fails fast with clear guidance when it lacks write permission.
 
 ## [1.7.0 -- XDG-Compliant Config Directory](RELEASE-NOTES-1.7.0.md)
 
