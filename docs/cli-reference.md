@@ -366,7 +366,7 @@ spekk skill list coach                     # List skills and their source
 spekk skill show coach coordinator-skill   # Print a skill's content
 ```
 
-Skills resolve through layers: `.spekk/skills/<agent>/` (project), then `~/.spekk/skills/<agent>/` (user), then the skills built into the binary.
+Skills resolve through layers: `.spekk/skills/<agent>/` (project), then `~/.config/spekk/skills/<agent>/` (user), then the skills built into the binary.
 
 ---
 

@@ -16,7 +16,9 @@ Spekk turns a `specs/` directory in your repo into a work queue for AI agents:
 curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-Or with Go: `go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest` — or download a binary (including Windows) from [releases](https://github.com/spekk-ai/spekk-cli/releases/latest).
+Or with Go: `go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest` — or download a binary from [releases](https://github.com/spekk-ai/spekk-cli/releases/latest).
+
+> **Platform support:** Spekk supports **macOS and Linux**. Windows is not officially supported — Windows binaries are published on a best-effort basis and untested; use [WSL](https://learn.microsoft.com/en-us/windows/wsl/) for the supported experience.
 
 ## Quick Start
 
@@ -92,14 +94,14 @@ The file naming convention determines how your customization is applied:
 
 | Location | Scope | Example Path |
 |----------|-------|-------------|
-| `~/.spekk/` | Global -- applies to all your projects | `~/.spekk/builder.prompt.md` |
+| `~/.config/spekk/` | Global -- applies to all your projects | `~/.config/spekk/builder.prompt.md` |
 | `.spekk/` (project root) | Local -- applies to this project only | `.spekk/coach.prompt.md` |
 
 Local files take precedence over global files. If both a local override and a global override exist, the local override wins.
 
 ### Example: Extending the Builder Prompt Globally
 
-Create `~/.spekk/builder.prompt.md`:
+Create `~/.config/spekk/builder.prompt.md`:
 
 ```markdown
 ## Company Standards
@@ -123,7 +125,7 @@ When creating specs, follow Django conventions and
 reference the project's existing app structure.
 ```
 
-This completely replaces the base coach prompt for this project. Any extend files (`~/.spekk/coach.prompt.md` or `.spekk/coach.prompt.md`) are still appended after the override.
+This completely replaces the base coach prompt for this project. Any extend files (`~/.config/spekk/coach.prompt.md` or `.spekk/coach.prompt.md`) are still appended after the override.
 
 ### Version Control
 

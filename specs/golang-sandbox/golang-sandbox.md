@@ -23,6 +23,6 @@ Manages DigitalOcean cloud sandbox environments. Already has a Go-based deploy a
 ## Strategy
 
 - Port DigitalOcean API client to Go (net/http)
-- Port metadata store to Go (JSON files in `~/.spekk/sandboxes/`)
+- Port metadata store to Go (single JSON file: `sandboxes.json` in the global config dir)
 - Port each subcommand as a Go function
 - Cloud-init template embedded via Go embed

@@ -16,7 +16,7 @@ The Go skill resolver discovers and loads skill files using the same layered res
 
 **Resolution order (first match wins):**
 1. Local: `.spekk/skills/{agent}/*.md`
-2. Global: `~/.spekk/skills/{agent}/*.md`
+2. Global: `~/.config/spekk/skills/{agent}/*.md`
 3. Package: `specs/{agent}-skills-system/*.md` or `specs/builder-skills/*.md`
 
 **Skill matching:**

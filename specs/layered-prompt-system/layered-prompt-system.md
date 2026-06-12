@@ -22,16 +22,16 @@ Agent names are simplified: `coach`, `builder`, `observer` (not `coach-agent`, e
 | Layer | Extend Path | Override Path | Purpose |
 |-------|------------|---------------|---------|
 | Base | `<spekk-package>/specs/<agent>-agent/<agent>.prompt.md` | — | Ships with spekk, core agent behavior |
-| Global | `~/.spekk/<agent>.prompt.md` | `~/.spekk/<agent>.prompt.override.md` | User's personal defaults across all projects |
+| Global | `~/.config/spekk/<agent>.prompt.md` | `~/.config/spekk/<agent>.prompt.override.md` | User's personal defaults across all projects |
 | Local | `.spekk/<agent>.prompt.md` | `.spekk/<agent>.prompt.override.md` | Project-specific customizations |
 
 ## Resolution
 
 1. Determine base prompt:
    - If local override (`.spekk/<agent>.prompt.override.md`) exists → use as base
-   - Else if global override (`~/.spekk/<agent>.prompt.override.md`) exists → use as base
+   - Else if global override (`~/.config/spekk/<agent>.prompt.override.md`) exists → use as base
    - Else use package base (`<spekk>/specs/<agent>-agent/<agent>.prompt.md`, required)
-2. Append global extend (`~/.spekk/<agent>.prompt.md`) if exists
+2. Append global extend (`~/.config/spekk/<agent>.prompt.md`) if exists
 3. Append local extend (`.spekk/<agent>.prompt.md`) if exists
 4. Concatenate with `\n\n---\n\n` separator
 
@@ -39,7 +39,7 @@ Agent names are simplified: `coach`, `builder`, `observer` (not `coach-agent`, e
 
 ### Extending: Adding company coding standards to builder
 
-Create `~/.spekk/builder.prompt.md`:
+Create `~/.config/spekk/builder.prompt.md`:
 ```markdown
 ## Company Standards
 

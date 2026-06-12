@@ -17,8 +17,8 @@ func testEmbeddedFS(agent string) fstest.MapFS {
 	}
 }
 
-func newResolver(home, cwd string, efs fstest.MapFS) *PromptResolver {
-	return &PromptResolver{HomeDir: home, Cwd: cwd, EmbeddedFS: efs}
+func newResolver(globalConfigDir, cwd string, efs fstest.MapFS) *PromptResolver {
+	return &PromptResolver{GlobalConfigDir: globalConfigDir, Cwd: cwd, EmbeddedFS: efs}
 }
 
 func TestGetPromptContent_BasePrompt(t *testing.T) {
@@ -55,12 +55,10 @@ func TestGetPromptContent_NoEmbeddedFS(t *testing.T) {
 }
 
 func TestGetPromptContent_GlobalOverride(t *testing.T) {
-	home := t.TempDir()
-	globalDir := filepath.Join(home, ".spekk")
-	os.MkdirAll(globalDir, 0o755)
+	globalDir := t.TempDir()
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.override.md"), []byte("# Global Override"), 0o644)
 
-	r := newResolver(home, t.TempDir(), testEmbeddedFS("builder"))
+	r := newResolver(globalDir, t.TempDir(), testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -71,18 +69,15 @@ func TestGetPromptContent_GlobalOverride(t *testing.T) {
 }
 
 func TestGetPromptContent_LocalOverrideTakesPrecedence(t *testing.T) {
-	home := t.TempDir()
-	cwd := t.TempDir()
-
-	globalDir := filepath.Join(home, ".spekk")
-	os.MkdirAll(globalDir, 0o755)
+	globalDir := t.TempDir()
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.override.md"), []byte("# Global Override"), 0o644)
 
+	cwd := t.TempDir()
 	localDir := filepath.Join(cwd, ".spekk")
 	os.MkdirAll(localDir, 0o755)
 	os.WriteFile(filepath.Join(localDir, "builder.prompt.override.md"), []byte("# Local Override"), 0o644)
 
-	r := newResolver(home, cwd, testEmbeddedFS("builder"))
+	r := newResolver(globalDir, cwd, testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -93,12 +88,10 @@ func TestGetPromptContent_LocalOverrideTakesPrecedence(t *testing.T) {
 }
 
 func TestGetPromptContent_GlobalExtendAppended(t *testing.T) {
-	home := t.TempDir()
-	globalDir := filepath.Join(home, ".spekk")
-	os.MkdirAll(globalDir, 0o755)
+	globalDir := t.TempDir()
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.md"), []byte("## Global Extend"), 0o644)
 
-	r := newResolver(home, t.TempDir(), testEmbeddedFS("builder"))
+	r := newResolver(globalDir, t.TempDir(), testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -138,18 +131,15 @@ func TestGetPromptContent_LocalExtendAppended(t *testing.T) {
 }
 
 func TestGetPromptContent_AllThreeLayers(t *testing.T) {
-	home := t.TempDir()
-	cwd := t.TempDir()
-
-	globalDir := filepath.Join(home, ".spekk")
-	os.MkdirAll(globalDir, 0o755)
+	globalDir := t.TempDir()
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.md"), []byte("## Global Extend"), 0o644)
 
+	cwd := t.TempDir()
 	localDir := filepath.Join(cwd, ".spekk")
 	os.MkdirAll(localDir, 0o755)
 	os.WriteFile(filepath.Join(localDir, "builder.prompt.md"), []byte("## Local Extend"), 0o644)
 
-	r := newResolver(home, cwd, testEmbeddedFS("builder"))
+	r := newResolver(globalDir, cwd, testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +150,7 @@ func TestGetPromptContent_AllThreeLayers(t *testing.T) {
 		t.Fatalf("expected 3 layers, got %d", len(parts))
 	}
 	if !strings.Contains(parts[0], "# Base builder prompt") {
-		t.Error("first layer should be base")
+		t.Error("first layer should be base prompt")
 	}
 	if !strings.Contains(parts[1], "## Global Extend") {
 		t.Error("second layer should be global extend")
@@ -171,13 +161,11 @@ func TestGetPromptContent_AllThreeLayers(t *testing.T) {
 }
 
 func TestGetPromptContent_GlobalOverrideWithExtends(t *testing.T) {
-	home := t.TempDir()
-	globalDir := filepath.Join(home, ".spekk")
-	os.MkdirAll(globalDir, 0o755)
+	globalDir := t.TempDir()
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.override.md"), []byte("# Custom Base"), 0o644)
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.md"), []byte("## Extra Instructions"), 0o644)
 
-	r := newResolver(home, t.TempDir(), testEmbeddedFS("builder"))
+	r := newResolver(globalDir, t.TempDir(), testEmbeddedFS("builder"))
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatal(err)
@@ -196,12 +184,10 @@ func TestGetPromptContent_GlobalOverrideWithExtends(t *testing.T) {
 }
 
 func TestGetPromptContent_OverrideWithNoEmbedded(t *testing.T) {
-	home := t.TempDir()
-	globalDir := filepath.Join(home, ".spekk")
-	os.MkdirAll(globalDir, 0o755)
+	globalDir := t.TempDir()
 	os.WriteFile(filepath.Join(globalDir, "builder.prompt.override.md"), []byte("# Override Builder"), 0o644)
 
-	r := newResolver(home, t.TempDir(), nil)
+	r := newResolver(globalDir, t.TempDir(), nil)
 	content, err := r.GetPromptContent("builder")
 	if err != nil {
 		t.Fatalf("should succeed with override even without embedded: %v", err)
@@ -214,12 +200,10 @@ func TestGetPromptContent_OverrideWithNoEmbedded(t *testing.T) {
 func TestGetPromptContent_WorksForAllAgents(t *testing.T) {
 	for _, agent := range []string{"coach", "builder", "observer"} {
 		t.Run(agent, func(t *testing.T) {
-			home := t.TempDir()
-			globalDir := filepath.Join(home, ".spekk")
-			os.MkdirAll(globalDir, 0o755)
+			globalDir := t.TempDir()
 			os.WriteFile(filepath.Join(globalDir, agent+".prompt.md"), []byte("## Global "+agent), 0o644)
 
-			r := newResolver(home, t.TempDir(), testEmbeddedFS(agent))
+			r := newResolver(globalDir, t.TempDir(), testEmbeddedFS(agent))
 			content, err := r.GetPromptContent(agent)
 			if err != nil {
 				t.Fatal(err)

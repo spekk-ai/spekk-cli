@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
 // SandboxMeta holds local metadata for a sandbox.
@@ -23,11 +26,14 @@ type SandboxMeta struct {
 // sandboxesFile returns the path to the sandboxes metadata file.
 // Overridable in tests.
 var sandboxesFile = func() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".spekk", "sandboxes.json")
+	dir, err := config.GlobalConfigDir()
+	if err != nil {
+		dir = config.DefaultDir()
+	}
+	return filepath.Join(dir, "sandboxes.json")
 }
 
-// LoadSandboxes reads all sandbox metadata from ~/.spekk/sandboxes.json.
+// LoadSandboxes reads all sandbox metadata from the config dir's sandboxes.json.
 func LoadSandboxes() (map[string]*SandboxMeta, error) {
 	data, err := os.ReadFile(sandboxesFile())
 	if err != nil {
@@ -43,7 +49,40 @@ func LoadSandboxes() (map[string]*SandboxMeta, error) {
 	if result == nil {
 		result = make(map[string]*SandboxMeta)
 	}
+	for _, meta := range result {
+		meta.SSHKeyPath = remapLegacyKeyPath(meta.SSHKeyPath)
+	}
 	return result, nil
+}
+
+// remapLegacyKeyPath rewrites an SSH key path that still points into the
+// pre-XDG ~/.spekk directory after that directory has been migrated to the
+// XDG config location. Returns the path unchanged unless the old path is
+// gone and the same relative path exists under the new config dir.
+func remapLegacyKeyPath(p string) string {
+	if p == "" {
+		return p
+	}
+	if _, err := os.Stat(p); err == nil {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	oldPrefix := filepath.Join(home, ".spekk") + string(os.PathSeparator)
+	if !strings.HasPrefix(p, oldPrefix) {
+		return p
+	}
+	dir, err := config.GlobalConfigDir()
+	if err != nil {
+		return p
+	}
+	candidate := filepath.Join(dir, strings.TrimPrefix(p, oldPrefix))
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return p
 }
 
 // GetSandbox returns metadata for a named sandbox, or nil if not found.
@@ -80,7 +119,7 @@ func RemoveSandbox(name string) error {
 func writeSandboxes(sandboxes map[string]*SandboxMeta) error {
 	dir := filepath.Dir(sandboxesFile())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("creating ~/.spekk: %w", err)
+		return fmt.Errorf("creating config dir: %w", err)
 	}
 	data, err := json.MarshalIndent(sandboxes, "", "  ")
 	if err != nil {

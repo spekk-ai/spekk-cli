@@ -54,16 +54,16 @@ func NewClientWithToken(token, base string) *Client {
 
 // Droplet represents a DigitalOcean droplet.
 type Droplet struct {
-	ID        int       `json:"id"`
-	Name      string    `json:"name"`
-	Status    string    `json:"status"`
-	Region    Region    `json:"region"`
-	Size      Size      `json:"size"`
-	Image     Image     `json:"image"`
-	Networks  Networks  `json:"networks"`
-	Tags      []string  `json:"tags"`
-	VpcUUID   string    `json:"vpc_uuid"`
-	CreatedAt string    `json:"created_at"`
+	ID        int      `json:"id"`
+	Name      string   `json:"name"`
+	Status    string   `json:"status"`
+	Region    Region   `json:"region"`
+	Size      Size     `json:"size"`
+	Image     Image    `json:"image"`
+	Networks  Networks `json:"networks"`
+	Tags      []string `json:"tags"`
+	VpcUUID   string   `json:"vpc_uuid"`
+	CreatedAt string   `json:"created_at"`
 }
 
 // Region represents a DO region.
@@ -106,14 +106,14 @@ func (d *Droplet) PublicIP() string {
 
 // CreateDropletRequest contains options for creating a droplet.
 type CreateDropletRequest struct {
-	Name      string   `json:"name"`
-	Region    string   `json:"region"`
-	Size      string   `json:"size"`
-	Image     string   `json:"image"`
-	SSHKeys   []int    `json:"ssh_keys,omitempty"`
-	UserData  string   `json:"user_data,omitempty"`
-	Tags      []string `json:"tags"`
-	VpcUUID   string   `json:"vpc_uuid,omitempty"`
+	Name     string   `json:"name"`
+	Region   string   `json:"region"`
+	Size     string   `json:"size"`
+	Image    string   `json:"image"`
+	SSHKeys  []int    `json:"ssh_keys,omitempty"`
+	UserData string   `json:"user_data,omitempty"`
+	Tags     []string `json:"tags"`
+	VpcUUID  string   `json:"vpc_uuid,omitempty"`
 }
 
 // SSHKey represents a DigitalOcean SSH key.

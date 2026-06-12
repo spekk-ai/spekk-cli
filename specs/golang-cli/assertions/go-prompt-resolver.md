@@ -16,11 +16,11 @@ The Go prompt resolver loads agent prompts using the same layered resolution as 
 
 **Base prompt resolution (first match wins):**
 - Local override: `.spekk/{agent}.prompt.override.md`
-- Global override: `~/.spekk/{agent}.prompt.override.md`
+- Global override: `~/.config/spekk/{agent}.prompt.override.md`
 - Package base: `specs/{agent}-agent/{agent}.prompt.md` (relative to spekk installation)
 
 **Extension layers (appended in order):**
-- Global extend: `~/.spekk/{agent}.prompt.md`
+- Global extend: `~/.config/spekk/{agent}.prompt.md`
 - Local extend: `.spekk/{agent}.prompt.md`
 
 **Behavior:**

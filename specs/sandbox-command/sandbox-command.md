@@ -29,7 +29,7 @@ spekk sandbox deploy <name>
 
 - Uses DigitalOcean API directly via Node.js `fetch` (no `doctl` dependency)
 - Requires `DO_API_TOKEN` environment variable for API access
-- Stores sandbox metadata locally in `~/.spekk/sandboxes.json`
+- Stores sandbox metadata locally in `~/.config/spekk/sandboxes.json`
 - Cloud-init template and agent-client.py are bundled with the CLI package
 - SSH key must be pre-registered in DigitalOcean; CLI uses the user's default SSH key
 

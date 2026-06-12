@@ -23,16 +23,16 @@ type chatData struct {
 }
 
 type attachment struct {
-	Type            string      `json:"type"`
-	Selector        string      `json:"selector,omitempty"`
-	Tag             string      `json:"tag,omitempty"`
-	Classes         []string    `json:"classes,omitempty"`
-	ID              string      `json:"id,omitempty"`
-	InnerText       string      `json:"inner_text,omitempty"`
+	Type            string       `json:"type"`
+	Selector        string       `json:"selector,omitempty"`
+	Tag             string       `json:"tag,omitempty"`
+	Classes         []string     `json:"classes,omitempty"`
+	ID              string       `json:"id,omitempty"`
+	InnerText       string       `json:"inner_text,omitempty"`
 	BoundingBox     *boundingBox `json:"bounding_box,omitempty"`
-	ElementSelector string      `json:"element_selector,omitempty"`
-	Description     string      `json:"description,omitempty"`
-	Actions         []action    `json:"actions,omitempty"`
+	ElementSelector string       `json:"element_selector,omitempty"`
+	Description     string       `json:"description,omitempty"`
+	Actions         []action     `json:"actions,omitempty"`
 }
 
 type boundingBox struct {
@@ -52,11 +52,11 @@ type action struct {
 }
 
 type elementSelectionData struct {
-	Selector    string      `json:"selector"`
-	Tag         string      `json:"tag"`
-	Classes     []string    `json:"classes,omitempty"`
-	ID          string      `json:"id,omitempty"`
-	InnerText   string      `json:"inner_text,omitempty"`
+	Selector    string       `json:"selector"`
+	Tag         string       `json:"tag"`
+	Classes     []string     `json:"classes,omitempty"`
+	ID          string       `json:"id,omitempty"`
+	InnerText   string       `json:"inner_text,omitempty"`
 	BoundingBox *boundingBox `json:"bounding_box,omitempty"`
 }
 

@@ -27,8 +27,7 @@ type LaunchOptions struct {
 // including optional skill activation.
 func BuildActivationMessage(opts LaunchOptions) (string, error) {
 	resolver := &cli.PromptResolver{
-		HomeDir: homeDir(),
-		Cwd:     cwd(),
+		Cwd: cwd(),
 	}
 
 	message, err := resolver.CreateActivationMessage(opts.Agent)
@@ -46,7 +45,6 @@ func BuildActivationMessage(opts LaunchOptions) (string, error) {
 // BuildSkillMessage builds skill activation content to append to the base message.
 func BuildSkillMessage(installDir, agent, subcommand string, args []string) (string, error) {
 	sr := &cli.SkillResolver{
-		HomeDir:    homeDir(),
 		Cwd:        cwd(),
 		InstallDir: installDir,
 	}
@@ -131,7 +129,6 @@ func Launch(message string) error {
 // ShowHelp displays agent help with available skills.
 func ShowHelp(installDir, agent string) {
 	sr := &cli.SkillResolver{
-		HomeDir:    homeDir(),
 		Cwd:        cwd(),
 		InstallDir: installDir,
 	}

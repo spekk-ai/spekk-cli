@@ -234,7 +234,6 @@ func launchCoachAgent(args []string) {
 	// Check for skill subcommand
 	if len(args) > 0 {
 		sr := &cli.SkillResolver{
-			HomeDir:    homeDir(),
 			Cwd:        cwdStr(),
 			InstallDir: installDir,
 		}
@@ -258,11 +257,6 @@ func launchCoachAgent(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-}
-
-func homeDir() string {
-	h, _ := os.UserHomeDir()
-	return h
 }
 
 func cwdStr() string {
@@ -704,7 +698,7 @@ AGENTS:
   coach, builder
 
 Skills resolve through layers: .spekk/skills/<agent>/ (project), then
-~/.spekk/skills/<agent>/ (user), then the skills built into the binary.
+~/.config/spekk/skills/<agent>/ (user), then the skills built into the binary.
 `
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		if len(args) == 0 {

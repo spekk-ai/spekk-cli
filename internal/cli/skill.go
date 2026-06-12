@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/spekk-ai/spekk-cli/internal/config"
+	"github.com/spekk-ai/spekk-cli/internal/fsutil"
 )
 
 // legacyAliases maps agent → subcommand → skill filename stem.
@@ -30,21 +33,29 @@ var DefaultEmbeddedSkillFS fs.FS
 
 // SkillResolver discovers and loads skill files using layered resolution.
 type SkillResolver struct {
-	HomeDir    string
-	Cwd        string
-	InstallDir string
-	EmbeddedFS fs.FS // override for testing; falls back to DefaultEmbeddedSkillFS
+	// GlobalConfigDir overrides the global config directory used for skill
+	// resolution. When empty, config.GlobalConfigDir() is called (production).
+	// Set this in tests to inject a temp directory without triggering migration.
+	GlobalConfigDir string
+	Cwd             string
+	InstallDir      string
+	EmbeddedFS      fs.FS // override for testing; falls back to DefaultEmbeddedSkillFS
 }
 
 // NewSkillResolver creates a resolver with default paths.
 func NewSkillResolver(installDir string) *SkillResolver {
-	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
 	return &SkillResolver{
-		HomeDir:    home,
 		Cwd:        cwd,
 		InstallDir: installDir,
 	}
+}
+
+func (r *SkillResolver) globalDir() (string, error) {
+	if r.GlobalConfigDir != "" {
+		return r.GlobalConfigDir, nil
+	}
+	return config.GlobalConfigDir()
 }
 
 // Skill represents a resolved skill.
@@ -56,9 +67,9 @@ type Skill struct {
 
 // skillDirs returns the layered skill directories for an agent (local → global → package).
 func (r *SkillResolver) skillDirs(agent string) []string {
-	dirs := []string{
-		filepath.Join(r.Cwd, ".spekk", "skills", agent),
-		filepath.Join(r.HomeDir, ".spekk", "skills", agent),
+	dirs := []string{filepath.Join(r.Cwd, ".spekk", "skills", agent)}
+	if globalConfigDir, err := r.globalDir(); err == nil {
+		dirs = append(dirs, filepath.Join(globalConfigDir, "skills", agent))
 	}
 	if relDir, ok := packageSkillDirNames[agent]; ok {
 		dirs = append(dirs, filepath.Join(r.InstallDir, relDir))
@@ -109,7 +120,7 @@ func (r *SkillResolver) ResolveSkill(agent, subcommand string) *Skill {
 	dirs := r.skillDirs(agent)
 
 	for _, dir := range dirs {
-		if !dirExists(dir) {
+		if !fsutil.DirExists(dir) {
 			continue
 		}
 
@@ -272,10 +283,4 @@ func (r *SkillResolver) ListSkills(agent string) []SkillEntry {
 	}
 
 	return skills
-}
-
-// dirExists checks if a path exists and is a directory.
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }

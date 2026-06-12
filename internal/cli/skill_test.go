@@ -21,8 +21,8 @@ func writeSkillFile(t *testing.T, dir, filename, content string) {
 	os.WriteFile(filepath.Join(dir, filename), []byte(content), 0o644)
 }
 
-func newSkillResolver(home, cwd, install string) *SkillResolver {
-	return &SkillResolver{HomeDir: home, Cwd: cwd, InstallDir: install}
+func newSkillResolver(globalConfigDir, cwd, install string) *SkillResolver {
+	return &SkillResolver{GlobalConfigDir: globalConfigDir, Cwd: cwd, InstallDir: install}
 }
 
 func TestResolveSkill_DirectFilenameMatch(t *testing.T) {
@@ -64,11 +64,11 @@ func TestResolveSkill_LegacyAlias(t *testing.T) {
 }
 
 func TestResolveSkill_FrontmatterIDMatch(t *testing.T) {
-	home, cwd, install := setupSkillDirs(t, "builder")
-	globalDir := filepath.Join(home, ".spekk", "skills", "builder")
+	globalConfigDir, cwd, install := setupSkillDirs(t, "builder")
+	globalDir := filepath.Join(globalConfigDir, "skills", "builder")
 	writeSkillFile(t, globalDir, "some-file.md", "---\nid: custom-id\n---\n\n# Custom")
 
-	r := newSkillResolver(home, cwd, install)
+	r := newSkillResolver(globalConfigDir, cwd, install)
 	skill := r.ResolveSkill("builder", "custom-id")
 
 	if skill == nil {
@@ -80,15 +80,15 @@ func TestResolveSkill_FrontmatterIDMatch(t *testing.T) {
 }
 
 func TestResolveSkill_LocalShadowsGlobal(t *testing.T) {
-	home, cwd, install := setupSkillDirs(t, "coach")
+	globalConfigDir, cwd, install := setupSkillDirs(t, "coach")
 
-	globalDir := filepath.Join(home, ".spekk", "skills", "coach")
+	globalDir := filepath.Join(globalConfigDir, "skills", "coach")
 	writeSkillFile(t, globalDir, "my-skill.md", "# Global Version")
 
 	localDir := filepath.Join(cwd, ".spekk", "skills", "coach")
 	writeSkillFile(t, localDir, "my-skill.md", "# Local Version")
 
-	r := newSkillResolver(home, cwd, install)
+	r := newSkillResolver(globalConfigDir, cwd, install)
 	skill := r.ResolveSkill("coach", "my-skill")
 
 	if skill == nil {
@@ -133,17 +133,17 @@ func TestResolveSkill_NotFound(t *testing.T) {
 }
 
 func TestListSkills_Deduplication(t *testing.T) {
-	home, cwd, install := setupSkillDirs(t, "coach")
+	globalConfigDir, cwd, install := setupSkillDirs(t, "coach")
 
 	localDir := filepath.Join(cwd, ".spekk", "skills", "coach")
 	writeSkillFile(t, localDir, "shared.md", "# Local")
 	writeSkillFile(t, localDir, "local-only.md", "# Local Only")
 
-	globalDir := filepath.Join(home, ".spekk", "skills", "coach")
+	globalDir := filepath.Join(globalConfigDir, "skills", "coach")
 	writeSkillFile(t, globalDir, "shared.md", "# Global")
 	writeSkillFile(t, globalDir, "global-only.md", "# Global Only")
 
-	r := newSkillResolver(home, cwd, install)
+	r := newSkillResolver(globalConfigDir, cwd, install)
 	skills := r.ListSkills("coach")
 
 	names := map[string]bool{}
@@ -244,10 +244,10 @@ func TestResolveSkill_EmbeddedFallback(t *testing.T) {
 	}
 
 	r := &SkillResolver{
-		HomeDir:    t.TempDir(),
-		Cwd:        t.TempDir(),
-		InstallDir: t.TempDir(),
-		EmbeddedFS: efs,
+		GlobalConfigDir: t.TempDir(),
+		Cwd:             t.TempDir(),
+		InstallDir:      t.TempDir(),
+		EmbeddedFS:      efs,
 	}
 
 	skill := r.ResolveSkill("coach", "coordinator-skill")
@@ -270,10 +270,10 @@ func TestResolveSkill_EmbeddedAliasResolution(t *testing.T) {
 	}
 
 	r := &SkillResolver{
-		HomeDir:    t.TempDir(),
-		Cwd:        t.TempDir(),
-		InstallDir: t.TempDir(),
-		EmbeddedFS: efs,
+		GlobalConfigDir: t.TempDir(),
+		Cwd:             t.TempDir(),
+		InstallDir:      t.TempDir(),
+		EmbeddedFS:      efs,
 	}
 
 	// "coordinate" is a legacy alias for "coordinator-skill"
@@ -293,15 +293,15 @@ func TestResolveSkill_FilesystemShadowsEmbedded(t *testing.T) {
 		},
 	}
 
-	home, cwd, install := setupSkillDirs(t, "coach")
+	globalConfigDir, cwd, install := setupSkillDirs(t, "coach")
 	localDir := filepath.Join(cwd, ".spekk", "skills", "coach")
 	writeSkillFile(t, localDir, "coordinator-skill.md", "# Local Version")
 
 	r := &SkillResolver{
-		HomeDir:    home,
-		Cwd:        cwd,
-		InstallDir: install,
-		EmbeddedFS: efs,
+		GlobalConfigDir: globalConfigDir,
+		Cwd:             cwd,
+		InstallDir:      install,
+		EmbeddedFS:      efs,
 	}
 
 	skill := r.ResolveSkill("coach", "coordinator-skill")
@@ -327,10 +327,10 @@ func TestListSkills_IncludesEmbedded(t *testing.T) {
 	}
 
 	r := &SkillResolver{
-		HomeDir:    t.TempDir(),
-		Cwd:        t.TempDir(),
-		InstallDir: t.TempDir(),
-		EmbeddedFS: efs,
+		GlobalConfigDir: t.TempDir(),
+		Cwd:             t.TempDir(),
+		InstallDir:      t.TempDir(),
+		EmbeddedFS:      efs,
 	}
 
 	skills := r.ListSkills("coach")
@@ -354,15 +354,15 @@ func TestListSkills_FilesystemShadowsEmbedded(t *testing.T) {
 		},
 	}
 
-	home, cwd, install := setupSkillDirs(t, "coach")
+	globalConfigDir, cwd, install := setupSkillDirs(t, "coach")
 	localDir := filepath.Join(cwd, ".spekk", "skills", "coach")
 	writeSkillFile(t, localDir, "coordinator-skill.md", "# Local")
 
 	r := &SkillResolver{
-		HomeDir:    home,
-		Cwd:        cwd,
-		InstallDir: install,
-		EmbeddedFS: efs,
+		GlobalConfigDir: globalConfigDir,
+		Cwd:             cwd,
+		InstallDir:      install,
+		EmbeddedFS:      efs,
 	}
 
 	skills := r.ListSkills("coach")
@@ -390,9 +390,9 @@ func TestResolveSkill_DefaultEmbeddedSkillFS(t *testing.T) {
 	defer func() { DefaultEmbeddedSkillFS = old }()
 
 	r := &SkillResolver{
-		HomeDir:    t.TempDir(),
-		Cwd:        t.TempDir(),
-		InstallDir: t.TempDir(),
+		GlobalConfigDir: t.TempDir(),
+		Cwd:             t.TempDir(),
+		InstallDir:      t.TempDir(),
 		// EmbeddedFS not set — should fall back to DefaultEmbeddedSkillFS
 	}
 
