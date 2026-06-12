@@ -3,7 +3,7 @@ id: path-warning-after-install
 parent: install-script
 created: 2026-06-12T00:00:00Z
 priority: 2
-status: in_progress
+status: done
 depends-on: default-install-dir-user-owned
 branch: fix/update-permission-message
 ---

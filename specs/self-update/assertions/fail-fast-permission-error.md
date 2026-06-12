@@ -3,7 +3,7 @@ id: fail-fast-permission-error
 parent: self-update
 created: 2026-06-12T00:00:00Z
 priority: 1
-status: in_progress
+status: done
 branch: fix/update-permission-message
 ---
 
@@ -16,8 +16,7 @@ via a sudo install), `spekk update` cannot write the new binary. This must
 fail *before* downloading anything, and the error must tell the user exactly
 what to do.
 
-Implemented in PR #114 (`fix/update-permission-message`); marked
-`in_progress` until that PR merges to main.
+Implemented in PR #114.
 
 ## Success Criteria
 

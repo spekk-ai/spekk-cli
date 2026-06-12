@@ -3,7 +3,7 @@ id: default-install-dir-user-owned
 parent: install-script
 created: 2026-06-12T00:00:00Z
 priority: 1
-status: in_progress
+status: done
 branch: fix/update-permission-message
 ---
 
