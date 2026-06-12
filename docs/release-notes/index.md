@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.7.1 -- Update Permission Fix](RELEASE-NOTES-1.7.1.md)
+
+`spekk update` now fails fast with clear guidance when the install directory isn't writable (e.g. a sudo install to `/usr/local/bin`), instead of a raw permission error after starting the download.
+
 ## [1.7.0 -- XDG-Compliant Config Directory](RELEASE-NOTES-1.7.0.md)
 
 The global config directory moves from `~/.spekk` to `~/.config/spekk` (honoring `$XDG_CONFIG_HOME`), with automatic migration of existing directories. Platform support clarified: macOS and Linux.

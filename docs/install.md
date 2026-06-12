@@ -40,6 +40,14 @@ spekk update          # install latest
 spekk update --check  # preview without installing
 ```
 
+`spekk update` replaces the binary in place, so it needs write access to the install directory. If spekk lives in a root-owned directory like `/usr/local/bin`, run `sudo spekk update` — this applies to every update there, not just the first. To update without sudo, install to a user-writable directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | SPEKK_INSTALL_DIR=~/.local/bin sh
+```
+
+(Ensure `~/.local/bin` is on your `PATH`.)
+
 ---
 
 ## Claude-assisted setup
