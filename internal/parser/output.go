@@ -28,19 +28,19 @@ func marshalJSON(v any) ([]byte, error) {
 
 // NextAssertionOutput is the JSON output for `spekk next` (single assertion).
 type NextAssertionOutput struct {
-	Type      string          `json:"type"`
-	ID        string          `json:"id"`
-	Parent    string          `json:"parent"`
-	File      string          `json:"file"`
-	Priority  int             `json:"priority"`
-	Status    string          `json:"status"`
-	Branch    string          `json:"branch"`
-	Created   string          `json:"created"`
-	DependsOn string          `json:"dependsOn,omitempty"`
-	LockedBy  string          `json:"lockedBy,omitempty"`
-	Title     string          `json:"title"`
-	Content   string          `json:"content"`
-	Spec      *SpecRefOutput  `json:"spec,omitempty"`
+	Type      string         `json:"type"`
+	ID        string         `json:"id"`
+	Parent    string         `json:"parent"`
+	File      string         `json:"file"`
+	Priority  int            `json:"priority"`
+	Status    string         `json:"status"`
+	Branch    string         `json:"branch"`
+	Created   string         `json:"created"`
+	DependsOn string         `json:"dependsOn,omitempty"`
+	LockedBy  string         `json:"lockedBy,omitempty"`
+	Title     string         `json:"title"`
+	Content   string         `json:"content"`
+	Spec      *SpecRefOutput `json:"spec,omitempty"`
 }
 
 // SpecRefOutput is a reference to a parent spec within assertion output.
@@ -52,9 +52,9 @@ type SpecRefOutput struct {
 
 // HierarchyOutput is the JSON output for `spekk next --all`.
 type HierarchyOutput struct {
-	Type         string              `json:"type"`
-	Specs        []HierarchySpec     `json:"specs"`
-	Observations []json.RawMessage   `json:"observations"`
+	Type         string            `json:"type"`
+	Specs        []HierarchySpec   `json:"specs"`
+	Observations []json.RawMessage `json:"observations"`
 }
 
 // HierarchySpec is a spec entry within the hierarchy output.
