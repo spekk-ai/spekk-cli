@@ -15,7 +15,7 @@ branch: feat/agent-install
 
 - Detects OS (`darwin`/`linux`) and architecture (`amd64`/`arm64` including `x86_64`/`aarch64` aliases); errors clearly on anything else, pointing Windows users to the releases page
 - Downloads `spekk-<os>-<arch>` from `https://github.com/spekk-ai/spekk-cli/releases/latest/download/`
-- Installs to `/usr/local/bin/spekk`, overridable via `SPEKK_INSTALL_DIR`; uses `sudo` only when the target directory is not writable
+- Installs `spekk` to the default install directory, overridable via `SPEKK_INSTALL_DIR`; uses `sudo` only when the target directory is not writable (which directory is the default is specified by `default-install-dir-user-owned`)
 - Cleans up its temp file on failure
 - Prints the installed version and a pointer to getting started
 - Works under plain `sh` (no bashisms) so `curl ... | sh` is safe
