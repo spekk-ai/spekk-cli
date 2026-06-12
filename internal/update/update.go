@@ -127,6 +127,23 @@ func FetchLatestRelease() (*releaseResponse, error) {
 }
 
 func downloadAndReplace(url, destPath string) error {
+	// Create the temp file before downloading so a permission problem fails
+	// fast. It lives in the same directory as the target so the final rename
+	// is atomic.
+	dir := filepath.Dir(destPath)
+	tmp, err := os.CreateTemp(dir, ".spekk-update-*")
+	if err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("no write permission for %s (spekk was likely installed with sudo) — try: sudo spekk update", dir)
+		}
+		return fmt.Errorf("cannot create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		tmp.Close()
+		os.Remove(tmpName) // clean up on any error path
+	}()
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
@@ -143,18 +160,6 @@ func downloadAndReplace(url, destPath string) error {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("download returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-
-	// Write to a temp file in the same directory so we can atomically rename.
-	dir := filepath.Dir(destPath)
-	tmp, err := os.CreateTemp(dir, ".spekk-update-*")
-	if err != nil {
-		return fmt.Errorf("cannot create temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	defer func() {
-		tmp.Close()
-		os.Remove(tmpName) // clean up on any error path
-	}()
 
 	if _, err := io.Copy(tmp, resp.Body); err != nil {
 		return fmt.Errorf("cannot write new binary: %w", err)

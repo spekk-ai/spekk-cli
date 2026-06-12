@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/spekk-ai/spekk-cli/internal/version"
@@ -146,6 +147,47 @@ func TestRunDevBuild(t *testing.T) {
 	err := Run(false)
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("development build")) {
 		t.Errorf("expected dev build error, got: %v", err)
+	}
+}
+
+func TestDownloadAndReplacePermissionDenied(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions work differently on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root; permission checks do not apply")
+	}
+
+	original := Client
+	defer func() { Client = original }()
+
+	requested := false
+	Client = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requested = true
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewBuffer(nil))}, nil
+		}),
+	}
+
+	dir := t.TempDir()
+	binPath := filepath.Join(dir, "spekk")
+	if err := os.WriteFile(binPath, []byte("old-binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0755) // restore so t.TempDir cleanup works
+
+	err := downloadAndReplace("https://example.com/binary", binPath)
+	if err == nil {
+		t.Fatal("expected permission error")
+	}
+	if !strings.Contains(err.Error(), "sudo spekk update") {
+		t.Errorf("error should suggest sudo, got: %v", err)
+	}
+	if requested {
+		t.Error("should fail before making any HTTP request")
 	}
 }
 
