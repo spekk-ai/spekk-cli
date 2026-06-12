@@ -39,8 +39,19 @@ echo "Downloading $binary ..."
 curl -fsSL "$url" -o "$tmp" || err "download failed: $url"
 chmod +x "$tmp"
 
+# Never escalate for a directory under $HOME — a sudo-created dir or binary
+# there would be root-owned and break sudo-free self-updates, the exact
+# problem the user-owned default exists to avoid.
+case "$INSTALL_DIR" in
+    "$HOME"/*) in_home=1 ;;
+    *)         in_home=0 ;;
+esac
+
 if [ ! -d "$INSTALL_DIR" ]; then
     if ! mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+        if [ "$in_home" = 1 ]; then
+            err "cannot create $INSTALL_DIR — check ownership/permissions of its parent directories (a previous sudo install may have left them root-owned)"
+        fi
         echo "Creating $INSTALL_DIR (requires sudo)"
         sudo mkdir -p "$INSTALL_DIR"
     fi
@@ -49,6 +60,9 @@ fi
 if [ -w "$INSTALL_DIR" ]; then
     mv "$tmp" "$INSTALL_DIR/spekk"
 else
+    if [ "$in_home" = 1 ]; then
+        err "$INSTALL_DIR is not writable — check its ownership (a previous sudo install may have left it root-owned)"
+    fi
     echo "Installing to $INSTALL_DIR (requires sudo)"
     sudo mv "$tmp" "$INSTALL_DIR/spekk"
 fi

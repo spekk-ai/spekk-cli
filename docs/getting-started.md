@@ -14,27 +14,15 @@ Get up and running with Spekk CLI in under five minutes.
 
 ## Installation
 
-### From GitHub Releases (recommended)
+### Install script (recommended)
 
-Download the latest binary for your platform:
+Detects your platform, installs to user-owned `~/.local/bin` (no sudo needed — for installs or updates), and warns if the directory isn't on your `PATH`:
 
 ```bash
-# macOS (Apple Silicon)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-arm64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
-
-# macOS (Intel)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-amd64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
-
-# Linux (x86_64)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-amd64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
-
-# Linux (ARM64)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-arm64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
+curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
+
+See the [install guide](install.md) for manual downloads and options.
 
 ### From Source
 

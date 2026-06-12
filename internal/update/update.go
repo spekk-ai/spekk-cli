@@ -134,7 +134,7 @@ func downloadAndReplace(url, destPath string) error {
 	tmp, err := os.CreateTemp(dir, ".spekk-update-*")
 	if err != nil {
 		if os.IsPermission(err) {
-			return fmt.Errorf("no write permission for %s (spekk was likely installed with sudo) — try: sudo spekk update", dir)
+			return fmt.Errorf("no write permission for %s (spekk was likely installed with sudo) — run: sudo spekk update, or reinstall to user-owned ~/.local/bin for sudo-free updates: https://github.com/spekk-ai/spekk-cli#install", dir)
 		}
 		return fmt.Errorf("cannot create temp file: %w", err)
 	}

@@ -22,10 +22,16 @@ standard install.
   `$HOME/.local/bin/spekk`
 - `~/.local/bin` is created (`mkdir -p`) if it does not exist
 - No sudo is invoked anywhere in the default flow
+- Sudo is never invoked for any install dir under `$HOME` (default or
+  override): a sudo-created directory or binary there would be root-owned and
+  break sudo-free self-updates — the exact failure this convention exists to
+  prevent. If a `$HOME` path cannot be created or written, the script errors
+  with a message pointing at ownership/permissions (e.g. left root-owned by a
+  previous sudo install) instead of escalating
 - `SPEKK_INSTALL_DIR` still overrides the destination; when the override
-  points at a directory the user cannot write (e.g. `/usr/local/bin`), the
-  existing sudo fallback is retained ("Installing to <dir> (requires sudo)"
-  + `sudo mv`)
+  points at a directory outside `$HOME` the user cannot write (e.g.
+  `/usr/local/bin`), the existing sudo fallback is retained
+  ("Installing to <dir> (requires sudo)" + `sudo mv`)
 - The script's usage comment and the README/`docs/install.md` install docs
   reflect the new default and the `SPEKK_INSTALL_DIR` escape hatch
 - Script remains POSIX sh (no bashisms), so `curl ... | sh` stays safe

@@ -186,6 +186,9 @@ func TestDownloadAndReplacePermissionDenied(t *testing.T) {
 	if !strings.Contains(err.Error(), "sudo spekk update") {
 		t.Errorf("error should suggest sudo, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "~/.local/bin") {
+		t.Errorf("error should suggest reinstalling to a user-owned dir, got: %v", err)
+	}
 	if requested {
 		t.Error("should fail before making any HTTP request")
 	}

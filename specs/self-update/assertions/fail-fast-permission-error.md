@@ -26,8 +26,10 @@ Implemented in PR #114 (`fix/update-permission-message`); marked
   than after a wasted download
 - On a permission error (`os.IsPermission`) creating the temp file, the error
   is exactly:
-  `no write permission for <dir> (spekk was likely installed with sudo) — try: sudo spekk update`
-  where `<dir>` is the directory containing the binary
+  `no write permission for <dir> (spekk was likely installed with sudo) — run: sudo spekk update, or reinstall to user-owned ~/.local/bin for sudo-free updates: https://github.com/spekk-ai/spekk-cli#install`
+  where `<dir>` is the directory containing the binary — it must offer both
+  the immediate workaround (sudo) and the convention-aligned fix (reinstall
+  to a user-owned directory)
 - Other temp-file creation failures still surface as
   "cannot create temp file: <cause>"
 - Atomicity guarantees from `atomic-binary-replace` are unchanged: temp file

@@ -22,7 +22,7 @@ Details:
 For installs that remain in root-owned directories, `spekk update` previously failed with a raw permission error — after already initiating the download. Now it fails fast, before any network request, with clear guidance:
 
 ```
-no write permission for /usr/local/bin (spekk was likely installed with sudo) — try: sudo spekk update
+no write permission for /usr/local/bin (spekk was likely installed with sudo) — run: sudo spekk update, or reinstall to user-owned ~/.local/bin for sudo-free updates: https://github.com/spekk-ai/spekk-cli#install
 ```
 
 **Note for users on 1.5.0–1.7.0:** the version of `spekk update` you're running predates this fix, so you'll see the old raw error. The fix for your update is the same: `sudo spekk update`.
