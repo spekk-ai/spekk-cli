@@ -30,33 +30,11 @@ graph LR
 
 ## Quick start
 
-=== "macOS (Apple Silicon)"
+Install with one command (macOS / Linux — installs to user-owned `~/.local/bin`, no sudo needed):
 
-    ```bash
-    curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-arm64 -o /usr/local/bin/spekk
-    chmod +x /usr/local/bin/spekk
-    ```
-
-=== "macOS (Intel)"
-
-    ```bash
-    curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-amd64 -o /usr/local/bin/spekk
-    chmod +x /usr/local/bin/spekk
-    ```
-
-=== "Linux (x86_64)"
-
-    ```bash
-    curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-amd64 -o /usr/local/bin/spekk
-    chmod +x /usr/local/bin/spekk
-    ```
-
-=== "Linux (ARM64)"
-
-    ```bash
-    curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-arm64 -o /usr/local/bin/spekk
-    chmod +x /usr/local/bin/spekk
-    ```
+```bash
+curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
+```
 
 Then start building:
 

@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.8.0 -- Sudo-Free Installs and Updates](RELEASE-NOTES-1.8.0.md)
+
+`install.sh` now defaults to user-owned `~/.local/bin`, so `spekk update` works without sudo. The installer warns (with the exact fix) when the directory isn't on `PATH`, and `spekk update` fails fast with clear guidance when it lacks write permission.
+
 ## [1.7.0 -- XDG-Compliant Config Directory](RELEASE-NOTES-1.7.0.md)
 
 The global config directory moves from `~/.spekk` to `~/.config/spekk` (honoring `$XDG_CONFIG_HOME`), with automatic migration of existing directories. Platform support clarified: macOS and Linux.

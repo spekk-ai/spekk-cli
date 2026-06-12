@@ -100,3 +100,6 @@ projects/
 bin/spekk-go
 /spekk
 dist/
+
+# Generated spec-explorer artifact
+.spekk/index.html
