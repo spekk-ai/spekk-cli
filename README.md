@@ -16,7 +16,9 @@ Spekk turns a `specs/` directory in your repo into a work queue for AI agents:
 curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-Or with Go: `go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest` — or download a binary (including Windows) from [releases](https://github.com/spekk-ai/spekk-cli/releases/latest).
+Or with Go: `go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest` — or download a binary from [releases](https://github.com/spekk-ai/spekk-cli/releases/latest).
+
+> **Platform support:** Spekk supports **macOS and Linux**. Windows is not officially supported — Windows binaries are published on a best-effort basis and untested; use [WSL](https://learn.microsoft.com/en-us/windows/wsl/) for the supported experience.
 
 ## Quick Start
 
