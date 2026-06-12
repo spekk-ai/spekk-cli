@@ -3,9 +3,9 @@ id: path-warning-after-install
 parent: install-script
 created: 2026-06-12T00:00:00Z
 priority: 2
-status: not_started
+status: in_progress
 depends-on: default-install-dir-user-owned
-branch: feat/user-owned-install-dir
+branch: fix/update-permission-message
 ---
 
 # Install Warns With a Copy-Paste Fix When the Install Dir Is Not on PATH

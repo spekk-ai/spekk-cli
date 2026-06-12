@@ -6,7 +6,7 @@
 curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-The script detects your platform, downloads the latest release, and installs to `/usr/local/bin` (override with `SPEKK_INSTALL_DIR`). Verify:
+The script detects your platform, downloads the latest release, and installs to `~/.local/bin` (override with `SPEKK_INSTALL_DIR`, e.g. `SPEKK_INSTALL_DIR=/usr/local/bin` for a system-wide install). If `~/.local/bin` is not on your `PATH`, the script prints the exact line to add to your shell config. Verify:
 
 ```bash
 spekk version
@@ -40,13 +40,13 @@ spekk update          # install latest
 spekk update --check  # preview without installing
 ```
 
-`spekk update` replaces the binary in place, so it needs write access to the install directory. If spekk lives in a root-owned directory like `/usr/local/bin`, run `sudo spekk update` — this applies to every update there, not just the first. To update without sudo, install to a user-writable directory:
+`spekk update` replaces the binary in place, so it needs write access to the install directory. The default install location (`~/.local/bin`) is user-owned, so updates just work. If spekk lives in a root-owned directory like `/usr/local/bin` (e.g. from an older install or `SPEKK_INSTALL_DIR=/usr/local/bin`), run `sudo spekk update` — this applies to every update there, not just the first. To update without sudo, reinstall to the user-owned default:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | SPEKK_INSTALL_DIR=~/.local/bin sh
+curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-(Ensure `~/.local/bin` is on your `PATH`.)
+(Ensure `~/.local/bin` is on your `PATH` — the installer tells you the exact line to add if it isn't.)
 
 ---
 
@@ -55,5 +55,5 @@ curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh 
 Paste this into Claude Code:
 
 ```
-Install the spekk CLI for me. Download the right binary from https://github.com/spekk-ai/spekk-cli/releases/latest for my platform and put it in /usr/local/bin/.
+Install the spekk CLI for me. Download the right binary from https://github.com/spekk-ai/spekk-cli/releases/latest for my platform, put it in ~/.local/bin/ (create the directory if needed), make it executable, and make sure ~/.local/bin is on my PATH.
 ```

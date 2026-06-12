@@ -3,8 +3,8 @@ id: default-install-dir-user-owned
 parent: install-script
 created: 2026-06-12T00:00:00Z
 priority: 1
-status: not_started
-branch: feat/user-owned-install-dir
+status: in_progress
+branch: fix/update-permission-message
 ---
 
 # Default Install Directory Is User-Owned (`~/.local/bin`)
