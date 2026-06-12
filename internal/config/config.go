@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/spekk-ai/spekk-cli/internal/fsutil"
 )
 
 var (
@@ -72,7 +74,7 @@ func resolveGlobalConfigDir(home string, out io.Writer, in io.Reader, interactiv
 }
 
 func maybeMigrate(oldDir, newDir string, out io.Writer, in io.Reader, interactive bool) error {
-	if !dirExists(oldDir) || dirExists(newDir) {
+	if !fsutil.DirExists(oldDir) || fsutil.DirExists(newDir) {
 		return nil
 	}
 	fmt.Fprintf(out, "\nspekk: config directory has moved.\n")
@@ -89,7 +91,7 @@ func maybeMigrate(oldDir, newDir string, out io.Writer, in io.Reader, interactiv
 	if err := os.Rename(oldDir, newDir); err != nil {
 		// A concurrent spekk process (e.g. agent shims launching in parallel)
 		// may have completed the migration between our check and the rename.
-		if !dirExists(oldDir) && dirExists(newDir) {
+		if !fsutil.DirExists(oldDir) && fsutil.DirExists(newDir) {
 			return nil
 		}
 		// Cross-filesystem rename fails; fall back to copy + delete.
@@ -135,9 +137,4 @@ func copyFile(src, dst string, mode fs.FileMode) error {
 	defer out.Close()
 	_, err = io.Copy(out, in)
 	return err
-}
-
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }

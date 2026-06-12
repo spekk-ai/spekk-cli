@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spekk-ai/spekk-cli/internal/fsutil"
 )
 
 func TestResolveGlobalConfigDir_DefaultPath(t *testing.T) {
@@ -89,10 +91,10 @@ func TestMaybeMigrate_InteractiveMigratesOnEnter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dirExists(oldDir) {
+	if fsutil.DirExists(oldDir) {
 		t.Error("old dir should be gone after migration")
 	}
-	if !dirExists(newDir) {
+	if !fsutil.DirExists(newDir) {
 		t.Error("new dir should exist after migration")
 	}
 	data, readErr := os.ReadFile(filepath.Join(newDir, "file.txt"))
@@ -124,7 +126,7 @@ func TestMaybeMigrate_NonInteractiveDoesNotPrompt(t *testing.T) {
 	if strings.Contains(out.String(), "Press Enter") {
 		t.Error("non-interactive mode must not prompt")
 	}
-	if !dirExists(newDir) {
+	if !fsutil.DirExists(newDir) {
 		t.Error("migration should still happen non-interactively")
 	}
 	if !strings.Contains(out.String(), "Migrated") {

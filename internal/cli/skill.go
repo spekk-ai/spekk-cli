@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/config"
+	"github.com/spekk-ai/spekk-cli/internal/fsutil"
 )
 
 // legacyAliases maps agent → subcommand → skill filename stem.
@@ -119,7 +120,7 @@ func (r *SkillResolver) ResolveSkill(agent, subcommand string) *Skill {
 	dirs := r.skillDirs(agent)
 
 	for _, dir := range dirs {
-		if !dirExists(dir) {
+		if !fsutil.DirExists(dir) {
 			continue
 		}
 
@@ -282,10 +283,4 @@ func (r *SkillResolver) ListSkills(agent string) []SkillEntry {
 	}
 
 	return skills
-}
-
-// dirExists checks if a path exists and is a directory.
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }
