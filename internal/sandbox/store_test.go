@@ -87,6 +87,27 @@ func TestLoadSandboxesMissingFile(t *testing.T) {
 	}
 }
 
+func TestRemapLegacyKeyPath(t *testing.T) {
+	// Existing path is returned unchanged.
+	tmp := t.TempDir()
+	existing := filepath.Join(tmp, "key")
+	os.WriteFile(existing, []byte("k"), 0o600)
+	if got := remapLegacyKeyPath(existing); got != existing {
+		t.Errorf("existing path should be unchanged, got %s", got)
+	}
+
+	// Empty path is returned unchanged.
+	if got := remapLegacyKeyPath(""); got != "" {
+		t.Errorf("empty path should be unchanged, got %s", got)
+	}
+
+	// A missing path outside ~/.spekk is returned unchanged.
+	missing := filepath.Join(tmp, "nope")
+	if got := remapLegacyKeyPath(missing); got != missing {
+		t.Errorf("non-legacy missing path should be unchanged, got %s", got)
+	}
+}
+
 func TestSandboxesFileWrittenCorrectly(t *testing.T) {
 	tmpDir := t.TempDir()
 	origFile := sandboxesFile

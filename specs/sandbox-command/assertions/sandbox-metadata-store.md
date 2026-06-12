@@ -12,12 +12,12 @@ depends-on: sandbox-command-routing
 
 ## Requirement
 
-Sandbox metadata is persisted locally in `~/.spekk/sandboxes.json` so the CLI can map sandbox names to droplet IDs, IPs, and other state without querying DO every time.
+Sandbox metadata is persisted locally in `~/.config/spekk/sandboxes.json` so the CLI can map sandbox names to droplet IDs, IPs, and other state without querying DO every time.
 
 ## Success Criteria
 
 - `src/sandbox/store.js` exports functions: `loadSandboxes`, `saveSandbox`, `removeSandbox`, `getSandbox`
-- `~/.spekk/` directory is created automatically if it does not exist
+- `~/.config/spekk/` directory is created automatically if it does not exist
 - `sandboxes.json` stores an object keyed by sandbox name with values: `{ dropletId, ip, region, size, createdAt, status }`
 - `saveSandbox(name, data)` merges data into the existing entry (or creates a new one)
 - `removeSandbox(name)` deletes the entry from the JSON file

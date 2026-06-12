@@ -10,7 +10,7 @@ status: done
 
 ## Description
 
-The `SkillResolver` class discovers skills using a layered resolution order: local (`.spekk/skills/{agent}/`) > global (`~/.spekk/skills/{agent}/`) > package (`specs/coach-skills-system/` or `specs/builder-skills/`). First match wins.
+The `SkillResolver` class discovers skills using a layered resolution order: local (`.spekk/skills/{agent}/`) > global (`~/.config/spekk/skills/{agent}/`) > package (`specs/coach-skills-system/` or `specs/builder-skills/`). First match wins.
 
 ## Success Criteria
 

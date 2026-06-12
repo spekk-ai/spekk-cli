@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
 var sandboxNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
@@ -476,8 +478,11 @@ systemctl restart spekk-agent`, spekkAgentUnit)
 
 // KnownHostsFile returns the path to the per-sandbox known_hosts file.
 func KnownHostsFile(name string) string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".spekk", "known_hosts", name)
+	dir, err := config.GlobalConfigDir()
+	if err != nil {
+		dir = config.DefaultDir()
+	}
+	return filepath.Join(dir, "known_hosts", name)
 }
 
 // sshHostKeyOpts returns SSH options for host key verification.
@@ -515,11 +520,11 @@ func sshArgs(sandbox *SandboxMeta, name string) []string {
 // generateSSHKeyPair creates an ed25519 SSH key pair for a sandbox.
 // Returns the path to the private key.
 func generateSSHKeyPair(name string) (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := config.GlobalConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("getting home dir: %w", err)
+		return "", fmt.Errorf("getting config dir: %w", err)
 	}
-	keysDir := filepath.Join(home, ".spekk", "keys")
+	keysDir := filepath.Join(dir, "keys")
 	if err := os.MkdirAll(keysDir, 0o700); err != nil {
 		return "", fmt.Errorf("creating keys dir: %w", err)
 	}

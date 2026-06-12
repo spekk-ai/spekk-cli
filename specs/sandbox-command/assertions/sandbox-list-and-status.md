@@ -16,7 +16,7 @@ depends-on: sandbox-metadata-store
 
 ## Success Criteria
 
-- `spekk sandbox list` reads `~/.spekk/sandboxes.json` and prints a table with columns: Name, IP, Region, Status, Created
+- `spekk sandbox list` reads `~/.config/spekk/sandboxes.json` and prints a table with columns: Name, IP, Region, Status, Created
 - If no sandboxes exist, prints "No sandboxes found." and exits with code 0
 - `spekk sandbox status <name>` looks up the sandbox in the local store, then fetches live data from `getDroplet(id)`
 - Status output includes: sandbox name, droplet ID, IP address, region, size, droplet status (from DO API), and created timestamp

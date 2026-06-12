@@ -294,7 +294,6 @@ func RunBuilder(args []string, installDir string) {
 	skillName := ExtractSkillArg(args)
 	if skillName != "" {
 		sr := &cli.SkillResolver{
-			HomeDir:    homeDir(),
 			Cwd:        cwd(),
 			InstallDir: installDir,
 		}

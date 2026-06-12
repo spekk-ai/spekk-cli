@@ -10,7 +10,7 @@ What's new in each version of Spekk CLI.
 
 ## [1.4.0 -- Layered Prompts, Sandboxes, WebSocket Server](RELEASE-NOTES-1.4.0.md)
 
-Agent prompts can now be customized globally (`~/.spekk/`) or per-project (`.spekk/`) with extend and override files. New sandbox commands for cloud agent environments. WebSocket server for real-time integrations.
+Agent prompts can now be customized globally (`~/.config/spekk/`) or per-project (`.spekk/`) with extend and override files. New sandbox commands for cloud agent environments. WebSocket server for real-time integrations.
 
 ## [1.3.0 -- Cloud Sandboxes](RELEASE-NOTES-1.3.0.md)
 

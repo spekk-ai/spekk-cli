@@ -92,14 +92,14 @@ The file naming convention determines how your customization is applied:
 
 | Location | Scope | Example Path |
 |----------|-------|-------------|
-| `~/.spekk/` | Global -- applies to all your projects | `~/.spekk/builder.prompt.md` |
+| `~/.config/spekk/` | Global -- applies to all your projects | `~/.config/spekk/builder.prompt.md` |
 | `.spekk/` (project root) | Local -- applies to this project only | `.spekk/coach.prompt.md` |
 
 Local files take precedence over global files. If both a local override and a global override exist, the local override wins.
 
 ### Example: Extending the Builder Prompt Globally
 
-Create `~/.spekk/builder.prompt.md`:
+Create `~/.config/spekk/builder.prompt.md`:
 
 ```markdown
 ## Company Standards
@@ -123,7 +123,7 @@ When creating specs, follow Django conventions and
 reference the project's existing app structure.
 ```
 
-This completely replaces the base coach prompt for this project. Any extend files (`~/.spekk/coach.prompt.md` or `.spekk/coach.prompt.md`) are still appended after the override.
+This completely replaces the base coach prompt for this project. Any extend files (`~/.config/spekk/coach.prompt.md` or `.spekk/coach.prompt.md`) are still appended after the override.
 
 ### Version Control
 

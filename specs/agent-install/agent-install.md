@@ -13,7 +13,7 @@ Users can install the spekk agents (coach, builder, observer) as subagents in th
 The binary remains the single source of truth for prompts and skills:
 
 - **`spekk prompt <agent>`** prints the layered-resolved agent prompt to stdout. This is the universal escape hatch — it works with any tool that can run a shell command or accept pasted text.
-- **`spekk skill list <agent>` / `spekk skill show <agent> <name>`** expose the existing layered `SkillResolver` on the command line, so an agent running in any harness can fetch skill content on demand. Built-in skills ship in the binary; nothing is installed to disk. `.spekk/skills/` (project) and `~/.spekk/skills/` (user) remain optional override layers.
+- **`spekk skill list <agent>` / `spekk skill show <agent> <name>`** expose the existing layered `SkillResolver` on the command line, so an agent running in any harness can fetch skill content on demand. Built-in skills ship in the binary; nothing is installed to disk. `.spekk/skills/` (project) and `~/.config/spekk/skills/` (user) remain optional override layers.
 - **`spekk install --target <tool>`** writes a **thin shim** subagent file per agent into the host tool's agent directory. The shim contains only host frontmatter (name/description for auto-delegation) and an instruction to run `spekk prompt <agent>` and adopt the output as operating instructions. Because the real prompt is fetched from the binary at session start, installed agents never go stale and always match the behavior of the `spekk` binary they shell out to.
 
 ### Why thin shims (not full prompt copies)

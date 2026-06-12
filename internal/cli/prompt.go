@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
 const promptSeparator = "\n\n---\n\n"
@@ -23,26 +25,32 @@ var validAgents = []string{"coach", "builder", "observer"}
 //
 //	Base (first match wins):
 //	  1. Local override:  .spekk/{agent}.prompt.override.md
-//	  2. Global override: ~/.spekk/{agent}.prompt.override.md
+//	  2. Global override: ~/.config/spekk/{agent}.prompt.override.md
 //	  3. Embedded base:   built into the binary at compile time
 //
 //	Extensions (appended in order after base):
-//	  1. Global extend: ~/.spekk/{agent}.prompt.md
+//	  1. Global extend: ~/.config/spekk/{agent}.prompt.md
 //	  2. Local extend:  .spekk/{agent}.prompt.md
 type PromptResolver struct {
-	HomeDir    string
-	Cwd        string
-	EmbeddedFS fs.FS // override for testing; falls back to DefaultEmbeddedFS
+	// GlobalConfigDir overrides the global config directory used for prompt
+	// resolution. When empty, config.GlobalConfigDir() is called (production).
+	// Set this in tests to inject a temp directory without triggering migration.
+	GlobalConfigDir string
+	Cwd             string
+	EmbeddedFS      fs.FS // override for testing; falls back to DefaultEmbeddedFS
 }
 
 // NewPromptResolver creates a resolver with default paths.
 func NewPromptResolver() *PromptResolver {
-	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
-	return &PromptResolver{
-		HomeDir: home,
-		Cwd:     cwd,
+	return &PromptResolver{Cwd: cwd}
+}
+
+func (r *PromptResolver) globalDir() (string, error) {
+	if r.GlobalConfigDir != "" {
+		return r.GlobalConfigDir, nil
 	}
+	return config.GlobalConfigDir()
 }
 
 // isValidAgent checks if the agent name is recognized.
@@ -93,7 +101,10 @@ func (r *PromptResolver) GetPromptContent(agent string) (string, error) {
 		return "", fmt.Errorf("Unknown agent: %s", agent)
 	}
 
-	globalDir := filepath.Join(r.HomeDir, ".spekk")
+	globalDir, err := r.globalDir()
+	if err != nil {
+		return "", err
+	}
 	localDir := filepath.Join(r.Cwd, ".spekk")
 
 	// Step 1: Determine base prompt (first match wins)

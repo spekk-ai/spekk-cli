@@ -15,7 +15,7 @@ Manages DigitalOcean cloud sandbox environments. Already has a Go-based deploy a
 - `src/sandbox/cli.js` — subcommand routing (125 lines)
 - `src/sandbox/create.js` — droplet creation with cloud-init (282 lines)
 - `src/sandbox/do-api.js` — DigitalOcean API client (91 lines)
-- `src/sandbox/store.js` — local metadata store in `~/.spekk/sandboxes/` (44 lines)
+- `src/sandbox/store.js` — local metadata store in `~/.config/spekk/sandboxes/` (44 lines)
 - `src/sandbox/tokens.js` — token management (10 lines)
 - `src/sandbox/list.js`, `status.js`, `ssh.js`, `destroy.js`, `deploy.js`, `release.js` — subcommand implementations
 - `src/sandbox/agent.js`, `templates.js` — agent/template management
@@ -23,6 +23,6 @@ Manages DigitalOcean cloud sandbox environments. Already has a Go-based deploy a
 ## Strategy
 
 - Port DigitalOcean API client to Go (net/http)
-- Port metadata store to Go (JSON files in `~/.spekk/sandboxes/`)
+- Port metadata store to Go (JSON files in `~/.config/spekk/sandboxes/`)
 - Port each subcommand as a Go function
 - Cloud-init template embedded via Go embed

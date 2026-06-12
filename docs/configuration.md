@@ -25,14 +25,14 @@ Extend files still layer on top of an override.
 
 | Location | Scope |
 |----------|-------|
-| `~/.spekk/` | **Global** -- applies to all your projects |
+| `~/.config/spekk/` | **Global** -- applies to all your projects |
 | `.spekk/` (project root) | **Local** -- applies to this project only |
 
 Local files take precedence over global files.
 
 ### Example: extend the builder globally
 
-Create `~/.spekk/builder.prompt.md`:
+Create `~/.config/spekk/builder.prompt.md`:
 
 ```markdown
 ## Company Standards
@@ -63,11 +63,11 @@ This completely replaces the base coach prompt for this project. Any extend file
 ```
 1. Base prompt (built into package)
    ↓ overridden by
-2. Global override (~/.spekk/<agent>.prompt.override.md)
+2. Global override (~/.config/spekk/<agent>.prompt.override.md)
    ↓ overridden by
 3. Local override (.spekk/<agent>.prompt.override.md)
    ↓ extended by
-4. Global extend (~/.spekk/<agent>.prompt.md)
+4. Global extend (~/.config/spekk/<agent>.prompt.md)
    ↓ extended by
 5. Local extend (.spekk/<agent>.prompt.md)
 ```

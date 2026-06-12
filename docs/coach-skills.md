@@ -21,7 +21,7 @@ Skills are resolved from three locations, checked in order (first match wins):
 | Priority | Location | Scope |
 |----------|----------|-------|
 | 1 | `.spekk/skills/{agent}/` | **Local** -- project-specific skills |
-| 2 | `~/.spekk/skills/{agent}/` | **Global** -- your personal skills |
+| 2 | `~/.config/spekk/skills/{agent}/` | **Global** -- your personal skills |
 | 3 | Package built-ins | **Default** -- ships with Spekk |
 
 Where `{agent}` is `coach` or `builder`.
@@ -202,7 +202,7 @@ Create a markdown file in your local or global skills directory:
 .spekk/skills/coach/my-skill.md
 
 # Global (all projects)
-~/.spekk/skills/coach/my-skill.md
+~/.config/spekk/skills/coach/my-skill.md
 
 # Builder skills work the same way
 .spekk/skills/builder/my-skill.md
