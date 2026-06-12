@@ -18,16 +18,17 @@ var (
 	cachedErr error
 )
 
-// GlobalConfigDir returns the global spekk configuration directory, following
-// the XDG Base Directory Specification:
+// GlobalConfigDir returns the global spekk configuration directory:
 //
-//	$XDG_CONFIG_HOME/spekk  (if XDG_CONFIG_HOME is set and non-empty)
-//	~/.config/spekk          (otherwise)
+//	$SPEKK_CONFIG_DIR        (if set — used as-is, no migration)
+//	$XDG_CONFIG_HOME/spekk   (if XDG_CONFIG_HOME is set and non-empty)
+//	~/.config/spekk           (otherwise)
 //
 // On the first call per process, if the legacy ~/.spekk directory exists and
 // the new path does not, the directory is migrated. When stdin is a terminal
 // the user is asked to press Enter first; in non-interactive contexts (pipes,
 // shims, servers) the migration happens silently with a notice on stderr.
+// Setting SPEKK_CONFIG_DIR bypasses migration entirely.
 func GlobalConfigDir() (string, error) {
 	once.Do(func() {
 		home, err := os.UserHomeDir()
@@ -43,6 +44,9 @@ func GlobalConfigDir() (string, error) {
 // DefaultDir returns the global config path without triggering migration.
 // Use only as a fallback when GlobalConfigDir() has failed.
 func DefaultDir() string {
+	if dir := os.Getenv("SPEKK_CONFIG_DIR"); dir != "" {
+		return dir
+	}
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
 		home, _ := os.UserHomeDir()
@@ -61,6 +65,9 @@ func stdinIsTTY() bool {
 }
 
 func resolveGlobalConfigDir(home string, out io.Writer, in io.Reader, interactive bool) (string, error) {
+	if dir := os.Getenv("SPEKK_CONFIG_DIR"); dir != "" {
+		return dir, nil
+	}
 	xdgBase := os.Getenv("XDG_CONFIG_HOME")
 	if xdgBase == "" {
 		xdgBase = filepath.Join(home, ".config")
@@ -94,8 +101,16 @@ func maybeMigrate(oldDir, newDir string, out io.Writer, in io.Reader, interactiv
 		if !fsutil.DirExists(oldDir) && fsutil.DirExists(newDir) {
 			return nil
 		}
-		// Cross-filesystem rename fails; fall back to copy + delete.
-		if err2 := copyDir(oldDir, newDir); err2 != nil {
+		// Cross-filesystem rename fails; fall back to copy + delete, staged
+		// through a temp dir so a crash mid-copy never leaves a partial
+		// config dir at the final path — the old dir stays intact and the
+		// migration simply retries on the next run.
+		tmpDir := newDir + ".migrating"
+		os.RemoveAll(tmpDir)
+		if err2 := copyDir(oldDir, tmpDir); err2 != nil {
+			return fmt.Errorf("migrating config dir: %w", err2)
+		}
+		if err2 := os.Rename(tmpDir, newDir); err2 != nil {
 			return fmt.Errorf("migrating config dir: %w", err2)
 		}
 		if err2 := os.RemoveAll(oldDir); err2 != nil {

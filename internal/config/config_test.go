@@ -12,6 +12,7 @@ import (
 
 func TestResolveGlobalConfigDir_DefaultPath(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("SPEKK_CONFIG_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	dir, err := resolveGlobalConfigDir(home, io.Discard, strings.NewReader(""), false)
@@ -27,6 +28,7 @@ func TestResolveGlobalConfigDir_DefaultPath(t *testing.T) {
 func TestResolveGlobalConfigDir_XDGOverride(t *testing.T) {
 	home := t.TempDir()
 	custom := t.TempDir()
+	t.Setenv("SPEKK_CONFIG_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", custom)
 
 	dir, err := resolveGlobalConfigDir(home, io.Discard, strings.NewReader(""), false)
@@ -41,9 +43,39 @@ func TestResolveGlobalConfigDir_XDGOverride(t *testing.T) {
 
 func TestDefaultDir_HonorsXDG(t *testing.T) {
 	custom := t.TempDir()
+	t.Setenv("SPEKK_CONFIG_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", custom)
 	if got := DefaultDir(); got != filepath.Join(custom, "spekk") {
 		t.Errorf("expected XDG-based path, got %s", got)
+	}
+}
+
+func TestSpekkConfigDirOverride(t *testing.T) {
+	home := t.TempDir()
+	override := t.TempDir()
+	t.Setenv("SPEKK_CONFIG_DIR", override)
+
+	// Legacy dir exists, but the override must bypass migration entirely.
+	oldDir := filepath.Join(home, ".spekk")
+	os.MkdirAll(oldDir, 0o755)
+
+	out := &strings.Builder{}
+	dir, err := resolveGlobalConfigDir(home, out, strings.NewReader(""), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dir != override {
+		t.Errorf("expected override dir %s, got %s", override, dir)
+	}
+	if out.Len() > 0 {
+		t.Error("override must not trigger migration output")
+	}
+	if !fsutil.DirExists(oldDir) {
+		t.Error("override must leave legacy dir untouched")
+	}
+
+	if got := DefaultDir(); got != override {
+		t.Errorf("DefaultDir should honor override, got %s", got)
 	}
 }
 
