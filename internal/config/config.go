@@ -18,17 +18,16 @@ var (
 	cachedErr error
 )
 
-// GlobalConfigDir returns the global spekk configuration directory:
+// GlobalConfigDir returns the global spekk configuration directory, following
+// the XDG Base Directory Specification:
 //
-//	$SPEKK_CONFIG_DIR        (if set — used as-is, no migration)
-//	$XDG_CONFIG_HOME/spekk   (if XDG_CONFIG_HOME is set and non-empty)
-//	~/.config/spekk           (otherwise)
+//	$XDG_CONFIG_HOME/spekk  (if XDG_CONFIG_HOME is set and non-empty)
+//	~/.config/spekk          (otherwise)
 //
 // On the first call per process, if the legacy ~/.spekk directory exists and
 // the new path does not, the directory is migrated. When stdin is a terminal
 // the user is asked to press Enter first; in non-interactive contexts (pipes,
 // shims, servers) the migration happens silently with a notice on stderr.
-// Setting SPEKK_CONFIG_DIR bypasses migration entirely.
 func GlobalConfigDir() (string, error) {
 	once.Do(func() {
 		home, err := os.UserHomeDir()
@@ -44,9 +43,6 @@ func GlobalConfigDir() (string, error) {
 // DefaultDir returns the global config path without triggering migration.
 // Use only as a fallback when GlobalConfigDir() has failed.
 func DefaultDir() string {
-	if dir := os.Getenv("SPEKK_CONFIG_DIR"); dir != "" {
-		return dir
-	}
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
 		home, _ := os.UserHomeDir()
@@ -65,9 +61,6 @@ func stdinIsTTY() bool {
 }
 
 func resolveGlobalConfigDir(home string, out io.Writer, in io.Reader, interactive bool) (string, error) {
-	if dir := os.Getenv("SPEKK_CONFIG_DIR"); dir != "" {
-		return dir, nil
-	}
 	xdgBase := os.Getenv("XDG_CONFIG_HOME")
 	if xdgBase == "" {
 		xdgBase = filepath.Join(home, ".config")

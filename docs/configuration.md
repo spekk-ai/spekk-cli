@@ -30,7 +30,7 @@ Extend files still layer on top of an override.
 
 Local files take precedence over global files.
 
-The global directory follows the XDG Base Directory spec: `$XDG_CONFIG_HOME/spekk` when `XDG_CONFIG_HOME` is set, `~/.config/spekk` otherwise. Set `SPEKK_CONFIG_DIR` to override the location entirely (this also bypasses the automatic migration of a legacy `~/.spekk` directory).
+The global directory follows the XDG Base Directory spec: `$XDG_CONFIG_HOME/spekk` when `XDG_CONFIG_HOME` is set, `~/.config/spekk` otherwise.
 
 ### Example: extend the builder globally
 

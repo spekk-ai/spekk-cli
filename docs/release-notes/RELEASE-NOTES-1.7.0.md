@@ -8,7 +8,6 @@ The global configuration directory has moved from `~/.spekk` to follow the [XDG 
 
 | Path | Used when |
 |------|-----------|
-| `$SPEKK_CONFIG_DIR` | `SPEKK_CONFIG_DIR` is set (used as-is, bypasses migration) |
 | `$XDG_CONFIG_HOME/spekk` | `XDG_CONFIG_HOME` is set |
 | `~/.config/spekk` | otherwise (the default) |
 
@@ -25,7 +24,7 @@ On the first command that touches global config, an existing `~/.spekk` director
 - The migration is safe under concurrency: multiple spekk processes starting at once (e.g. agent shims launching together at session start) resolve cleanly.
 - Saved sandbox SSH key paths that point into the old location are remapped automatically, so existing sandboxes keep working.
 
-No action is required. If you've scripted against `~/.spekk` directly, update those paths to `~/.config/spekk` — or set `SPEKK_CONFIG_DIR=~/.spekk` to keep the old location and skip migration.
+No action is required. If you've scripted against `~/.spekk` directly, update those paths to `~/.config/spekk`.
 
 ## Platform Support Clarified
 
