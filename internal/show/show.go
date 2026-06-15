@@ -10,8 +10,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
+	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
@@ -23,6 +25,31 @@ type showData struct {
 	ProjectName string          `json:"projectName"`
 	Specs       []showSpec      `json:"specs"`
 	Assertions  []showAssertion `json:"assertions"`
+
+	// CrossBranch reports whether cross-branch / merge-preview mode is active.
+	// When false the cross-branch fields below and on each spec/assertion are
+	// empty/omitted, and show output is byte-identical to the default path.
+	CrossBranch bool `json:"crossBranch,omitempty"`
+	// Degraded is true when conflict detection is unavailable (git < 2.38, or an
+	// unparseable version) so the template can show the "classification-only,
+	// conflicts unconfirmed" notice. Only meaningful when CrossBranch is true.
+	Degraded bool `json:"degraded,omitempty"`
+	// Branches is the set of comparison branch display names folded into the
+	// view (the union of branches that contributed at least one state).
+	Branches []string `json:"branches,omitempty"`
+}
+
+// crossBranchContribution is one (branch, state) contribution for a spec or
+// assertion in cross-branch mode. A single item may carry several of these (N
+// branches collapsed into one view). The shape is intentionally keyed by branch
+// and not collapsed to a single pair so the future A-vs-B extension can add more
+// pairwise contributions without a model rewrite.
+type crossBranchContribution struct {
+	Branch    string `json:"branch"`
+	State     string `json:"state"` // incoming_add|incoming_mod|conflict|incoming_del
+	Degraded  bool   `json:"degraded,omitempty"`
+	OldStatus string `json:"oldStatus,omitempty"`
+	NewStatus string `json:"newStatus,omitempty"`
 }
 
 // showSpec represents a spec for the explorer UI.
@@ -34,6 +61,20 @@ type showSpec struct {
 	File     string `json:"file"`
 	Content  string `json:"content"`
 	Branch   string `json:"branch"`
+
+	// CrossBranch holds the per-branch contributions touching this spec's parent
+	// file (omitted entirely when not in cross-branch mode or when unchanged).
+	CrossBranch []crossBranchContribution `json:"crossBranch,omitempty"`
+	// CrossBranchSummary is the rolled-up headline state across this spec and all
+	// its assertions, suitable for a single spec-level badge. The rollup picks the
+	// "worst"/most-attention-worthy state by the precedence:
+	//
+	//	conflict > incoming_del > incoming_add > incoming_mod
+	//
+	// (a conflict anywhere dominates; otherwise an incoming deletion, then an
+	// incoming addition, then a clean incoming modification). Empty when the spec
+	// and its assertions have no cross-branch contributions.
+	CrossBranchSummary string `json:"crossBranchSummary,omitempty"`
 }
 
 // showAssertion represents an assertion for the explorer UI.
@@ -48,6 +89,10 @@ type showAssertion struct {
 	Branch    string `json:"branch"`
 	DependsOn string `json:"dependsOn,omitempty"`
 	Created   string `json:"created"`
+
+	// CrossBranch holds the per-branch contributions touching this assertion file
+	// (omitted entirely when not in cross-branch mode or when unchanged).
+	CrossBranch []crossBranchContribution `json:"crossBranch,omitempty"`
 }
 
 // Options configures how the Spec Explorer is generated.
@@ -69,13 +114,6 @@ type Options struct {
 // requested; the real diffing is wired in by later work, so for now it is a
 // no-op placeholder beyond a log line.
 func Run(specsDir string, opts Options) error {
-	if opts.CrossBranch {
-		// Placeholder: cross-branch diffing is implemented by later waves.
-		// For now this falls through to the standard current-tree behavior so
-		// the build stays green and existing behavior is unchanged.
-		fmt.Fprintln(os.Stderr, "cross-branch mode requested (not yet implemented)")
-	}
-
 	// 1. Parse specs
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {
@@ -88,6 +126,15 @@ func Run(specsDir string, opts Options) error {
 
 	// 2. Build showData from parse result
 	data := buildShowData(specsDir, result)
+
+	// 2a. In cross-branch mode, classify changed spec/assertion files across all
+	// branches and fold the contributions into the data. When off, this is
+	// skipped entirely so the output is byte-identical to the default path.
+	if opts.CrossBranch {
+		if err := applyCrossBranch(&data, opts.BranchFilter); err != nil {
+			return fmt.Errorf("classifying cross-branch state: %w", err)
+		}
+	}
 
 	// 3. Marshal to JSON
 	jsonBytes, err := json.Marshal(data)
@@ -160,6 +207,188 @@ func buildShowData(specsDir string, result *parser.ParseResult) showData {
 		ProjectName: projectName,
 		Specs:       showSpecs,
 		Assertions:  showAssertions,
+	}
+}
+
+// rollupPrecedence ranks cross-branch states for the spec-level rollup badge.
+// Higher wins. The rule (documented on showSpec.CrossBranchSummary):
+//
+//	conflict > incoming_del > incoming_add > incoming_mod
+var rollupPrecedence = map[string]int{
+	string(crossbranch.StateIncomingMod): 1,
+	string(crossbranch.StateIncomingAdd): 2,
+	string(crossbranch.StateIncomingDel): 3,
+	string(crossbranch.StateConflict):    4,
+}
+
+// worseState returns whichever of a or b ranks higher by rollupPrecedence.
+// Empty strings rank below everything.
+func worseState(a, b string) string {
+	if rollupPrecedence[b] > rollupPrecedence[a] {
+		return b
+	}
+	return a
+}
+
+// applyCrossBranch classifies cross-branch state for the given branch filter and
+// folds the contributions into data: attaching per-item contribution lists,
+// synthesizing placeholder entries for incoming additions (foreign specs/
+// assertions that have no local file), computing the spec-level rollup summary,
+// and recording mode metadata (active, degraded, compared branches).
+func applyCrossBranch(data *showData, filter string) error {
+	states, err := crossbranch.Classify(filter)
+	if err != nil {
+		return err
+	}
+	supported, err := crossbranch.SupportsMergeTree()
+	if err != nil {
+		return err
+	}
+
+	data.CrossBranch = true
+	data.Degraded = !supported
+
+	// Phase 1: group contributions by repo-relative path. The parser stores File
+	// as a slash-form path under "specs/", which is exactly the form
+	// crossbranch.FileState.Path uses, so they match directly after normalize.
+	// Grouping first (rather than mutating slice elements as we go) avoids holding
+	// element pointers across the appends that synthesize foreign entries.
+	byPath := map[string][]crossBranchContribution{}
+	branchSet := map[string]struct{}{}
+	for _, fs := range states {
+		branchSet[fs.Branch] = struct{}{}
+		path := normalizePath(fs.Path)
+		byPath[path] = append(byPath[path], crossBranchContribution{
+			Branch:    fs.Branch,
+			State:     string(fs.State),
+			Degraded:  fs.Degraded,
+			OldStatus: fs.OldStatus,
+			NewStatus: fs.NewStatus,
+		})
+	}
+
+	// Phase 2: attach contributions to existing items, tracking which paths were
+	// matched so the rest (incoming additions with no local file) can be
+	// synthesized afterward.
+	matched := map[string]bool{}
+	for i := range data.Specs {
+		if c, ok := byPath[normalizePath(data.Specs[i].File)]; ok {
+			data.Specs[i].CrossBranch = c
+			matched[normalizePath(data.Specs[i].File)] = true
+		}
+	}
+	for i := range data.Assertions {
+		if c, ok := byPath[normalizePath(data.Assertions[i].File)]; ok {
+			data.Assertions[i].CrossBranch = c
+			matched[normalizePath(data.Assertions[i].File)] = true
+		}
+	}
+
+	// Phase 3: synthesize placeholder entries for any contribution path with no
+	// local file. These are incoming additions (foreign specs/assertions) — other
+	// states require the file to exist on ours, so an unmatched path is an add.
+	// Synthesis happens after Phase 2 so the appends never invalidate live
+	// element pointers.
+	for path, contribs := range byPath {
+		if matched[path] {
+			continue
+		}
+		if isAssertionPath(path) {
+			a := synthesizeAssertion(path)
+			a.CrossBranch = contribs
+			data.Assertions = append(data.Assertions, a)
+		} else {
+			s := synthesizeSpec(path)
+			s.CrossBranch = contribs
+			data.Specs = append(data.Specs, s)
+		}
+	}
+
+	// Roll up each spec's headline state across its own contributions and those
+	// of its assertions (matched by parent id).
+	rollup := map[string]string{} // spec id -> worst state
+	for i := range data.Specs {
+		s := &data.Specs[i]
+		for _, c := range s.CrossBranch {
+			rollup[s.ID] = worseState(rollup[s.ID], c.State)
+		}
+	}
+	for i := range data.Assertions {
+		a := &data.Assertions[i]
+		for _, c := range a.CrossBranch {
+			rollup[a.Parent] = worseState(rollup[a.Parent], c.State)
+		}
+	}
+	for i := range data.Specs {
+		data.Specs[i].CrossBranchSummary = rollup[data.Specs[i].ID]
+	}
+
+	branches := make([]string, 0, len(branchSet))
+	for b := range branchSet {
+		branches = append(branches, b)
+	}
+	sort.Strings(branches)
+	data.Branches = branches
+
+	return nil
+}
+
+// normalizePath makes a file path comparable across the parser (which stores
+// slash-form repo-relative paths under "specs/") and crossbranch.FileState.Path
+// (likewise repo-relative slash-form under "specs/"). It coerces to slash form
+// and strips any leading "./" so the two domains line up.
+func normalizePath(p string) string {
+	p = filepath.ToSlash(p)
+	return strings.TrimPrefix(p, "./")
+}
+
+// isAssertionPath reports whether a repo-relative spec path is an assertion file
+// (lives under an assertions/ directory) rather than a spec parent file.
+func isAssertionPath(path string) bool {
+	return strings.Contains(path, "/assertions/")
+}
+
+// idFromPath derives a stable id from a spec/assertion file path: the file's
+// base name without its .md extension (e.g. "specs/foo/assertions/bar.md" ->
+// "bar"). Used for synthesized foreign entries where no parsed id is available.
+func idFromPath(path string) string {
+	base := path[strings.LastIndex(path, "/")+1:]
+	return strings.TrimSuffix(base, ".md")
+}
+
+// parentFromAssertionPath derives the owning spec id for an assertion file path
+// of the form "specs/<spec-id>/assertions/<name>.md".
+func parentFromAssertionPath(path string) string {
+	const marker = "/assertions/"
+	idx := strings.Index(path, marker)
+	if idx < 0 {
+		return ""
+	}
+	head := path[:idx] // "specs/<spec-id>"
+	return head[strings.LastIndex(head, "/")+1:]
+}
+
+// synthesizeSpec builds a minimal placeholder showSpec for a foreign spec that
+// exists only on another branch (incoming addition) and therefore has no local
+// file to walk. Content is intentionally empty; id/title come from the path.
+func synthesizeSpec(path string) showSpec {
+	id := idFromPath(path)
+	return showSpec{
+		ID:    id,
+		Title: id,
+		File:  path,
+	}
+}
+
+// synthesizeAssertion builds a minimal placeholder showAssertion for a foreign
+// assertion that exists only on another branch (incoming addition).
+func synthesizeAssertion(path string) showAssertion {
+	id := idFromPath(path)
+	return showAssertion{
+		ID:     id,
+		Parent: parentFromAssertionPath(path),
+		Title:  id,
+		File:   path,
 	}
 }
 

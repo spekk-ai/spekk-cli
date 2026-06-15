@@ -2,6 +2,7 @@ package show
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -79,6 +80,178 @@ func TestTemplateSanitizesMarkdown(t *testing.T) {
 	// Every marked.parse() call must be wrapped in DOMPurify.sanitize()
 	if strings.Count(templateHTML, "marked.parse(") != strings.Count(templateHTML, "DOMPurify.sanitize(marked.parse(") {
 		t.Error("all marked.parse() calls must be wrapped with DOMPurify.sanitize()")
+	}
+}
+
+// git runs a raw git command in dir, failing the test on error. Used only to
+// build fixture repos for cross-branch tests.
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return string(out)
+}
+
+func assertionMD(id, status, body string) string {
+	return "---\nid: " + id + "\nparent: demo\ncreated: 2026-01-01T00:00:00Z\n" +
+		"priority: 1\nstatus: " + status + "\n---\n\n# " + id + "\n\n" + body + "\n"
+}
+
+// findContribution returns the contribution from a branch in a list, or fails.
+func findContribution(t *testing.T, list []crossBranchContribution, branch string) crossBranchContribution {
+	t.Helper()
+	for _, c := range list {
+		if c.Branch == branch {
+			return c
+		}
+	}
+	t.Fatalf("no contribution from branch %q in %+v", branch, list)
+	return crossBranchContribution{}
+}
+
+// TestCrossBranchFolding builds a temp git repo whose specs differ across
+// branches, runs buildShowData + applyCrossBranch with cross-branch mode on, and
+// asserts the per-item contributions, the incoming_add synthesis, and the
+// spec-level rollup all appear.
+func TestCrossBranchFolding(t *testing.T) {
+	dir := t.TempDir()
+	git(t, dir, "init", "-q", "-b", "main")
+	git(t, dir, "config", "user.email", "test@example.com")
+	git(t, dir, "config", "user.name", "Test")
+
+	specsDir := filepath.Join(dir, "specs")
+	specFile := filepath.Join(specsDir, "demo", "demo.md")
+	modFile := filepath.Join(specsDir, "demo", "assertions", "clean-mod.md")
+	delFile := filepath.Join(specsDir, "demo", "assertions", "to-delete.md")
+	addFile := filepath.Join(specsDir, "demo", "assertions", "foreign.md")
+
+	writeFile(t, specFile, "---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# demo\n")
+	writeFile(t, modFile, assertionMD("clean-mod", "not_started", "original body"))
+	writeFile(t, delFile, assertionMD("to-delete", "not_started", "doomed"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "base")
+
+	// Branch "other" diverges: incoming add, status-drift modification, deletion.
+	git(t, dir, "checkout", "-q", "-b", "other")
+	writeFile(t, addFile, assertionMD("foreign", "draft", "only on branch"))
+	writeFile(t, modFile, assertionMD("clean-mod", "done", "original body"))
+	os.Remove(delFile)
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "branch work")
+
+	// Back to ours; restore working tree to main's content.
+	git(t, dir, "checkout", "-q", "main")
+	t.Chdir(dir)
+
+	result, err := parser.ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := buildShowData(specsDir, result)
+	if err := applyCrossBranch(&data, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if !data.CrossBranch {
+		t.Error("expected CrossBranch mode flag to be true")
+	}
+
+	// Incoming addition: foreign assertion has no local file, so it must be
+	// synthesized and carry an incoming_add contribution.
+	var foreign *showAssertion
+	for i := range data.Assertions {
+		if data.Assertions[i].ID == "foreign" {
+			foreign = &data.Assertions[i]
+		}
+	}
+	if foreign == nil {
+		t.Fatal("foreign assertion (incoming_add) was not synthesized into the data")
+	}
+	if foreign.Parent != "demo" {
+		t.Errorf("synthesized foreign parent = %q, want demo", foreign.Parent)
+	}
+	if c := findContribution(t, foreign.CrossBranch, "other"); c.State != "incoming_add" {
+		t.Errorf("foreign state = %q, want incoming_add", c.State)
+	}
+
+	// Clean modification with status drift not_started -> done.
+	var mod *showAssertion
+	for i := range data.Assertions {
+		if data.Assertions[i].ID == "clean-mod" {
+			mod = &data.Assertions[i]
+		}
+	}
+	if mod == nil {
+		t.Fatal("clean-mod assertion missing")
+	}
+	c := findContribution(t, mod.CrossBranch, "other")
+	if c.State != "incoming_mod" {
+		t.Errorf("clean-mod state = %q, want incoming_mod", c.State)
+	}
+	if c.OldStatus != "not_started" || c.NewStatus != "done" {
+		t.Errorf("clean-mod drift = %q->%q, want not_started->done", c.OldStatus, c.NewStatus)
+	}
+
+	// Incoming deletion on the local to-delete assertion.
+	var del *showAssertion
+	for i := range data.Assertions {
+		if data.Assertions[i].ID == "to-delete" {
+			del = &data.Assertions[i]
+		}
+	}
+	if del == nil {
+		t.Fatal("to-delete assertion missing")
+	}
+	if c := findContribution(t, del.CrossBranch, "other"); c.State != "incoming_del" {
+		t.Errorf("to-delete state = %q, want incoming_del", c.State)
+	}
+
+	// Rollup: precedence incoming_del > incoming_add > incoming_mod => the demo
+	// spec's headline is incoming_del.
+	var demo *showSpec
+	for i := range data.Specs {
+		if data.Specs[i].ID == "demo" {
+			demo = &data.Specs[i]
+		}
+	}
+	if demo == nil {
+		t.Fatal("demo spec missing")
+	}
+	if demo.CrossBranchSummary != "incoming_del" {
+		t.Errorf("demo rollup = %q, want incoming_del", demo.CrossBranchSummary)
+	}
+
+	// Branch metadata records the compared branch.
+	if len(data.Branches) != 1 || data.Branches[0] != "other" {
+		t.Errorf("Branches = %v, want [other]", data.Branches)
+	}
+}
+
+// TestCrossBranchOffUnchanged verifies the non-cross-branch path leaves the new
+// fields empty so existing output is unaffected.
+func TestCrossBranchOffUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+	writeFile(t, filepath.Join(specsDir, "demo", "demo.md"),
+		"---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# demo\n")
+
+	result, err := parser.ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := buildShowData(specsDir, result)
+
+	if data.CrossBranch || data.Degraded || data.Branches != nil {
+		t.Error("cross-branch metadata must be zero-valued when mode is off")
+	}
+	for _, s := range data.Specs {
+		if s.CrossBranch != nil || s.CrossBranchSummary != "" {
+			t.Error("spec cross-branch fields must be empty when mode is off")
+		}
 	}
 }
 
