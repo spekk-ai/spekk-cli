@@ -353,7 +353,8 @@ func watchSpecs(specsDir string, onChange func()) func() {
 		}
 	}()
 
-	return func() { close(done) }
+	var once sync.Once
+	return func() { once.Do(func() { close(done) }) }
 }
 
 // watchRefs polls git ref state for cross-branch mode and calls onChange when
@@ -369,22 +370,34 @@ func watchSpecs(specsDir string, onChange func()) func() {
 // this stays strictly read-only — it never mutates the working tree, index, or
 // any ref. Returns a stop function.
 func watchRefs(onChange func()) func() {
-	snapshot := scanRefs()
+	snapshot, _ := scanRefs() // a startup error just means the first good scan sets the baseline
 
 	done := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
+		errored := false
 		for {
 			select {
 			case <-done:
 				return
 			case <-ticker.C:
-				current := scanRefs()
-				// Empty current (e.g. transient git error) is treated as "no
-				// change" rather than a spurious reload: only act on a real,
-				// non-empty difference from the last known good snapshot.
-				if current != "" && current != snapshot {
+				current, err := scanRefs()
+				if err != nil {
+					// Don't reload on a failed scan, but log once on entering the
+					// error state so a persistently broken watcher is observable
+					// rather than silently dead. No spam: only on the transition.
+					if !errored {
+						errored = true
+						fmt.Fprintf(os.Stderr, "cross-branch watch: git ref scan failed (%v); live reload paused until it recovers\n", err)
+					}
+					continue
+				}
+				if errored {
+					errored = false
+					fmt.Fprintln(os.Stderr, "cross-branch watch: git ref scan recovered")
+				}
+				if current != snapshot {
 					snapshot = current
 					onChange()
 				}
@@ -392,27 +405,29 @@ func watchRefs(onChange func()) func() {
 		}
 	}()
 
-	return func() { close(done) }
+	var once sync.Once
+	return func() { once.Do(func() { close(done) }) }
 }
 
 // scanRefs returns a fingerprint of the current git ref state: every branch ref
-// (local and remote-tracking) and its object id, plus HEAD. An empty string is
-// returned on any git error so callers can distinguish "couldn't read" from a
-// real change. Read-only: goes through the crossbranch chokepoint exclusively.
-func scanRefs() string {
+// (local and remote-tracking) and its object id, plus HEAD. It returns an error
+// (rather than a sentinel string) on any git failure so the watcher can surface
+// a persistently broken scan instead of silently never reloading. Read-only:
+// goes through the crossbranch chokepoint exclusively.
+func scanRefs() (string, error) {
 	refs, err := crossbranch.Run(
 		"for-each-ref",
 		"--format=%(refname) %(objectname)",
 		"refs/heads", "refs/remotes",
 	)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	head, err := crossbranch.Run("rev-parse", "HEAD")
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return refs + "\nHEAD " + head
+	return refs + "\nHEAD " + head, nil
 }
 
 // scanMdFiles recursively scans dir for .md files and returns a map of

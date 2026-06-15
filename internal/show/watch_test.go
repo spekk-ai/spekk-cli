@@ -161,6 +161,20 @@ func TestWatchRefsDetectsBranchChange(t *testing.T) {
 	}
 }
 
+// TestWatcherStopIdempotent ensures the watcher stop functions can be called
+// more than once without panicking on a double close(done). RunWatch may invoke
+// a stopper on both its error branch and the normal fall-through, so the stoppers
+// must be idempotent.
+func TestWatcherStopIdempotent(t *testing.T) {
+	s1 := watchSpecs(t.TempDir(), func() {})
+	s1()
+	s1() // must not panic on a second close
+
+	s2 := watchRefs(func() {})
+	s2()
+	s2() // must not panic on a second close
+}
+
 // initGitRepo creates a throwaway git repo with one commit and returns its path.
 func initGitRepo(t *testing.T) string {
 	t.Helper()
