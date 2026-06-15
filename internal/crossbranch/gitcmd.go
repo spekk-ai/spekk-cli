@@ -1,6 +1,7 @@
 package crossbranch
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -66,6 +67,31 @@ func Run(args ...string) (string, error) {
 	out, err := exec.Command("git", args...).Output()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// RunReportingExit behaves like Run but tolerates a single expected nonzero exit
+// code, returning the command's stdout in that case instead of discarding it.
+//
+// It exists for `git merge-tree`, which signals "conflicts found" with exit
+// status 1 while still printing the full conflict report to stdout. Run relies on
+// (*exec.Cmd).Output, which drops stdout on any nonzero exit, so the report would
+// be lost. This keeps merge-tree on the same single chokepoint: the identical
+// read-only guard applies, so it cannot broaden which git commands are reachable;
+// only output handling differs. Exit codes other than okExit are real errors.
+//
+//	out, err := crossbranch.RunReportingExit(1, "merge-tree", "--write-tree", "--name-only", "HEAD", rev)
+func RunReportingExit(okExit int, args ...string) (string, error) {
+	if err := guard(args); err != nil {
+		return "", err
+	}
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != okExit {
+			return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+		}
 	}
 	return strings.TrimSpace(string(out)), nil
 }
