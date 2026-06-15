@@ -50,10 +50,32 @@ type showAssertion struct {
 	Created   string `json:"created"`
 }
 
+// Options configures how the Spec Explorer is generated.
+type Options struct {
+	// CrossBranch activates cross-branch / merge-preview mode. When false,
+	// show behaves exactly as the current-working-tree-only default.
+	CrossBranch bool
+	// BranchFilter is an optional glob used to exclude noisy/stale branches
+	// in cross-branch mode (e.g. "feat/*"). Empty means no filtering.
+	BranchFilter string
+}
+
 // Run parses specs from specsDir, generates the Spec Explorer HTML, writes it
 // to .spekk/index.html relative to the project root, and opens it in the
 // default browser.
-func Run(specsDir string) error {
+//
+// When opts.CrossBranch is false, behavior is identical to the current
+// working-tree-only default. When true, cross-branch / merge-preview mode is
+// requested; the real diffing is wired in by later work, so for now it is a
+// no-op placeholder beyond a log line.
+func Run(specsDir string, opts Options) error {
+	if opts.CrossBranch {
+		// Placeholder: cross-branch diffing is implemented by later waves.
+		// For now this falls through to the standard current-tree behavior so
+		// the build stays green and existing behavior is unchanged.
+		fmt.Fprintln(os.Stderr, "cross-branch mode requested (not yet implemented)")
+	}
+
 	// 1. Parse specs
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {

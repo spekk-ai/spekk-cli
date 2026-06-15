@@ -107,7 +107,7 @@ priority: 1
 	os.Setenv("CI", "true")
 	defer os.Unsetenv("CI")
 
-	err := Run(specsDir)
+	err := Run(specsDir, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

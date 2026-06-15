@@ -97,7 +97,16 @@ const sseClientScript = `
 </script>`
 
 // RunWatch starts the watch-mode HTTP server with SSE live reload.
-func RunWatch(specsDir string) error {
+//
+// opts mirrors show.Run's Options so the watch path stays consistent. The
+// cross-branch fields are threaded through but not yet acted upon; watch
+// behavior is unchanged until later work fills in the real cross-branch flow.
+func RunWatch(specsDir string, opts Options) error {
+	if opts.CrossBranch {
+		// Placeholder: cross-branch diffing is implemented by later waves.
+		fmt.Fprintln(os.Stderr, "cross-branch mode requested (not yet implemented)")
+	}
+
 	var (
 		mu    sync.Mutex
 		dirty bool
