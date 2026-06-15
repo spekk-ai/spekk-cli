@@ -169,7 +169,14 @@ func guard(args []string) error {
 				continue
 			}
 			if !sawSeparator && strings.HasPrefix(a, "-") {
-				if branchMutatingFlags[a] {
+				// Match on the flag name before any "=value" so the equals form
+				// (e.g. --set-upstream-to=origin/x) is rejected like the
+				// separate-argument form.
+				flag := a
+				if eq := strings.IndexByte(a, '='); eq >= 0 {
+					flag = a[:eq]
+				}
+				if branchMutatingFlags[flag] {
 					return fmt.Errorf("crossbranch: git branch flag %q is not read-only", a)
 				}
 				continue

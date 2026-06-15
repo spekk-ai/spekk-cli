@@ -112,6 +112,8 @@ func TestReadOnlyGuaranteeRejectsMutatingSubcommands(t *testing.T) {
 		{"branch", "-m", "renamed"},
 		{"branch", "-f", "main", "HEAD"},
 		{"branch", "newbranch"},
+		{"branch", "--set-upstream-to", "main"}, // separate-argument upstream form
+		{"branch", "--set-upstream-to=main"},    // equals form must also be rejected
 	}
 
 	for _, args := range mutating {
@@ -127,7 +129,6 @@ func TestReadOnlyGuaranteeRejectsMutatingSubcommands(t *testing.T) {
 	if before != after {
 		t.Fatalf("a rejected command appears to have executed:\nbefore: %+v\nafter:  %+v", before, after)
 	}
-	_ = dir
 }
 
 func mustRun(t *testing.T, args ...string) {
