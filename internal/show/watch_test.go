@@ -2,6 +2,8 @@ package show
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -116,6 +118,68 @@ func TestWatchSpecsDetectsNewFile(t *testing.T) {
 		// ok
 	case <-time.After(3 * time.Second):
 		t.Fatal("watcher did not detect new file within timeout")
+	}
+}
+
+// TestWatchRefsDetectsBranchChange verifies the cross-branch ref watcher fires
+// when a new branch is created — a git-state change that moves no working-tree
+// .md file and would be missed by the file watcher alone.
+func TestWatchRefsDetectsBranchChange(t *testing.T) {
+	repo := initGitRepo(t)
+
+	// chdir into repo so the crossbranch chokepoint (which shells out to git in
+	// the current directory) sees this repo.
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(repo); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(prev)
+
+	changed := make(chan struct{}, 1)
+	stop := watchRefs(func() {
+		select {
+		case changed <- struct{}{}:
+		default:
+		}
+	})
+	defer stop()
+
+	// Let the watcher take its initial snapshot.
+	time.Sleep(100 * time.Millisecond)
+
+	// Create a new branch ref (read-only relative to the working tree/index).
+	runGit(t, repo, "branch", "feature-x")
+
+	select {
+	case <-changed:
+		// ok
+	case <-time.After(5 * time.Second):
+		t.Fatal("ref watcher did not detect new branch within timeout")
+	}
+}
+
+// initGitRepo creates a throwaway git repo with one commit and returns its path.
+func initGitRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	writeFile(t, filepath.Join(dir, "README.md"), "# Test")
+	runGit(t, dir, "add", "README.md")
+	runGit(t, dir, "commit", "-m", "init")
+	return dir
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 }
 

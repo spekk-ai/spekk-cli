@@ -3,7 +3,7 @@ id: watch-mode-integration
 parent: show-cross-branch
 created: 2026-06-15T12:00:00Z
 priority: 3
-status: not_started
+status: done
 branch: feat/show-cross-branch
 depends-on: html-state-rendering
 ---

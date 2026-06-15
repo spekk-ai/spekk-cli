@@ -331,6 +331,224 @@
             50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); }
         }
 
+        /* ===== Cross-branch / merge-preview treatments ===== */
+
+        /* Top-of-view banner naming compared branches */
+        .cross-branch-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            border-left: 4px solid #6366f1;
+            border-radius: 8px;
+            color: #3730a3;
+        }
+
+        .cross-branch-banner .cb-banner-icon {
+            font-size: 18px;
+            line-height: 1.2;
+            flex-shrink: 0;
+        }
+
+        .cross-branch-banner .cb-banner-title {
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .cross-branch-banner .cb-banner-text {
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .cross-branch-banner .cb-branch-chip {
+            display: inline-block;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            background: #e0e7ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 4px;
+            padding: 1px 6px;
+            margin: 2px 4px 0 0;
+            color: #3730a3;
+        }
+
+        /* Degraded-mode notice (git < 2.38, classification only) */
+        .cross-branch-degraded {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-left: 4px solid #f97316;
+            border-radius: 8px;
+            color: #9a3412;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .cross-branch-degraded .cb-degraded-icon {
+            font-size: 16px;
+            flex-shrink: 0;
+            line-height: 1.2;
+        }
+
+        /* Cross-branch state badge (tree summary + detail contributions).
+           Distinct from the .status-* badges: pill with leading glyph. */
+        .cb-badge {
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-right: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            letter-spacing: 0.02em;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .cb-incoming_add {
+            background: #ecfeff;
+            color: #155e75;
+            border: 1px solid #67e8f9;
+        }
+        .cb-incoming_add::before { content: "\2795"; font-size: 9px; } /* heavy plus */
+
+        .cb-incoming_mod {
+            background: #eff6ff;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+        .cb-incoming_mod::before { content: "\21BB"; font-size: 11px; } /* clockwise arrow */
+
+        .cb-conflict {
+            background: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #ef4444;
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+        }
+        .cb-conflict::before { content: "\26A0"; font-size: 11px; } /* warning sign */
+
+        /* Unconfirmed / potential conflict (degraded mode): dashed + question */
+        .cb-conflict.cb-unconfirmed {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 1px dashed #f97316;
+            box-shadow: none;
+        }
+        .cb-conflict.cb-unconfirmed::before { content: "\26A0\FE0F?"; font-size: 10px; }
+
+        .cb-incoming_del {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+        }
+        .cb-incoming_del::before { content: "\2716"; font-size: 9px; } /* heavy multiplication x */
+
+        /* Item-level treatments applied to spec-header / assertion-item rows. */
+        .spec-header.cb-row-incoming_add,
+        .assertion-item.cb-row-incoming_add {
+            opacity: 0.6;
+            background: repeating-linear-gradient(45deg, #f8fafc, #f8fafc 6px, #ecfeff 6px, #ecfeff 12px);
+        }
+
+        .spec-header.cb-row-incoming_mod,
+        .assertion-item.cb-row-incoming_mod {
+            border-left: 4px solid #3b82f6;
+            background: #eff6ff;
+        }
+
+        .spec-header.cb-row-conflict,
+        .assertion-item.cb-row-conflict {
+            border-left: 4px solid #ef4444;
+            background: #fef2f2;
+        }
+
+        .spec-header.cb-row-conflict-unconfirmed,
+        .assertion-item.cb-row-conflict-unconfirmed {
+            border-left: 4px dashed #f97316;
+            background: #fff7ed;
+        }
+
+        .spec-header.cb-row-incoming_del,
+        .assertion-item.cb-row-incoming_del {
+            background: #f8fafc;
+        }
+        .spec-header.cb-row-incoming_del .spec-title,
+        .assertion-item.cb-row-incoming_del .cb-deletable-title {
+            text-decoration: line-through;
+            text-decoration-color: #94a3b8;
+            color: #94a3b8;
+        }
+
+        /* Detail-panel per-branch contribution list */
+        .cb-contributions {
+            margin-bottom: 20px;
+            padding: 14px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+
+        .cb-contributions .cb-contrib-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #334155;
+            margin-bottom: 10px;
+        }
+
+        .cb-contrib-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            border-top: 1px solid #e2e8f0;
+            font-size: 13px;
+        }
+
+        .cb-contrib-row:first-of-type {
+            border-top: none;
+        }
+
+        .cb-contrib-branch {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #1e293b;
+            background: #e2e8f0;
+            border-radius: 4px;
+            padding: 1px 6px;
+        }
+
+        .cb-contrib-drift {
+            font-size: 12px;
+            color: #475569;
+        }
+
+        .cb-contrib-drift .cb-drift-arrow {
+            color: #94a3b8;
+            margin: 0 4px;
+        }
+
+        .cb-contrib-drift code {
+            font-family: 'Courier New', monospace;
+            background: #f1f5f9;
+            border-radius: 3px;
+            padding: 0 4px;
+        }
+
+        .cb-contrib-unconfirmed-note {
+            font-size: 11px;
+            font-style: italic;
+            color: #9a3412;
+        }
+
         .priority-badge {
             padding: 3px 8px;
             border-radius: 6px;
@@ -731,6 +949,7 @@
                 <h1 id="header-title">Spec Explorer</h1>
                 <p class="stats" id="header-stats"></p>
                 <p class="hidden-count" id="hidden-count"></p>
+                <div id="cross-branch-banner-slot"></div>
 
                 <div class="toggle-container">
                     <label>
@@ -787,6 +1006,11 @@
         var assertions = DATA.assertions || [];
         var projectName = DATA.projectName || 'Project';
 
+        // Cross-branch / merge-preview mode metadata (see helpers below).
+        var crossBranchMode = DATA.crossBranch === true;
+        var crossBranchDegraded = DATA.degraded === true;
+        var crossBranchBranches = DATA.branches || [];
+
         // Index assertions by parent
         var assertionsByParent = {};
         var assertionById = {};
@@ -815,6 +1039,12 @@
         var headerStats = document.getElementById('header-stats');
         headerStats.textContent = specs.length + ' specs, ' + assertions.length + ' assertions';
 
+        // Render cross-branch banner / degraded notice (no-op when off).
+        var bannerSlot = document.getElementById('cross-branch-banner-slot');
+        if (bannerSlot && crossBranchMode) {
+            bannerSlot.innerHTML = cbBannerHtml();
+        }
+
         // Escape HTML
         function escapeHtml(text) {
             var div = document.createElement('div');
@@ -834,6 +1064,125 @@
             }
         }
 
+        // ===== Cross-branch helpers =====
+
+        // Human-readable label for a cross-branch state.
+        function cbStateLabel(state) {
+            switch (state) {
+                case 'incoming_add': return 'Incoming add';
+                case 'incoming_mod': return 'Incoming change';
+                case 'conflict': return 'Conflict';
+                case 'incoming_del': return 'Incoming delete';
+                default: return state || '';
+            }
+        }
+
+        // True when a contribution represents an unconfirmed (degraded) conflict.
+        function cbIsUnconfirmedConflict(contrib) {
+            return contrib && contrib.state === 'conflict' && contrib.degraded === true;
+        }
+
+        // CSS suffix used for row treatment. A degraded conflict gets its own
+        // unconfirmed treatment, distinct from a confirmed conflict.
+        function cbRowClassFor(state, unconfirmed) {
+            if (state === 'conflict' && unconfirmed) return 'cb-row-conflict-unconfirmed';
+            return 'cb-row-' + state;
+        }
+
+        // Render a single cross-branch summary badge for a state. unconfirmed
+        // applies the dashed "potential conflict" treatment.
+        function cbBadgeHtml(state, unconfirmed) {
+            if (!state) return '';
+            var cls = 'cb-badge cb-' + state;
+            if (state === 'conflict' && unconfirmed) cls += ' cb-unconfirmed';
+            var label = cbStateLabel(state);
+            if (state === 'conflict' && unconfirmed) label = 'Possible conflict';
+            return '<span class="' + cls + '">' + escapeHtml(label) + '</span>';
+        }
+
+        // Rollup precedence matching internal/show worseState: conflict beats
+        // incoming_del beats incoming_mod beats incoming_add.
+        var CB_PRECEDENCE = { incoming_add: 1, incoming_mod: 2, incoming_del: 3, conflict: 4 };
+
+        // Worst (highest-precedence) state across a contribution list.
+        function cbWorstState(contribs) {
+            var worst = '';
+            if (!contribs) return worst;
+            for (var k = 0; k < contribs.length; k++) {
+                var s = contribs[k].state;
+                if (!worst || (CB_PRECEDENCE[s] || 0) > (CB_PRECEDENCE[worst] || 0)) {
+                    worst = s;
+                }
+            }
+            return worst;
+        }
+
+        // Does any contribution in the list represent an unconfirmed conflict?
+        function cbHasUnconfirmedConflict(contribs) {
+            if (!contribs) return false;
+            for (var k = 0; k < contribs.length; k++) {
+                if (cbIsUnconfirmedConflict(contribs[k])) return true;
+            }
+            return false;
+        }
+
+        // Render the per-branch contribution breakdown for the detail panel.
+        // Lists each (branch -> state), and for status drift shows old -> new.
+        function cbContributionsHtml(contribs) {
+            if (!crossBranchMode || !contribs || contribs.length === 0) return '';
+            var h = '<div class="cb-contributions">';
+            h += '<div class="cb-contrib-title">Cross-branch contributions</div>';
+            for (var k = 0; k < contribs.length; k++) {
+                var c = contribs[k];
+                var unconfirmed = cbIsUnconfirmedConflict(c);
+                h += '<div class="cb-contrib-row">';
+                h += '<span class="cb-contrib-branch">' + escapeHtml(c.branch || '') + '</span>';
+                h += cbBadgeHtml(c.state, unconfirmed);
+                if (c.state === 'incoming_mod' && (c.oldStatus || c.newStatus)) {
+                    h += '<span class="cb-contrib-drift">';
+                    h += '<code>' + escapeHtml(c.oldStatus || '—') + '</code>';
+                    h += '<span class="cb-drift-arrow">→</span>';
+                    h += '<code>' + escapeHtml(c.newStatus || '—') + '</code>';
+                    h += '</span>';
+                }
+                if (unconfirmed) {
+                    h += '<span class="cb-contrib-unconfirmed-note">unconfirmed (git &lt; 2.38)</span>';
+                }
+                h += '</div>';
+            }
+            h += '</div>';
+            return h;
+        }
+
+        // Banner naming the compared branches, shown at the top of the tree
+        // panel when cross-branch mode is active.
+        function cbBannerHtml() {
+            if (!crossBranchMode) return '';
+            var h = '<div class="cross-branch-banner">';
+            h += '<span class="cb-banner-icon">🔀</span>'; /* twisted arrows */
+            h += '<div>';
+            h += '<div class="cb-banner-title">Cross-branch preview</div>';
+            h += '<div class="cb-banner-text">Comparing the current branch against ';
+            if (crossBranchBranches.length === 0) {
+                h += 'other branches.';
+            } else {
+                h += '<br>';
+                for (var k = 0; k < crossBranchBranches.length; k++) {
+                    h += '<span class="cb-branch-chip">' + escapeHtml(crossBranchBranches[k]) + '</span>';
+                }
+            }
+            h += '</div></div></div>';
+
+            if (crossBranchDegraded) {
+                h += '<div class="cross-branch-degraded">';
+                h += '<span class="cb-degraded-icon">⚠️</span>';
+                h += '<div>Conflict detection is unavailable (git &lt; 2.38). Results are '
+                    + 'classification-only — conflicts shown are <strong>potential</strong>, not confirmed.</div>';
+                h += '</div>';
+            }
+            return h;
+        }
+
         // Build tree panel
         function buildTree() {
             var treeEl = document.getElementById('spec-tree');
@@ -844,11 +1193,19 @@
                 var specAssertions = assertionsByParent[spec.id] || [];
                 var searchText = spec.id + ' ' + spec.title.toLowerCase() + ' ' + spec.status + ' ' + spec.priority;
 
+                // Cross-branch spec summary (worst incoming state across the spec)
+                var specCbSummary = crossBranchMode ? (spec.crossBranchSummary || '') : '';
+                var specCbUnconfirmed = specCbSummary === 'conflict' && cbHasUnconfirmedConflict(spec.crossBranch);
+                var specCbRowClass = specCbSummary ? ' ' + cbRowClassFor(specCbSummary, specCbUnconfirmed) : '';
+
                 html += '<li class="spec-item" data-spec-id="' + escapeHtml(spec.id) + '" data-search-text="' + escapeHtml(searchText) + '">';
-                html += '<div class="spec-header" data-action="toggle-spec" data-spec-id="' + escapeHtml(spec.id) + '" data-show-detail="true" data-type="spec">';
+                html += '<div class="spec-header' + specCbRowClass + '" data-action="toggle-spec" data-spec-id="' + escapeHtml(spec.id) + '" data-show-detail="true" data-type="spec">';
                 html += '<span class="toggle-icon" id="toggle-' + escapeHtml(spec.id) + '">\u25B6</span>';
                 html += '<span class="priority-badge priority-' + spec.priority + '">' + spec.priority + '</span>';
                 html += '<span class="status-badge status-' + escapeHtml(spec.status) + '"></span>';
+                if (specCbSummary) {
+                    html += cbBadgeHtml(specCbSummary, specCbUnconfirmed);
+                }
                 html += '<span class="spec-title">' + escapeHtml(spec.title) + '</span>';
                 html += '</div>';
 
@@ -856,11 +1213,19 @@
                 for (var ai = 0; ai < specAssertions.length; ai++) {
                     var assertion = specAssertions[ai];
                     var aSearchText = assertion.id + ' ' + assertion.title.toLowerCase() + ' ' + assertion.status + ' ' + assertion.priority;
-                    html += '<li class="assertion-item" data-action="show-detail" data-assertion-id="' + escapeHtml(assertion.id) + '" data-type="assertion" data-search-text="' + escapeHtml(aSearchText) + '">';
+
+                    var aCbState = crossBranchMode ? cbWorstState(assertion.crossBranch) : '';
+                    var aCbUnconfirmed = aCbState === 'conflict' && cbHasUnconfirmedConflict(assertion.crossBranch);
+                    var aCbRowClass = aCbState ? ' ' + cbRowClassFor(aCbState, aCbUnconfirmed) : '';
+
+                    html += '<li class="assertion-item' + aCbRowClass + '" data-action="show-detail" data-assertion-id="' + escapeHtml(assertion.id) + '" data-type="assertion" data-search-text="' + escapeHtml(aSearchText) + '">';
                     html += '<div style="display: flex; align-items: center;">';
                     html += '<span class="priority-badge priority-' + assertion.priority + '">' + assertion.priority + '</span>';
                     html += '<span class="status-badge status-' + escapeHtml(assertion.status) + '"></span>';
-                    html += '<span>' + escapeHtml(assertion.title) + '</span>';
+                    if (aCbState) {
+                        html += cbBadgeHtml(aCbState, aCbUnconfirmed);
+                    }
+                    html += '<span class="cb-deletable-title">' + escapeHtml(assertion.title) + '</span>';
                     html += '</div>';
                     html += '</li>';
                 }
@@ -886,8 +1251,13 @@
                 html += '<span class="meta-item">Status: <span class="detail-status-badge">' + statusEmoji(spec.status) + '</span></span>';
                 html += '<span class="meta-item">Priority: <span class="detail-priority-badge">' + spec.priority + '</span></span>';
                 html += '<span class="meta-item">File: <strong>' + escapeHtml(spec.file) + '</strong></span>';
+                if (crossBranchMode && spec.crossBranchSummary) {
+                    var specSummaryUnconfirmed = spec.crossBranchSummary === 'conflict' && cbHasUnconfirmedConflict(spec.crossBranch);
+                    html += '<span class="meta-item">Cross-branch: ' + cbBadgeHtml(spec.crossBranchSummary, specSummaryUnconfirmed) + '</span>';
+                }
                 html += '</div>';
                 html += '</div>';
+                html += cbContributionsHtml(spec.crossBranch);
                 html += '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(spec.content || '')) + '</div>';
                 html += '</div>';
             }
@@ -909,6 +1279,7 @@
                 }
                 html += '</div>';
                 html += '</div>';
+                html += cbContributionsHtml(assertion.crossBranch);
                 html += '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(assertion.content || '')) + '</div>';
                 html += '</div>';
             }
