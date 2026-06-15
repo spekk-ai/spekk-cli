@@ -151,6 +151,36 @@ func TestClassifyEmpty(t *testing.T) {
 	}
 }
 
+// TestClassifySkipsUnrelatedHistory: a branch sharing no common ancestor with
+// HEAD (orphan history) has no three-way merge-base. It must be skipped
+// (contribute nothing) without failing the whole classification.
+func TestClassifySkipsUnrelatedHistory(t *testing.T) {
+	dir, _ := newRepo(t)
+
+	// A spec on main (ours).
+	writeSpec(t, dir, "specs/demo/demo.md", "---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# demo\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "spec on main")
+
+	// An orphan branch: a completely unrelated history that adds its own spec.
+	git(t, dir, "checkout", "-q", "--orphan", "orphan")
+	git(t, dir, "rm", "-rf", ".") // clear main's tracked files from index + worktree
+	writeSpec(t, dir, "specs/foreign/foreign.md", "---\nid: foreign\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# foreign\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "orphan root")
+	git(t, dir, "checkout", "-q", "main")
+
+	states, err := Classify("")
+	if err != nil {
+		t.Fatalf("Classify must not fail on an unrelated-history branch: %v", err)
+	}
+	for _, s := range states {
+		if s.Branch == "orphan" {
+			t.Errorf("orphan branch (no merge-base) should contribute nothing, got %+v", s)
+		}
+	}
+}
+
 // TestParseMergeTreeConflicts validates conflict-report parsing against the
 // real --name-only output shape for both clean and conflicted merges.
 func TestParseMergeTreeConflicts(t *testing.T) {

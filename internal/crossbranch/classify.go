@@ -114,9 +114,18 @@ func Classify(filter string) ([]FileState, error) {
 // classifyBranch classifies all changed spec/assertion files for one comparison
 // branch against HEAD.
 func classifyBranch(b Branch, mergeTreeOK bool) ([]FileState, error) {
-	base, err := Run("merge-base", "HEAD", b.Rev)
+	// merge-base exits 1 with empty stdout when the histories share no common
+	// ancestor (orphan branches, imported subtrees, --orphan docs branches).
+	// Route through RunReportingExit so that exit-1-with-no-output is not treated
+	// as a fatal error: such a branch has no three-way base to diff against, so we
+	// skip it (contribute nothing) rather than aborting the whole cross-branch
+	// render. A genuine failure (bad ref, exit != 1) still returns an error.
+	base, err := RunReportingExit(1, "merge-base", "HEAD", b.Rev)
 	if err != nil {
 		return nil, fmt.Errorf("crossbranch: merge-base HEAD %s: %w", b.Rev, err)
+	}
+	if base == "" {
+		return nil, nil
 	}
 
 	ours, err := changedFiles(base, "HEAD")
