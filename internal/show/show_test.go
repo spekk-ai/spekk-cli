@@ -246,6 +246,58 @@ func TestCrossBranchFolding(t *testing.T) {
 	}
 }
 
+// TestCrossBranchRollupDirNotEqualID: when a spec's directory differs from its
+// frontmatter id, a foreign incoming_add assertion (whose synthesized parent is
+// derived from the directory) must still roll up into that spec's summary. The
+// rollup keys by spec directory, not frontmatter id, so this holds.
+func TestCrossBranchRollupDirNotEqualID(t *testing.T) {
+	dir := t.TempDir()
+	git(t, dir, "init", "-q", "-b", "main")
+	git(t, dir, "config", "user.email", "test@example.com")
+	git(t, dir, "config", "user.name", "Test")
+	git(t, dir, "config", "commit.gpgsign", "false")
+
+	specsDir := filepath.Join(dir, "specs")
+	// Directory is "user-auth" but the spec's frontmatter id is "authentication".
+	writeFile(t, filepath.Join(specsDir, "user-auth", "user-auth.md"),
+		"---\nid: authentication\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# Authentication\n")
+	writeFile(t, filepath.Join(specsDir, "user-auth", "assertions", "existing.md"),
+		"---\nid: existing\nparent: authentication\ncreated: 2026-01-01T00:00:00Z\npriority: 1\nstatus: not_started\n---\n\n# existing\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "base")
+
+	// Branch adds a foreign assertion under the same directory.
+	git(t, dir, "checkout", "-q", "-b", "other")
+	writeFile(t, filepath.Join(specsDir, "user-auth", "assertions", "new.md"),
+		"---\nid: new\nparent: authentication\ncreated: 2026-01-01T00:00:00Z\npriority: 1\nstatus: draft\n---\n\n# new\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "foreign assertion")
+	git(t, dir, "checkout", "-q", "main")
+	chdir(t, dir)
+
+	result, err := parser.ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := buildShowData(specsDir, result)
+	if err := applyCrossBranch(&data, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	var spec *showSpec
+	for i := range data.Specs {
+		if data.Specs[i].ID == "authentication" {
+			spec = &data.Specs[i]
+		}
+	}
+	if spec == nil {
+		t.Fatal("authentication spec missing")
+	}
+	if spec.CrossBranchSummary != "incoming_add" {
+		t.Errorf("rollup for dir!=id spec = %q, want incoming_add (foreign assertion must roll into the spec summary)", spec.CrossBranchSummary)
+	}
+}
+
 // TestCrossBranchOffUnchanged verifies the non-cross-branch path leaves the new
 // fields empty so existing output is unaffected.
 func TestCrossBranchOffUnchanged(t *testing.T) {

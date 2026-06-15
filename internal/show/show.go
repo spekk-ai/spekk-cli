@@ -305,22 +305,27 @@ func applyCrossBranch(data *showData, filter string) error {
 	}
 
 	// Roll up each spec's headline state across its own contributions and those
-	// of its assertions (matched by parent id).
-	rollup := map[string]string{} // spec id -> worst state
+	// of its assertions. Key by the spec DIRECTORY derived from file paths, not by
+	// frontmatter id: a synthesized foreign assertion only knows its path, and the
+	// parser does not require a spec's directory name to equal its frontmatter id.
+	// Keying by directory makes real and synthesized entries align regardless.
+	rollup := map[string]string{} // spec dir (e.g. "specs/foo") -> worst state
 	for i := range data.Specs {
 		s := &data.Specs[i]
 		for _, c := range s.CrossBranch {
-			rollup[s.ID] = worseState(rollup[s.ID], c.State)
+			k := specDirKey(s.File)
+			rollup[k] = worseState(rollup[k], c.State)
 		}
 	}
 	for i := range data.Assertions {
 		a := &data.Assertions[i]
 		for _, c := range a.CrossBranch {
-			rollup[a.Parent] = worseState(rollup[a.Parent], c.State)
+			k := specDirKey(a.File)
+			rollup[k] = worseState(rollup[k], c.State)
 		}
 	}
 	for i := range data.Specs {
-		data.Specs[i].CrossBranchSummary = rollup[data.Specs[i].ID]
+		data.Specs[i].CrossBranchSummary = rollup[specDirKey(data.Specs[i].File)]
 	}
 
 	branches := make([]string, 0, len(branchSet))
@@ -366,6 +371,21 @@ func parentFromAssertionPath(path string) string {
 	}
 	head := path[:idx] // "specs/<spec-id>"
 	return head[strings.LastIndex(head, "/")+1:]
+}
+
+// specDirKey returns the spec-directory portion of a spec or assertion file path
+// (e.g. "specs/foo" for both "specs/foo/foo.md" and
+// "specs/foo/assertions/bar.md"). It is the stable rollup key tying an assertion
+// to its owning spec by location, independent of frontmatter ids.
+func specDirKey(path string) string {
+	p := normalizePath(path)
+	if idx := strings.Index(p, "/assertions/"); idx >= 0 {
+		return p[:idx]
+	}
+	if idx := strings.LastIndex(p, "/"); idx >= 0 {
+		return p[:idx]
+	}
+	return p
 }
 
 // synthesizeSpec builds a minimal placeholder showSpec for a foreign spec that
