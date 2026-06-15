@@ -328,3 +328,61 @@ func TestBuildActivationMessage_UnknownAgent(t *testing.T) {
 		t.Fatal("expected error for unknown agent")
 	}
 }
+
+// TestBuildHelpText_ObserverWithSkills verifies observer help includes
+// the dynamic skill list AND observer-specific options/examples.
+func TestBuildHelpText_ObserverWithSkills(t *testing.T) {
+	install := t.TempDir()
+	skillDir := filepath.Join(install, "specs", "observer-skills")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "coverage-gap.md"), []byte("# Coverage Gap"), 0o644)
+
+	// Isolate cwd/home so local/global layers don't shadow.
+	isolated := t.TempDir()
+	t.Setenv("HOME", isolated)
+	origWd, _ := os.Getwd()
+	os.Chdir(isolated)
+	t.Cleanup(func() { os.Chdir(origWd) })
+
+	out := buildHelpText(install, "observer")
+
+	if !strings.Contains(out, "AVAILABLE SKILLS:") {
+		t.Error("help should contain AVAILABLE SKILLS section")
+	}
+	if !strings.Contains(out, "coverage-gap") {
+		t.Error("help should list discovered observer skill")
+	}
+	if !strings.Contains(out, "--interval") {
+		t.Error("help should document observer's --interval option")
+	}
+	if !strings.Contains(out, "--quiet") {
+		t.Error("help should document observer's --quiet option")
+	}
+	if !strings.Contains(out, "spekk observer") {
+		t.Error("help should reference the observer command")
+	}
+}
+
+// TestBuildHelpText_ObserverAlwaysShowsOptions verifies observer-specific
+// options appear in help regardless of the skill list.
+func TestBuildHelpText_ObserverAlwaysShowsOptions(t *testing.T) {
+	install := t.TempDir()
+
+	isolated := t.TempDir()
+	t.Setenv("HOME", isolated)
+	origWd, _ := os.Getwd()
+	os.Chdir(isolated)
+	t.Cleanup(func() { os.Chdir(origWd) })
+
+	out := buildHelpText(install, "observer")
+
+	if !strings.Contains(out, "--interval") {
+		t.Error("help should document observer's --interval option")
+	}
+	if !strings.Contains(out, "--quiet") {
+		t.Error("help should document observer's --quiet option")
+	}
+	if !strings.Contains(out, "spekk observer") {
+		t.Error("help should reference the observer command")
+	}
+}

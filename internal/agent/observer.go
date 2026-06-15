@@ -64,8 +64,46 @@ func BuildObserverOptionsMessage(cfg ObserverConfig) string {
 func RunObserver(args []string, installDir string) {
 	// Handle help
 	if hasHelp(args) {
-		showObserverHelp()
+		ShowHelp(installDir, "observer")
 		return
+	}
+
+	// Skill subcommand: check the first positional arg against the observer skill resolver
+	// before parsing flags as monitoring options.
+	skillName := ExtractSkillArgFromFlagSet(args, ObserverFlags)
+	if skillName != "" {
+		sr := &cli.SkillResolver{
+			Cwd:        cwd(),
+			InstallDir: installDir,
+		}
+		if sr.ResolveSkill("observer", skillName) != nil {
+			fmt.Println("Launching Observer Agent with skill:", skillName)
+			wd, _ := os.Getwd()
+			fmt.Println("Working directory:", wd)
+			fmt.Println()
+
+			skillMsg, err := BuildSkillMessage(installDir, "observer", skillName, args)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+
+			opts := LaunchOptions{
+				Agent:        "observer",
+				InstallDir:   installDir,
+				ExtraMessage: skillMsg,
+			}
+			message, err := BuildActivationMessage(opts)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+			if err := Launch(message); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+			return
+		}
 	}
 
 	cfg, err := ParseObserverFlags(args)
@@ -99,21 +137,3 @@ func RunObserver(args []string, installDir string) {
 	}
 }
 
-func showObserverHelp() {
-	fmt.Print(`
-spekk observer - Intelligent spec-code drift monitoring with Claude
-
-USAGE:
-  spekk observer [OPTIONS]
-
-OPTIONS:
-  --interval <seconds>   Preferred scan interval (Claude agent can adjust)
-  --quiet                Preference for minimal output (Claude agent decides)
-  --help, -h             Show this help message
-
-EXAMPLES:
-  spekk observer                    # Launch Claude agent observer
-  spekk observer --interval 60      # Observer with 60s interval preference
-  spekk observer --quiet            # Observer with quiet preference
-`)
-}
