@@ -41,7 +41,7 @@ func newRepoWithDirtyTree(t *testing.T) string {
 	writeFile(t, dir, "spec.md", "edited but not committed\n")
 	writeFile(t, dir, "untracked.md", "brand new\n")
 
-	t.Chdir(dir)
+	chdir(t, dir)
 	return dir
 }
 

@@ -18,6 +18,21 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
+// chdir changes the process working directory to dir for the test's duration,
+// restoring it via t.Cleanup. Used instead of t.Chdir (a go1.24 API) to keep the
+// module's declared go1.23 toolchain floor.
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+}
+
 func TestBuildShowData(t *testing.T) {
 	dir := t.TempDir()
 	specsDir := filepath.Join(dir, "specs")
@@ -145,7 +160,7 @@ func TestCrossBranchFolding(t *testing.T) {
 
 	// Back to ours; restore working tree to main's content.
 	git(t, dir, "checkout", "-q", "main")
-	t.Chdir(dir)
+	chdir(t, dir)
 
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {

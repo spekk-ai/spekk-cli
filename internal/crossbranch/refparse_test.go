@@ -23,7 +23,7 @@ func newRepoWithSpecAtRef(t *testing.T) (dir, branch string) {
 	gitInRepo(t, dir, "add", "spec.md")
 	gitInRepo(t, dir, "commit", "-q", "-m", "add spec")
 
-	t.Chdir(dir)
+	chdir(t, dir)
 	branch = gitInRepo(t, dir, "rev-parse", "--abbrev-ref", "HEAD")
 	return dir, branch
 }

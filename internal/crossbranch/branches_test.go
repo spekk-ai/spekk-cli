@@ -1,10 +1,26 @@
 package crossbranch
 
 import (
+	"os"
 	"os/exec"
 	"sort"
 	"testing"
 )
+
+// chdir changes the process working directory to dir for the duration of the
+// test, restoring the previous cwd via t.Cleanup. Used instead of t.Chdir, which
+// is a go1.24 API, to keep the module's declared go1.23 toolchain floor.
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+}
 
 // git runs a raw git command in dir, failing the test on error. Tests need
 // write commands (init, commit, update-ref) to build fixtures, so they bypass
@@ -32,7 +48,7 @@ func newRepo(t *testing.T) (dir, head string) {
 	git(t, dir, "config", "user.name", "Test")
 	git(t, dir, "commit", "-q", "--allow-empty", "-m", "init")
 	head = trim(git(t, dir, "rev-parse", "HEAD"))
-	t.Chdir(dir)
+	chdir(t, dir)
 	return dir, head
 }
 
