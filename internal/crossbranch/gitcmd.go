@@ -3,9 +3,40 @@ package crossbranch
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
+	"sync"
 )
+
+// rootCache memoizes the repository toplevel for a given working directory so
+// repoRoot does not shell out on every git call. Keyed by cwd (not a single
+// process-wide value) so that test binaries operating on several temp repos in
+// one process each resolve their own root correctly.
+var rootCache sync.Map // cwd string -> root string
+
+// repoRoot returns the absolute toplevel of the git repository containing the
+// current working directory, or "" if it cannot be determined (e.g. not in a
+// repo). Every git command in this package runs with its working directory set
+// to this root, so pathspecs like "specs" and "ls-tree -- <path>" resolve
+// against the repo root regardless of which subdirectory the user invoked spekk
+// from. It execs git directly (not via Run) to avoid recursing through the
+// chokepoint, and is read-only (rev-parse).
+func repoRoot() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	if v, ok := rootCache.Load(cwd); ok {
+		return v.(string)
+	}
+	root := ""
+	if out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output(); err == nil {
+		root = strings.TrimSpace(string(out))
+	}
+	rootCache.Store(cwd, root)
+	return root
+}
 
 // readOnlySubcommands is the allowlist of git subcommands this package may run.
 // Every command here either reports information or writes only to the object
@@ -64,7 +95,11 @@ func Run(args ...string) (string, error) {
 	if err := guard(args); err != nil {
 		return "", err
 	}
-	out, err := exec.Command("git", args...).Output()
+	cmd := exec.Command("git", args...)
+	if root := repoRoot(); root != "" {
+		cmd.Dir = root
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
@@ -86,7 +121,11 @@ func RunReportingExit(okExit int, args ...string) (string, error) {
 	if err := guard(args); err != nil {
 		return "", err
 	}
-	out, err := exec.Command("git", args...).Output()
+	cmd := exec.Command("git", args...)
+	if root := repoRoot(); root != "" {
+		cmd.Dir = root
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) || exitErr.ExitCode() != okExit {

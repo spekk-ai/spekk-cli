@@ -245,6 +245,35 @@ func TestClassifyBranchDegradedMode(t *testing.T) {
 	}
 }
 
+// TestClassifyFromSubdirectory: cross-branch git must anchor at the repo root,
+// so classification works even when spekk is invoked from a subdirectory. Before
+// the cmd.Dir anchor the "-- specs" pathspec resolved relative to cwd and matched
+// nothing, silently yielding an empty overlay.
+func TestClassifyFromSubdirectory(t *testing.T) {
+	dir, _ := newRepo(t)
+
+	writeSpec(t, dir, "specs/demo/demo.md", "---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# demo\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "base")
+
+	git(t, dir, "checkout", "-q", "-b", "other")
+	writeSpec(t, dir, "specs/foreign/foreign.md", "---\nid: foreign\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# foreign\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "foreign")
+	git(t, dir, "checkout", "-q", "main")
+
+	// Invoke from a nested subdirectory of the repo.
+	chdir(t, filepath.Join(dir, "specs", "demo"))
+
+	states, err := Classify("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := find(t, states, "specs/foreign/foreign.md", "other"); s.State != StateIncomingAdd {
+		t.Errorf("from subdir: got %+v, want incoming_add", s)
+	}
+}
+
 // TestParseMergeTreeConflicts validates conflict-report parsing against the
 // real --name-only output shape for both clean and conflicted merges.
 func TestParseMergeTreeConflicts(t *testing.T) {
