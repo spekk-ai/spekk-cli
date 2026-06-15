@@ -265,7 +265,10 @@ func changedFiles(from, to string) (map[string]changeKind, error) {
 	// --no-renames keeps a rename as delete+add, which is exactly how we want
 	// to classify it at the file level (the old path is an incoming deletion,
 	// the new path an incoming addition) and avoids R<score> status parsing.
-	out, err := Run("diff", "--name-status", "--no-renames", from, to, "--", "specs")
+	// --no-ext-diff prevents any configured external diff driver from running
+	// while comparing other branches' content (defense-in-depth; --name-status
+	// would not invoke one anyway).
+	out, err := Run("diff", "--name-status", "--no-renames", "--no-ext-diff", from, to, "--", "specs")
 	if err != nil {
 		return nil, fmt.Errorf("crossbranch: diff %s..%s: %w", from, to, err)
 	}

@@ -6,9 +6,13 @@
 // conflicts, and deletions to the spec corpus — a preview of what merging each
 // branch would do, without ever performing a merge.
 //
-// The whole package is strictly read-only. It shells out to git via os/exec,
-// but every git invocation is funneled through the single chokepoint in
-// gitcmd.go, which permits only an allowlist of non-mutating subcommands. As a
-// result it is structurally impossible for this package to change the working
-// tree, the index, the current branch, or any refs.
+// The package is read-only with respect to git state. It shells out to git via
+// os/exec, but every invocation is funneled through the single chokepoint in
+// gitcmd.go, which permits only an allowlist of subcommands that do not mutate
+// the working tree, the index, the current branch, or any refs (the allowlist
+// gates subcommands; it does not exhaustively constrain every flag, so callers
+// must not construct a read subcommand with a writing flag such as
+// `diff --output`). All call sites in this package are fixed and pass no such
+// flags, and the diff calls additionally pass --no-ext-diff to avoid invoking
+// external programs while reading other branches' content.
 package crossbranch
