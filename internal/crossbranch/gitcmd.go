@@ -95,15 +95,31 @@ func Run(args ...string) (string, error) {
 	if err := guard(args); err != nil {
 		return "", err
 	}
-	cmd := exec.Command("git", args...)
-	if root := repoRoot(); root != "" {
-		cmd.Dir = root
-	}
-	out, err := cmd.Output()
+	out, err := gitCmd(args).Output()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// gitCmd builds the *exec.Cmd for an already-guarded git invocation, applying the
+// package-wide execution policy: run at the repository toplevel (so cwd-relative
+// pathspecs resolve against the repo root) and force core.quotePath=false so that
+// non-ASCII spec paths appear verbatim — not octal-escaped and double-quoted — in
+// diff/ls-tree/merge-tree output, keeping path matching consistent across calls.
+// The config is injected via environment (git >= 2.31) rather than a global -c
+// flag so the guard's "args[0] is the subcommand" model stays intact.
+func gitCmd(args []string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	if root := repoRoot(); root != "" {
+		cmd.Dir = root
+	}
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=core.quotePath",
+		"GIT_CONFIG_VALUE_0=false",
+	)
+	return cmd
 }
 
 // RunReportingExit behaves like Run but tolerates a single expected nonzero exit
@@ -121,11 +137,7 @@ func RunReportingExit(okExit int, args ...string) (string, error) {
 	if err := guard(args); err != nil {
 		return "", err
 	}
-	cmd := exec.Command("git", args...)
-	if root := repoRoot(); root != "" {
-		cmd.Dir = root
-	}
-	out, err := cmd.Output()
+	out, err := gitCmd(args).Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) || exitErr.ExitCode() != okExit {

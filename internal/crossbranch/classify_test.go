@@ -274,6 +274,34 @@ func TestClassifyFromSubdirectory(t *testing.T) {
 	}
 }
 
+// TestClassifyNonASCIIPath: a spec/assertion file with non-ASCII characters in
+// its path must still be classified. git's default core.quotePath octal-escapes
+// and double-quotes such paths in diff output, which would fail the "specs/"
+// prefix check; the chokepoint forces core.quotePath=false so the path appears
+// verbatim. (CJK avoids the NFC/NFD filename normalization that accented Latin
+// would introduce on some filesystems.)
+func TestClassifyNonASCIIPath(t *testing.T) {
+	dir, _ := newRepo(t)
+	writeSpec(t, dir, "specs/demo/demo.md", "---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# demo\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "base")
+
+	const p = "specs/demo/assertions/日本.md"
+	git(t, dir, "checkout", "-q", "-b", "other")
+	writeSpec(t, dir, p, assertionMD("nihon", "draft", "non-ascii filename"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "non-ascii")
+	git(t, dir, "checkout", "-q", "main")
+
+	states, err := Classify("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := find(t, states, p, "other"); s.State != StateIncomingAdd {
+		t.Errorf("non-ASCII path: got %+v, want incoming_add at %q", s, p)
+	}
+}
+
 // TestParseMergeTreeConflicts validates conflict-report parsing against the
 // real --name-only output shape for both clean and conflicted merges.
 func TestParseMergeTreeConflicts(t *testing.T) {
