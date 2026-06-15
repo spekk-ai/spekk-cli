@@ -181,6 +181,70 @@ func TestClassifySkipsUnrelatedHistory(t *testing.T) {
 	}
 }
 
+// TestClassifyBranchDegradedMode exercises the git<2.38 degraded path that the
+// real SupportsMergeTree() can never reach on a modern test host. It drives
+// classifyBranch directly with mergeTreeOK=false and contrasts it against the
+// supported path on the same fixture: in supported mode a both-changed file that
+// merges cleanly is incoming_mod and only the overlapping edit is a confirmed
+// conflict; in degraded mode every both-changed file becomes an *unconfirmed*
+// (Degraded) conflict, with no silent drops.
+func TestClassifyBranchDegradedMode(t *testing.T) {
+	dir, _ := newRepo(t)
+
+	const (
+		conflFile = "specs/demo/assertions/conflicted.md"
+		cleanBoth = "specs/demo/assertions/clean-both.md"
+	)
+
+	// Base on main.
+	writeSpec(t, dir, conflFile, assertionMD("conflicted", "not_started", "L1\nL2\nL3"))
+	writeSpec(t, dir, cleanBoth, assertionMD("clean-both", "not_started", "A1\nA2\nA3\nA4\nA5\nA6\nA7"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "base")
+
+	// "other" edits both files.
+	git(t, dir, "checkout", "-q", "-b", "other")
+	writeSpec(t, dir, conflFile, assertionMD("conflicted", "not_started", "L1\nTHEIRS\nL3"))
+	writeSpec(t, dir, cleanBoth, assertionMD("clean-both", "not_started", "A1\nA2\nA3\nA4\nA5\nA6\nTHEIRS7"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "other edits")
+
+	// Ours (main) edits the conflicted file's same region, and the clean file's
+	// far region (so it merges cleanly).
+	git(t, dir, "checkout", "-q", "main")
+	writeSpec(t, dir, conflFile, assertionMD("conflicted", "not_started", "L1\nOURS\nL3"))
+	writeSpec(t, dir, cleanBoth, assertionMD("clean-both", "not_started", "OURS1\nA2\nA3\nA4\nA5\nA6\nA7"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "our edits")
+
+	b := Branch{Name: "other", Rev: "refs/heads/other"}
+
+	// Supported mode: overlapping edit is a confirmed conflict (Degraded=false);
+	// the non-overlapping both-edit merges cleanly -> incoming_mod.
+	supported, err := classifyBranch(b, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := find(t, supported, conflFile, "other"); s.State != StateConflict || s.Degraded {
+		t.Errorf("supported conflFile: got %+v, want StateConflict with Degraded=false", s)
+	}
+	if s := find(t, supported, cleanBoth, "other"); s.State != StateIncomingMod {
+		t.Errorf("supported cleanBoth: got %+v, want StateIncomingMod", s)
+	}
+
+	// Degraded mode: both both-changed files become unconfirmed conflicts.
+	degraded, err := classifyBranch(b, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{conflFile, cleanBoth} {
+		s := find(t, degraded, f, "other")
+		if s.State != StateConflict || !s.Degraded {
+			t.Errorf("degraded %s: got %+v, want StateConflict with Degraded=true", f, s)
+		}
+	}
+}
+
 // TestParseMergeTreeConflicts validates conflict-report parsing against the
 // real --name-only output shape for both clean and conflicted merges.
 func TestParseMergeTreeConflicts(t *testing.T) {
