@@ -137,6 +137,7 @@ func TestCrossBranchFolding(t *testing.T) {
 	git(t, dir, "init", "-q", "-b", "main")
 	git(t, dir, "config", "user.email", "test@example.com")
 	git(t, dir, "config", "user.name", "Test")
+	git(t, dir, "config", "commit.gpgsign", "false")
 
 	specsDir := filepath.Join(dir, "specs")
 	specFile := filepath.Join(specsDir, "demo", "demo.md")

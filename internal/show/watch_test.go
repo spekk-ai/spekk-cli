@@ -80,10 +80,8 @@ func TestWatchSpecsDetectsChange(t *testing.T) {
 	})
 	defer stop()
 
-	// Wait for watcher to take initial snapshot
-	time.Sleep(100 * time.Millisecond)
-
-	// Modify a file
+	// watchSpecs captures its baseline snapshot synchronously before returning,
+	// so the modification below is guaranteed to come after it — no sleep needed.
 	writeFile(t, filepath.Join(specsDir, "test.md"), "# Modified")
 
 	select {
@@ -108,9 +106,8 @@ func TestWatchSpecsDetectsNewFile(t *testing.T) {
 	})
 	defer stop()
 
-	time.Sleep(100 * time.Millisecond)
-
-	// Add a new file
+	// Baseline snapshot is taken synchronously in watchSpecs; the new file below
+	// therefore always postdates it.
 	writeFile(t, filepath.Join(specsDir, "new.md"), "# New")
 
 	select {
@@ -147,10 +144,8 @@ func TestWatchRefsDetectsBranchChange(t *testing.T) {
 	})
 	defer stop()
 
-	// Let the watcher take its initial snapshot.
-	time.Sleep(100 * time.Millisecond)
-
-	// Create a new branch ref (read-only relative to the working tree/index).
+	// watchRefs records its baseline ref fingerprint synchronously before
+	// returning, so creating the branch now is always seen as a later change.
 	runGit(t, repo, "branch", "feature-x")
 
 	select {
@@ -182,6 +177,7 @@ func initGitRepo(t *testing.T) string {
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@example.com")
 	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
 	writeFile(t, filepath.Join(dir, "README.md"), "# Test")
 	runGit(t, dir, "add", "README.md")
 	runGit(t, dir, "commit", "-m", "init")

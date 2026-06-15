@@ -46,6 +46,7 @@ func newRepo(t *testing.T) (dir, head string) {
 	git(t, dir, "init", "-q", "-b", "main")
 	git(t, dir, "config", "user.email", "test@example.com")
 	git(t, dir, "config", "user.name", "Test")
+	git(t, dir, "config", "commit.gpgsign", "false")
 	git(t, dir, "commit", "-q", "--allow-empty", "-m", "init")
 	head = trim(git(t, dir, "rev-parse", "HEAD"))
 	chdir(t, dir)
