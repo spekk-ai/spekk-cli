@@ -360,6 +360,8 @@ Development setup, project structure, testing, and the release process are docum
 
 The specs are the source of truth. Code is the implementation of specs. Tests prove specs are satisfied.
 
+The values that govern how Spekk itself is built — low dependencies, a single self-contained binary, minimalism, model-and-provider agnosticism, and a high bar for quality — are written down in [the Spekk Constitution](./CONSTITUTION.md).
+
 ## License
 
 [Apache 2.0](./LICENSE)

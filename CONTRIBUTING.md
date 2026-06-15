@@ -1,5 +1,7 @@
 # Contributing to Spekk CLI
 
+Before contributing, read [the Spekk Constitution](./CONSTITUTION.md) — the values that govern what we build, what we refuse to build, and how we resolve conflicts between them. Contributions are weighed against it.
+
 ## Pull Requests
 
 PRs are welcome but reviewed at the maintainers' discretion. We are a small team and may close PRs without detailed explanation. If you're planning significant work, open an issue first to discuss it — that saves everyone time.
