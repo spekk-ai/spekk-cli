@@ -3,7 +3,7 @@ id: branch-discovery
 parent: show-cross-branch
 created: 2026-06-15T12:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/show-cross-branch
 depends-on: cross-branch-flag
 ---
