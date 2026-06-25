@@ -323,3 +323,126 @@ func TestParseMergeTreeConflicts(t *testing.T) {
 		t.Errorf("conflicted merge: got %d conflicts, want 1: %v", len(got), got)
 	}
 }
+
+// TestIsSpecFile pins the structural matchers to the parser's layout convention
+// (specs/<dir>/<dir>.md parents, specs/<dir>/assertions/<name>.md assertions) so
+// stray markdown under specs/ is not classified as a phantom spec/assertion.
+func TestIsSpecFile(t *testing.T) {
+	cases := []struct {
+		path                          string
+		isSpec, isParent, isAssertion bool
+	}{
+		{"specs/foo/foo.md", true, true, false},
+		{"specs/foo/assertions/bar.md", true, false, true},
+		// Excluded: not the canonical layout.
+		{"specs/README.md", false, false, false},                 // flat file at specs/ root
+		{"specs/foo/NOTES.md", false, false, false},              // basename != dir
+		{"specs/foo/index.md", false, false, false},              // basename != dir
+		{"specs/foo/assertions/sub/bar.md", false, false, false}, // nested below assertions/
+		{"docs/foo/foo.md", false, false, false},                 // not under specs/
+		{"specs/foo/foo.txt", false, false, false},               // not markdown
+	}
+	for _, c := range cases {
+		if got := isSpecFile(c.path); got != c.isSpec {
+			t.Errorf("isSpecFile(%q) = %v, want %v", c.path, got, c.isSpec)
+		}
+		if got := isSpecParentFile(c.path); got != c.isParent {
+			t.Errorf("isSpecParentFile(%q) = %v, want %v", c.path, got, c.isParent)
+		}
+		if got := isAssertionFile(c.path); got != c.isAssertion {
+			t.Errorf("isAssertionFile(%q) = %v, want %v", c.path, got, c.isAssertion)
+		}
+	}
+}
+
+// TestClassifyForeignMetadata verifies that a foreign file — one with no local
+// entry because ours deleted it while another branch modified it — still carries
+// parsed metadata (Meta) for synthesis, not just an empty placeholder. This is the
+// modify/delete-conflict path, distinct from a plain incoming addition.
+func TestClassifyForeignMetadata(t *testing.T) {
+	dir, _ := newRepo(t)
+
+	const (
+		specFile = "specs/demo/demo.md"
+		aFile    = "specs/demo/assertions/keep-me.md"
+	)
+	writeSpec(t, dir, specFile, "---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# demo\n")
+	writeSpec(t, dir, aFile, assertionMD("keep-me", "not_started", "base body"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "base")
+
+	// other branch MODIFIES the assertion (status drift to done).
+	git(t, dir, "checkout", "-q", "-b", "other")
+	writeSpec(t, dir, aFile, assertionMD("keep-me", "done", "branch body"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "other modifies")
+
+	// ours DELETES the assertion -> modify/delete conflict; the file is foreign.
+	git(t, dir, "checkout", "-q", "main")
+	removeSpec(t, dir, aFile)
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "ours deletes")
+
+	states, err := Classify("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs := find(t, states, aFile, "other")
+	if fs.Meta == nil {
+		t.Fatalf("%s: Meta is nil; a foreign (ours-deleted) file must carry parsed metadata", aFile)
+	}
+	if fs.Meta.Status != "done" {
+		t.Errorf("%s: Meta.Status = %q, want done (parsed from the modifying branch)", aFile, fs.Meta.Status)
+	}
+}
+
+// TestClassifyBothAdded covers the add/add case: a path added on BOTH ours and
+// the other branch. Identical content merges cleanly and must contribute nothing
+// (the file already matches theirs); differing content is an add/add conflict
+// that merge-tree reports.
+func TestClassifyBothAdded(t *testing.T) {
+	dir, _ := newRepo(t)
+
+	const (
+		base     = "specs/demo/demo.md"
+		sameFile = "specs/demo/assertions/both-same.md"
+		diffFile = "specs/demo/assertions/both-diff.md"
+	)
+	writeSpec(t, dir, base, "---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# demo\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "base")
+
+	// other branch adds both files.
+	git(t, dir, "checkout", "-q", "-b", "other")
+	writeSpec(t, dir, sameFile, assertionMD("both-same", "not_started", "identical body"))
+	writeSpec(t, dir, diffFile, assertionMD("both-diff", "not_started", "THEIRS body"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "other adds")
+
+	// ours adds the same paths: one identical, one different.
+	git(t, dir, "checkout", "-q", "main")
+	writeSpec(t, dir, sameFile, assertionMD("both-same", "not_started", "identical body"))
+	writeSpec(t, dir, diffFile, assertionMD("both-diff", "not_started", "OURS body"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "ours adds")
+
+	states, err := Classify("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Identical both-add: no contribution (already in sync with theirs).
+	for _, s := range states {
+		if s.Path == sameFile {
+			t.Errorf("identical both-add %s should contribute nothing, got %+v", sameFile, s)
+		}
+	}
+
+	// Differing both-add: add/add conflict (on a git that supports merge-tree).
+	if ok, _ := SupportsMergeTree(); ok {
+		s := find(t, states, diffFile, "other")
+		if s.State != StateConflict {
+			t.Errorf("%s: State = %q, want %q (add/add conflict)", diffFile, s.State, StateConflict)
+		}
+	}
+}

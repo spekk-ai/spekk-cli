@@ -6,6 +6,12 @@
 // conflicts, and deletions to the spec corpus — a preview of what merging each
 // branch would do, without ever performing a merge.
 //
+// The comparison is a three-way diff against a single merge-base (git merge-base
+// HEAD <branch>) confirmed by git merge-tree. For criss-cross histories with
+// multiple merge bases this approximates git's recursive merge rather than
+// reproducing it exactly; it is a preview, not the merge itself, so the
+// occasional divergence from a real merge on such histories is acceptable.
+//
 // The package is read-only with respect to git state. It shells out to git via
 // os/exec, but every invocation is funneled through the single chokepoint in
 // gitcmd.go, which permits only an allowlist of subcommands that do not mutate

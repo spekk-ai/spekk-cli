@@ -116,12 +116,54 @@ func RunWatch(specsDir string, opts Options) error {
 		dirty bool
 	)
 
+	// Cross-branch classification cache. Classification compares committed refs
+	// (HEAD vs each branch's merge-base) and never reads the working tree, so its
+	// result only changes when git ref state changes — not when a working-tree
+	// .md file is edited. We therefore memoize the expensive Classify /
+	// SupportsMergeTree results keyed on the ref fingerprint (scanRefs): an edit
+	// that triggers a re-render reparses specs cheaply but reuses the cached
+	// classification, while a ref move invalidates it and reclassifies once. This
+	// keeps a flapping remote (or several open tabs) from re-running N merge-tree
+	// subprocesses on every refresh.
+	var (
+		cbMu        sync.Mutex
+		cbFP        string
+		cbStates    []crossbranch.FileState
+		cbSupported bool
+		cbValid     bool
+	)
+	classifyCached := func() ([]crossbranch.FileState, bool, error) {
+		fp, fpErr := scanRefs()
+
+		cbMu.Lock()
+		defer cbMu.Unlock()
+		if fpErr == nil && cbValid && fp == cbFP {
+			return cbStates, cbSupported, nil
+		}
+
+		states, err := crossbranch.Classify(opts.BranchFilter)
+		if err != nil {
+			return nil, false, err
+		}
+		supported, err := crossbranch.SupportsMergeTree()
+		if err != nil {
+			return nil, false, err
+		}
+
+		if fpErr == nil {
+			cbFP, cbStates, cbSupported, cbValid = fp, states, supported, true
+		} else {
+			// Couldn't fingerprint ref state; serve this result but don't cache it
+			// (we can't tell when it goes stale).
+			cbValid = false
+		}
+		return states, supported, nil
+	}
+
 	// getHTML regenerates HTML from current spec state. In cross-branch mode it
-	// re-runs the same read-only classification (applyCrossBranch) that show.Run
-	// uses, so every render reflects the latest branch states. Cost stays linear
-	// in the number of comparison branches (N branches -> N merge-tree calls per
-	// refresh) because classification is rebuilt from scratch each time with no
-	// retained per-refresh state.
+	// folds in the cross-branch classification (cached per git ref state by
+	// classifyCached), so every render reflects the latest branch states without
+	// re-running merge-tree when nothing in git has moved.
 	getHTML := func() (string, error) {
 		mu.Lock()
 		dirty = false
@@ -137,13 +179,15 @@ func RunWatch(specsDir string, opts Options) error {
 
 		data := buildShowData(specsDir, result)
 
-		// Reuse show.Run's exact cross-branch path; do not reimplement
-		// classification here. When off, this is skipped entirely so output is
-		// identical to the default working-tree-only path.
+		// Reuse show.Run's exact cross-branch fold; classification is cached on
+		// ref state. When off, this is skipped entirely so output is identical to
+		// the default working-tree-only path.
 		if opts.CrossBranch {
-			if err := applyCrossBranch(&data, opts.BranchFilter); err != nil {
-				return "", fmt.Errorf("classifying cross-branch state: %w", err)
+			states, supported, cerr := classifyCached()
+			if cerr != nil {
+				return "", fmt.Errorf("classifying cross-branch state: %w", cerr)
 			}
+			foldCrossBranch(&data, states, supported)
 		}
 
 		jsonBytes, err := json.Marshal(data)

@@ -62,6 +62,12 @@ type showSpec struct {
 	Content  string `json:"content"`
 	Branch   string `json:"branch"`
 
+	// Foreign is true when this spec exists only on other branches (an incoming
+	// addition with no local working-tree file) and was synthesized from metadata
+	// parsed out of a ref. The client uses it to hide the item when all of its
+	// contributing branches are deselected.
+	Foreign bool `json:"foreign,omitempty"`
+
 	// CrossBranch holds the per-branch contributions touching this spec's parent
 	// file (omitted entirely when not in cross-branch mode or when unchanged).
 	CrossBranch []crossBranchContribution `json:"crossBranch,omitempty"`
@@ -90,6 +96,11 @@ type showAssertion struct {
 	DependsOn string `json:"dependsOn,omitempty"`
 	Created   string `json:"created"`
 
+	// Foreign is true when this assertion exists only on other branches (an
+	// incoming addition with no local working-tree file) and was synthesized from
+	// metadata parsed out of a ref.
+	Foreign bool `json:"foreign,omitempty"`
+
 	// CrossBranch holds the per-branch contributions touching this assertion file
 	// (omitted entirely when not in cross-branch mode or when unchanged).
 	CrossBranch []crossBranchContribution `json:"crossBranch,omitempty"`
@@ -110,9 +121,9 @@ type Options struct {
 // default browser.
 //
 // When opts.CrossBranch is false, behavior is identical to the current
-// working-tree-only default. When true, cross-branch / merge-preview mode is
-// requested; the real diffing is wired in by later work, so for now it is a
-// no-op placeholder beyond a log line.
+// working-tree-only default. When true, cross-branch / merge-preview mode
+// classifies spec/assertion state across all branches (via applyCrossBranch) and
+// folds the contributions into the rendered data.
 func Run(specsDir string, opts Options) error {
 	// 1. Parse specs
 	result, err := parser.ParseAllSpecs(specsDir)
@@ -231,10 +242,9 @@ func worseState(a, b string) string {
 }
 
 // applyCrossBranch classifies cross-branch state for the given branch filter and
-// folds the contributions into data: attaching per-item contribution lists,
-// synthesizing placeholder entries for incoming additions (foreign specs/
-// assertions that have no local file), computing the spec-level rollup summary,
-// and recording mode metadata (active, degraded, compared branches).
+// folds the contributions into data. It is the entry point for the non-watch
+// path (show.Run); watch mode reuses foldCrossBranch directly with a cached
+// classification keyed on git ref state (see RunWatch).
 func applyCrossBranch(data *showData, filter string) error {
 	states, err := crossbranch.Classify(filter)
 	if err != nil {
@@ -244,7 +254,18 @@ func applyCrossBranch(data *showData, filter string) error {
 	if err != nil {
 		return err
 	}
+	foldCrossBranch(data, states, supported)
+	return nil
+}
 
+// foldCrossBranch folds an already-computed classification into data: attaching
+// per-item contribution lists, synthesizing placeholder entries for incoming
+// additions (foreign specs/assertions that have no local file), computing the
+// spec-level rollup summary, and recording mode metadata (active, degraded,
+// compared branches). Splitting this from classification lets watch mode cache
+// the expensive Classify/SupportsMergeTree results while still re-folding into a
+// freshly parsed data set on every render.
+func foldCrossBranch(data *showData, states []crossbranch.FileState, supported bool) {
 	data.CrossBranch = true
 	data.Degraded = !supported
 
@@ -255,6 +276,11 @@ func applyCrossBranch(data *showData, filter string) error {
 	// element pointers across the appends that synthesize foreign entries.
 	byPath := map[string][]crossBranchContribution{}
 	branchSet := map[string]struct{}{}
+	// foreignMetaByPath holds the metadata a foreign (incoming-add) path should be
+	// synthesized from. states arrives sorted by (Path, Branch), so the first Meta
+	// seen for a path is the alphabetically-first contributing branch's — the
+	// chosen source when a foreign file exists on several branches.
+	foreignMetaByPath := map[string]*crossbranch.FileMeta{}
 	for _, fs := range states {
 		branchSet[fs.Branch] = struct{}{}
 		path := normalizePath(fs.Path)
@@ -265,6 +291,11 @@ func applyCrossBranch(data *showData, filter string) error {
 			OldStatus: fs.OldStatus,
 			NewStatus: fs.NewStatus,
 		})
+		if fs.Meta != nil {
+			if _, ok := foreignMetaByPath[path]; !ok {
+				foreignMetaByPath[path] = fs.Meta
+			}
+		}
 	}
 
 	// Phase 2: attach contributions to existing items, tracking which paths were
@@ -284,23 +315,42 @@ func applyCrossBranch(data *showData, filter string) error {
 		}
 	}
 
-	// Phase 3: synthesize placeholder entries for any contribution path with no
-	// local file. These are incoming additions (foreign specs/assertions) — other
-	// states require the file to exist on ours, so an unmatched path is an add.
-	// Synthesis happens after Phase 2 so the appends never invalidate live
-	// element pointers.
+	// Phase 3: synthesize entries for any contribution path with no local file.
+	// These are foreign items: usually incoming additions, but also modify/delete
+	// conflicts where ours deleted a file another branch modified (so it has no
+	// local entry yet still contributes a conflict). In both cases the metadata was
+	// parsed from the contributing branch during classification (foreignMetaByPath).
+	// Synthesis happens after Phase 2 so the appends never invalidate live element
+	// pointers.
 	for path, contribs := range byPath {
 		if matched[path] {
 			continue
 		}
 		if isAssertionPath(path) {
-			a := synthesizeAssertion(path)
+			a := synthesizeAssertion(path, foreignMetaByPath[path])
 			a.CrossBranch = contribs
 			data.Assertions = append(data.Assertions, a)
 		} else {
-			s := synthesizeSpec(path)
+			s := synthesizeSpec(path, foreignMetaByPath[path])
 			s.CrossBranch = contribs
 			data.Specs = append(data.Specs, s)
+		}
+	}
+
+	// A foreign spec's status is derived from its (foreign) assertions, exactly as
+	// a local spec's is, since a spec parent file does not store status. Compute it
+	// from the synthesized foreign assertions grouped by spec directory, so a
+	// foreign spec renders a real status badge instead of an empty one.
+	foreignChildStatuses := map[string][]string{}
+	for i := range data.Assertions {
+		if data.Assertions[i].Foreign {
+			k := specDirKey(data.Assertions[i].File)
+			foreignChildStatuses[k] = append(foreignChildStatuses[k], data.Assertions[i].Status)
+		}
+	}
+	for i := range data.Specs {
+		if data.Specs[i].Foreign {
+			data.Specs[i].Status = parser.ParentStatusFromChildStatuses(foreignChildStatuses[specDirKey(data.Specs[i].File)])
 		}
 	}
 
@@ -334,8 +384,6 @@ func applyCrossBranch(data *showData, filter string) error {
 	}
 	sort.Strings(branches)
 	data.Branches = branches
-
-	return nil
 }
 
 // normalizePath makes a file path comparable across the parser (which stores
@@ -388,28 +436,67 @@ func specDirKey(path string) string {
 	return p
 }
 
-// synthesizeSpec builds a minimal placeholder showSpec for a foreign spec that
-// exists only on another branch (incoming addition) and therefore has no local
-// file to walk. Content is intentionally empty; id/title come from the path.
-func synthesizeSpec(path string) showSpec {
-	id := idFromPath(path)
-	return showSpec{
-		ID:    id,
-		Title: id,
-		File:  path,
-	}
+// specDirName returns the final path segment of specDirKey — the spec directory
+// name (e.g. "foo" for both "specs/foo/foo.md" and "specs/foo/assertions/bar.md").
+// This is the stable spec id for synthesized foreign entries, aligned with the
+// rollup key and with parentFromAssertionPath.
+func specDirName(path string) string {
+	dir := specDirKey(path)
+	return dir[strings.LastIndex(dir, "/")+1:]
 }
 
-// synthesizeAssertion builds a minimal placeholder showAssertion for a foreign
-// assertion that exists only on another branch (incoming addition).
-func synthesizeAssertion(path string) showAssertion {
-	id := idFromPath(path)
-	return showAssertion{
-		ID:     id,
-		Parent: parentFromAssertionPath(path),
-		Title:  id,
-		File:   path,
+// synthesizeSpec builds a showSpec for a foreign spec that exists only on another
+// branch (incoming addition) and therefore has no local file to walk. The id is
+// derived from the spec DIRECTORY name (not the file basename) so it matches both
+// the rollup key (specDirKey) and the parent id that synthesizeAssertion derives
+// via parentFromAssertionPath — keeping a foreign spec and its foreign assertions
+// linked in the tree even when the parser's frontmatter id would differ. When
+// meta is available (parsed from the contributing branch) the real title, priority
+// and content are used; Status is computed by the caller from the foreign
+// assertions. meta is nil only when the foreign file could not be parsed, in which
+// case a path-derived placeholder is used.
+func synthesizeSpec(path string, meta *crossbranch.FileMeta) showSpec {
+	id := specDirName(path)
+	s := showSpec{
+		ID:      id,
+		Title:   id,
+		File:    path,
+		Foreign: true,
 	}
+	if meta != nil {
+		if meta.Title != "" {
+			s.Title = meta.Title
+		}
+		s.Priority = meta.Priority
+		s.Content = meta.Content
+		s.Branch = meta.Branch
+	}
+	return s
+}
+
+// synthesizeAssertion builds a showAssertion for a foreign assertion that exists
+// only on another branch (incoming addition). When meta is available the real
+// title, status, priority, content and branch are used so the item renders with a
+// proper status/priority badge rather than a blank placeholder.
+func synthesizeAssertion(path string, meta *crossbranch.FileMeta) showAssertion {
+	id := idFromPath(path)
+	a := showAssertion{
+		ID:      id,
+		Parent:  parentFromAssertionPath(path),
+		Title:   id,
+		File:    path,
+		Foreign: true,
+	}
+	if meta != nil {
+		if meta.Title != "" {
+			a.Title = meta.Title
+		}
+		a.Status = meta.Status
+		a.Priority = meta.Priority
+		a.Content = meta.Content
+		a.Branch = meta.Branch
+	}
+	return a
 }
 
 // openBrowser opens the given file path in the default browser.

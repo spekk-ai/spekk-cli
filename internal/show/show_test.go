@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
@@ -296,6 +297,143 @@ func TestCrossBranchRollupDirNotEqualID(t *testing.T) {
 	}
 	if spec.CrossBranchSummary != "incoming_add" {
 		t.Errorf("rollup for dir!=id spec = %q, want incoming_add (foreign assertion must roll into the spec summary)", spec.CrossBranchSummary)
+	}
+}
+
+// TestTemplateCrossBranchUI guards the cross-branch template wiring: the
+// branch-selection dropdown, its localStorage persistence, the client-side
+// re-render, the icon-only badge rendering, and the missing-status fallback. These
+// are string-level checks so an accidental removal of the JS is caught.
+func TestTemplateCrossBranchUI(t *testing.T) {
+	markers := []string{
+		"cb-branch-toggle",            // dropdown button
+		"cb-branch-checkbox",          // per-branch checkboxes
+		"cbApplyBranchSelection",      // client-side re-render on toggle
+		"spekkCrossBranchDeselected:", // localStorage key (per project)
+		"function cbFilteredContribs", // contribution filter
+		"function cbSpecVisible",      // foreign-item hiding
+		"function statusClass",        // empty-status fallback
+		".status-unknown",             // neutral badge style
+	}
+	for _, m := range markers {
+		if !strings.Contains(templateHTML, m) {
+			t.Errorf("template.html missing cross-branch UI marker %q", m)
+		}
+	}
+	// The inline state badge must be icon-only: cbBadgeHtml builds a titled span
+	// with no inner label text.
+	if !strings.Contains(templateHTML, `class="' + cls + '" title="' + escapeHtml(label) + '"></span>`) {
+		t.Error("cbBadgeHtml should render an icon-only badge (title tooltip, empty body)")
+	}
+}
+
+// TestForeignItemHasMetadataAndFlag verifies that a wholly foreign spec (parent +
+// assertion added only on another branch) is synthesized with Foreign=true and
+// real metadata: the assertion carries its parsed status, and the spec's status is
+// derived from that assertion (not left blank, which previously produced an empty
+// status badge).
+func TestForeignItemHasMetadataAndFlag(t *testing.T) {
+	dir := t.TempDir()
+	git(t, dir, "init", "-q", "-b", "main")
+	git(t, dir, "config", "user.email", "test@example.com")
+	git(t, dir, "config", "user.name", "Test")
+	git(t, dir, "config", "commit.gpgsign", "false")
+
+	specsDir := filepath.Join(dir, "specs")
+	// A local spec so the explorer has something on ours.
+	writeFile(t, filepath.Join(specsDir, "local", "local.md"),
+		"---\nid: local\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# Local\n")
+	writeFile(t, filepath.Join(specsDir, "local", "assertions", "a.md"),
+		"---\nid: a\nparent: local\ncreated: 2026-01-01T00:00:00Z\npriority: 1\nstatus: done\n---\n\n# a\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "base")
+
+	// A branch adds an entirely new spec with a done assertion.
+	git(t, dir, "checkout", "-q", "-b", "other")
+	writeFile(t, filepath.Join(specsDir, "shiny", "shiny.md"),
+		"---\nid: shiny\ncreated: 2026-01-01T00:00:00Z\npriority: 2\n---\n\n# Shiny Feature\n")
+	writeFile(t, filepath.Join(specsDir, "shiny", "assertions", "works.md"),
+		"---\nid: works\nparent: shiny\ncreated: 2026-01-01T00:00:00Z\npriority: 3\nstatus: done\n---\n\n# It Works\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "foreign spec")
+	git(t, dir, "checkout", "-q", "main")
+	chdir(t, dir)
+
+	result, err := parser.ParseAllSpecs(specsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := buildShowData(specsDir, result)
+	if err := applyCrossBranch(&data, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	var fs *showSpec
+	for i := range data.Specs {
+		if data.Specs[i].ID == "shiny" {
+			fs = &data.Specs[i]
+		}
+	}
+	if fs == nil {
+		t.Fatal("foreign spec 'shiny' was not synthesized")
+	}
+	if !fs.Foreign {
+		t.Error("foreign spec must be flagged Foreign=true")
+	}
+	if fs.Title != "Shiny Feature" {
+		t.Errorf("foreign spec title = %q, want parsed 'Shiny Feature'", fs.Title)
+	}
+	if fs.Priority != 2 {
+		t.Errorf("foreign spec priority = %d, want 2 (parsed from ref)", fs.Priority)
+	}
+	// status derived from the single done assertion -> done (never empty).
+	if fs.Status != "done" {
+		t.Errorf("foreign spec status = %q, want done (derived from foreign assertions)", fs.Status)
+	}
+
+	var fa *showAssertion
+	for i := range data.Assertions {
+		if data.Assertions[i].ID == "works" {
+			fa = &data.Assertions[i]
+		}
+	}
+	if fa == nil {
+		t.Fatal("foreign assertion 'works' was not synthesized")
+	}
+	if !fa.Foreign || fa.Status != "done" || fa.Priority != 3 {
+		t.Errorf("foreign assertion = {Foreign:%v Status:%q Priority:%d}, want {true done 3}", fa.Foreign, fa.Status, fa.Priority)
+	}
+}
+
+// TestSynthesizeForeignLinkage verifies a synthesized foreign spec and its
+// synthesized foreign assertions link by spec-directory: the spec's id (from the
+// directory, not the file basename) must equal the assertions' derived parent so
+// the tree nests them together.
+func TestSynthesizeForeignLinkage(t *testing.T) {
+	const (
+		specPath = "specs/foo/foo.md"
+		aPath    = "specs/foo/assertions/bar.md"
+	)
+	if got := specDirName(specPath); got != "foo" {
+		t.Errorf("specDirName(%q) = %q, want foo", specPath, got)
+	}
+	s := synthesizeSpec(specPath, nil)
+	a := synthesizeAssertion(aPath, nil)
+	if s.ID != a.Parent {
+		t.Errorf("synthesized spec id %q != assertion parent %q (would orphan the assertion)", s.ID, a.Parent)
+	}
+	if s.ID != "foo" {
+		t.Errorf("synthesized spec id = %q, want foo (the directory name)", s.ID)
+	}
+	if !s.Foreign || !a.Foreign {
+		t.Errorf("synthesized items must be flagged Foreign: spec=%v assertion=%v", s.Foreign, a.Foreign)
+	}
+
+	// With metadata, real title/status/priority flow through.
+	meta := &crossbranch.FileMeta{Title: "Real Title", Status: "done", Priority: 3, Content: "# body"}
+	am := synthesizeAssertion(aPath, meta)
+	if am.Title != "Real Title" || am.Status != "done" || am.Priority != 3 || am.Content != "# body" {
+		t.Errorf("synthesizeAssertion with meta = %+v, want real title/status/priority/content", am)
 	}
 }
 

@@ -326,6 +326,16 @@
             font-size: 10px;
         }
 
+        /* Fallback for an item whose status could not be determined (e.g. a
+           foreign file that failed to parse). Renders a neutral badge rather than
+           an empty, box-shadow-only one. */
+        .status-unknown {
+            background: #f1f5f9;
+            color: #94a3b8;
+            border: 1px dashed #cbd5e1;
+        }
+        .status-unknown::before { content: "\003F"; font-size: 10px; } /* question mark */
+
         @keyframes pulse-yellow {
             0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
             50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); }
@@ -398,20 +408,91 @@
             line-height: 1.2;
         }
 
+        /* Branch checkbox dropdown: deselect branches to filter contributions
+           client-side. Selection persists in localStorage. */
+        .cb-branch-filter {
+            position: relative;
+            display: inline-block;
+            margin: 8px 0 4px;
+        }
+        .cb-branch-toggle {
+            font-size: 12px;
+            font-weight: 600;
+            color: #3730a3;
+            background: #e0e7ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 6px;
+            padding: 5px 10px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .cb-branch-toggle:hover { background: #c7d2fe; }
+        .cb-branch-toggle .cb-branch-caret { font-size: 9px; }
+        .cb-branch-menu {
+            position: absolute;
+            z-index: 50;
+            top: calc(100% + 4px);
+            left: 0;
+            min-width: 220px;
+            max-height: 320px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            padding: 6px;
+        }
+        .cb-branch-menu[hidden] { display: none; }
+        .cb-branch-menu .cb-menu-actions {
+            display: flex;
+            gap: 8px;
+            padding: 4px 6px 6px;
+            border-bottom: 1px solid #e2e8f0;
+            margin-bottom: 4px;
+        }
+        .cb-branch-menu .cb-menu-action {
+            font-size: 11px;
+            color: #4338ca;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 4px;
+        }
+        .cb-branch-menu .cb-menu-action:hover { text-decoration: underline; }
+        .cb-branch-menu label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            color: #1e293b;
+            padding: 4px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .cb-branch-menu label:hover { background: #f1f5f9; }
+        .cb-branch-chip.cb-chip-deselected {
+            opacity: 0.45;
+            text-decoration: line-through;
+        }
+
         /* Cross-branch state badge (tree summary + detail contributions).
-           Distinct from the .status-* badges: pill with leading glyph. */
+           Icon-only: the leading glyph (::before) is the whole badge; the
+           human-readable label lives in the title tooltip and the detail panel. */
         .cb-badge {
-            padding: 3px 8px;
+            padding: 2px 5px;
             border-radius: 6px;
             font-size: 11px;
             font-weight: 700;
-            text-transform: uppercase;
             margin-right: 8px;
             display: inline-flex;
             align-items: center;
-            gap: 4px;
-            letter-spacing: 0.02em;
+            justify-content: center;
+            line-height: 1;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            cursor: default;
         }
 
         .cb-incoming_add {
@@ -453,10 +534,16 @@
         .cb-incoming_del::before { content: "\2716"; font-size: 9px; } /* heavy multiplication x */
 
         /* Item-level treatments applied to spec-header / assertion-item rows. */
+        /* incoming-addition: diagonal tint signals "foreign / not here yet". The
+           opacity is applied only to the title (below), never the whole row, so
+           the priority/status/state badges stay fully legible. */
         .spec-header.cb-row-incoming_add,
         .assertion-item.cb-row-incoming_add {
-            opacity: 0.6;
             background: repeating-linear-gradient(45deg, #f8fafc, #f8fafc 6px, #ecfeff 6px, #ecfeff 12px);
+        }
+        .spec-header.cb-row-incoming_add .spec-title,
+        .assertion-item.cb-row-incoming_add .cb-deletable-title {
+            opacity: 0.65;
         }
 
         .spec-header.cb-row-incoming_mod,
@@ -566,6 +653,20 @@
             background: #e2e8f0;
             color: #1e293b;
             border: 1px solid #cbd5e1;
+        }
+
+        /* Fallback for an unknown priority (e.g. a foreign file that failed to
+           parse, priority 0): a neutral dash instead of a bare "0" badge. */
+        .priority-0 {
+            background: #f1f5f9;
+            color: #94a3b8;
+            border: 1px dashed #cbd5e1;
+        }
+
+        .cb-contrib-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #334155;
         }
 
         .spec-title {
@@ -1011,6 +1112,83 @@
         var crossBranchDegraded = DATA.degraded === true;
         var crossBranchBranches = DATA.branches || [];
 
+        // ===== Branch selection (client-side contribution filter) =====
+        // We persist the DESELECTED set (not the selected set) so a branch newly
+        // appearing in the data defaults to selected, and a removed branch simply
+        // drops out. Keyed per project in localStorage.
+        var cbDeselectKey = 'spekkCrossBranchDeselected:' + projectName;
+        var cbDeselected = {};
+        (function loadDeselected() {
+            try {
+                var raw = localStorage.getItem(cbDeselectKey);
+                if (!raw) return;
+                var arr = JSON.parse(raw);
+                if (Object.prototype.toString.call(arr) === '[object Array]') {
+                    var present = {};
+                    for (var i = 0; i < crossBranchBranches.length; i++) present[crossBranchBranches[i]] = true;
+                    for (var j = 0; j < arr.length; j++) {
+                        if (present[arr[j]]) cbDeselected[arr[j]] = true; // prune vanished branches
+                    }
+                }
+            } catch (e) { /* ignore malformed storage */ }
+        })();
+
+        function cbSaveDeselected() {
+            var arr = [];
+            for (var b in cbDeselected) { if (cbDeselected[b]) arr.push(b); }
+            try { localStorage.setItem(cbDeselectKey, JSON.stringify(arr)); } catch (e) { /* ignore */ }
+        }
+
+        function cbIsSelected(branch) { return !cbDeselected[branch]; }
+
+        // Contributions for an item, restricted to currently-selected branches.
+        function cbFilteredContribs(item) {
+            if (!item || !item.crossBranch) return [];
+            var out = [];
+            for (var k = 0; k < item.crossBranch.length; k++) {
+                if (cbIsSelected(item.crossBranch[k].branch)) out.push(item.crossBranch[k]);
+            }
+            return out;
+        }
+
+        // A local item is always visible; a foreign item is visible only while at
+        // least one of its contributing branches is selected.
+        function cbAssertionVisible(a) {
+            return !a.foreign || cbFilteredContribs(a).length > 0;
+        }
+        function cbSpecVisible(spec) {
+            if (!spec.foreign) return true;
+            if (cbFilteredContribs(spec).length > 0) return true;
+            var kids = assertionsByParent[spec.id] || [];
+            for (var i = 0; i < kids.length; i++) {
+                if (cbAssertionVisible(kids[i])) return true;
+            }
+            return false;
+        }
+
+        // Spec-level rollup recomputed from the selected branches: the worst state
+        // across the spec's own filtered contributions and those of its assertions.
+        function cbSpecSummary(spec) {
+            var worst = cbWorstState(cbFilteredContribs(spec));
+            var kids = assertionsByParent[spec.id] || [];
+            for (var i = 0; i < kids.length; i++) {
+                var s = cbWorstState(cbFilteredContribs(kids[i]));
+                if (s && (CB_PRECEDENCE[s] || 0) > (CB_PRECEDENCE[worst] || 0)) worst = s;
+            }
+            return worst;
+        }
+
+        // Whether the conflict driving a spec's rollup is an unconfirmed (degraded)
+        // one, across the spec's own and its assertions' selected contributions.
+        function cbSpecSummaryUnconfirmed(spec) {
+            if (cbHasUnconfirmedConflict(cbFilteredContribs(spec))) return true;
+            var kids = assertionsByParent[spec.id] || [];
+            for (var i = 0; i < kids.length; i++) {
+                if (cbHasUnconfirmedConflict(cbFilteredContribs(kids[i]))) return true;
+            }
+            return false;
+        }
+
         // Index assertions by parent
         var assertionsByParent = {};
         var assertionById = {};
@@ -1089,15 +1267,28 @@
             return 'cb-row-' + state;
         }
 
-        // Render a single cross-branch summary badge for a state. unconfirmed
-        // applies the dashed "potential conflict" treatment.
+        // Full human-readable label for a state, including the unconfirmed variant.
+        function cbStateLabelFull(state, unconfirmed) {
+            if (state === 'conflict' && unconfirmed) return 'Possible conflict';
+            return cbStateLabel(state);
+        }
+
+        // Render a single cross-branch state badge as an ICON ONLY (the glyph comes
+        // from the .cb-<state>::before rule). The human-readable label is exposed
+        // via the title tooltip rather than inline text, keeping the tree compact;
+        // the detail panel shows the words (see cbContributionsHtml).
         function cbBadgeHtml(state, unconfirmed) {
             if (!state) return '';
             var cls = 'cb-badge cb-' + state;
             if (state === 'conflict' && unconfirmed) cls += ' cb-unconfirmed';
-            var label = cbStateLabel(state);
-            if (state === 'conflict' && unconfirmed) label = 'Possible conflict';
-            return '<span class="' + cls + '">' + escapeHtml(label) + '</span>';
+            var label = cbStateLabelFull(state, unconfirmed);
+            return '<span class="' + cls + '" title="' + escapeHtml(label) + '"></span>';
+        }
+
+        // Status CSS suffix that falls back to a neutral "unknown" badge instead of
+        // an empty, box-shadow-only one when status is missing.
+        function statusClass(status) {
+            return status ? status : 'unknown';
         }
 
         // Rollup precedence matching internal/show worseState: conflict beats
@@ -1138,6 +1329,7 @@
                 h += '<div class="cb-contrib-row">';
                 h += '<span class="cb-contrib-branch">' + escapeHtml(c.branch || '') + '</span>';
                 h += cbBadgeHtml(c.state, unconfirmed);
+                h += '<span class="cb-contrib-label">' + escapeHtml(cbStateLabelFull(c.state, unconfirmed)) + '</span>';
                 if (c.state === 'incoming_mod' && (c.oldStatus || c.newStatus)) {
                     h += '<span class="cb-contrib-drift">';
                     h += '<code>' + escapeHtml(c.oldStatus || '—') + '</code>';
@@ -1168,8 +1360,11 @@
             } else {
                 h += '<br>';
                 for (var k = 0; k < crossBranchBranches.length; k++) {
-                    h += '<span class="cb-branch-chip">' + escapeHtml(crossBranchBranches[k]) + '</span>';
+                    var bn = crossBranchBranches[k];
+                    var chipCls = 'cb-branch-chip' + (cbIsSelected(bn) ? '' : ' cb-chip-deselected');
+                    h += '<span class="' + chipCls + '" data-branch="' + escapeHtml(bn) + '">' + escapeHtml(bn) + '</span>';
                 }
+                h += cbBranchFilterHtml();
             }
             h += '</div></div></div>';
 
@@ -1183,6 +1378,138 @@
             return h;
         }
 
+        // Checkbox dropdown to deselect branches. The menu is built once; toggling a
+        // checkbox filters contributions client-side and persists to localStorage.
+        function cbBranchFilterHtml() {
+            var selected = 0;
+            for (var i = 0; i < crossBranchBranches.length; i++) {
+                if (cbIsSelected(crossBranchBranches[i])) selected++;
+            }
+            var h = '<span class="cb-branch-filter">';
+            h += '<button type="button" class="cb-branch-toggle" id="cb-branch-toggle" aria-expanded="false">';
+            h += 'Branches <span id="cb-branch-count">(' + selected + '/' + crossBranchBranches.length + ')</span>';
+            h += ' <span class="cb-branch-caret">▼</span></button>';
+            h += '<div class="cb-branch-menu" id="cb-branch-menu" hidden>';
+            h += '<div class="cb-menu-actions">';
+            h += '<button type="button" class="cb-menu-action" data-cb-menu="all">Select all</button>';
+            h += '<button type="button" class="cb-menu-action" data-cb-menu="none">Deselect all</button>';
+            h += '</div>';
+            for (var k = 0; k < crossBranchBranches.length; k++) {
+                var bn = crossBranchBranches[k];
+                h += '<label><input type="checkbox" class="cb-branch-checkbox" data-branch="' + escapeHtml(bn) + '"'
+                    + (cbIsSelected(bn) ? ' checked' : '') + '> ' + escapeHtml(bn) + '</label>';
+            }
+            h += '</div></span>';
+            return h;
+        }
+
+        // Re-render the tree and detail panels after a branch-selection change,
+        // preserving expansion, the active detail, and scroll so toggling a branch
+        // is non-disruptive. All recomputation is client-side from data already in
+        // the page (no server round-trip).
+        function cbApplyBranchSelection() {
+            // Capture UI state.
+            var expanded = {};
+            document.querySelectorAll('.assertions-list.expanded').forEach(function(el) {
+                expanded[el.id.replace('assertions-', '')] = true;
+            });
+            var activeDetail = document.querySelector('.detail-content.active');
+            var activeId = activeDetail ? activeDetail.id : null;
+            var treePanel = document.querySelector('.tree-panel');
+            var scrollTop = treePanel ? treePanel.scrollTop : 0;
+
+            buildTree();
+            buildDetailPanels();
+            markCompletedSpecs();
+            updateHiddenCount();
+
+            // Restore expansion.
+            Object.keys(expanded).forEach(function(specId) {
+                var list = document.getElementById('assertions-' + specId);
+                var toggle = document.getElementById('toggle-' + specId);
+                if (list) list.classList.add('expanded');
+                if (toggle) { toggle.classList.add('expanded'); toggle.parentElement.classList.add('expanded'); toggle.textContent = '▼'; }
+            });
+            // Restore active detail if it still exists (it may have been hidden).
+            if (activeId) {
+                var el = document.getElementById(activeId);
+                if (el) {
+                    el.classList.add('active');
+                    var emptyState = document.getElementById('empty-state');
+                    if (emptyState) emptyState.style.display = 'none';
+                }
+            }
+            if (treePanel) treePanel.scrollTop = scrollTop;
+
+            // Re-apply any active search filter against the rebuilt DOM.
+            var searchInput = document.getElementById('spec-search');
+            if (searchInput && searchInput.value) {
+                searchInput.dispatchEvent(new Event('input'));
+            }
+        }
+
+        // Wire the branch dropdown: open/close, checkbox toggles, select/deselect
+        // all, chip dimming, count, and persistence.
+        function initializeBranchFilter() {
+            if (!crossBranchMode) return;
+            var toggle = document.getElementById('cb-branch-toggle');
+            var menu = document.getElementById('cb-branch-menu');
+            if (!toggle || !menu) return;
+
+            toggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var open = menu.hasAttribute('hidden');
+                if (open) { menu.removeAttribute('hidden'); toggle.setAttribute('aria-expanded', 'true'); }
+                else { menu.setAttribute('hidden', ''); toggle.setAttribute('aria-expanded', 'false'); }
+            });
+            // Keep clicks inside the menu from closing it.
+            menu.addEventListener('click', function(e) { e.stopPropagation(); });
+            document.addEventListener('click', function() {
+                if (!menu.hasAttribute('hidden')) { menu.setAttribute('hidden', ''); toggle.setAttribute('aria-expanded', 'false'); }
+            });
+
+            function refreshChipsAndCount() {
+                var selected = 0;
+                for (var i = 0; i < crossBranchBranches.length; i++) {
+                    if (cbIsSelected(crossBranchBranches[i])) selected++;
+                }
+                var count = document.getElementById('cb-branch-count');
+                if (count) count.textContent = '(' + selected + '/' + crossBranchBranches.length + ')';
+                document.querySelectorAll('.cb-branch-chip').forEach(function(chip) {
+                    var b = chip.getAttribute('data-branch');
+                    if (cbIsSelected(b)) chip.classList.remove('cb-chip-deselected');
+                    else chip.classList.add('cb-chip-deselected');
+                });
+            }
+
+            menu.addEventListener('change', function(e) {
+                var cb = e.target;
+                if (!cb.classList || !cb.classList.contains('cb-branch-checkbox')) return;
+                var branch = cb.getAttribute('data-branch');
+                if (cb.checked) delete cbDeselected[branch];
+                else cbDeselected[branch] = true;
+                cbSaveDeselected();
+                refreshChipsAndCount();
+                cbApplyBranchSelection();
+            });
+
+            menu.querySelectorAll('[data-cb-menu]').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var mode = btn.getAttribute('data-cb-menu');
+                    cbDeselected = {};
+                    if (mode === 'none') {
+                        for (var i = 0; i < crossBranchBranches.length; i++) cbDeselected[crossBranchBranches[i]] = true;
+                    }
+                    cbSaveDeselected();
+                    menu.querySelectorAll('.cb-branch-checkbox').forEach(function(c) {
+                        c.checked = cbIsSelected(c.getAttribute('data-branch'));
+                    });
+                    refreshChipsAndCount();
+                    cbApplyBranchSelection();
+                });
+            });
+        }
+
         // Build tree panel
         function buildTree() {
             var treeEl = document.getElementById('spec-tree');
@@ -1190,19 +1517,23 @@
 
             for (var si = 0; si < specs.length; si++) {
                 var spec = specs[si];
+                // In cross-branch mode, a foreign spec disappears once all of its
+                // contributing branches are deselected.
+                if (crossBranchMode && !cbSpecVisible(spec)) continue;
                 var specAssertions = assertionsByParent[spec.id] || [];
                 var searchText = spec.id + ' ' + spec.title.toLowerCase() + ' ' + spec.status + ' ' + spec.priority;
 
-                // Cross-branch spec summary (worst incoming state across the spec)
-                var specCbSummary = crossBranchMode ? (spec.crossBranchSummary || '') : '';
-                var specCbUnconfirmed = specCbSummary === 'conflict' && cbHasUnconfirmedConflict(spec.crossBranch);
+                // Cross-branch spec summary (worst incoming state across the spec),
+                // recomputed from the currently-selected branches.
+                var specCbSummary = crossBranchMode ? cbSpecSummary(spec) : '';
+                var specCbUnconfirmed = specCbSummary === 'conflict' && cbSpecSummaryUnconfirmed(spec);
                 var specCbRowClass = specCbSummary ? ' ' + cbRowClassFor(specCbSummary, specCbUnconfirmed) : '';
 
                 html += '<li class="spec-item" data-spec-id="' + escapeHtml(spec.id) + '" data-search-text="' + escapeHtml(searchText) + '">';
                 html += '<div class="spec-header' + specCbRowClass + '" data-action="toggle-spec" data-spec-id="' + escapeHtml(spec.id) + '" data-show-detail="true" data-type="spec">';
                 html += '<span class="toggle-icon" id="toggle-' + escapeHtml(spec.id) + '">\u25B6</span>';
-                html += '<span class="priority-badge priority-' + spec.priority + '">' + spec.priority + '</span>';
-                html += '<span class="status-badge status-' + escapeHtml(spec.status) + '"></span>';
+                html += '<span class="priority-badge priority-' + spec.priority + '">' + (spec.priority || '–') + '</span>';
+                html += '<span class="status-badge status-' + escapeHtml(statusClass(spec.status)) + '"></span>';
                 if (specCbSummary) {
                     html += cbBadgeHtml(specCbSummary, specCbUnconfirmed);
                 }
@@ -1212,16 +1543,19 @@
                 html += '<ul class="assertions-list" id="assertions-' + escapeHtml(spec.id) + '">';
                 for (var ai = 0; ai < specAssertions.length; ai++) {
                     var assertion = specAssertions[ai];
+                    // Hide a foreign assertion whose every contributing branch is deselected.
+                    if (crossBranchMode && !cbAssertionVisible(assertion)) continue;
                     var aSearchText = assertion.id + ' ' + assertion.title.toLowerCase() + ' ' + assertion.status + ' ' + assertion.priority;
 
-                    var aCbState = crossBranchMode ? cbWorstState(assertion.crossBranch) : '';
-                    var aCbUnconfirmed = aCbState === 'conflict' && cbHasUnconfirmedConflict(assertion.crossBranch);
+                    var aFiltered = crossBranchMode ? cbFilteredContribs(assertion) : [];
+                    var aCbState = crossBranchMode ? cbWorstState(aFiltered) : '';
+                    var aCbUnconfirmed = aCbState === 'conflict' && cbHasUnconfirmedConflict(aFiltered);
                     var aCbRowClass = aCbState ? ' ' + cbRowClassFor(aCbState, aCbUnconfirmed) : '';
 
                     html += '<li class="assertion-item' + aCbRowClass + '" data-action="show-detail" data-assertion-id="' + escapeHtml(assertion.id) + '" data-type="assertion" data-search-text="' + escapeHtml(aSearchText) + '">';
                     html += '<div style="display: flex; align-items: center;">';
-                    html += '<span class="priority-badge priority-' + assertion.priority + '">' + assertion.priority + '</span>';
-                    html += '<span class="status-badge status-' + escapeHtml(assertion.status) + '"></span>';
+                    html += '<span class="priority-badge priority-' + assertion.priority + '">' + (assertion.priority || '–') + '</span>';
+                    html += '<span class="status-badge status-' + escapeHtml(statusClass(assertion.status)) + '"></span>';
                     if (aCbState) {
                         html += cbBadgeHtml(aCbState, aCbUnconfirmed);
                     }
@@ -1244,6 +1578,7 @@
             // Spec detail panels
             for (var si = 0; si < specs.length; si++) {
                 var spec = specs[si];
+                if (crossBranchMode && !cbSpecVisible(spec)) continue;
                 html += '<div class="detail-content" id="detail-spec-' + escapeHtml(spec.id) + '">';
                 html += '<div class="detail-header">';
                 html += '<div class="detail-title">' + escapeHtml(spec.title) + '</div>';
@@ -1251,13 +1586,15 @@
                 html += '<span class="meta-item">Status: <span class="detail-status-badge">' + statusEmoji(spec.status) + '</span></span>';
                 html += '<span class="meta-item">Priority: <span class="detail-priority-badge">' + spec.priority + '</span></span>';
                 html += '<span class="meta-item">File: <strong>' + escapeHtml(spec.file) + '</strong></span>';
-                if (crossBranchMode && spec.crossBranchSummary) {
-                    var specSummaryUnconfirmed = spec.crossBranchSummary === 'conflict' && cbHasUnconfirmedConflict(spec.crossBranch);
-                    html += '<span class="meta-item">Cross-branch: ' + cbBadgeHtml(spec.crossBranchSummary, specSummaryUnconfirmed) + '</span>';
+                var specDetailSummary = crossBranchMode ? cbSpecSummary(spec) : '';
+                if (specDetailSummary) {
+                    var specSummaryUnconfirmed = specDetailSummary === 'conflict' && cbSpecSummaryUnconfirmed(spec);
+                    html += '<span class="meta-item">Cross-branch: ' + cbBadgeHtml(specDetailSummary, specSummaryUnconfirmed)
+                        + ' <span class="cb-contrib-label">' + escapeHtml(cbStateLabelFull(specDetailSummary, specSummaryUnconfirmed)) + '</span></span>';
                 }
                 html += '</div>';
                 html += '</div>';
-                html += cbContributionsHtml(spec.crossBranch);
+                html += cbContributionsHtml(cbFilteredContribs(spec));
                 html += '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(spec.content || '')) + '</div>';
                 html += '</div>';
             }
@@ -1265,6 +1602,7 @@
             // Assertion detail panels
             for (var ai = 0; ai < assertions.length; ai++) {
                 var assertion = assertions[ai];
+                if (crossBranchMode && !cbAssertionVisible(assertion)) continue;
                 html += '<div class="detail-content" id="detail-assertion-' + escapeHtml(assertion.id) + '" data-branch="' + escapeHtml(assertion.branch) + '">';
                 html += '<div class="detail-header">';
                 html += '<div class="detail-title">' + escapeHtml(assertion.title) + '</div>';
@@ -1279,7 +1617,7 @@
                 }
                 html += '</div>';
                 html += '</div>';
-                html += cbContributionsHtml(assertion.crossBranch);
+                html += cbContributionsHtml(cbFilteredContribs(assertion));
                 html += '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(assertion.content || '')) + '</div>';
                 html += '</div>';
             }
@@ -2043,6 +2381,7 @@
         initializeCompletedSpecsToggle();
         initializeMetroMapCollapse();
         initializeSearch();
+        initializeBranchFilter();
 
     })();
     </script>

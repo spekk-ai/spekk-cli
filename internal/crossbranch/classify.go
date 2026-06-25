@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
 // State is the cross-branch classification of a single spec/assertion file for
@@ -63,6 +65,27 @@ type FileState struct {
 	// This lets the renderer highlight status drift without re-parsing.
 	OldStatus string
 	NewStatus string
+
+	// Meta carries the parsed metadata of an incoming-addition ("foreign") file,
+	// read from the branch where it was added so the renderer can synthesize a
+	// complete item (real title/status/priority/content) instead of a blank
+	// placeholder. It is populated only for StateIncomingAdd and is nil for every
+	// other state and when the foreign file could not be parsed.
+	Meta *FileMeta
+}
+
+// FileMeta is the parsed metadata of a foreign (incoming-addition) spec or
+// assertion file, read from the branch that introduces it. It mirrors the subset
+// of parser.Spec / parser.Assertion the explorer needs to render a synthesized
+// item. For a spec parent file, Status is left empty: a spec's status is derived
+// from its assertions, not stored, so the caller computes it from the foreign
+// assertions instead.
+type FileMeta struct {
+	Title    string
+	Status   string
+	Branch   string
+	Priority int
+	Content  string
 }
 
 // Classify discovers the comparison branches (via DiscoverBranches with the
@@ -149,10 +172,13 @@ func classifyBranch(b Branch, mergeTreeOK bool) ([]FileState, error) {
 
 		switch their {
 		case changeAdd:
-			// Added on theirs. If also present/added on ours it would be a
-			// both-added candidate; classify as conflict candidate only when
-			// ours also added (same path). Otherwise it is a clean incoming
-			// addition.
+			// Added on theirs. If ours also added the same path it is a both-added
+			// candidate: an add/add with differing content conflicts (git cannot
+			// three-way merge with no base), which merge-tree reports. If it merges
+			// cleanly the two sides added identical content, so the file is already
+			// in sync with theirs and a merge would change nothing — contribute no
+			// FileState, exactly like an unchanged file (it is NOT an incoming add,
+			// since the file already exists on ours).
 			if ourChanged && our == changeAdd {
 				st, deg, rerr := resolveConflict(b, path, mergeTreeOK, &confirmedConflicts, &conflictsResolved)
 				if rerr != nil {
@@ -160,12 +186,10 @@ func classifyBranch(b Branch, mergeTreeOK bool) ([]FileState, error) {
 				}
 				if st == StateConflict {
 					states = append(states, FileState{Path: path, Branch: b.Name, State: StateConflict, Degraded: deg})
-				} else {
-					states = append(states, FileState{Path: path, Branch: b.Name, State: StateIncomingAdd})
 				}
 				continue
 			}
-			states = append(states, FileState{Path: path, Branch: b.Name, State: StateIncomingAdd})
+			states = append(states, FileState{Path: path, Branch: b.Name, State: StateIncomingAdd, Meta: foreignMeta(b.Rev, path)})
 
 		case changeDelete:
 			// Deleted on theirs. If ours also changed it (modify/delete) the
@@ -200,11 +224,20 @@ func classifyBranch(b Branch, mergeTreeOK bool) ([]FileState, error) {
 			if rerr != nil {
 				return nil, rerr
 			}
+			// When ours DELETED the file while theirs modified it (a modify/delete
+			// conflict), the file has no local entry — it is foreign — so parse its
+			// metadata from the branch, which still has it, for synthesis. (When
+			// both sides modified, the file exists on ours and is matched, so no
+			// foreign metadata is needed.)
+			var meta *FileMeta
+			if our == changeDelete {
+				meta = foreignMeta(b.Rev, path)
+			}
 			if st == StateConflict {
-				states = append(states, FileState{Path: path, Branch: b.Name, State: StateConflict, Degraded: deg})
+				states = append(states, FileState{Path: path, Branch: b.Name, State: StateConflict, Degraded: deg, Meta: meta})
 			} else {
 				// merge-tree merged this file cleanly despite both touching it.
-				fs := FileState{Path: path, Branch: b.Name, State: StateIncomingMod}
+				fs := FileState{Path: path, Branch: b.Name, State: StateIncomingMod, Meta: meta}
 				if old, neu, ok := statusDrift(b, path); ok {
 					fs.OldStatus = old
 					fs.NewStatus = neu
@@ -307,41 +340,109 @@ func changedFiles(from, to string) (map[string]changeKind, error) {
 }
 
 // isSpecFile reports whether path is a spec parent or assertion markdown file
-// under specs/. Both spec files (specs/<id>/<id>.md) and assertion files
-// (specs/<id>/assertions/<name>.md) qualify.
+// under specs/, using the same structural layout the parser (ParseAllSpecs)
+// recognizes. This deliberately mirrors the parser's convention rather than
+// matching any *.md under specs/, so stray markdown (e.g. specs/README.md,
+// specs/foo/NOTES.md, deeply nested files) is not classified as a phantom
+// spec/assertion the parser would never surface.
 func isSpecFile(path string) bool {
-	return strings.HasPrefix(path, "specs/") && strings.HasSuffix(path, ".md")
+	return isSpecParentFile(path) || isAssertionFile(path)
 }
 
-// isAssertionFile reports whether path is an assertion file (lives under an
-// assertions/ directory). Used to decide whether status drift is meaningful.
+// isSpecParentFile reports whether path is a spec parent file of the exact form
+// specs/<dir>/<dir>.md — the file basename must equal its immediate directory,
+// which is the layout ParseAllSpecs requires (specs/{spec-id}/{spec-id}.md).
+func isSpecParentFile(path string) bool {
+	if !strings.HasPrefix(path, "specs/") || !strings.HasSuffix(path, ".md") {
+		return false
+	}
+	parts := strings.Split(path, "/")
+	if len(parts) != 3 {
+		return false
+	}
+	return parts[2] == parts[1]+".md"
+}
+
+// isAssertionFile reports whether path is an assertion file of the exact form
+// specs/<dir>/assertions/<name>.md (a direct child of an assertions/ directory),
+// matching how the parser enumerates assertions. Used both to filter the diff and
+// to decide whether status drift is meaningful.
 func isAssertionFile(path string) bool {
-	return isSpecFile(path) && strings.Contains(path, "/assertions/")
+	if !strings.HasPrefix(path, "specs/") || !strings.HasSuffix(path, ".md") {
+		return false
+	}
+	parts := strings.Split(path, "/")
+	return len(parts) == 4 && parts[2] == "assertions"
 }
 
 // statusDrift returns (oldStatus, newStatus, true) when path is an assertion
-// file whose status: differs between ours (HEAD) and the other branch. It
-// reuses the existing parser via AssertionAtRef. Any parse/absence problem, a
-// non-assertion path, or an unchanged status yields ok=false so the caller
-// simply omits drift detail.
+// file whose status: differs between ours (HEAD) and the other branch. Any
+// parse/absence problem, a non-assertion path, or an unchanged status yields
+// ok=false so the caller simply omits drift detail.
+//
+// statusDrift is only ever called for a clean incoming-modification, where the
+// assertion is known to exist on both HEAD and b.Rev. It therefore reads each
+// blob with a single `git show <ref>:<path>` rather than AssertionAtRef, whose
+// extra ls-tree existence probe is redundant here — halving the git spawns per
+// drifting assertion (2 instead of 4).
 func statusDrift(b Branch, path string) (oldStatus, newStatus string, ok bool) {
 	if !isAssertionFile(path) {
 		return "", "", false
 	}
-	ourA, err := AssertionAtRef("HEAD", path)
+	oldStatus, ok = assertionStatusAtRef("HEAD", path)
+	if !ok {
+		// Absent/unparseable on ours — no drift to report here.
+		return "", "", false
+	}
+	newStatus, ok = assertionStatusAtRef(b.Rev, path)
+	if !ok {
+		return "", "", false
+	}
+	if oldStatus == newStatus {
+		return "", "", false
+	}
+	return oldStatus, newStatus, true
+}
+
+// foreignMeta parses the metadata of an incoming-addition file at the branch ref
+// that introduces it, so the renderer can synthesize a complete foreign item. It
+// reuses the existing parser via AssertionAtRef / SpecAtRef (parse-from-ref). Any
+// git/parse failure yields nil — the caller falls back to a path-derived
+// placeholder rather than failing the whole classification.
+func foreignMeta(rev, path string) *FileMeta {
+	if isAssertionFile(path) {
+		a, err := AssertionAtRef(rev, path)
+		if err != nil {
+			return nil
+		}
+		return &FileMeta{Title: a.Title, Status: a.Status, Branch: a.Branch, Priority: a.Priority, Content: a.Content}
+	}
+	if isSpecParentFile(path) {
+		s, err := SpecAtRef(rev, path)
+		if err != nil {
+			return nil
+		}
+		// Spec status is derived from assertions, not stored on the parent; leave
+		// it empty for the caller to compute from the foreign assertions.
+		return &FileMeta{Title: s.Title, Branch: s.Branch, Priority: s.Priority, Content: s.Content}
+	}
+	return nil
+}
+
+// assertionStatusAtRef reads ref:path as an assertion and returns its status,
+// with ok=false on any git/parse failure (treated as "no drift to report"). It
+// reads the blob directly via the read-only chokepoint without a separate
+// existence probe, since callers only invoke it for paths already known present.
+func assertionStatusAtRef(ref, path string) (status string, ok bool) {
+	content, err := Run("show", ref+":"+path)
 	if err != nil {
-		// Absent on ours (it's an incoming add, not a mod) or unparseable —
-		// no drift to report here.
-		return "", "", false
+		return "", false
 	}
-	theirA, err := AssertionAtRef(b.Rev, path)
+	a, err := parser.ParseAssertionContent(path, content)
 	if err != nil {
-		return "", "", false
+		return "", false
 	}
-	if ourA.Status == theirA.Status {
-		return "", "", false
-	}
-	return ourA.Status, theirA.Status, true
+	return a.Status, true
 }
 
 // mergeTreeConflicts runs an in-memory three-way merge of HEAD with rev and

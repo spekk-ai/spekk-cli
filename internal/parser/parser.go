@@ -531,6 +531,20 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 	}, nil
 }
 
+// ParentStatusFromChildStatuses derives a spec's rolled-up status from its child
+// assertions' statuses, using the same rules as the working-tree parser
+// (computeParentStatus). It is exposed so callers that assemble a spec's children
+// from outside the working tree — e.g. the cross-branch explorer synthesizing a
+// foreign spec from assertions parsed out of a git ref — compute a status
+// consistent with how local specs are rolled up.
+func ParentStatusFromChildStatuses(statuses []string) string {
+	children := make([]Assertion, len(statuses))
+	for i, s := range statuses {
+		children[i] = Assertion{Parent: "p", Status: s}
+	}
+	return computeParentStatus("p", children)
+}
+
 // computeParentStatus derives the status of a spec from its child assertions.
 func computeParentStatus(parentID string, assertions []Assertion) string {
 	var children []Assertion

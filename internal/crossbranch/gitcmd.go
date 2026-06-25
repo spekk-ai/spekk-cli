@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -114,12 +115,38 @@ func gitCmd(args []string) *exec.Cmd {
 	if root := repoRoot(); root != "" {
 		cmd.Dir = root
 	}
-	cmd.Env = append(os.Environ(),
-		"GIT_CONFIG_COUNT=1",
-		"GIT_CONFIG_KEY_0=core.quotePath",
-		"GIT_CONFIG_VALUE_0=false",
-	)
+	cmd.Env = appendQuotePathConfig(os.Environ())
 	return cmd
+}
+
+// appendQuotePathConfig adds a core.quotePath=false entry to env via the
+// GIT_CONFIG_COUNT/KEY/VALUE protocol (git >= 2.31) WITHOUT discarding any config
+// the caller already injected the same way. It reads the inherited
+// GIT_CONFIG_COUNT, writes our key at the next free index, and bumps the count by
+// one, so a user's pre-existing env-based git config (indices 0..n-1) is preserved
+// rather than silently overridden by a hardcoded count of 1.
+func appendQuotePathConfig(env []string) []string {
+	n := existingConfigCount(env)
+	return append(env,
+		fmt.Sprintf("GIT_CONFIG_KEY_%d=core.quotePath", n),
+		fmt.Sprintf("GIT_CONFIG_VALUE_%d=false", n),
+		fmt.Sprintf("GIT_CONFIG_COUNT=%d", n+1),
+	)
+}
+
+// existingConfigCount returns the GIT_CONFIG_COUNT already present in env, or 0 if
+// unset or unparseable. The last occurrence wins, mirroring how a child process
+// resolves duplicate environment entries.
+func existingConfigCount(env []string) int {
+	count := 0
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "GIT_CONFIG_COUNT="); ok {
+			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n >= 0 {
+				count = n
+			}
+		}
+	}
+	return count
 }
 
 // RunReportingExit behaves like Run but tolerates a single expected nonzero exit
