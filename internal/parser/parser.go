@@ -229,7 +229,7 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 		Branch:   branch,
 		File:     relFilePath,
 		Title:    extractTitle(body),
-		Content:  content,
+		Content:  strings.TrimSpace(body),
 	}, nil
 }
 
@@ -296,7 +296,7 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		LockedBy:  fm.get("locked-by"),
 		File:      relFilePath,
 		Title:     extractTitle(body),
-		Content:   content,
+		Content:   strings.TrimSpace(body),
 	}, nil
 }
 
