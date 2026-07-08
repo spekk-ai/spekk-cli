@@ -404,3 +404,83 @@ func TestResolveSkill_DefaultEmbeddedSkillFS(t *testing.T) {
 		t.Errorf("unexpected content: %s", skill.Content)
 	}
 }
+
+// Observer coverage for the observer-skill-discovery spec
+// (assertion: skill-resolver-includes-observer).
+
+func TestSkillDirs_ObserverLayers(t *testing.T) {
+	home, cwd, install := setupSkillDirs(t, "observer")
+	r := newSkillResolver(home, cwd, install)
+
+	dirs := r.skillDirs("observer")
+	want := []string{
+		filepath.Join(cwd, ".spekk", "skills", "observer"),
+		filepath.Join(home, "skills", "observer"),
+		filepath.Join(install, "specs", "observer-skills"),
+	}
+	if len(dirs) != len(want) {
+		t.Fatalf("expected %d dirs, got %d: %v", len(want), len(dirs), dirs)
+	}
+	for i := range want {
+		if dirs[i] != want[i] {
+			t.Errorf("dir %d: expected %s, got %s", i, want[i], dirs[i])
+		}
+	}
+}
+
+func TestResolveSkill_ObserverLocalShadowsPackage(t *testing.T) {
+	home, cwd, install := setupSkillDirs(t, "observer")
+	writeSkillFile(t, filepath.Join(install, "specs", "observer-skills"), "my-scan.md", "# Package Scan")
+	writeSkillFile(t, filepath.Join(cwd, ".spekk", "skills", "observer"), "my-scan.md", "# Local Scan")
+
+	r := newSkillResolver(home, cwd, install)
+	skill := r.ResolveSkill("observer", "my-scan")
+	if skill == nil {
+		t.Fatal("expected observer skill to resolve")
+	}
+	if skill.Content != "# Local Scan" {
+		t.Errorf("expected local layer to shadow package, got: %s", skill.Content)
+	}
+
+	skills := r.ListSkills("observer")
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 deduped skill, got %d: %v", len(skills), skills)
+	}
+	if skills[0].Source != filepath.Join(cwd, ".spekk", "skills", "observer") {
+		t.Errorf("expected local source, got %s", skills[0].Source)
+	}
+}
+
+func TestListAliases_ObserverNeverNil(t *testing.T) {
+	home, cwd, install := setupSkillDirs(t, "observer")
+	r := newSkillResolver(home, cwd, install)
+
+	aliases := r.ListAliases("observer")
+	if aliases == nil {
+		t.Fatal("ListAliases(observer) must not return nil")
+	}
+	if aliases["coverage-gap"] != "coverage-gap-skill" {
+		t.Errorf("expected coverage-gap alias to map to coverage-gap-skill, got %q", aliases["coverage-gap"])
+	}
+}
+
+func TestResolveSkill_ObserverEmbeddedCoverageGapAlias(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/observer-skills/coverage-gap-skill.md": &fstest.MapFile{
+			Data: []byte("---\nid: coverage-gap\n---\n# Coverage Gap"),
+		},
+	}
+	home, cwd, install := setupSkillDirs(t, "observer")
+	r := newSkillResolver(home, cwd, install)
+	r.EmbeddedFS = efs
+
+	for _, name := range []string{"coverage-gap", "coverage-gap-skill"} {
+		skill := r.ResolveSkill("observer", name)
+		if skill == nil {
+			t.Fatalf("expected embedded observer skill to resolve via %q", name)
+		}
+		if skill.Source != "(embedded)" {
+			t.Errorf("%s: expected source (embedded), got %s", name, skill.Source)
+		}
+	}
+}
