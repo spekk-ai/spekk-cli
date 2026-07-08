@@ -141,11 +141,7 @@ func RunWatch(specsDir string, opts Options) error {
 			return cbStates, cbSupported, nil
 		}
 
-		states, err := crossbranch.Classify(opts.BranchFilter)
-		if err != nil {
-			return nil, false, err
-		}
-		supported, err := crossbranch.SupportsMergeTree()
+		states, supported, err := crossbranch.Classify(opts.BranchFilter)
 		if err != nil {
 			return nil, false, err
 		}
@@ -414,7 +410,16 @@ func watchSpecs(specsDir string, onChange func()) func() {
 // this stays strictly read-only — it never mutates the working tree, index, or
 // any ref. Returns a stop function.
 func watchRefs(onChange func()) func() {
-	snapshot, _ := scanRefs() // a startup error just means the first good scan sets the baseline
+	return watchRefsWithScan(scanRefs, onChange)
+}
+
+// watchRefsWithScan is the testable core of watchRefs. It accepts a pluggable
+// scan function so tests can inject a stub without hitting the filesystem or
+// spawning git processes. Production code always passes scanRefs; tests may pass
+// a controlled stub. The scan function has the same contract as scanRefs:
+// returning ("", err) on failure, (fingerprint, nil) on success.
+func watchRefsWithScan(scan func() (string, error), onChange func()) func() {
+	snapshot, _ := scan() // a startup error just means the first good scan sets the baseline
 
 	done := make(chan struct{})
 	go func() {
@@ -426,7 +431,7 @@ func watchRefs(onChange func()) func() {
 			case <-done:
 				return
 			case <-ticker.C:
-				current, err := scanRefs()
+				current, err := scan()
 				if err != nil {
 					// Don't reload on a failed scan, but log once on entering the
 					// error state so a persistently broken watcher is observable

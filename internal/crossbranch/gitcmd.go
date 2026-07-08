@@ -46,38 +46,17 @@ func repoRoot() string {
 // allowlist makes the read-only guarantee structural: a mutating subcommand
 // (checkout, switch, merge, reset, stash, add, commit, ...) cannot reach exec.
 var readOnlySubcommands = map[string]bool{
-	"--version":    true,
-	"rev-parse":    true,
+	"--version": true,
+	"rev-parse": true,
+	// for-each-ref is preferred over "branch" for listing refs: it is strictly
+	// read-only with no mutating flag surface, supports richer format strings,
+	// and sorts/filters in a single call without extra parsing.
 	"for-each-ref": true,
-	"branch":       true, // list/read only — see guarded flags below
 	"merge-base":   true,
 	"diff":         true,
-	"diff-tree":    true,
 	"show":         true,
 	"ls-tree":      true,
-	"cat-file":     true,
 	"merge-tree":   true,
-}
-
-// branchMutatingFlags are flags that turn `git branch` from a read-only list
-// into a ref mutation (delete, rename, force, copy). They are rejected so that
-// only the listing forms of `git branch` are reachable.
-var branchMutatingFlags = map[string]bool{
-	"-d":                 true,
-	"-D":                 true,
-	"--delete":           true,
-	"-m":                 true,
-	"-M":                 true,
-	"--move":             true,
-	"-c":                 true,
-	"-C":                 true,
-	"--copy":             true,
-	"-f":                 true,
-	"--force":            true,
-	"--edit-description": true,
-	"--set-upstream-to":  true,
-	"-u":                 true,
-	"--unset-upstream":   true,
 }
 
 // Run executes a read-only git command and returns its trimmed stdout.
@@ -125,9 +104,22 @@ func gitCmd(args []string) *exec.Cmd {
 // GIT_CONFIG_COUNT, writes our key at the next free index, and bumps the count by
 // one, so a user's pre-existing env-based git config (indices 0..n-1) is preserved
 // rather than silently overridden by a hardcoded count of 1.
+//
+// Any existing GIT_CONFIG_COUNT= entries are removed before appending the updated
+// one. On Linux/glibc, getenv(3) returns the first match in the environ array, so
+// leaving a stale entry would shadow the new count and cause git to ignore our
+// injected key/value pair.
 func appendQuotePathConfig(env []string) []string {
 	n := existingConfigCount(env)
-	return append(env,
+	// Remove any prior GIT_CONFIG_COUNT entry — on Linux/glibc getenv returns
+	// the first match, so leaving the old value would shadow the updated count.
+	filtered := make([]string, 0, len(env)+3)
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "GIT_CONFIG_COUNT=") {
+			filtered = append(filtered, kv)
+		}
+	}
+	return append(filtered,
 		fmt.Sprintf("GIT_CONFIG_KEY_%d=core.quotePath", n),
 		fmt.Sprintf("GIT_CONFIG_VALUE_%d=false", n),
 		fmt.Sprintf("GIT_CONFIG_COUNT=%d", n+1),
@@ -135,8 +127,8 @@ func appendQuotePathConfig(env []string) []string {
 }
 
 // existingConfigCount returns the GIT_CONFIG_COUNT already present in env, or 0 if
-// unset or unparseable. The last occurrence wins, mirroring how a child process
-// resolves duplicate environment entries.
+// unset or unparseable. When multiple entries exist, the last occurrence is used to
+// match the value that appendQuotePathConfig will keep after filtering.
 func existingConfigCount(env []string) int {
 	count := 0
 	for _, kv := range env {
@@ -184,33 +176,6 @@ func guard(args []string) error {
 	sub := args[0]
 	if !readOnlySubcommands[sub] {
 		return fmt.Errorf("crossbranch: git subcommand %q is not on the read-only allowlist", sub)
-	}
-	if sub == "branch" {
-		// `git branch` is read-only only in its listing forms. Reject any
-		// mutating flag (delete/rename/force/copy/upstream) and any non-flag
-		// operand, since `git branch <name> [<start>]` *creates* a ref.
-		sawSeparator := false
-		for _, a := range args[1:] {
-			if a == "--" {
-				sawSeparator = true
-				continue
-			}
-			if !sawSeparator && strings.HasPrefix(a, "-") {
-				// Match on the flag name before any "=value" so the equals form
-				// (e.g. --set-upstream-to=origin/x) is rejected like the
-				// separate-argument form.
-				flag := a
-				if eq := strings.IndexByte(a, '='); eq >= 0 {
-					flag = a[:eq]
-				}
-				if branchMutatingFlags[flag] {
-					return fmt.Errorf("crossbranch: git branch flag %q is not read-only", a)
-				}
-				continue
-			}
-			// A positional operand (branch name) means a create/reset form.
-			return fmt.Errorf("crossbranch: git branch with operand %q is not read-only (it would create or move a ref)", a)
-		}
 	}
 	return nil
 }

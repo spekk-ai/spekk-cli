@@ -92,7 +92,7 @@ func TestClassifyStates(t *testing.T) {
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "ours work")
 
-	states, err := Classify("")
+	states, _, err := Classify("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestClassifyStates(t *testing.T) {
 // TestClassifyEmpty: no other branches -> empty result, no error.
 func TestClassifyEmpty(t *testing.T) {
 	newRepo(t)
-	states, err := Classify("")
+	states, _, err := Classify("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestClassifySkipsUnrelatedHistory(t *testing.T) {
 	git(t, dir, "commit", "-q", "-m", "orphan root")
 	git(t, dir, "checkout", "-q", "main")
 
-	states, err := Classify("")
+	states, _, err := Classify("")
 	if err != nil {
 		t.Fatalf("Classify must not fail on an unrelated-history branch: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestClassifyFromSubdirectory(t *testing.T) {
 	// Invoke from a nested subdirectory of the repo.
 	chdir(t, filepath.Join(dir, "specs", "demo"))
 
-	states, err := Classify("")
+	states, _, err := Classify("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +293,7 @@ func TestClassifyNonASCIIPath(t *testing.T) {
 	git(t, dir, "commit", "-q", "-m", "non-ascii")
 	git(t, dir, "checkout", "-q", "main")
 
-	states, err := Classify("")
+	states, _, err := Classify("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +383,7 @@ func TestClassifyForeignMetadata(t *testing.T) {
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "ours deletes")
 
-	states, err := Classify("")
+	states, _, err := Classify("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,6 +393,58 @@ func TestClassifyForeignMetadata(t *testing.T) {
 	}
 	if fs.Meta.Status != "done" {
 		t.Errorf("%s: Meta.Status = %q, want done (parsed from the modifying branch)", aFile, fs.Meta.Status)
+	}
+}
+
+// TestClassifyBranchFilter verifies that Classify with a non-empty branch filter
+// restricts results to only branches matching the glob. Branches that do not
+// match must contribute nothing even when they have changed spec files.
+func TestClassifyBranchFilter(t *testing.T) {
+	dir, _ := newRepo(t)
+
+	const (
+		specFile = "specs/demo/demo.md"
+		addFile1 = "specs/demo/assertions/from-feat.md"
+		addFile2 = "specs/demo/assertions/from-other.md"
+	)
+	writeSpec(t, dir, specFile, "---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# demo\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "base")
+
+	// "feat/x" branch adds addFile1.
+	git(t, dir, "checkout", "-q", "-b", "feat/x")
+	writeSpec(t, dir, addFile1, assertionMD("from-feat", "draft", "feat body"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "feat adds")
+	git(t, dir, "checkout", "-q", "main")
+
+	// "other" branch adds addFile2.
+	git(t, dir, "checkout", "-q", "-b", "other")
+	writeSpec(t, dir, addFile2, assertionMD("from-other", "not_started", "other body"))
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "other adds")
+	git(t, dir, "checkout", "-q", "main")
+
+	// With filter "feat/*", only feat/x should appear; "other" must be excluded.
+	states, _, err := Classify("feat/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, s := range states {
+		if s.Branch == "other" {
+			t.Errorf("branch filter feat/* must exclude 'other', got %+v", s)
+		}
+	}
+
+	found := false
+	for _, s := range states {
+		if s.Path == addFile1 && s.Branch == "feat/x" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("branch filter feat/* must include feat/x's addition %s; states=%+v", addFile1, states)
 	}
 }
 
@@ -426,7 +478,7 @@ func TestClassifyBothAdded(t *testing.T) {
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "ours adds")
 
-	states, err := Classify("")
+	states, _, err := Classify("")
 	if err != nil {
 		t.Fatal(err)
 	}

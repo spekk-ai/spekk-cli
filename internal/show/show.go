@@ -246,11 +246,7 @@ func worseState(a, b string) string {
 // path (show.Run); watch mode reuses foldCrossBranch directly with a cached
 // classification keyed on git ref state (see RunWatch).
 func applyCrossBranch(data *showData, filter string) error {
-	states, err := crossbranch.Classify(filter)
-	if err != nil {
-		return err
-	}
-	supported, err := crossbranch.SupportsMergeTree()
+	states, supported, err := crossbranch.Classify(filter)
 	if err != nil {
 		return err
 	}
@@ -495,6 +491,12 @@ func synthesizeAssertion(path string, meta *crossbranch.FileMeta) showAssertion 
 		a.Priority = meta.Priority
 		a.Content = meta.Content
 		a.Branch = meta.Branch
+		// Prefer the frontmatter parent over the path-derived one: an assertion
+		// may live under a spec directory whose name differs from the frontmatter
+		// parent id, and the explicit frontmatter value is authoritative.
+		if meta.Parent != "" {
+			a.Parent = meta.Parent
+		}
 	}
 	return a
 }
