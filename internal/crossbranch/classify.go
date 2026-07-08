@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
@@ -86,6 +87,11 @@ type FileMeta struct {
 	Branch   string
 	Priority int
 	Content  string
+	// Parent is the frontmatter parent id for assertion files. When populated it
+	// takes precedence over the path-derived parent in synthesizeAssertion, so
+	// an assertion that lives under one spec directory but declares a different
+	// parent in its frontmatter is linked correctly.
+	Parent string
 }
 
 // Classify discovers the comparison branches (via DiscoverBranches with the
@@ -105,22 +111,22 @@ type FileMeta struct {
 // Files unchanged on both sides contribute nothing. The result is sorted by
 // (Path, Branch) for deterministic output. An empty comparison set (no other
 // branches, detached HEAD, ...) yields an empty slice and a nil error.
-func Classify(filter string) ([]FileState, error) {
+func Classify(filter string) ([]FileState, bool, error) {
 	branches, err := DiscoverBranches(filter)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	mergeTreeOK, err := SupportsMergeTree()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	var result []FileState
 	for _, b := range branches {
 		states, cerr := classifyBranch(b, mergeTreeOK)
 		if cerr != nil {
-			return nil, cerr
+			return nil, false, cerr
 		}
 		result = append(result, states...)
 	}
@@ -131,7 +137,7 @@ func Classify(filter string) ([]FileState, error) {
 		}
 		return result[i].Branch < result[j].Branch
 	})
-	return result, nil
+	return result, mergeTreeOK, nil
 }
 
 // classifyBranch classifies all changed spec/assertion files for one comparison
@@ -192,9 +198,15 @@ func classifyBranch(b Branch, mergeTreeOK bool) ([]FileState, error) {
 			states = append(states, FileState{Path: path, Branch: b.Name, State: StateIncomingAdd, Meta: foreignMeta(b.Rev, path)})
 
 		case changeDelete:
-			// Deleted on theirs. If ours also changed it (modify/delete) the
-			// merge is not trivially clean; let merge-tree adjudicate. A plain
-			// deletion (ours untouched) is an incoming deletion.
+			// Deleted on theirs. If ours also deleted it (both-deleted), the
+			// file is simply gone on both sides — a non-event that contributes
+			// nothing (both agree on the deletion).
+			if our == changeDelete {
+				continue
+			}
+			// If ours changed it (modify/delete) the merge is not trivially
+			// clean; let merge-tree adjudicate. A plain deletion (ours
+			// untouched) is an incoming deletion.
 			if ourChanged && our != changeDelete {
 				st, deg, rerr := resolveConflict(b, path, mergeTreeOK, &confirmedConflicts, &conflictsResolved)
 				if rerr != nil {
@@ -415,7 +427,7 @@ func foreignMeta(rev, path string) *FileMeta {
 		if err != nil {
 			return nil
 		}
-		return &FileMeta{Title: a.Title, Status: a.Status, Branch: a.Branch, Priority: a.Priority, Content: a.Content}
+		return &FileMeta{Title: a.Title, Status: a.Status, Branch: a.Branch, Priority: a.Priority, Content: a.Content, Parent: a.Parent}
 	}
 	if isSpecParentFile(path) {
 		s, err := SpecAtRef(rev, path)
@@ -445,21 +457,55 @@ func assertionStatusAtRef(ref, path string) (status string, ok bool) {
 	return a.Status, true
 }
 
+// noWriteTreeOnce guards the one-time probe that detects whether the installed
+// git supports `merge-tree --no-write-tree`. The flag was introduced alongside
+// --write-tree in git 2.38; on older gits the flag is unknown and we fall back
+// to --write-tree (which writes loose tree objects that git auto-GC eventually
+// collects). A sync.Once keeps the probe at most once per process.
+var (
+	noWriteTreeOnce      sync.Once
+	noWriteTreeSupported bool
+)
+
+// supportsNoWriteTree reports whether the installed git understands the
+// `merge-tree --no-write-tree` flag. It probes by merging HEAD with itself
+// (always a clean, zero-conflict merge) and treating a nil error as "supported"
+// and any error as "not supported / flag unknown".
+func supportsNoWriteTree() bool {
+	noWriteTreeOnce.Do(func() {
+		// Merging HEAD with HEAD always exits 0 (clean merge) — no conflict
+		// output to worry about. A non-nil error here means git rejected the
+		// flag (exit 128 "unknown option") rather than a real merge problem.
+		_, err := Run("merge-tree", "--no-write-tree", "HEAD", "HEAD")
+		noWriteTreeSupported = (err == nil)
+	})
+	return noWriteTreeSupported
+}
+
 // mergeTreeConflicts runs an in-memory three-way merge of HEAD with rev and
 // returns the set of conflicted paths (repo-relative slash-form).
 //
-// It uses `git merge-tree --write-tree --name-only HEAD <rev>`, whose
-// conflicted-file-info section is a plain list of paths (one per line) after
-// the merged-tree OID on the first line. merge-tree is read-only — it writes
-// only to the object store, never the working tree or index — and is on the
-// crossbranch read-only allowlist.
+// It uses `git merge-tree --name-only HEAD <rev>`, whose conflicted-file-info
+// section is a plain list of paths (one per line) after the merged-tree OID on
+// the first line. When the installed git supports --no-write-tree (git >= 2.38),
+// that flag is used to avoid writing loose tree objects to the object store.
+// When it is not supported, --write-tree is used instead; the resulting loose
+// objects are harmless — git auto-GC will eventually collect them.
 //
 // merge-tree signals "conflicts exist" with exit status 1 while still printing
 // the conflict report to stdout, so this routes through RunReportingExit(1, ...)
 // (the chokepoint variant that captures stdout on the expected exit code) rather
 // than plain Run, which would discard the report on the nonzero exit.
 func mergeTreeConflicts(rev string) (map[string]bool, error) {
-	out, err := RunReportingExit(1, "merge-tree", "--write-tree", "--name-only", "HEAD", rev)
+	writeFlag := "--write-tree"
+	if supportsNoWriteTree() {
+		// --no-write-tree avoids writing loose tree objects to the object
+		// store; supported on git >= 2.38.
+		writeFlag = "--no-write-tree"
+	}
+	// Note: when writeFlag is --write-tree, merge-tree writes tree objects
+	// which git auto-GC will eventually collect.
+	out, err := RunReportingExit(1, "merge-tree", writeFlag, "--name-only", "HEAD", rev)
 	if err != nil {
 		return nil, fmt.Errorf("crossbranch: merge-tree HEAD %s: %w", rev, err)
 	}

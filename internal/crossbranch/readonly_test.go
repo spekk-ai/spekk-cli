@@ -79,11 +79,12 @@ func TestReadOnlyGuaranteeLeavesRepoUnchanged(t *testing.T) {
 	before := takeSnapshot(t, dir)
 
 	// Representative read-only operations the crossbranch flow relies on, all
-	// routed through the single chokepoint.
+	// routed through the single chokepoint. "branch" is intentionally absent:
+	// it was removed from the allowlist because for-each-ref covers all
+	// listing needs with no mutating flag surface.
 	mustRun(t, "--version")
 	mustRun(t, "rev-parse", "HEAD")
 	mustRun(t, "for-each-ref", "--format=%(refname)")
-	mustRun(t, "branch", "--list")
 	mustRun(t, "diff", "HEAD")
 	mustRun(t, "show", "HEAD:spec.md")
 	mustRun(t, "ls-tree", "HEAD")
@@ -140,12 +141,15 @@ func mustRun(t *testing.T, args ...string) {
 
 // TestAppendQuotePathConfigChains verifies the core.quotePath=false config is
 // appended after any GIT_CONFIG entries the caller already injected, bumping the
-// count instead of clobbering it.
+// count instead of clobbering it, and that exactly one GIT_CONFIG_COUNT= entry
+// remains in the result (no stale duplicate that would shadow the updated count
+// on Linux/glibc).
 func TestAppendQuotePathConfigChains(t *testing.T) {
 	t.Run("no pre-existing config uses index 0", func(t *testing.T) {
 		out := appendQuotePathConfig([]string{"PATH=/usr/bin"})
 		want := []string{"GIT_CONFIG_KEY_0=core.quotePath", "GIT_CONFIG_VALUE_0=false", "GIT_CONFIG_COUNT=1"}
 		assertTail(t, out, want)
+		assertExactlyOne(t, out, "GIT_CONFIG_COUNT=")
 	})
 
 	t.Run("existing count is preserved and bumped", func(t *testing.T) {
@@ -160,6 +164,23 @@ func TestAppendQuotePathConfigChains(t *testing.T) {
 		// The caller's two entries must still be present.
 		if !containsLine(out, "GIT_CONFIG_KEY_0=user.name") || !containsLine(out, "GIT_CONFIG_KEY_1=core.pager") {
 			t.Errorf("pre-existing GIT_CONFIG entries were dropped: %v", out)
+		}
+		assertExactlyOne(t, out, "GIT_CONFIG_COUNT=")
+	})
+
+	t.Run("stale GIT_CONFIG_COUNT is removed so no duplicate shadows the new count", func(t *testing.T) {
+		// Simulate the scenario that triggers the Linux/glibc bug: env already
+		// contains a GIT_CONFIG_COUNT (e.g. from a parent process) before we
+		// inject ours. The result must contain exactly one GIT_CONFIG_COUNT=
+		// so that getenv returns the correct updated value.
+		env := []string{
+			"GIT_CONFIG_COUNT=1",
+			"GIT_CONFIG_KEY_0=user.name", "GIT_CONFIG_VALUE_0=Alice",
+		}
+		out := appendQuotePathConfig(env)
+		assertExactlyOne(t, out, "GIT_CONFIG_COUNT=")
+		if !containsLine(out, "GIT_CONFIG_COUNT=2") {
+			t.Errorf("expected GIT_CONFIG_COUNT=2 in output, got: %v", out)
 		}
 	})
 
@@ -190,4 +211,18 @@ func containsLine(ss []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// assertExactlyOne asserts that exactly one entry in ss has the given prefix.
+func assertExactlyOne(t *testing.T, ss []string, prefix string) {
+	t.Helper()
+	count := 0
+	for _, s := range ss {
+		if strings.HasPrefix(s, prefix) {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly one entry with prefix %q, got %d in %v", prefix, count, ss)
+	}
 }

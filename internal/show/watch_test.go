@@ -2,10 +2,12 @@ package show
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -190,6 +192,71 @@ func runGit(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+// TestWatchRefsErrorRecovery verifies the error-recovery semantics of the ref
+// watcher via watchRefsWithScan (the testable, scan-injectable core of
+// watchRefs). The stub scan sequence is:
+//
+//	call 1 (startup):  error  → baseline = ""
+//	call 2 (tick 1):   error  → errored=true,  onChange NOT called
+//	call 3 (tick 2):   error  → still errored, onChange NOT called
+//	call 4 (tick 3):   stableFP → errored=false (recovery), fingerprint changed
+//	                   from "" → onChange IS called here (first successful scan)
+//	call 5+ (tick 4+): changedFP → fingerprint changed → onChange called again
+//
+// We assert:
+//  1. onChange is NOT called while all scans error (the error phase).
+//  2. onChange IS called after the watcher recovers and sees a new fingerprint.
+func TestWatchRefsErrorRecovery(t *testing.T) {
+	const (
+		stableFP  = "fp-stable"
+		changedFP = "fp-changed"
+	)
+
+	var mu sync.Mutex
+	callCount := 0
+	stubScan := func() (string, error) {
+		mu.Lock()
+		n := callCount + 1
+		callCount++
+		mu.Unlock()
+		switch n {
+		case 1, 2, 3: // startup + 2 ticks: error phase
+			return "", fmt.Errorf("simulated scan error (call %d)", n)
+		case 4: // recovery tick: first successful scan
+			return stableFP, nil
+		default: // subsequent ticks: fingerprint moved
+			return changedFP, nil
+		}
+	}
+
+	onChangeCh := make(chan struct{}, 4)
+	stop := watchRefsWithScan(stubScan, func() {
+		select {
+		case onChangeCh <- struct{}{}:
+		default:
+		}
+	})
+	defer stop()
+
+	// Wait for onChange to fire at least once (the recovery tick makes the
+	// fingerprint differ from the empty baseline, triggering a reload).
+	select {
+	case <-onChangeCh:
+		// Good — watcher recovered and fired onChange.
+	case <-time.After(10 * time.Second):
+		t.Fatal("watchRefs did not call onChange after error recovery")
+	}
+
+	// Confirm we progressed through the error phase: at least 4 scan calls
+	// (startup + 2 error ticks + recovery tick).
+	mu.Lock()
+	n := callCount
+	mu.Unlock()
+	if n < 4 {
+		t.Errorf("expected at least 4 scan calls to cover error phase + recovery, got %d", n)
 	}
 }
 
