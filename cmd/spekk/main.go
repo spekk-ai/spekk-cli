@@ -327,28 +327,31 @@ func showStatus() {
 }
 
 // showSpekk generates and displays the spec explorer web interface.
-// Supports --watch / -w flag for live reload.
+// Supports --watch / -w for live reload and --cross-branch (with an optional
+// --branch-filter glob) for merge-preview mode.
 func showSpekk(args []string) {
 	specsDir := findSpecsDir()
 
-	// Check for --watch / -w flag
-	watch := false
-	for _, a := range args {
-		if a == "--watch" || a == "-w" {
-			watch = true
-			break
-		}
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"watch":         {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
+		"cross-branch":  {Names: []string{"--cross-branch"}, Type: cli.BoolFlag},
+		"branch-filter": {Names: []string{"--branch-filter"}, Type: cli.StringFlag},
+	})
+
+	opts := show.Options{
+		CrossBranch:  flags.Bool("cross-branch"),
+		BranchFilter: flags.String("branch-filter"),
 	}
 
-	if watch {
-		if err := show.RunWatch(specsDir); err != nil {
+	if flags.Bool("watch") {
+		if err := show.RunWatch(specsDir, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 
-	if err := show.Run(specsDir); err != nil {
+	if err := show.Run(specsDir, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -832,6 +835,11 @@ COMMANDS:
 
 DEFAULT:
   When no command is provided, spekk runs the spec parser to find the next assertion.
+
+FLAGS for "show":
+  --watch, -w              Watch specs and live-reload the explorer
+  --cross-branch           Merge-preview mode: show spec/assertion state across all branches
+  --branch-filter <glob>   In cross-branch mode, only include branches matching the glob (e.g. 'feat/*')
 
 FLAGS for "next":
   --all             Show all assertions
