@@ -5,7 +5,7 @@ created: 2026-05-22T12:00:00Z
 priority: 1
 status: done
 depends-on: skill-resolver-includes-observer
-branch: feature/observer-skill-discovery
+branch: feature/extend-observer
 ---
 
 # RunObserver Detects and Activates Skills

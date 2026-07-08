@@ -126,8 +126,11 @@ func setupObserverSkill(t *testing.T, skillName, content string) string {
 	}
 
 	// Isolate cwd/home so local/global layers don't pick up real skills.
+	// XDG_CONFIG_HOME must be pinned too: config.GlobalConfigDir prefers it
+	// over HOME, so a developer machine with it set would leak real skills.
 	isolated := t.TempDir()
 	t.Setenv("HOME", isolated)
+	t.Setenv("XDG_CONFIG_HOME", isolated)
 	origWd, _ := os.Getwd()
 	if err := os.Chdir(isolated); err != nil {
 		t.Fatal(err)

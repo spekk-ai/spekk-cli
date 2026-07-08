@@ -18,8 +18,10 @@ var legacyAliases = map[string]map[string]string{
 		"coordinate": "coordinator-skill",
 		"validate":   "business-model-validator-skill",
 	},
-	"builder":  {},
-	"observer": {},
+	"builder": {},
+	"observer": {
+		"coverage-gap": "coverage-gap-skill",
+	},
 }
 
 // packageSkillDirNames maps agent → relative directory under installDir.

@@ -27,7 +27,7 @@ Constructor accepts `{ homeDir, cwd }` for testability (same as `PromptResolver`
 | Layer | Path | Purpose |
 |-------|------|---------|
 | Local | `.spekk/skills/{agent}/*.md` | Project-specific skills |
-| Global | `~/.spekk/skills/{agent}/*.md` | User's personal skills across all projects |
+| Global | `~/.config/spekk/skills/{agent}/*.md` | User's personal skills across all projects |
 | Package | `specs/coach-skills-system/` (coach) / `specs/builder-skills/` (builder) | Ships with spekk |
 
 ### Skill Name Derivation

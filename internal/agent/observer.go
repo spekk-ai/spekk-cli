@@ -82,6 +82,14 @@ func RunObserver(args []string, installDir string) {
 			fmt.Println("Working directory:", wd)
 			fmt.Println()
 
+			// Flags still apply in skill mode (`spekk observer <skill> [flags]`),
+			// so parse them and pass the preferences along with the skill content.
+			cfg, err := ParseObserverFlags(args)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+
 			skillMsg, err := BuildSkillMessage(installDir, "observer", skillName, args)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -91,7 +99,7 @@ func RunObserver(args []string, installDir string) {
 			opts := LaunchOptions{
 				Agent:        "observer",
 				InstallDir:   installDir,
-				ExtraMessage: skillMsg,
+				ExtraMessage: skillMsg + BuildObserverOptionsMessage(cfg),
 			}
 			message, err := BuildActivationMessage(opts)
 			if err != nil {
@@ -136,4 +144,3 @@ func RunObserver(args []string, installDir string) {
 		os.Exit(1)
 	}
 }
-

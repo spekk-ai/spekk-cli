@@ -330,16 +330,19 @@ func TestBuildActivationMessage_UnknownAgent(t *testing.T) {
 }
 
 // TestBuildHelpText_ObserverWithSkills verifies observer help includes
-// the dynamic skill list AND observer-specific options/examples.
+// the dynamic skill list AND observer-specific options/examples. The fixture
+// uses the real shipped filename (coverage-gap-skill.md) so this test catches
+// help listing the raw stem instead of the aliased invocation name.
 func TestBuildHelpText_ObserverWithSkills(t *testing.T) {
 	install := t.TempDir()
 	skillDir := filepath.Join(install, "specs", "observer-skills")
 	os.MkdirAll(skillDir, 0o755)
-	os.WriteFile(filepath.Join(skillDir, "coverage-gap.md"), []byte("# Coverage Gap"), 0o644)
+	os.WriteFile(filepath.Join(skillDir, "coverage-gap-skill.md"), []byte("---\nid: coverage-gap\n---\n# Coverage Gap"), 0o644)
 
 	// Isolate cwd/home so local/global layers don't shadow.
 	isolated := t.TempDir()
 	t.Setenv("HOME", isolated)
+	t.Setenv("XDG_CONFIG_HOME", isolated)
 	origWd, _ := os.Getwd()
 	os.Chdir(isolated)
 	t.Cleanup(func() { os.Chdir(origWd) })
@@ -349,8 +352,11 @@ func TestBuildHelpText_ObserverWithSkills(t *testing.T) {
 	if !strings.Contains(out, "AVAILABLE SKILLS:") {
 		t.Error("help should contain AVAILABLE SKILLS section")
 	}
-	if !strings.Contains(out, "coverage-gap") {
-		t.Error("help should list discovered observer skill")
+	if !strings.Contains(out, "  coverage-gap\n") {
+		t.Errorf("help should list the skill under its invocation name %q, got:\n%s", "coverage-gap", out)
+	}
+	if strings.Contains(out, "coverage-gap-skill") {
+		t.Error("help should not expose the raw filename stem coverage-gap-skill")
 	}
 	if !strings.Contains(out, "--interval") {
 		t.Error("help should document observer's --interval option")
@@ -370,6 +376,7 @@ func TestBuildHelpText_ObserverAlwaysShowsOptions(t *testing.T) {
 
 	isolated := t.TempDir()
 	t.Setenv("HOME", isolated)
+	t.Setenv("XDG_CONFIG_HOME", isolated)
 	origWd, _ := os.Getwd()
 	os.Chdir(isolated)
 	t.Cleanup(func() { os.Chdir(origWd) })
