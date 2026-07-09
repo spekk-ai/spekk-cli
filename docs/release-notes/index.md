@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.9.0 -- Cross-Branch Merge Preview](RELEASE-NOTES-1.9.0.md)
+
+`spekk show --cross-branch` previews what merging each branch into the current branch would do to the spec corpus — read-only, with inline diff badges, branch filtering, and conflict detection. Observer now supports skills with layered resolution and ships a `coverage-gap` seed skill. Show detail panel renders proper markdown typography.
+
 ## [1.8.0 -- Sudo-Free Installs and Updates](RELEASE-NOTES-1.8.0.md)
 
 `install.sh` now defaults to user-owned `~/.local/bin`, so `spekk update` works without sudo. The installer warns (with the exact fix) when the directory isn't on `PATH`, and `spekk update` fails fast with clear guidance when it lacks write permission.

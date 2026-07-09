@@ -53,6 +53,11 @@ nav = [
   { "Configuration" = "configuration.md" },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.9.0 — Cross-Branch Merge Preview" = "release-notes/RELEASE-NOTES-1.9.0.md" },
+    { "1.8.0 — Sudo-Free Installs and Updates" = "release-notes/RELEASE-NOTES-1.8.0.md" },
+    { "1.7.0 — XDG-Compliant Config Directory" = "release-notes/RELEASE-NOTES-1.7.0.md" },
+    { "1.6.0 — Use Spekk from Any Coding Assistant" = "release-notes/RELEASE-NOTES-1.6.0.md" },
+    { "1.5.0 — The Go Rewrite" = "release-notes/RELEASE-NOTES-1.5.0.md" },
     { "1.4.0 — Layered Prompts, Sandboxes, WebSocket Server" = "release-notes/RELEASE-NOTES-1.4.0.md" },
     { "1.3.0 — Cloud Sandboxes" = "release-notes/RELEASE-NOTES-1.3.0.md" },
     { "1.2.4 — Live Reload + Searchbar" = "release-notes/RELEASE-NOTES-1.2.4.md" },
