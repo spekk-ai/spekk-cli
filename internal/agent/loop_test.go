@@ -146,6 +146,67 @@ func TestLoopFlags_WatchParsing(t *testing.T) {
 	}
 }
 
+func TestLoopFlags_IdleTimeoutParsing(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{nil, ""},
+		{[]string{"--idle-timeout", "60"}, "60"},
+		{[]string{"--watch", "--idle-timeout", "300"}, "300"},
+		{[]string{"--idle-timeout", "30", "-w"}, "30"},
+	}
+	for _, tt := range tests {
+		parsed := cli.ParseFlags(tt.args, LoopFlags)
+		got := parsed.String("idleTimeout")
+		if got != tt.want {
+			t.Errorf("LoopFlags(%v): idleTimeout = %q, want %q", tt.args, got, tt.want)
+		}
+	}
+}
+
+func TestResetAssertionStatus(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test-assertion.md")
+
+	content := `---
+id: test-assertion
+parent: test-spec
+created: 2026-01-20T16:00:00Z
+priority: 1
+status: in_progress
+locked-by: builder-macbook-12345-1706210400
+branch: feature/test
+---
+
+# Test Assertion
+
+Some content here.
+`
+	os.WriteFile(filePath, []byte(content), 0o644)
+
+	err := resetAssertionStatus(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(filePath)
+	result := string(data)
+
+	if strings.Contains(result, "in_progress") {
+		t.Error("expected status to be reset from in_progress")
+	}
+	if !strings.Contains(result, "status: not_started") {
+		t.Error("expected status to be not_started")
+	}
+	if strings.Contains(result, "locked-by:") {
+		t.Error("expected locked-by line to be removed")
+	}
+	if !strings.Contains(result, "# Test Assertion") {
+		t.Error("expected body content to be preserved")
+	}
+}
+
 func TestCompletionMessage(t *testing.T) {
 	tests := []struct {
 		count int64

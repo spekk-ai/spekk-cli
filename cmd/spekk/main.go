@@ -302,7 +302,8 @@ COMMANDS:
   help      Show this help message
 
 BUILDER FLAGS:
-  --watch, -w   Keep polling for new work after all assertions complete (default: exit on complete)`)
+  --watch, -w                Keep polling for new work after all assertions complete (default: exit on complete)
+  --idle-timeout <seconds>   Kill stuck builder after N seconds of no output (default: 120)`)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown loop command: %s\n", args[0])
 		fmt.Fprintln(os.Stderr, `Run "spekk loop help" for available commands.`)

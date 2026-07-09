@@ -3,14 +3,17 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/creack/pty/v2"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
@@ -74,7 +77,8 @@ func completionMessage(count int64) string {
 
 // LoopFlags defines the flag set for the loop builder CLI.
 var LoopFlags = cli.FlagSet{
-	"watch": {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
+	"watch":       {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
+	"idleTimeout": {Names: []string{"--idle-timeout"}, Type: cli.StringFlag},
 }
 
 // RunBuilderLoop runs the continuous builder loop.
@@ -82,11 +86,22 @@ func RunBuilderLoop(args []string, installDir string) {
 	parsed := cli.ParseFlags(args, LoopFlags)
 	watch := parsed.Bool("watch")
 
+	idleTimeout := 120
+	if s := parsed.String("idleTimeout"); s != "" {
+		val, err := strconv.Atoi(s)
+		if err != nil || val <= 0 {
+			colorLog(colorRed, "Error: --idle-timeout must be a positive integer (seconds)")
+			os.Exit(1)
+		}
+		idleTimeout = val
+	}
+
 	colorLog(colorCyan, "Starting Builder Loop...")
 	colorLog(colorBlue, "This will continuously get next assertions and implement them.")
 	if watch {
 		colorLog(colorYellow, "Watch mode: will poll for new work after completion.")
 	}
+	colorLog(colorBlue, fmt.Sprintf("Idle timeout: %ds", idleTimeout))
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
 
 	var completed int64
@@ -139,7 +154,7 @@ func RunBuilderLoop(args []string, installDir string) {
 		colorLog(colorBlue, fmt.Sprintf("   Status: %s", result.Status))
 		colorLog(colorBlue, fmt.Sprintf("   Priority: %d", result.Priority))
 
-		// Launch builder agent
+		// Launch builder agent with PTY and idle timeout
 		colorLog(colorMagenta, "Launching Builder Agent...")
 
 		opts := LaunchOptions{
@@ -152,9 +167,9 @@ func RunBuilderLoop(args []string, installDir string) {
 			os.Exit(1)
 		}
 
-		success, launchErr := launchClaude(
+		success, timedOut, launchErr := launchClaudeWithPTY(
 			[]string{"--dangerously-skip-permissions", message},
-			nil,
+			time.Duration(idleTimeout)*time.Second,
 		)
 
 		if launchErr != nil {
@@ -162,7 +177,12 @@ func RunBuilderLoop(args []string, installDir string) {
 			os.Exit(1)
 		}
 
-		if success {
+		if timedOut {
+			colorLog(colorYellow, "Resetting assertion status to not_started...")
+			if resetErr := resetAssertionStatus(result.File); resetErr != nil {
+				colorLog(colorRed, "Failed to reset assertion status: "+resetErr.Error())
+			}
+		} else if success {
 			atomic.AddInt64(&completed, 1)
 			colorLog(colorGreen, "Builder agent completed work")
 		} else {
@@ -266,4 +286,124 @@ func getNextAssertionForLoop(spekkBin string) (*AssertionResult, error) {
 		return nil, fmt.Errorf("malformed JSON from parser: %w", err)
 	}
 	return &result, nil
+}
+
+// launchClaudeWithPTY spawns claude inside a pseudo-terminal for idle timeout detection.
+// Returns (success, timedOut, error). When timedOut is true, the process was killed
+// due to inactivity and the caller should reset the assertion status.
+func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, bool, error) {
+	cmd := exec.Command("claude", claudeArgs...)
+
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		if isNotFound(err) {
+			colorLog(colorRed, "Error: Claude Code CLI not found. Please install Claude Code first.")
+			colorLog(colorBlue, "Visit: https://claude.ai/code for installation instructions.")
+			os.Exit(1)
+		}
+		return false, false, fmt.Errorf("error launching Claude with PTY: %w", err)
+	}
+	defer ptmx.Close()
+
+	// Propagate terminal size from parent terminal to PTY
+	_ = pty.InheritSize(os.Stdin, ptmx)
+	sigwinch := make(chan os.Signal, 1)
+	signal.Notify(sigwinch, syscall.SIGWINCH)
+	go func() {
+		for range sigwinch {
+			_ = pty.InheritSize(os.Stdin, ptmx)
+		}
+	}()
+	defer func() {
+		signal.Stop(sigwinch)
+		close(sigwinch)
+	}()
+
+	// Track last output activity (unix nanoseconds)
+	var lastActivity atomic.Int64
+	lastActivity.Store(time.Now().UnixNano())
+
+	// Copy PTY output to stdout, tracking activity on each read
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := ptmx.Read(buf)
+			if n > 0 {
+				lastActivity.Store(time.Now().UnixNano())
+				os.Stdout.Write(buf[:n])
+			}
+			if readErr != nil {
+				return
+			}
+		}
+	}()
+
+	// Forward stdin to PTY
+	go func() {
+		_, _ = io.Copy(ptmx, os.Stdin)
+	}()
+
+	// Idle timeout monitor
+	var timeoutFired atomic.Bool
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				last := time.Unix(0, lastActivity.Load())
+				if time.Since(last) >= idleTimeout {
+					timeoutFired.Store(true)
+					colorLog(colorYellow, fmt.Sprintf("\nBuilder idle for %ds. Force-stopping...", int(idleTimeout.Seconds())))
+					cmd.Process.Signal(syscall.SIGTERM)
+					return
+				}
+			}
+		}
+	}()
+
+	waitErr := cmd.Wait()
+	close(done)
+
+	if timeoutFired.Load() {
+		return false, true, nil
+	}
+
+	if waitErr != nil {
+		if exitErr, ok := waitErr.(*exec.ExitError); ok {
+			colorLog(colorYellow, fmt.Sprintf("Claude Code exited with code %d", exitErr.ExitCode()))
+			return false, false, nil
+		}
+		return false, false, waitErr
+	}
+
+	return true, false, nil
+}
+
+// resetAssertionStatus resets an assertion file's status from in_progress to
+// not_started and removes the locked-by field. Used when a builder is killed
+// by idle timeout so the next iteration can pick it up again.
+func resetAssertionStatus(filePath string) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("reading assertion file: %w", err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var result []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "status:") && strings.Contains(trimmed, "in_progress") {
+			line = strings.Replace(line, "in_progress", "not_started", 1)
+		}
+		if strings.HasPrefix(trimmed, "locked-by:") {
+			continue
+		}
+		result = append(result, line)
+	}
+
+	return os.WriteFile(filePath, []byte(strings.Join(result, "\n")), 0o644)
 }
