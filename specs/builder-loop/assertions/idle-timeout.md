@@ -21,3 +21,11 @@ The builder loop kills a stuck builder process after a configurable period of in
 - The timeout resets on any stdout or stderr activity from the builder process
 - A grace period of one poll cycle is given at startup before timeout detection begins (prevents false positives during initial prompt loading)
 - When a builder is killed by timeout, the loop resets the assertion status from `in_progress` back to `not_started` so the next iteration can pick it up again
+- Idle timeout ONLY applies to `RunBuilderLoop` — do NOT add it to `RunBuilder` (the regular `spekk builder` command)
+
+## Constraints
+
+**DO NOT use `cmd.StdoutPipe()` / `cmd.StderrPipe()` to monitor output.**
+A previous implementation used pipes to tee stdout/stderr for activity tracking. This broke Claude Code entirely — Claude detects it is not connected to a TTY and produces no output, causing every build to false-timeout at 120s. The pipe approach was reverted in commit d87e6d7.
+
+Use `creack/pty` to allocate a real pseudo-terminal instead. This preserves Claude's TTY detection while still allowing the loop to read output for activity tracking.
