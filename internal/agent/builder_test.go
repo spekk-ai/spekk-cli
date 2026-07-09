@@ -1,8 +1,20 @@
 package agent
 
 import (
+	"bytes"
+	"os/exec"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
+	"time"
 )
+
+// newTestCommand creates an exec.Cmd for testing (avoids needing claude).
+func newTestCommand(name string, args ...string) *exec.Cmd {
+	return exec.Command(name, args...)
+}
 
 func TestParseBuilderFlags_Once(t *testing.T) {
 	cfg := ParseBuilderFlags([]string{"--once"})
@@ -214,5 +226,106 @@ func TestHasHelp(t *testing.T) {
 		if got != tt.expect {
 			t.Errorf("hasHelp(%v) = %v, want %v", tt.args, got, tt.expect)
 		}
+	}
+}
+
+func TestParseBuilderFlags_IdleTimeout_Default(t *testing.T) {
+	cfg := ParseBuilderFlags([]string{})
+	if cfg.IdleTimeout != DefaultIdleTimeout {
+		t.Errorf("expected default idle timeout %d, got %d", DefaultIdleTimeout, cfg.IdleTimeout)
+	}
+}
+
+func TestParseBuilderFlags_IdleTimeout_Custom(t *testing.T) {
+	cfg := ParseBuilderFlags([]string{"--idle-timeout", "60"})
+	if cfg.IdleTimeout != 60 {
+		t.Errorf("expected idle timeout 60, got %d", cfg.IdleTimeout)
+	}
+}
+
+func TestParseBuilderFlags_IdleTimeout_Zero(t *testing.T) {
+	cfg := ParseBuilderFlags([]string{"--idle-timeout", "0"})
+	if cfg.IdleTimeout != 0 {
+		t.Errorf("expected idle timeout 0, got %d", cfg.IdleTimeout)
+	}
+}
+
+func TestParseBuilderFlags_IdleTimeout_Invalid(t *testing.T) {
+	cfg := ParseBuilderFlags([]string{"--idle-timeout", "abc"})
+	if cfg.IdleTimeout != DefaultIdleTimeout {
+		t.Errorf("expected default idle timeout on invalid input, got %d", cfg.IdleTimeout)
+	}
+}
+
+func TestActivityCopier_UpdatesTimestamp(t *testing.T) {
+	var lastActivity int64
+	atomic.StoreInt64(&lastActivity, time.Now().Add(-10*time.Second).UnixNano())
+
+	before := atomic.LoadInt64(&lastActivity)
+
+	src := strings.NewReader("hello world")
+	dst := &bytes.Buffer{}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	activityCopier(dst, src, &lastActivity, &wg)
+	wg.Wait()
+
+	after := atomic.LoadInt64(&lastActivity)
+
+	if after <= before {
+		t.Error("expected lastActivity to be updated after write")
+	}
+	if dst.String() != "hello world" {
+		t.Errorf("expected output 'hello world', got %q", dst.String())
+	}
+}
+
+func TestIdleTimeoutKillsStuckProcess(t *testing.T) {
+	// Spawn a process that produces no output and sleeps forever.
+	// Verify the idle timeout mechanism kills it.
+	cmd := newTestCommand("sleep", "60")
+	stdoutPipe, _ := cmd.StdoutPipe()
+	stderrPipe, _ := cmd.StderrPipe()
+
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	var lastActivity int64
+	atomic.StoreInt64(&lastActivity, time.Now().UnixNano())
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go activityCopier(&bytes.Buffer{}, stdoutPipe, &lastActivity, &wg)
+	go activityCopier(&bytes.Buffer{}, stderrPipe, &lastActivity, &wg)
+
+	// Monitor with 1s idle timeout
+	var timedOut int32
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(200 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				last := time.Unix(0, atomic.LoadInt64(&lastActivity))
+				if time.Since(last) >= 1*time.Second {
+					atomic.StoreInt32(&timedOut, 1)
+					cmd.Process.Signal(syscall.SIGTERM)
+					return
+				}
+			}
+		}
+	}()
+
+	wg.Wait()
+	cmd.Wait()
+	close(done)
+
+	if atomic.LoadInt32(&timedOut) != 1 {
+		t.Error("expected process to be killed by idle timeout")
 	}
 }

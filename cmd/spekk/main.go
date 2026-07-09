@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	spekk "github.com/spekk-ai/spekk-cli"
@@ -284,17 +285,25 @@ func runLoop(args []string) {
 		os.Exit(1)
 	}
 
-	// Check for --watch flag in remaining args
-	watch := false
-	for _, a := range args[1:] {
-		if a == "--watch" || a == "-w" {
-			watch = true
+	// Parse loop flags from remaining args
+	var loopCfg agent.LoopConfig
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--watch", "-w":
+			loopCfg.Watch = true
+		case "--idle-timeout":
+			if i+1 < len(args) {
+				i++
+				if n, err := strconv.Atoi(args[i]); err == nil && n >= 0 {
+					loopCfg.IdleTimeout = n
+				}
+			}
 		}
 	}
 
 	switch args[0] {
 	case "builder":
-		runBuilderLoop(findInstallDir(), watch)
+		runBuilderLoop(findInstallDir(), loopCfg)
 	case "coach":
 		runCoachLoop(findInstallDir())
 	case "help", "--help", "-h":
@@ -316,8 +325,8 @@ COMMANDS:
 }
 
 // runBuilderLoop runs the automated builder loop.
-func runBuilderLoop(installDir string, watch bool) {
-	agent.RunBuilderLoop(installDir, watch)
+func runBuilderLoop(installDir string, cfg agent.LoopConfig) {
+	agent.RunBuilderLoop(installDir, cfg)
 }
 
 // runCoachLoop runs the interactive coach loop.

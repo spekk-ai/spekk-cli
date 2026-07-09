@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -58,8 +60,12 @@ var BuilderFlags = cli.FlagSet{
 	"interactive": {Names: []string{"--interactive", "-i"}, Type: cli.BoolFlag},
 	"spec":        {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
 	"assertion":   {Names: []string{"--assertion"}, Type: cli.StringFlag},
+	"idleTimeout": {Names: []string{"--idle-timeout"}, Type: cli.StringFlag},
 	"help":        {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
+
+// DefaultIdleTimeout is the default idle timeout in seconds for the builder loop.
+const DefaultIdleTimeout = 120
 
 // BuilderConfig holds parsed builder options.
 type BuilderConfig struct {
@@ -70,12 +76,19 @@ type BuilderConfig struct {
 	Interactive bool
 	Spec        string
 	Assertion   string
+	IdleTimeout int // seconds; 0 disables idle timeout
 	InstallDir  string
 }
 
 // ParseBuilderFlags parses args into a BuilderConfig.
 func ParseBuilderFlags(args []string) BuilderConfig {
 	parsed := cli.ParseFlags(args, BuilderFlags)
+	idleTimeout := DefaultIdleTimeout
+	if s := parsed.String("idleTimeout"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 0 {
+			idleTimeout = n
+		}
+	}
 	return BuilderConfig{
 		Once:        parsed.Bool("once"),
 		Watch:       parsed.Bool("watch"),
@@ -84,6 +97,7 @@ func ParseBuilderFlags(args []string) BuilderConfig {
 		Interactive: parsed.Bool("interactive"),
 		Spec:        parsed.String("spec"),
 		Assertion:   parsed.String("assertion"),
+		IdleTimeout: idleTimeout,
 	}
 }
 
@@ -277,6 +291,111 @@ func launchClaude(claudeArgs []string, holder *processHolder) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// activityCopier reads from src and writes to dst, updating lastActivity
+// atomically on every write. This allows idle timeout detection while still
+// displaying output to the user in real time.
+func activityCopier(dst io.Writer, src io.Reader, lastActivity *int64, wg *sync.WaitGroup) {
+	defer wg.Done()
+	buf := make([]byte, 4096)
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			atomic.StoreInt64(lastActivity, time.Now().UnixNano())
+			dst.Write(buf[:n])
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+// launchClaudeWithIdleTimeout spawns claude and kills it if idle for too long.
+// Returns (success, timedOut, error). When timedOut is true, the process was
+// killed due to inactivity.
+func launchClaudeWithIdleTimeout(claudeArgs []string, holder *processHolder, idleTimeout time.Duration) (bool, bool, error) {
+	cmd := exec.Command("claude", claudeArgs...)
+	cmd.Stdin = os.Stdin
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return false, false, fmt.Errorf("stdout pipe: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return false, false, fmt.Errorf("stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		if isNotFound(err) {
+			colorLog(colorRed, "Error: Claude Code CLI not found. Please install Claude Code first.")
+			colorLog(colorBlue, "Visit: https://claude.ai/code for installation instructions.")
+			os.Exit(1)
+		}
+		return false, false, fmt.Errorf("error launching Claude Code: %w", err)
+	}
+
+	if holder != nil {
+		holder.set(cmd.Process)
+	}
+
+	// Track activity via atomic timestamp
+	var lastActivity int64
+	atomic.StoreInt64(&lastActivity, time.Now().UnixNano())
+
+	// Tee stdout/stderr to detect activity while displaying output
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go activityCopier(os.Stdout, stdoutPipe, &lastActivity, &wg)
+	go activityCopier(os.Stderr, stderrPipe, &lastActivity, &wg)
+
+	// Idle timeout monitor
+	var timedOut int32
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				last := time.Unix(0, atomic.LoadInt64(&lastActivity))
+				idle := time.Since(last)
+				if idle >= idleTimeout {
+					atomic.StoreInt32(&timedOut, 1)
+					colorLog(colorYellow, fmt.Sprintf("Builder idle for %ds. Force-stopping...", int(idleTimeout.Seconds())))
+					cmd.Process.Signal(syscall.SIGTERM)
+					return
+				}
+			}
+		}
+	}()
+
+	// Wait for pipe readers to drain (happens after process exits)
+	wg.Wait()
+	// Then collect exit status
+	waitErr := cmd.Wait()
+	close(done)
+
+	if holder != nil {
+		holder.set(nil)
+	}
+
+	if atomic.LoadInt32(&timedOut) == 1 {
+		return false, true, nil
+	}
+
+	if waitErr != nil {
+		if exitErr, ok := waitErr.(*exec.ExitError); ok {
+			colorLog(colorYellow, fmt.Sprintf("Claude Code exited with code %d", exitErr.ExitCode()))
+			return false, false, nil
+		}
+		return false, false, waitErr
+	}
+
+	return true, false, nil
 }
 
 // RunBuilder is the main entry point for the builder agent.
@@ -482,10 +601,22 @@ func RunBuilder(args []string, installDir string) {
 			message = override + message
 		}
 
-		success, launchErr := launchClaude(
-			[]string{"--dangerously-skip-permissions", message},
-			active,
-		)
+		claudeArgs := []string{"--dangerously-skip-permissions", message}
+		var success bool
+		var launchErr error
+
+		if cfg.IdleTimeout > 0 {
+			var timedOut bool
+			success, timedOut, launchErr = launchClaudeWithIdleTimeout(
+				claudeArgs, active,
+				time.Duration(cfg.IdleTimeout)*time.Second,
+			)
+			if timedOut {
+				colorLog(colorYellow, "Builder was idle too long, moving on...")
+			}
+		} else {
+			success, launchErr = launchClaude(claudeArgs, active)
+		}
 
 		if launchErr != nil {
 			colorLog(colorRed, "Build failed: "+launchErr.Error())

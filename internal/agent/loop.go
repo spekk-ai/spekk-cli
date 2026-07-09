@@ -12,6 +12,12 @@ import (
 	"time"
 )
 
+// LoopConfig holds configuration for RunBuilderLoop.
+type LoopConfig struct {
+	Watch       bool
+	IdleTimeout int // seconds; 0 disables idle timeout
+}
+
 // gitStageAndCommit stages all changes and commits with the given message.
 // Returns true if a commit was created, false if nothing to commit.
 func gitStageAndCommit(message string) (bool, error) {
@@ -76,13 +82,16 @@ func logLoopComplete(completed int64) {
 }
 
 // RunBuilderLoop runs the continuous builder loop.
-// If watch is true, the loop polls every 5s when all assertions are complete
-// instead of exiting.
-func RunBuilderLoop(installDir string, watch bool) {
-	if watch {
+// cfg.Watch: poll every 5s when all assertions are complete instead of exiting.
+// cfg.IdleTimeout: kill stuck builders after this many seconds of no output (0=disabled, default 120).
+func RunBuilderLoop(installDir string, cfg LoopConfig) {
+	if cfg.Watch {
 		colorLog(colorCyan, "Starting Builder Loop (watch mode)...")
 	} else {
 		colorLog(colorCyan, "Starting Builder Loop...")
+	}
+	if cfg.IdleTimeout == 0 {
+		cfg.IdleTimeout = DefaultIdleTimeout
 	}
 	colorLog(colorBlue, "This will continuously get next assertions and implement them.")
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
@@ -116,7 +125,7 @@ func RunBuilderLoop(installDir string, watch bool) {
 		}
 
 		if result.Type == "complete" {
-			if watch {
+			if cfg.Watch {
 				colorLog(colorBlue, "All assertions complete. Watching for new work (every 5s)...")
 				time.Sleep(5 * time.Second)
 				continue
@@ -149,10 +158,22 @@ func RunBuilderLoop(installDir string, watch bool) {
 			os.Exit(1)
 		}
 
-		success, launchErr := launchClaude(
-			[]string{"--dangerously-skip-permissions", message},
-			nil,
-		)
+		claudeArgs := []string{"--dangerously-skip-permissions", message}
+		var success bool
+		var launchErr error
+
+		if cfg.IdleTimeout > 0 {
+			var timedOut bool
+			success, timedOut, launchErr = launchClaudeWithIdleTimeout(
+				claudeArgs, nil,
+				time.Duration(cfg.IdleTimeout)*time.Second,
+			)
+			if timedOut {
+				colorLog(colorYellow, "Builder was idle too long, moving on...")
+			}
+		} else {
+			success, launchErr = launchClaude(claudeArgs, nil)
+		}
 
 		if launchErr != nil {
 			colorLog(colorRed, "Builder agent failed: "+launchErr.Error())
