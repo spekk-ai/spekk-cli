@@ -7,18 +7,9 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
-
-// LoopConfig holds configuration for RunBuilderLoop.
-type LoopConfig struct {
-	Watch       bool
-	IdleTimeout int      // seconds; 0 disables idle timeout
-	Skills      []string // post-build skill names to run after all assertions complete
-	InstallDir  string   // spekk install directory (needed for skill resolution)
-}
 
 // gitStageAndCommit stages all changes and commits with the given message.
 // Returns true if a commit was created, false if nothing to commit.
@@ -70,41 +61,17 @@ func gitStageSpecsAndCommit(message string) (bool, error) {
 	return true, nil
 }
 
-// formatLoopComplete returns the appropriate completion message based on assertion count.
-func formatLoopComplete(completed int64) string {
-	if completed == 0 {
-		return "No assertions to work on."
-	}
-	return fmt.Sprintf("Builder loop complete. %d assertions completed.", completed)
-}
-
-// logLoopComplete prints the loop completion message.
-func logLoopComplete(completed int64) {
-	colorLog(colorGreen, formatLoopComplete(completed))
-}
-
 // RunBuilderLoop runs the continuous builder loop.
-// cfg.Watch: poll every 5s when all assertions are complete instead of exiting.
-// cfg.IdleTimeout: kill stuck builders after this many seconds of no output (0=disabled, default 120).
-func RunBuilderLoop(installDir string, cfg LoopConfig) {
-	if cfg.Watch {
-		colorLog(colorCyan, "Starting Builder Loop (watch mode)...")
-	} else {
-		colorLog(colorCyan, "Starting Builder Loop...")
-	}
-	if cfg.IdleTimeout == 0 {
-		cfg.IdleTimeout = DefaultIdleTimeout
-	}
+func RunBuilderLoop(installDir string) {
+	colorLog(colorCyan, "Starting Builder Loop...")
 	colorLog(colorBlue, "This will continuously get next assertions and implement them.")
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
-
-	var completed int64
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-sigCh
-		logLoopComplete(atomic.LoadInt64(&completed))
+		sig := <-sigCh
+		colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
 		os.Exit(0)
 	}()
 
@@ -127,17 +94,9 @@ func RunBuilderLoop(installDir string, cfg LoopConfig) {
 		}
 
 		if result.Type == "complete" {
-			if cfg.Watch {
-				colorLog(colorBlue, "All assertions complete. Watching for new work (every 5s)...")
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			c := atomic.LoadInt64(&completed)
-			logLoopComplete(c)
-			if len(cfg.Skills) > 0 && c > 0 {
-				runPostBuildSkills(cfg)
-			}
-			return
+			colorLog(colorGreen, "All assertions completed. Waiting for new work...")
+			time.Sleep(5 * time.Second)
+			continue
 		}
 
 		if result.Type != "assertion" {
@@ -164,22 +123,10 @@ func RunBuilderLoop(installDir string, cfg LoopConfig) {
 			os.Exit(1)
 		}
 
-		claudeArgs := []string{"--dangerously-skip-permissions", message}
-		var success bool
-		var launchErr error
-
-		if cfg.IdleTimeout > 0 {
-			var timedOut bool
-			success, timedOut, launchErr = launchClaudeWithIdleTimeout(
-				claudeArgs, nil,
-				time.Duration(cfg.IdleTimeout)*time.Second,
-			)
-			if timedOut {
-				colorLog(colorYellow, "Builder was idle too long, moving on...")
-			}
-		} else {
-			success, launchErr = launchClaude(claudeArgs, nil)
-		}
+		success, launchErr := launchClaude(
+			[]string{"--dangerously-skip-permissions", message},
+			nil,
+		)
 
 		if launchErr != nil {
 			colorLog(colorRed, "Builder agent failed: "+launchErr.Error())
@@ -187,7 +134,6 @@ func RunBuilderLoop(installDir string, cfg LoopConfig) {
 		}
 
 		if success {
-			atomic.AddInt64(&completed, 1)
 			colorLog(colorGreen, "Builder agent completed work")
 		} else {
 			colorLog(colorRed, "Builder agent exited with error")
@@ -209,94 +155,6 @@ func RunBuilderLoop(installDir string, cfg LoopConfig) {
 		colorLog(colorBlue, "Preparing for next iteration...")
 		time.Sleep(500 * time.Millisecond)
 	}
-}
-
-// runPostBuildSkills runs skill names sequentially after the builder loop completes.
-func runPostBuildSkills(cfg LoopConfig) {
-	colorLog(colorCyan, "\n--- Post-Build Skills ---")
-
-	results := make([]bool, len(cfg.Skills))
-	succeeded := 0
-
-	for i, skill := range cfg.Skills {
-		// Show checklist with current skill in progress
-		for j, s := range cfg.Skills {
-			if j < i {
-				if results[j] {
-					colorLog(colorGreen, fmt.Sprintf("[x] %s", s))
-				} else {
-					colorLog(colorRed, fmt.Sprintf("[!] %s", s))
-				}
-			} else if j == i {
-				colorLog(colorYellow, fmt.Sprintf("[ ] %s (running...)", s))
-			} else {
-				colorLog(colorBlue, fmt.Sprintf("[ ] %s", s))
-			}
-		}
-
-		opts := LaunchOptions{
-			Agent:      "builder",
-			InstallDir: cfg.InstallDir,
-		}
-		message, err := BuildActivationMessage(opts)
-		if err != nil {
-			colorLog(colorRed, fmt.Sprintf("Skill %s: failed to build message: %s", skill, err))
-			continue
-		}
-
-		skillMsg, err := BuildSkillMessage(cfg.InstallDir, "builder", skill, nil)
-		if err != nil {
-			colorLog(colorRed, fmt.Sprintf("Skill %s: %s", skill, err))
-			continue
-		}
-		if skillMsg == "" {
-			colorLog(colorRed, fmt.Sprintf("Skill %s: not found", skill))
-			continue
-		}
-		message += skillMsg
-
-		claudeArgs := []string{"--dangerously-skip-permissions", message}
-		var success bool
-		var launchErr error
-
-		if cfg.IdleTimeout > 0 {
-			var timedOut bool
-			success, timedOut, launchErr = launchClaudeWithIdleTimeout(
-				claudeArgs, nil,
-				time.Duration(cfg.IdleTimeout)*time.Second,
-			)
-			if timedOut {
-				colorLog(colorYellow, fmt.Sprintf("Skill %s: timed out (idle too long)", skill))
-				continue
-			}
-		} else {
-			success, launchErr = launchClaude(claudeArgs, nil)
-		}
-
-		if launchErr != nil {
-			colorLog(colorRed, fmt.Sprintf("Skill %s: failed: %s", skill, launchErr))
-			continue
-		}
-
-		if success {
-			results[i] = true
-			succeeded++
-			colorLog(colorGreen, fmt.Sprintf("Skill %s: completed", skill))
-		} else {
-			colorLog(colorRed, fmt.Sprintf("Skill %s: exited with error", skill))
-		}
-	}
-
-	// Final checklist
-	for i, s := range cfg.Skills {
-		if results[i] {
-			colorLog(colorGreen, fmt.Sprintf("[x] %s", s))
-		} else {
-			colorLog(colorRed, fmt.Sprintf("[!] %s", s))
-		}
-	}
-
-	colorLog(colorCyan, fmt.Sprintf("Post-build skills: %d/%d completed", succeeded, len(cfg.Skills)))
 }
 
 // RunCoachLoop runs the continuous coach loop.

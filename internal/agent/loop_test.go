@@ -110,37 +110,6 @@ func TestGitStageSpecsAndCommit_NoSpecs(t *testing.T) {
 	}
 }
 
-func TestFormatLoopComplete(t *testing.T) {
-	tests := []struct {
-		completed int64
-		expected  string
-	}{
-		{0, "No assertions to work on."},
-		{1, "Builder loop complete. 1 assertions completed."},
-		{5, "Builder loop complete. 5 assertions completed."},
-	}
-
-	for _, tt := range tests {
-		got := formatLoopComplete(tt.completed)
-		if got != tt.expected {
-			t.Errorf("formatLoopComplete(%d) = %q, want %q", tt.completed, got, tt.expected)
-		}
-	}
-}
-
-func TestLoopConfig_SkillsField(t *testing.T) {
-	cfg := LoopConfig{
-		Skills:     []string{"e2e-testing-skill", "api-audit-skill"},
-		InstallDir: "/tmp/test",
-	}
-	if len(cfg.Skills) != 2 {
-		t.Fatalf("expected 2 skills, got %d", len(cfg.Skills))
-	}
-	if cfg.Skills[0] != "e2e-testing-skill" || cfg.Skills[1] != "api-audit-skill" {
-		t.Errorf("unexpected skills: %v", cfg.Skills)
-	}
-}
-
 func TestGitStageSpecsAndCommit_NoChanges(t *testing.T) {
 	dir := initGitRepo(t)
 	origDir, _ := os.Getwd()

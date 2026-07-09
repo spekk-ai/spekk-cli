@@ -3,7 +3,7 @@ id: post-build-skills
 parent: builder-loop
 created: 2026-07-09T16:00:00Z
 priority: 2
-status: done
+status: not_started
 depends-on: exit-on-complete
 branch: feature/advanced-loop
 ---
