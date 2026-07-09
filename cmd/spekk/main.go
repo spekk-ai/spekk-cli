@@ -285,7 +285,7 @@ func runLoop(args []string) {
 		os.Exit(1)
 	}
 
-	// Parse loop flags from remaining args
+	// Parse loop flags and positional args (skill names) from remaining args
 	var loopCfg agent.LoopConfig
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -298,12 +298,17 @@ func runLoop(args []string) {
 					loopCfg.IdleTimeout = n
 				}
 			}
+		default:
+			if !strings.HasPrefix(args[i], "-") {
+				loopCfg.Skills = append(loopCfg.Skills, args[i])
+			}
 		}
 	}
 
 	switch args[0] {
 	case "builder":
-		runBuilderLoop(findInstallDir(), loopCfg)
+		loopCfg.InstallDir = findInstallDir()
+		runBuilderLoop(loopCfg.InstallDir, loopCfg)
 	case "coach":
 		runCoachLoop(findInstallDir())
 	case "help", "--help", "-h":

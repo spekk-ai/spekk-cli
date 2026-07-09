@@ -128,6 +128,19 @@ func TestFormatLoopComplete(t *testing.T) {
 	}
 }
 
+func TestLoopConfig_SkillsField(t *testing.T) {
+	cfg := LoopConfig{
+		Skills:     []string{"e2e-testing-skill", "api-audit-skill"},
+		InstallDir: "/tmp/test",
+	}
+	if len(cfg.Skills) != 2 {
+		t.Fatalf("expected 2 skills, got %d", len(cfg.Skills))
+	}
+	if cfg.Skills[0] != "e2e-testing-skill" || cfg.Skills[1] != "api-audit-skill" {
+		t.Errorf("unexpected skills: %v", cfg.Skills)
+	}
+}
+
 func TestGitStageSpecsAndCommit_NoChanges(t *testing.T) {
 	dir := initGitRepo(t)
 	origDir, _ := os.Getwd()
