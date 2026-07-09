@@ -3,7 +3,8 @@ id: idle-timeout
 parent: builder-loop
 created: 2026-07-09T16:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-paris-macbook-pro-2.local-69311-1783632767
 branch: feature/advanced-loop
 ---
 
