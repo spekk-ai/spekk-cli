@@ -230,8 +230,10 @@ Use `--branch-filter` to narrow the scope:
 
 ```bash
 spekk show --cross-branch --branch-filter 'feat/*'    # Only feature branches
-spekk show --cross-branch --branch-filter 'hotfix/*'   # Only hotfix branches
+spekk show --cross-branch --branch-filter 'hotfix/*'  # Only hotfix branches
 ```
+
+The filter matches against the logical branch name with any remote prefix stripped — `origin/feat/login` is matched as `feat/login`, so `feat/*` covers both local and remote-tracking branches (and `origin/*` matches nothing).
 
 The filter uses `filepath.Match` glob semantics: `*` matches non-separator characters, `?` matches one character, `[...]` matches character classes. A malformed pattern returns an error.
 
@@ -255,7 +257,7 @@ On older git, the feature **degrades gracefully** rather than failing:
 
 #### Read-only guarantee
 
-All git operations are funnelled through a single allowlist chokepoint. Only eight read-only subcommands are permitted (`rev-parse`, `for-each-ref`, `merge-base`, `diff`, `show`, `ls-tree`, `merge-tree`, `--version`). No checkout, merge, index mutation, or ref mutation can occur.
+All git operations are funnelled through a single allowlist chokepoint that permits only a small set of read-only subcommands (`rev-parse`, `for-each-ref`, `merge-tree`, and a few others). No checkout, merge, index mutation, or ref mutation can occur.
 
 #### Watch mode with cross-branch
 
@@ -263,7 +265,7 @@ When combined with `--watch`, cross-branch classification is cached on a git ref
 
 - **Working-tree edits** (spec file changes) trigger a cheap re-render reusing the cached classification
 - **Ref changes** (new commits, fetches, branch moves) invalidate the cache and trigger a full reclassification
-- Two independent watchers run: a file watcher (500ms polling) and a ref watcher (1s polling)
+- Two independent watchers run: one polling spec files and one polling git ref state
 - Transient git errors are logged once and the watcher recovers automatically when git becomes available again
 
 ---

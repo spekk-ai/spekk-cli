@@ -54,6 +54,7 @@ nav = [
   { "Release Notes" = [
     "release-notes/index.md",
     { "1.9.0 — Cross-Branch Merge Preview" = "release-notes/RELEASE-NOTES-1.9.0.md" },
+    { "1.8.1 — Show Markdown Rendering Fix" = "release-notes/RELEASE-NOTES-1.8.1.md" },
     { "1.8.0 — Sudo-Free Installs and Updates" = "release-notes/RELEASE-NOTES-1.8.0.md" },
     { "1.7.0 — XDG-Compliant Config Directory" = "release-notes/RELEASE-NOTES-1.7.0.md" },
     { "1.6.0 — Use Spekk from Any Coding Assistant" = "release-notes/RELEASE-NOTES-1.6.0.md" },
