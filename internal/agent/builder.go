@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -342,6 +343,7 @@ func RunBuilder(args []string, installDir string) {
 
 	// Non-interactive modes: manage SIGINT
 	active := &processHolder{}
+	var completed int64
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT)
@@ -351,7 +353,9 @@ func RunBuilder(args []string, installDir string) {
 				colorLog(colorYellow, "\nInterrupting current build...")
 				active.signal(syscall.SIGINT)
 			} else {
-				colorLog(colorYellow, "\nReceived SIGINT. Exiting gracefully...")
+				if !cfg.Once {
+					logLoopComplete(atomic.LoadInt64(&completed))
+				}
 				os.Exit(0)
 			}
 		}
@@ -397,9 +401,8 @@ func RunBuilder(args []string, installDir string) {
 				colorLog(colorGreen, "No assertions to work on.")
 				os.Exit(0)
 			}
-			colorLog(colorGreen, "All assertions completed. Waiting for new work...")
-			time.Sleep(5 * time.Second)
-			continue
+			logLoopComplete(atomic.LoadInt64(&completed))
+			return
 		}
 
 		if result.Type == "error" {
@@ -480,6 +483,7 @@ func RunBuilder(args []string, installDir string) {
 			}
 			colorLog(colorYellow, "Continuing to next assertion...")
 		} else if success {
+			atomic.AddInt64(&completed, 1)
 			colorLog(colorGreen, "Builder agent completed work")
 		} else {
 			colorLog(colorYellow, "Build did not succeed.")
