@@ -3,7 +3,8 @@ id: exit-on-complete
 parent: builder-loop
 created: 2026-07-09T16:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro-2.local-49473-1783632319
 depends-on: assertion-count-tracking
 branch: feature/advanced-loop
 ---
