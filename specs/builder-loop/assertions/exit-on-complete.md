@@ -5,6 +5,7 @@ created: 2026-07-09T16:00:00Z
 priority: 1
 status: not_started
 depends-on: assertion-count-tracking
+branch: feature/advanced-loop
 ---
 
 # Exit on Complete

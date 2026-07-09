@@ -5,6 +5,7 @@ created: 2026-07-09T16:00:00Z
 priority: 2
 status: not_started
 depends-on: exit-on-complete
+branch: feature/advanced-loop
 ---
 
 # Post-Build Skills Pipeline

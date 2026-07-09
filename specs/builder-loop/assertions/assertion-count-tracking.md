@@ -4,6 +4,7 @@ parent: builder-loop
 created: 2026-07-09T16:00:00Z
 priority: 1
 status: not_started
+branch: feature/advanced-loop
 ---
 
 # Assertion Count Tracking
