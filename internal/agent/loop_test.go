@@ -124,3 +124,20 @@ func TestGitStageSpecsAndCommit_NoChanges(t *testing.T) {
 		t.Error("expected no commit when there are no changes")
 	}
 }
+
+func TestCompletionMessage(t *testing.T) {
+	tests := []struct {
+		count int64
+		want  string
+	}{
+		{0, "No assertions to work on."},
+		{1, "Builder loop complete. 1 assertions completed."},
+		{5, "Builder loop complete. 5 assertions completed."},
+	}
+	for _, tt := range tests {
+		got := completionMessage(tt.count)
+		if got != tt.want {
+			t.Errorf("completionMessage(%d) = %q, want %q", tt.count, got, tt.want)
+		}
+	}
+}

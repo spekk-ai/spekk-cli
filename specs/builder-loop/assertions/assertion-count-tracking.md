@@ -3,8 +3,7 @@ id: assertion-count-tracking
 parent: builder-loop
 created: 2026-07-09T16:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-Paris-MacBook-Pro-2-40765-1752076800
+status: done
 branch: feature/advanced-loop
 ---
 
