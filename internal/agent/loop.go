@@ -81,10 +81,48 @@ var LoopFlags = cli.FlagSet{
 	"idleTimeout": {Names: []string{"--idle-timeout"}, Type: cli.StringFlag},
 }
 
+// extractAllPositionalArgs returns all positional (non-flag) arguments
+// from the args list, skipping known flags and their values.
+func extractAllPositionalArgs(args []string, flags cli.FlagSet) []string {
+	flagStrings := make(map[string]bool)
+	stringFlags := make(map[string]bool)
+
+	for _, def := range flags {
+		for _, f := range def.Names {
+			flagStrings[f] = true
+			if def.Type == cli.StringFlag {
+				stringFlags[f] = true
+			}
+		}
+	}
+
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if flagStrings[arg] {
+			if stringFlags[arg] {
+				i++ // skip value
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		positional = append(positional, arg)
+	}
+	return positional
+}
+
+// skillsSummary returns the post-build skills summary line.
+func skillsSummary(succeeded, total int) string {
+	return fmt.Sprintf("Post-build skills: %d/%d completed", succeeded, total)
+}
+
 // RunBuilderLoop runs the continuous builder loop.
 func RunBuilderLoop(args []string, installDir string) {
 	parsed := cli.ParseFlags(args, LoopFlags)
 	watch := parsed.Bool("watch")
+	skills := extractAllPositionalArgs(args, LoopFlags)
 
 	idleTimeout := 120
 	if s := parsed.String("idleTimeout"); s != "" {
@@ -100,6 +138,9 @@ func RunBuilderLoop(args []string, installDir string) {
 	colorLog(colorBlue, "This will continuously get next assertions and implement them.")
 	if watch {
 		colorLog(colorYellow, "Watch mode: will poll for new work after completion.")
+	}
+	if len(skills) > 0 {
+		colorLog(colorBlue, fmt.Sprintf("Post-build skills: %s", strings.Join(skills, ", ")))
 	}
 	colorLog(colorBlue, fmt.Sprintf("Idle timeout: %ds", idleTimeout))
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
@@ -140,7 +181,7 @@ func RunBuilderLoop(args []string, installDir string) {
 				time.Sleep(5 * time.Second)
 				continue
 			}
-			os.Exit(0)
+			break
 		}
 
 		if result.Type != "assertion" {
@@ -205,6 +246,80 @@ func RunBuilderLoop(args []string, installDir string) {
 		colorLog(colorBlue, "Preparing for next iteration...")
 		time.Sleep(500 * time.Millisecond)
 	}
+
+	// Post-build skills pipeline
+	count := atomic.LoadInt64(&completed)
+	if len(skills) > 0 && count > 0 {
+		runPostBuildSkills(skills, installDir, idleTimeout)
+	}
+}
+
+// runPostBuildSkills launches each skill as a separate builder agent invocation
+// after all assertions have been completed.
+func runPostBuildSkills(skills []string, installDir string, idleTimeout int) {
+	colorLog(colorCyan, "\n--- Post-Build Skills Pipeline ---")
+
+	done := make(map[string]bool)
+	succeeded := 0
+
+	for _, skill := range skills {
+		// Display current checklist state
+		for _, s := range skills {
+			if done[s] {
+				colorLog(colorGreen, fmt.Sprintf("[x] %s", s))
+			} else if s == skill {
+				colorLog(colorYellow, fmt.Sprintf("[ ] %s", s))
+			} else {
+				colorLog(colorBlue, fmt.Sprintf("[ ] %s", s))
+			}
+		}
+
+		// Build activation message with skill content
+		opts := LaunchOptions{
+			Agent:      "builder",
+			InstallDir: installDir,
+		}
+		message, err := BuildActivationMessage(opts)
+		if err != nil {
+			colorLog(colorRed, fmt.Sprintf("Skill %s: failed to build message: %s", skill, err))
+			done[skill] = true
+			continue
+		}
+
+		skillMsg, err := BuildSkillMessage(installDir, "builder", skill, []string{skill})
+		if err != nil {
+			colorLog(colorRed, fmt.Sprintf("Skill %s: error: %s", skill, err))
+			done[skill] = true
+			continue
+		}
+		if skillMsg == "" {
+			colorLog(colorYellow, fmt.Sprintf("Skill %q not found, skipping", skill))
+			done[skill] = true
+			continue
+		}
+
+		message += skillMsg
+
+		success, timedOut, launchErr := launchClaudeWithPTY(
+			[]string{"--dangerously-skip-permissions", message},
+			time.Duration(idleTimeout)*time.Second,
+		)
+
+		done[skill] = true
+
+		if launchErr != nil {
+			colorLog(colorRed, fmt.Sprintf("Skill %s failed: %s", skill, launchErr))
+		} else if timedOut {
+			colorLog(colorYellow, fmt.Sprintf("Skill %s timed out", skill))
+		} else if success {
+			succeeded++
+			colorLog(colorGreen, fmt.Sprintf("Skill %s completed", skill))
+		} else {
+			colorLog(colorRed, fmt.Sprintf("Skill %s exited with error", skill))
+		}
+	}
+
+	colorLog(colorGreen, skillsSummary(succeeded, len(skills)))
 }
 
 // RunCoachLoop runs the continuous coach loop.

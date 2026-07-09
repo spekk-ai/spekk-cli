@@ -3,8 +3,7 @@ id: post-build-skills
 parent: builder-loop
 created: 2026-07-09T16:00:00Z
 priority: 2
-status: in_progress
-locked-by: builder-Paris-MacBook-Pro-2-93967-1783633354
+status: done
 depends-on: exit-on-complete
 branch: feature/advanced-loop
 ---

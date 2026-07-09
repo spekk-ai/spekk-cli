@@ -301,9 +301,17 @@ COMMANDS:
   coach     Run the interactive coach loop (create specs, commit, repeat)
   help      Show this help message
 
+BUILDER USAGE:
+  spekk loop builder [FLAGS] [SKILL...]
+
 BUILDER FLAGS:
   --watch, -w                Keep polling for new work after all assertions complete (default: exit on complete)
-  --idle-timeout <seconds>   Kill stuck builder after N seconds of no output (default: 120)`)
+  --idle-timeout <seconds>   Kill stuck builder after N seconds of no output (default: 120)
+
+BUILDER SKILLS:
+  Positional arguments after flags are treated as post-build skill names.
+  Skills run sequentially after all assertions complete (only if at least one was built).
+  Example: spekk loop builder e2e-testing-skill api-audit-skill`)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown loop command: %s\n", args[0])
 		fmt.Fprintln(os.Stderr, `Run "spekk loop help" for available commands.`)

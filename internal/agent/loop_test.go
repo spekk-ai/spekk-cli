@@ -207,6 +207,55 @@ Some content here.
 	}
 }
 
+func TestExtractAllPositionalArgs(t *testing.T) {
+	tests := []struct {
+		args []string
+		want []string
+	}{
+		{nil, nil},
+		{[]string{}, nil},
+		{[]string{"skill1"}, []string{"skill1"}},
+		{[]string{"skill1", "skill2"}, []string{"skill1", "skill2"}},
+		{[]string{"--watch", "skill1"}, []string{"skill1"}},
+		{[]string{"skill1", "--watch"}, []string{"skill1"}},
+		{[]string{"--idle-timeout", "60", "skill1", "skill2"}, []string{"skill1", "skill2"}},
+		{[]string{"--watch", "--idle-timeout", "300", "s1", "s2", "s3"}, []string{"s1", "s2", "s3"}},
+		{[]string{"-w"}, nil},
+		{[]string{"--unknown-flag", "skill1"}, []string{"skill1"}},
+	}
+	for _, tt := range tests {
+		got := extractAllPositionalArgs(tt.args, LoopFlags)
+		if len(got) != len(tt.want) {
+			t.Errorf("extractAllPositionalArgs(%v) = %v, want %v", tt.args, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("extractAllPositionalArgs(%v)[%d] = %q, want %q", tt.args, i, got[i], tt.want[i])
+			}
+		}
+	}
+}
+
+func TestSkillsSummary(t *testing.T) {
+	tests := []struct {
+		succeeded int
+		total     int
+		want      string
+	}{
+		{0, 2, "Post-build skills: 0/2 completed"},
+		{1, 2, "Post-build skills: 1/2 completed"},
+		{2, 2, "Post-build skills: 2/2 completed"},
+		{3, 5, "Post-build skills: 3/5 completed"},
+	}
+	for _, tt := range tests {
+		got := skillsSummary(tt.succeeded, tt.total)
+		if got != tt.want {
+			t.Errorf("skillsSummary(%d, %d) = %q, want %q", tt.succeeded, tt.total, got, tt.want)
+		}
+	}
+}
+
 func TestCompletionMessage(t *testing.T) {
 	tests := []struct {
 		count int64
