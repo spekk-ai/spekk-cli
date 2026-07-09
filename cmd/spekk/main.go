@@ -284,9 +284,17 @@ func runLoop(args []string) {
 		os.Exit(1)
 	}
 
+	// Check for --watch flag in remaining args
+	watch := false
+	for _, a := range args[1:] {
+		if a == "--watch" || a == "-w" {
+			watch = true
+		}
+	}
+
 	switch args[0] {
 	case "builder":
-		runBuilderLoop(findInstallDir())
+		runBuilderLoop(findInstallDir(), watch)
 	case "coach":
 		runCoachLoop(findInstallDir())
 	case "help", "--help", "-h":
@@ -308,8 +316,8 @@ COMMANDS:
 }
 
 // runBuilderLoop runs the automated builder loop.
-func runBuilderLoop(installDir string) {
-	agent.RunBuilderLoop(installDir)
+func runBuilderLoop(installDir string, watch bool) {
+	agent.RunBuilderLoop(installDir, watch)
 }
 
 // runCoachLoop runs the interactive coach loop.

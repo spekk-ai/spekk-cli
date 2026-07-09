@@ -52,6 +52,7 @@ func colorLog(color, message string) {
 // BuilderFlags defines the flag set for the builder CLI.
 var BuilderFlags = cli.FlagSet{
 	"once":        {Names: []string{"--once"}, Type: cli.BoolFlag},
+	"watch":       {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
 	"dryRun":      {Names: []string{"--dry-run", "-d"}, Type: cli.BoolFlag},
 	"confirm":     {Names: []string{"--confirm", "-c"}, Type: cli.BoolFlag},
 	"interactive": {Names: []string{"--interactive", "-i"}, Type: cli.BoolFlag},
@@ -63,6 +64,7 @@ var BuilderFlags = cli.FlagSet{
 // BuilderConfig holds parsed builder options.
 type BuilderConfig struct {
 	Once        bool
+	Watch       bool
 	DryRun      bool
 	Confirm     bool
 	Interactive bool
@@ -76,6 +78,7 @@ func ParseBuilderFlags(args []string) BuilderConfig {
 	parsed := cli.ParseFlags(args, BuilderFlags)
 	return BuilderConfig{
 		Once:        parsed.Bool("once"),
+		Watch:       parsed.Bool("watch"),
 		DryRun:      parsed.Bool("dryRun"),
 		Confirm:     parsed.Bool("confirm"),
 		Interactive: parsed.Bool("interactive"),
@@ -366,6 +369,9 @@ func RunBuilder(args []string, installDir string) {
 		colorLog(colorCyan, "Dry run - showing what would be built...")
 	} else if cfg.Once {
 		colorLog(colorCyan, "Starting Builder Agent (single build)...")
+	} else if cfg.Watch {
+		colorLog(colorCyan, "Starting Builder Agent (watch mode)...")
+		colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
 	} else {
 		colorLog(colorCyan, "Starting Builder Agent (continuous mode)...")
 		colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
@@ -400,6 +406,11 @@ func RunBuilder(args []string, installDir string) {
 			if cfg.Once {
 				colorLog(colorGreen, "No assertions to work on.")
 				os.Exit(0)
+			}
+			if cfg.Watch {
+				colorLog(colorBlue, "All assertions complete. Watching for new work (every 5s)...")
+				time.Sleep(5 * time.Second)
+				continue
 			}
 			logLoopComplete(atomic.LoadInt64(&completed))
 			return

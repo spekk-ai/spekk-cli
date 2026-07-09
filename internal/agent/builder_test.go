@@ -9,8 +9,27 @@ func TestParseBuilderFlags_Once(t *testing.T) {
 	if !cfg.Once {
 		t.Error("expected Once to be true")
 	}
-	if cfg.DryRun || cfg.Confirm || cfg.Interactive {
+	if cfg.DryRun || cfg.Confirm || cfg.Interactive || cfg.Watch {
 		t.Error("other flags should be false")
+	}
+}
+
+func TestParseBuilderFlags_Watch(t *testing.T) {
+	cfg := ParseBuilderFlags([]string{"--watch"})
+	if !cfg.Watch {
+		t.Error("expected Watch to be true")
+	}
+
+	cfg = ParseBuilderFlags([]string{"-w"})
+	if !cfg.Watch {
+		t.Error("expected Watch to be true with -w shorthand")
+	}
+}
+
+func TestParseBuilderFlags_WatchDefault(t *testing.T) {
+	cfg := ParseBuilderFlags([]string{})
+	if cfg.Watch {
+		t.Error("Watch should default to false (exit-on-complete)")
 	}
 }
 

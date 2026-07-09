@@ -76,8 +76,14 @@ func logLoopComplete(completed int64) {
 }
 
 // RunBuilderLoop runs the continuous builder loop.
-func RunBuilderLoop(installDir string) {
-	colorLog(colorCyan, "Starting Builder Loop...")
+// If watch is true, the loop polls every 5s when all assertions are complete
+// instead of exiting.
+func RunBuilderLoop(installDir string, watch bool) {
+	if watch {
+		colorLog(colorCyan, "Starting Builder Loop (watch mode)...")
+	} else {
+		colorLog(colorCyan, "Starting Builder Loop...")
+	}
 	colorLog(colorBlue, "This will continuously get next assertions and implement them.")
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
 
@@ -110,6 +116,11 @@ func RunBuilderLoop(installDir string) {
 		}
 
 		if result.Type == "complete" {
+			if watch {
+				colorLog(colorBlue, "All assertions complete. Watching for new work (every 5s)...")
+				time.Sleep(5 * time.Second)
+				continue
+			}
 			logLoopComplete(atomic.LoadInt64(&completed))
 			return
 		}
