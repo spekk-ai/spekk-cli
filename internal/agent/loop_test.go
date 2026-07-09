@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
 func initGitRepo(t *testing.T) string {
@@ -122,6 +124,25 @@ func TestGitStageSpecsAndCommit_NoChanges(t *testing.T) {
 	}
 	if committed {
 		t.Error("expected no commit when there are no changes")
+	}
+}
+
+func TestLoopFlags_WatchParsing(t *testing.T) {
+	tests := []struct {
+		args  []string
+		watch bool
+	}{
+		{nil, false},
+		{[]string{}, false},
+		{[]string{"--watch"}, true},
+		{[]string{"-w"}, true},
+	}
+	for _, tt := range tests {
+		parsed := cli.ParseFlags(tt.args, LoopFlags)
+		got := parsed.Bool("watch")
+		if got != tt.watch {
+			t.Errorf("LoopFlags(%v): watch = %v, want %v", tt.args, got, tt.watch)
+		}
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
 // gitStageAndCommit stages all changes and commits with the given message.
@@ -70,10 +72,21 @@ func completionMessage(count int64) string {
 	return fmt.Sprintf("Builder loop complete. %d assertions completed.", count)
 }
 
+// LoopFlags defines the flag set for the loop builder CLI.
+var LoopFlags = cli.FlagSet{
+	"watch": {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
+}
+
 // RunBuilderLoop runs the continuous builder loop.
-func RunBuilderLoop(installDir string) {
+func RunBuilderLoop(args []string, installDir string) {
+	parsed := cli.ParseFlags(args, LoopFlags)
+	watch := parsed.Bool("watch")
+
 	colorLog(colorCyan, "Starting Builder Loop...")
 	colorLog(colorBlue, "This will continuously get next assertions and implement them.")
+	if watch {
+		colorLog(colorYellow, "Watch mode: will poll for new work after completion.")
+	}
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
 
 	var completed int64
@@ -108,8 +121,11 @@ func RunBuilderLoop(installDir string) {
 		if result.Type == "complete" {
 			count := atomic.LoadInt64(&completed)
 			colorLog(colorGreen, completionMessage(count))
-			time.Sleep(5 * time.Second)
-			continue
+			if watch {
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			os.Exit(0)
 		}
 
 		if result.Type != "assertion" {
