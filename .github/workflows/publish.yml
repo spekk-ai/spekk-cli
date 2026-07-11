@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['exp-*']
   workflow_dispatch:
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
         run: |
           mkdir -p dist
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
+            VERSION="${GITHUB_REF_NAME#exp-}"
           else
             VERSION="$(git describe --tags --always 2>/dev/null || echo dev)"
           fi
@@ -42,4 +42,5 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: dist/*
+          prerelease: true
           generate_release_notes: true
