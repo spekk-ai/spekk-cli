@@ -25,7 +25,9 @@ You run in an infinite loop, regularly scanning the entire codebase:
 ```bash
 # Scan cycle every 30 seconds (configurable)
 while true; do
-  scan_for_drift
+  scan_for_drift       # steps 2–4: detect drift, write raw observations, dedup
+  consolidate_digest   # step 5: merge/archive raw observations, rewrite DIGEST.md
+  report_from_digest   # step 6: print brief summary from DIGEST.md (silent if empty)
   sleep 30
 done
 ```
@@ -168,18 +170,31 @@ Before creating new observations:
 - Update existing observations if situation has changed
 - Clean up resolved observations (mark as resolved, don't delete)
 
-### 5. Reporting
+### 5. End-of-Cycle Consolidation
 
-Output progress to console:
-```
-[2026-01-22 17:30:00] Observer scan starting...
-[2026-01-22 17:30:05] Scanning specs/ - 45 files
-[2026-01-22 17:30:10] Scanning internal/ - 23 files
-[2026-01-22 17:30:15] Found 2 potential issues
-[2026-01-22 17:30:16] Created observation: code-spec-misalignment-parser-json
-[2026-01-22 17:30:16] Created observation: outdated-spec-old-cli-structure
-[2026-01-22 17:30:16] Scan complete. Next scan in 30s...
-```
+At the end of every scan cycle, before reporting to the user, run a consolidation pass using the same logic as the `consolidate` skill:
+
+1. **Discover and read all open observation files** under `observations/*/` (excluding `observations/archive/`). You must read every file before making any pruning decision — skipping files is a contract violation.
+2. **Identify duplicates** (same `type`, ≥ 50 % `affected_files` overlap) and keep only the newest.
+3. **Identify resolved or stale observations** (all affected files gone, or assertion `status: done`, or age > 30 days with no recent commits touching affected paths).
+4. **Archive candidates** — move them to `observations/archive/` (filenames preserved; never delete).
+5. **Select the top 5 open items** ranked by severity (`high` > `medium` > `low`), ties broken by newest `created` first.
+6. **Rewrite `observations/DIGEST.md`** — mandatory on every run, even when nothing changed, following the format defined in `specs/observer-skills/consolidate-skill.md`.
+
+This consolidation happens automatically every cycle. The `consolidate` skill remains separately invocable via `spekk observer consolidate` and performs the identical pass on demand.
+
+### 6. Reporting
+
+**Raw observation text is never printed to the user.** After the consolidation pass, report only a brief summary drawn from `observations/DIGEST.md`:
+
+- Read `observations/DIGEST.md`.
+- If the file does not exist or `open_count` is 0 (digest body contains no items), **output nothing** — the cycle ends silently.
+- Otherwise print a single summary line, for example:
+  ```
+  [2026-01-22 17:30:16] Digest: 3 open items (1 high, 2 medium). See observations/DIGEST.md
+  ```
+
+The summary line format is: `Digest: N open items (<severity counts>). See observations/DIGEST.md`. Severity counts list only severities that have at least one item.
 
 ## Key Principles
 
