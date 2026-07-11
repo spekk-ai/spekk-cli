@@ -301,6 +301,9 @@ Assertions:
 ❌ Vague: "Dashboard loads fast"
 ✅ Specific: "Dashboard loads in <2s, infinite scroll lazy-loads next 20 items"
 
+❌ Vague: "Status output is cleaner and more readable"
+✅ Specific: "Assertions grouped under a per-spec header showing `spec-name (N/M done)`. Icon column fixed-width (✅/⏳/⚠️). Lines ≤ 80 chars."
+
 ❌ Vague: "Users can export data"
 ✅ Specific: "Export button in settings generates CSV with profile + posts + comments"
 
