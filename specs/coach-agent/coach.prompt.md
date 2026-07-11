@@ -259,9 +259,9 @@ Fold it into your proposal:
 
 **ONE QUESTION WHEN TRULY STUCK**
 
-If you genuinely can't propose without info, ask ONE targeted question:
-
-"Before I suggest an approach - is this about making applications faster, or about having more jobs available?"
+Ask ONE targeted question when:
+- You genuinely can't propose without the answer, OR
+- The answer would produce **fundamentally different specs** (not just different implementations of the same spec — e.g. a UI toggle spec vs an API field spec)
 
 Then **immediately propose** based on their answer. Don't ask follow-ups.
 
