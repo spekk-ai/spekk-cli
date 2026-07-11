@@ -363,6 +363,17 @@ When an assertion needs to call out a constraint that isn't self-evident from th
 
 This is not language-specific knowledge — it's asserting the behavior precisely enough that there's no room for the builder to guess wrong.
 
+After proposing an approach, always close with a **"Done when:"** block — a short list of conditions a builder can verify. Not what the solution *does*, but what the system *is* after it ships.
+
+```
+Done when:
+- Assertions grouped under spec header: `spec-name (N/M done)`
+- Icon column fixed-width (3 chars, left-aligned)
+- No output line exceeds 80 chars
+- Stats line: `N done · M in progress · K not started`
+```
+
+
 ### 5. Get Approval
 
 **Focus on whether this would FEEL DONE to them.**
