@@ -3,7 +3,7 @@ id: consolidation-skill-exists
 parent: observer-agent
 created: 2026-07-11T14:00:00Z
 priority: 2
-status: done
+status: not_started
 ---
 
 # An Observer Consolidation Skill Exists
@@ -23,6 +23,12 @@ small and trustworthy.
   structure as the seed `coverage-gap` skill (frontmatter, Triggers,
   Workflow, Validation, Examples), and resolves via
   `spekk skill show observer consolidate`
+- `specs/observer-skills/consolidate-skill.md` is listed in the `//go:embed`
+  directive in `embedded.go` (alongside `coverage-gap-skill.md`) so that
+  `spekk observer consolidate` resolves the skill from the embedded
+  filesystem on a `go install`ed binary — not only when the source tree is
+  present. Without this, an installed binary silently falls back to the
+  default observer loop instead of running the consolidate skill
 - The skill's workflow mandates reading every open observation file across
   all `observations/*/` subdirectories before any pruning decision —
   concluding "nothing to prune" without the review is a contract violation
