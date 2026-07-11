@@ -56,7 +56,11 @@ Principles carried over from agent heartbeat systems:
 - **Harness-owned scheduling (future).** When consolidation becomes
   scheduled rather than user-invoked, the spekk CLI — not the agent —
   decides when it runs, via a deterministic state marker (last-consolidated
-  timestamp owned by Go, not inferred from filenames).
+  timestamp owned by Go, not inferred from filenames). The deeper reason
+  to prefer Go-owned scheduling over cron is that it enables the agent to
+  update its own task queue: the harness can hand the agent its next
+  scheduled work item and let it self-direct, rather than relying on an
+  external scheduler with no awareness of agent state.
 
 ## Non-Goals (For Now)
 
@@ -83,7 +87,7 @@ experience with the previous one:
 
 1. Consolidation skill, user-invoked (`spekk observer consolidate`) — now
 2. Digest becomes the default surfacing path (prompt-level, quiet default loop)
-3. Go-owned scheduling: CLI triggers consolidation on a deterministic cadence
+3. Cron-based scheduling: `spekk observer install-cron` writes crontab entries for the observer loop and consolidation; Go-owned scheduling (with agent self-directed task queue) is a future upgrade
 4. Parser-enforced observation/digest validation, `spekk` query commands
 5. Sandbox / external-harness execution of the observer loop
 
