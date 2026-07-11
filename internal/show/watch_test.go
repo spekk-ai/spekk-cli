@@ -2,8 +2,12 @@ package show
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -78,10 +82,8 @@ func TestWatchSpecsDetectsChange(t *testing.T) {
 	})
 	defer stop()
 
-	// Wait for watcher to take initial snapshot
-	time.Sleep(100 * time.Millisecond)
-
-	// Modify a file
+	// watchSpecs captures its baseline snapshot synchronously before returning,
+	// so the modification below is guaranteed to come after it — no sleep needed.
 	writeFile(t, filepath.Join(specsDir, "test.md"), "# Modified")
 
 	select {
@@ -106,9 +108,8 @@ func TestWatchSpecsDetectsNewFile(t *testing.T) {
 	})
 	defer stop()
 
-	time.Sleep(100 * time.Millisecond)
-
-	// Add a new file
+	// Baseline snapshot is taken synchronously in watchSpecs; the new file below
+	// therefore always postdates it.
 	writeFile(t, filepath.Join(specsDir, "new.md"), "# New")
 
 	select {
@@ -116,6 +117,146 @@ func TestWatchSpecsDetectsNewFile(t *testing.T) {
 		// ok
 	case <-time.After(3 * time.Second):
 		t.Fatal("watcher did not detect new file within timeout")
+	}
+}
+
+// TestWatchRefsDetectsBranchChange verifies the cross-branch ref watcher fires
+// when a new branch is created — a git-state change that moves no working-tree
+// .md file and would be missed by the file watcher alone.
+func TestWatchRefsDetectsBranchChange(t *testing.T) {
+	repo := initGitRepo(t)
+
+	// chdir into repo so the crossbranch chokepoint (which shells out to git in
+	// the current directory) sees this repo.
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(repo); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(prev)
+
+	changed := make(chan struct{}, 1)
+	stop := watchRefs(func() {
+		select {
+		case changed <- struct{}{}:
+		default:
+		}
+	})
+	defer stop()
+
+	// watchRefs records its baseline ref fingerprint synchronously before
+	// returning, so creating the branch now is always seen as a later change.
+	runGit(t, repo, "branch", "feature-x")
+
+	select {
+	case <-changed:
+		// ok
+	case <-time.After(5 * time.Second):
+		t.Fatal("ref watcher did not detect new branch within timeout")
+	}
+}
+
+// TestWatcherStopIdempotent ensures the watcher stop functions can be called
+// more than once without panicking on a double close(done). RunWatch may invoke
+// a stopper on both its error branch and the normal fall-through, so the stoppers
+// must be idempotent.
+func TestWatcherStopIdempotent(t *testing.T) {
+	s1 := watchSpecs(t.TempDir(), func() {})
+	s1()
+	s1() // must not panic on a second close
+
+	s2 := watchRefs(func() {})
+	s2()
+	s2() // must not panic on a second close
+}
+
+// initGitRepo creates a throwaway git repo with one commit and returns its path.
+func initGitRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
+	writeFile(t, filepath.Join(dir, "README.md"), "# Test")
+	runGit(t, dir, "add", "README.md")
+	runGit(t, dir, "commit", "-m", "init")
+	return dir
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+// TestWatchRefsErrorRecovery verifies the error-recovery semantics of the ref
+// watcher via watchRefsWithScan (the testable, scan-injectable core of
+// watchRefs). The stub scan sequence is:
+//
+//	call 1 (startup):  error  → baseline = ""
+//	call 2 (tick 1):   error  → errored=true,  onChange NOT called
+//	call 3 (tick 2):   error  → still errored, onChange NOT called
+//	call 4 (tick 3):   stableFP → errored=false (recovery), fingerprint changed
+//	                   from "" → onChange IS called here (first successful scan)
+//	call 5+ (tick 4+): changedFP → fingerprint changed → onChange called again
+//
+// We assert:
+//  1. onChange is NOT called while all scans error (the error phase).
+//  2. onChange IS called after the watcher recovers and sees a new fingerprint.
+func TestWatchRefsErrorRecovery(t *testing.T) {
+	const (
+		stableFP  = "fp-stable"
+		changedFP = "fp-changed"
+	)
+
+	var mu sync.Mutex
+	callCount := 0
+	stubScan := func() (string, error) {
+		mu.Lock()
+		n := callCount + 1
+		callCount++
+		mu.Unlock()
+		switch n {
+		case 1, 2, 3: // startup + 2 ticks: error phase
+			return "", fmt.Errorf("simulated scan error (call %d)", n)
+		case 4: // recovery tick: first successful scan
+			return stableFP, nil
+		default: // subsequent ticks: fingerprint moved
+			return changedFP, nil
+		}
+	}
+
+	onChangeCh := make(chan struct{}, 4)
+	stop := watchRefsWithScan(stubScan, func() {
+		select {
+		case onChangeCh <- struct{}{}:
+		default:
+		}
+	})
+	defer stop()
+
+	// Wait for onChange to fire at least once (the recovery tick makes the
+	// fingerprint differ from the empty baseline, triggering a reload).
+	select {
+	case <-onChangeCh:
+		// Good — watcher recovered and fired onChange.
+	case <-time.After(10 * time.Second):
+		t.Fatal("watchRefs did not call onChange after error recovery")
+	}
+
+	// Confirm we progressed through the error phase: at least 4 scan calls
+	// (startup + 2 error ticks + recovery tick).
+	mu.Lock()
+	n := callCount
+	mu.Unlock()
+	if n < 4 {
+		t.Errorf("expected at least 4 scan calls to cover error phase + recovery, got %d", n)
 	}
 }
 

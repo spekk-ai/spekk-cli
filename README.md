@@ -1,87 +1,87 @@
 # Spekk CLI
 
-**Spec-driven development CLI tool** for managing specifications and automating development workflows with AI agents.
+**Spec-driven development for AI coding agents.** Describe what must be true in plain-markdown specs; let agents make it true.
 
-## Overview
+Spekk turns a `specs/` directory in your repo into a work queue for AI agents:
 
-Spekk CLI enables spec-driven development by:
-- **Parsing** specification files to identify what needs to be built
-- **Orchestrating** AI agents (Coach and Builder) to create and implement specs
-- **Automating** the development workflow loop
+- **Specs** are markdown files stating what must be true, broken into small, testable **assertions**
+- `spekk next` parses them and returns the next ready assertion — dependency- and branch-aware
+- The **coach** agent turns messy feature requests and meeting notes into well-formed specs
+- The **builder** agent picks up assertions and implements them until they're true
+- Works inside [your existing coding assistant](#use-spekk-from-your-coding-assistant) — Claude Code, Copilot, Cursor, OpenCode, Codex — or standalone from the terminal
 
-## Documentation
-
-- **[Getting Started Guide](./docs/GETTING-STARTED.md)** - Quick introduction to Spekk
-- **[CLI Reference](./docs/CLI-REFERENCE.md)** - Complete command documentation
-- **[Coach Skills Guide](./docs/COACH-SKILLS.md)** - Detailed skill workflows
-
-## Installation
-
-### From GitHub Releases (recommended)
-
-Download the latest binary for your platform from [GitHub Releases](https://github.com/spekk-ai/spekk-cli/releases):
+## Install
 
 ```bash
-# macOS (Apple Silicon)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-arm64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
-
-# macOS (Intel)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-darwin-amd64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
-
-# Linux (x86_64)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-amd64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
-
-# Linux (ARM64)
-curl -L https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-linux-arm64 -o /usr/local/bin/spekk
-chmod +x /usr/local/bin/spekk
+curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-### From Source
+Or with Go: `go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest` — or download a binary from [releases](https://github.com/spekk-ai/spekk-cli/releases/latest).
 
-```bash
-go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest
-```
-
-### Verify
-
-```bash
-spekk --help
-```
+> **Platform support:** Spekk supports **macOS and Linux**. Windows is not officially supported — Windows binaries are published on a best-effort basis and untested; use [WSL](https://learn.microsoft.com/en-us/windows/wsl/) for the supported experience.
 
 ## Quick Start
 
+The workflow is three commands:
+
 ```bash
-# Find next priority assertion to work on
-spekk next
-
-# Launch builder (implements specs continuously)
-spekk builder
-
-# Launch builder for one assertion then exit
-spekk builder --once
-
-# Launch coach (creates specs interactively)
-spekk coach
-
-# Process meeting notes into specs/todos/context
-spekk coach meeting notes.txt
-
-# View all specs in interactive web UI
-spekk show
-
-# Watch mode with live reload
-spekk show -w
-
-# Get comprehensive overview of all specs
-spekk status
+cd your-project
+spekk init       # 1. create the specs/ directory
+spekk coach      # 2. draft specs with the coach agent
+spekk builder    # 3. implement the next ready assertion
 ```
+
+**Using Claude Code?** `spekk coach` and `spekk builder` launch it directly with the agent loaded — the commands above are all you need.
+
+**Using another assistant (Copilot, Cursor, OpenCode, Codex)?** Register the agents as subagents and run the same workflow from inside it:
+
+```bash
+spekk install --target cursor    # or: claude-code, copilot, opencode, codex
+```
+
+Then ask **spekk-coach** to draft specs and **spekk-builder** to implement them, right in your normal session. See [Use Spekk from Your Coding Assistant](#use-spekk-from-your-coding-assistant) for details.
+
+Either way, these work from any terminal:
+
+```bash
+spekk next       # print the next ready assertion (dependency-aware)
+spekk status     # overview of all specs and assertions
+spekk show -w    # interactive spec explorer with live reload
+```
+
+**Full documentation:** [Getting started](./docs/getting-started.md) · [Concepts](./docs/concepts.md) · [CLI reference](./docs/cli-reference.md) · [Configuration](./docs/configuration.md) · [Coach skills](./docs/coach-skills.md)
+
+## Use Spekk from Your Coding Assistant
+
+`spekk coach` and `spekk builder` launch Claude Code, but the agents work from any coding assistant. `spekk install` registers them as subagents in your preferred tool:
+
+```bash
+spekk install --target claude-code   # ~/.claude/agents/
+spekk install --target copilot      # ~/.copilot/agents/ (VS Code)
+spekk install --target cursor       # ~/.cursor/agents/
+spekk install --target opencode     # ~/.config/opencode/agents/
+spekk install --target codex        # ~/.codex/prompts/
+```
+
+This writes thin shims that fetch their instructions from the `spekk` binary at session start (via `spekk prompt <agent>`), so installed agents always match your binary version — updating spekk updates every tool at once. Add `--project` to install into the current repo instead of globally.
+
+The agents are designed to be unintrusive: they only engage in projects that have a `specs/` directory, and stay dormant everywhere else.
+
+### Any other tool
+
+If your assistant isn't listed, you don't need an installer — any tool that can run a shell command (or accept pasted text) can use spekk:
+
+```bash
+spekk prompt coach      # print the full coach prompt
+spekk prompt builder    # print the full builder prompt
+spekk skill list coach  # list available coach skills
+```
+
+Wire `spekk prompt <agent>` into your tool's custom-agent, rules, or system-prompt mechanism. If your tool reads `AGENTS.md`, a single line like *"For spec-driven development tasks, run `spekk prompt coach` (or `builder`) and follow those instructions"* is enough.
 
 ## Installing Skills
 
-Agents (coach, builder, observer) load skills from a layered set of directories: project-local (`<cwd>/.spekk/skills/<agent>/`), global (`~/.spekk/skills/<agent>/`), and the embedded defaults baked into the binary. The `spekk install` command fetches skills from the official registry — [`github.com/spekk-ai/spekk-skills`](https://github.com/spekk-ai/spekk-skills) — and drops them into one of those directories.
+Agents (coach, builder, observer) load skills from a layered set of directories: project-local (`<cwd>/.spekk/skills/<agent>/`), global (`~/.config/spekk/skills/<agent>/`), and the embedded defaults baked into the binary. The `spekk install` command fetches skills from the official registry — [`github.com/spekk-ai/spekk-skills`](https://github.com/spekk-ai/spekk-skills) — and drops them into one of those directories.
 
 ### Common Invocations
 
@@ -89,7 +89,7 @@ Agents (coach, builder, observer) load skills from a layered set of directories:
 # Install from the registry into the current project (.spekk/skills/<agent>/)
 spekk install coach meeting-notes
 
-# Install globally so every project on your machine can see it (~/.spekk/skills/<agent>/)
+# Install globally so every project on your machine can see it (~/.config/spekk/skills/<agent>/)
 spekk install coach meeting-notes --global
 
 # Install from an arbitrary URL instead of the registry
@@ -125,7 +125,6 @@ export SPEKK_SKILLS_RAW_BASE=https://raw.githubusercontent.com/my-org/internal-s
 export SPEKK_SKILLS_API_BASE=https://api.github.com/repos/my-org/internal-skills/contents
 spekk install coach my-skill
 ```
-
 ## Customizing Agent Prompts
 
 Spekk uses a layered prompt system that lets you customize agent behavior (coach, builder, observer) at two levels without modifying the binary.
@@ -141,14 +140,14 @@ The file naming convention determines how your customization is applied:
 
 | Location | Scope | Example Path |
 |----------|-------|-------------|
-| `~/.spekk/` | Global -- applies to all your projects | `~/.spekk/builder.prompt.md` |
+| `~/.config/spekk/` | Global -- applies to all your projects | `~/.config/spekk/builder.prompt.md` |
 | `.spekk/` (project root) | Local -- applies to this project only | `.spekk/coach.prompt.md` |
 
 Local files take precedence over global files. If both a local override and a global override exist, the local override wins.
 
 ### Example: Extending the Builder Prompt Globally
 
-Create `~/.spekk/builder.prompt.md`:
+Create `~/.config/spekk/builder.prompt.md`:
 
 ```markdown
 ## Company Standards
@@ -172,7 +171,7 @@ When creating specs, follow Django conventions and
 reference the project's existing app structure.
 ```
 
-This completely replaces the base coach prompt for this project. Any extend files (`~/.spekk/coach.prompt.md` or `.spekk/coach.prompt.md`) are still appended after the override.
+This completely replaces the base coach prompt for this project. Any extend files (`~/.config/spekk/coach.prompt.md` or `.spekk/coach.prompt.md`) are still appended after the override.
 
 ### Version Control
 
@@ -398,6 +397,7 @@ spekk observer
 
 ```bash
 spekk              # Default: runs parser (equivalent to `spekk next`)
+spekk init         # Set up a project (creates specs/)
 spekk next         # Get next priority assertion
 spekk show         # Launch interactive web spec explorer
 spekk show -w      # Watch mode with live reload
@@ -405,9 +405,14 @@ spekk status       # Comprehensive overview of all specs/assertions
 spekk coach        # Launch Coach Agent
 spekk builder      # Launch Builder Agent
 spekk observer     # Launch Observer Agent (monitors drift)
+spekk install      # Install agents into a coding assistant (--target)
+spekk prompt       # Print an agent's resolved prompt
+spekk skill        # List and print agent skills (list, show)
 spekk serve        # Start WebSocket server for browser extension
 spekk sandbox      # Manage cloud sandbox environments
 spekk loop         # Run orchestration workflows
+spekk update       # Self-update to the latest release
+spekk version      # Print the current version
 spekk help         # Show help message
 ```
 
@@ -433,78 +438,15 @@ spekk next --assertion <id>   # Get details for specific assertion
 spekk next --all-branches     # Include assertions from all branches
 ```
 
-## Directory Structure
+## Contributing
 
-```
-spekk-cli/
-├── cmd/spekk/              # CLI entry point
-│   └── main.go
-├── internal/               # Core Go packages
-│   ├── parser/            # Spec parser
-│   ├── agent/             # Agent launchers (coach, builder, observer, loops)
-│   ├── cli/               # Flag parsing, prompt/skill resolution
-│   ├── show/              # Spec explorer web UI
-│   ├── serve/             # WebSocket server for browser extension
-│   ├── sandbox/           # Cloud sandbox management (DigitalOcean)
-│   └── status/            # Status overview display
-├── specs/                  # All specifications
-│   ├── spec-parser/
-│   ├── coach-agent/
-│   ├── builder-agent/
-│   └── ...
-├── go.mod
-└── go.sum
-```
-
-## Development
-
-### Building
-
-```bash
-go build ./cmd/spekk
-```
-
-### Testing
-
-```bash
-# Run all tests
-go test ./...
-
-# Run tests for a specific package
-go test ./internal/parser/
-
-# Verbose output
-go test ./... -v
-```
-
-### Creating New Features
-
-1. **Write the spec** (or use coach agent):
-   ```bash
-   spekk coach
-   ```
-
-2. **Implement via builder**:
-   ```bash
-   spekk builder
-   ```
-
-3. **Or implement manually**:
-   ```bash
-   # Check what's next
-   spekk next
-
-   # Read the assertion file
-   cat specs/spec-parser/assertions/parses-frontmatter.md
-
-   # Implement the feature, update status to done
-   ```
+Development setup, project structure, testing, and the release process are documented in [CONTRIBUTING.md](./CONTRIBUTING.md). This repo is built with spekk itself — `spekk next` shows what's ready to work on.
 
 ## Requirements
 
-- **Go** 1.23+ (for building from source)
-- **Claude CLI** (for builder/coach/observer agents)
-- **Git** (for automated commits)
+- **Git** (for branch-aware parsing and automated commits)
+- **Claude CLI** — only for the standalone `spekk coach` / `spekk builder` / `spekk observer` launchers; not needed when using the agents [from another assistant](#use-spekk-from-your-coding-assistant)
+- **Go** 1.23+ — only for building from source
 
 ## Philosophy
 
@@ -518,4 +460,4 @@ The specs are the source of truth. Code is the implementation of specs. Tests pr
 
 ## License
 
-MIT
+[Apache 2.0](./LICENSE)

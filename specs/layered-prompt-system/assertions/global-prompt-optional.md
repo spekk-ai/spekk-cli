@@ -12,12 +12,12 @@ status: done
 
 ## Description
 
-The global prompt from `~/.spekk/` is optional. If present, it's appended to the base prompt. If missing, resolution continues silently.
+The global prompt from `~/.config/spekk/` is optional. If present, it's appended to the base prompt. If missing, resolution continues silently.
 
 ## Success Criteria
 
-- Global extend prompt loaded from `~/.spekk/<agent>.prompt.md`
-- Global override prompt loaded from `~/.spekk/<agent>.prompt.override.md`
+- Global extend prompt loaded from `~/.config/spekk/<agent>.prompt.md`
+- Global override prompt loaded from `~/.config/spekk/<agent>.prompt.override.md`
 - If override exists, it replaces the package base prompt
 - If extend exists, content is appended after the base (or overridden base)
 - If neither exists, no error — resolution continues

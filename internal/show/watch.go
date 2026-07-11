@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
@@ -97,13 +98,68 @@ const sseClientScript = `
 </script>`
 
 // RunWatch starts the watch-mode HTTP server with SSE live reload.
-func RunWatch(specsDir string) error {
+//
+// opts mirrors show.Run's Options so the watch path stays consistent. When
+// opts.CrossBranch is true the cross-branch contributions are recomputed on
+// every render (see getHTML) using the exact same read-only classification
+// path as show.Run (applyCrossBranch), and an additional git-ref watcher
+// triggers a live reload when branch state changes underneath the working
+// tree. When opts.CrossBranch is false, behavior is byte-for-byte identical to
+// the working-tree-only default.
+func RunWatch(specsDir string, opts Options) error {
+	if opts.CrossBranch {
+		fmt.Fprintln(os.Stderr, "cross-branch mode active (recomputed on each refresh)")
+	}
+
 	var (
 		mu    sync.Mutex
 		dirty bool
 	)
 
-	// getHTML regenerates HTML from current spec state.
+	// Cross-branch classification cache. Classification compares committed refs
+	// (HEAD vs each branch's merge-base) and never reads the working tree, so its
+	// result only changes when git ref state changes — not when a working-tree
+	// .md file is edited. We therefore memoize the expensive Classify /
+	// SupportsMergeTree results keyed on the ref fingerprint (scanRefs): an edit
+	// that triggers a re-render reparses specs cheaply but reuses the cached
+	// classification, while a ref move invalidates it and reclassifies once. This
+	// keeps a flapping remote (or several open tabs) from re-running N merge-tree
+	// subprocesses on every refresh.
+	var (
+		cbMu        sync.Mutex
+		cbFP        string
+		cbStates    []crossbranch.FileState
+		cbSupported bool
+		cbValid     bool
+	)
+	classifyCached := func() ([]crossbranch.FileState, bool, error) {
+		fp, fpErr := scanRefs()
+
+		cbMu.Lock()
+		defer cbMu.Unlock()
+		if fpErr == nil && cbValid && fp == cbFP {
+			return cbStates, cbSupported, nil
+		}
+
+		states, supported, err := crossbranch.Classify(opts.BranchFilter)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if fpErr == nil {
+			cbFP, cbStates, cbSupported, cbValid = fp, states, supported, true
+		} else {
+			// Couldn't fingerprint ref state; serve this result but don't cache it
+			// (we can't tell when it goes stale).
+			cbValid = false
+		}
+		return states, supported, nil
+	}
+
+	// getHTML regenerates HTML from current spec state. In cross-branch mode it
+	// folds in the cross-branch classification (cached per git ref state by
+	// classifyCached), so every render reflects the latest branch states without
+	// re-running merge-tree when nothing in git has moved.
 	getHTML := func() (string, error) {
 		mu.Lock()
 		dirty = false
@@ -118,6 +174,18 @@ func RunWatch(specsDir string) error {
 		}
 
 		data := buildShowData(specsDir, result)
+
+		// Reuse show.Run's exact cross-branch fold; classification is cached on
+		// ref state. When off, this is skipped entirely so output is identical to
+		// the default working-tree-only path.
+		if opts.CrossBranch {
+			states, supported, cerr := classifyCached()
+			if cerr != nil {
+				return "", fmt.Errorf("classifying cross-branch state: %w", cerr)
+			}
+			foldCrossBranch(&data, states, supported)
+		}
+
 		jsonBytes, err := json.Marshal(data)
 		if err != nil {
 			return "", fmt.Errorf("marshaling data: %w", err)
@@ -225,13 +293,27 @@ func RunWatch(specsDir string) error {
 	port := listener.Addr().(*net.TCPAddr).Port
 	server := &http.Server{Handler: mux}
 
-	// Start file watcher
-	stopWatcher := watchSpecs(specsDir, func() {
+	markDirty := func() {
 		mu.Lock()
 		dirty = true
 		mu.Unlock()
 		notifyClients()
-	})
+	}
+
+	// Start file watcher (working-tree .md changes).
+	stopWatcher := watchSpecs(specsDir, markDirty)
+
+	// In cross-branch mode, also watch git ref state. Branch refs can move
+	// (new commits, new/deleted branches, fetches) without any local .md file
+	// changing, and those moves change the cross-branch preview. The .md watcher
+	// alone would miss them, so a ref watcher pushes a live reload when refs
+	// change. Each render still recomputes classification regardless, so a manual
+	// browser refresh always reflects current branch state even if this watcher
+	// is not running. It is a no-op when cross-branch mode is off.
+	stopRefWatcher := func() {}
+	if opts.CrossBranch {
+		stopRefWatcher = watchRefs(markDirty)
+	}
 
 	// Handle SIGINT for graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -258,11 +340,13 @@ func RunWatch(specsDir string) error {
 	case err := <-serverErr:
 		if err != nil && err != http.ErrServerClosed {
 			stopWatcher()
+			stopRefWatcher()
 			return fmt.Errorf("server error: %w", err)
 		}
 	}
 
 	stopWatcher()
+	stopRefWatcher()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	server.Shutdown(shutdownCtx)
@@ -309,7 +393,90 @@ func watchSpecs(specsDir string, onChange func()) func() {
 		}
 	}()
 
-	return func() { close(done) }
+	var once sync.Once
+	return func() { once.Do(func() { close(done) }) }
+}
+
+// watchRefs polls git ref state for cross-branch mode and calls onChange when
+// it changes. "Ref state" is the full set of (refname, object id) pairs across
+// all branches plus HEAD, so it moves whenever a branch is created, deleted,
+// fetched, or advanced — exactly the events that change the cross-branch
+// preview but leave the local working tree untouched.
+//
+// It reuses a 1s poll (relaxed from the .md watcher's 500ms because a ref scan
+// shells out to git, whereas the .md scan is a cheap stat walk) and does no
+// busy-looping: one git read per tick, gated on a ticker. All git access goes
+// through the crossbranch read-only chokepoint (for-each-ref / rev-parse), so
+// this stays strictly read-only — it never mutates the working tree, index, or
+// any ref. Returns a stop function.
+func watchRefs(onChange func()) func() {
+	return watchRefsWithScan(scanRefs, onChange)
+}
+
+// watchRefsWithScan is the testable core of watchRefs. It accepts a pluggable
+// scan function so tests can inject a stub without hitting the filesystem or
+// spawning git processes. Production code always passes scanRefs; tests may pass
+// a controlled stub. The scan function has the same contract as scanRefs:
+// returning ("", err) on failure, (fingerprint, nil) on success.
+func watchRefsWithScan(scan func() (string, error), onChange func()) func() {
+	snapshot, _ := scan() // a startup error just means the first good scan sets the baseline
+
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		errored := false
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				current, err := scan()
+				if err != nil {
+					// Don't reload on a failed scan, but log once on entering the
+					// error state so a persistently broken watcher is observable
+					// rather than silently dead. No spam: only on the transition.
+					if !errored {
+						errored = true
+						fmt.Fprintf(os.Stderr, "cross-branch watch: git ref scan failed (%v); live reload paused until it recovers\n", err)
+					}
+					continue
+				}
+				if errored {
+					errored = false
+					fmt.Fprintln(os.Stderr, "cross-branch watch: git ref scan recovered")
+				}
+				if current != snapshot {
+					snapshot = current
+					onChange()
+				}
+			}
+		}
+	}()
+
+	var once sync.Once
+	return func() { once.Do(func() { close(done) }) }
+}
+
+// scanRefs returns a fingerprint of the current git ref state: every branch ref
+// (local and remote-tracking) and its object id, plus HEAD. It returns an error
+// (rather than a sentinel string) on any git failure so the watcher can surface
+// a persistently broken scan instead of silently never reloading. Read-only:
+// goes through the crossbranch chokepoint exclusively.
+func scanRefs() (string, error) {
+	refs, err := crossbranch.Run(
+		"for-each-ref",
+		"--format=%(refname) %(objectname)",
+		"refs/heads", "refs/remotes",
+	)
+	if err != nil {
+		return "", err
+	}
+	head, err := crossbranch.Run("rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return refs + "\nHEAD " + head, nil
 }
 
 // scanMdFiles recursively scans dir for .md files and returns a map of

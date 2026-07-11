@@ -1,0 +1,110 @@
+#cloud-config
+#
+# Cloud-init template for Spekk sandbox droplets.
+#
+# Usage:
+#   doctl compute droplet create sandbox-agent-1 \
+#     --image ubuntu-24-04-x64 \
+#     --size s-2vcpu-4gb \
+#     --region nyc1 \
+#     --user-data-file cloud-init.yaml \
+#     --ssh-keys YOUR_SSH_KEY_FINGERPRINT
+#
+# After creation, SSH in and run setup-credentials.sh to inject secrets.
+# Then run deploy-agent.sh to copy the Go binary and start the service.
+#
+
+package_update: true
+package_upgrade: true
+
+users:
+  - name: agent
+    shell: /bin/bash
+    groups: [docker, sudo, systemd-journal]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      # Replace with your SSH public key
+      - ssh-ed25519 AAAA... your-key-here
+
+packages:
+  - git
+  - jq
+  - htop
+  - tmux
+  - vim
+  - unzip
+  - ca-certificates
+  - curl
+  - gnupg
+
+write_files:
+  - path: /etc/systemd/system/spekk-agent.service
+    content: |
+      [Unit]
+      Description=Spekk Agent Client
+      After=network-online.target docker.service
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=agent
+      WorkingDirectory=/workspace
+      EnvironmentFile=/etc/spekk/agent.env
+      ExecStart=/opt/spekk/agent-client
+      Restart=always
+      RestartSec=5
+      StandardOutput=append:/var/log/spekk/agent.log
+      StandardError=append:/var/log/spekk/agent.log
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/spekk/agent.env.example
+    content: |
+      # Required: Agent auth token for WebSocket connection to Django
+      SPEKK_AGENT_TOKEN=
+      # Required: Spekk app host (e.g., app.spekk.ai)
+      SPEKK_HOST=
+      # Required: Anthropic API key for Claude Code
+      ANTHROPIC_API_KEY=
+      # Required: GitHub PAT for the agent's GitHub identity
+      GITHUB_TOKEN=
+
+runcmd:
+  # Docker (official repo)
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update -y
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+  # Node.js LTS (via NodeSource)
+  - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  - apt-get install -y nodejs
+
+  # GitHub CLI
+  - curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+  - chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+  - apt-get update -y
+  - apt-get install -y gh
+
+  # Claude Code CLI
+  - npm install -g @anthropic-ai/claude-code
+
+  # Workspace
+  - mkdir -p /workspace
+  - chown agent:agent /workspace
+
+  # Spekk agent directory
+  - mkdir -p /opt/spekk
+  - mkdir -p /etc/spekk
+  - mkdir -p /var/log/spekk
+  - chown agent:agent /var/log/spekk
+
+  # Git config for agent user
+  - su - agent -c 'git config --global init.defaultBranch main'
+
+  # Mark provisioning complete
+  - touch /opt/spekk/.provisioned

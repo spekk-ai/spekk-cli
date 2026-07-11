@@ -43,17 +43,12 @@ type asset struct {
 // Run performs the self-update. If checkOnly is true, it prints the available
 // version without installing.
 func Run(checkOnly bool) error {
-	token := os.Getenv("GH_SPEKK_TOKEN")
-	if token == "" {
-		return fmt.Errorf("GH_SPEKK_TOKEN environment variable is required\nSet this to a fine-grained PAT with contents:read on %s/%s", repoOwner, repoName)
-	}
-
 	current := version.Version
 	if current == "dev" {
 		return fmt.Errorf("cannot update a development build; install a released version first")
 	}
 
-	release, err := FetchLatestRelease(token)
+	release, err := FetchLatestRelease()
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %w", err)
 	}
@@ -96,7 +91,7 @@ func Run(checkOnly bool) error {
 		return fmt.Errorf("cannot resolve executable path: %w", err)
 	}
 
-	if err := downloadAndReplace(downloadURL, token, exePath); err != nil {
+	if err := downloadAndReplace(downloadURL, exePath); err != nil {
 		return fmt.Errorf("update failed: %w", err)
 	}
 
@@ -105,13 +100,12 @@ func Run(checkOnly bool) error {
 }
 
 // FetchLatestRelease queries the GitHub Releases API for the latest release.
-func FetchLatestRelease(token string) (*releaseResponse, error) {
+func FetchLatestRelease() (*releaseResponse, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "token "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := Client.Do(req)
@@ -132,12 +126,28 @@ func FetchLatestRelease(token string) (*releaseResponse, error) {
 	return &release, nil
 }
 
-func downloadAndReplace(url, token, destPath string) error {
+func downloadAndReplace(url, destPath string) error {
+	// Create the temp file before downloading so a permission problem fails
+	// fast. It lives in the same directory as the target so the final rename
+	// is atomic.
+	dir := filepath.Dir(destPath)
+	tmp, err := os.CreateTemp(dir, ".spekk-update-*")
+	if err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("no write permission for %s (spekk was likely installed with sudo) — run: sudo spekk update, or reinstall to user-owned ~/.local/bin for sudo-free updates: https://github.com/spekk-ai/spekk-cli#install", dir)
+		}
+		return fmt.Errorf("cannot create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		tmp.Close()
+		os.Remove(tmpName) // clean up on any error path
+	}()
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "token "+token)
 	req.Header.Set("Accept", "application/octet-stream")
 
 	resp, err := Client.Do(req)
@@ -147,50 +157,35 @@ func downloadAndReplace(url, token, destPath string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("download returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("download returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-
-	// Write to temp file in same directory for atomic rename
-	dir := filepath.Dir(destPath)
-	tmp, err := os.CreateTemp(dir, "spekk-update-*")
-	if err != nil {
-		return fmt.Errorf("cannot create temp file: %w (check directory permissions for %s)", err, dir)
-	}
-	tmpPath := tmp.Name()
 
 	if _, err := io.Copy(tmp, resp.Body); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return fmt.Errorf("download interrupted: %w", err)
+		return fmt.Errorf("cannot write new binary: %w", err)
 	}
-	tmp.Close()
-
-	if err := os.Chmod(tmpPath, 0755); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("cannot set permissions: %w", err)
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("cannot close temp file: %w", err)
 	}
 
-	// Replace binary (Windows needs special handling for running binaries)
+	// Preserve the executable bit.
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(tmpName, 0755); err != nil {
+			return fmt.Errorf("cannot chmod new binary: %w", err)
+		}
+	}
+
+	// On Windows the running binary cannot be replaced directly; rename the
+	// old one out of the way first.
 	if runtime.GOOS == "windows" {
-		oldPath := destPath + ".old"
-		os.Remove(oldPath)
-		if err := os.Rename(destPath, oldPath); err != nil {
-			os.Remove(tmpPath)
+		if err := os.Rename(destPath, destPath+".old"); err != nil {
 			return fmt.Errorf("cannot move old binary: %w", err)
 		}
-		if err := os.Rename(tmpPath, destPath); err != nil {
-			os.Rename(oldPath, destPath) // try to restore
-			os.Remove(tmpPath)
-			return fmt.Errorf("cannot install new binary: %w", err)
-		}
-		os.Remove(oldPath)
-	} else {
-		if err := os.Rename(tmpPath, destPath); err != nil {
-			os.Remove(tmpPath)
-			return fmt.Errorf("cannot replace binary: %w (you may need to run with sudo)", err)
-		}
 	}
 
+	if err := os.Rename(tmpName, destPath); err != nil {
+		return fmt.Errorf("cannot replace binary: %w", err)
+	}
 	return nil
 }
 
@@ -203,49 +198,48 @@ func AssetName(goos, goarch string) string {
 	return name
 }
 
-// IsNewer returns true if version a is strictly newer than version b.
-func IsNewer(a, b string) bool {
-	ap := ParseVersion(a)
-	bp := ParseVersion(b)
-
-	maxLen := len(ap)
-	if len(bp) > maxLen {
-		maxLen = len(bp)
+// ParseVersion splits a version string like "1.2.3" or "v1.2.3" into
+// a slice of ints. Non-numeric suffixes (e.g. "-dirty") are ignored.
+func ParseVersion(v string) []int {
+	v = strings.TrimPrefix(v, "v")
+	// Strip any suffix after a hyphen (e.g. "1.2.3-dirty" → "1.2.3")
+	if idx := strings.IndexByte(v, '-'); idx != -1 {
+		v = v[:idx]
 	}
-
-	for i := 0; i < maxLen; i++ {
-		var ai, bi int
-		if i < len(ap) {
-			ai = ap[i]
+	parts := strings.Split(v, ".")
+	nums := make([]int, 0, len(parts))
+	for _, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			break
 		}
-		if i < len(bp) {
-			bi = bp[i]
+		nums = append(nums, n)
+	}
+	if len(nums) == 0 {
+		return []int{0}
+	}
+	return nums
+}
+
+// IsNewer reports whether version a is strictly newer than version b.
+func IsNewer(a, b string) bool {
+	va := ParseVersion(a)
+	vb := ParseVersion(b)
+	n := len(va)
+	if len(vb) > n {
+		n = len(vb)
+	}
+	for i := 0; i < n; i++ {
+		ai, bi := 0, 0
+		if i < len(va) {
+			ai = va[i]
+		}
+		if i < len(vb) {
+			bi = vb[i]
 		}
 		if ai != bi {
 			return ai > bi
 		}
 	}
 	return false
-}
-
-// ParseVersion splits a version string like "v1.2.3" into integer components [1, 2, 3].
-func ParseVersion(v string) []int {
-	v = strings.TrimPrefix(v, "v")
-	parts := strings.Split(v, ".")
-	result := make([]int, len(parts))
-	for i, p := range parts {
-		// Strip non-numeric suffix (e.g., "3-dirty" → 3)
-		numStr := ""
-		for _, c := range p {
-			if c >= '0' && c <= '9' {
-				numStr += string(c)
-			} else {
-				break
-			}
-		}
-		if numStr != "" {
-			result[i], _ = strconv.Atoi(numStr)
-		}
-	}
-	return result
 }

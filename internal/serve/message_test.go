@@ -37,11 +37,11 @@ func TestFormatChatMessageWithAttachments(t *testing.T) {
 
 func TestFormatElementSelection(t *testing.T) {
 	result := formatElementSelection(elementSelectionData{
-		Selector: "div.main",
-		Tag:      "div",
-		Classes:  []string{"main", "content"},
-		ID:       "app",
-		InnerText: "Hello",
+		Selector:    "div.main",
+		Tag:         "div",
+		Classes:     []string{"main", "content"},
+		ID:          "app",
+		InnerText:   "Hello",
 		BoundingBox: &boundingBox{Width: 100, Height: 50},
 	})
 	if !strings.Contains(result, "`div.main`") {
@@ -61,8 +61,8 @@ func TestFormatElementSelection(t *testing.T) {
 func TestFormatElementSelectionTruncatesLongText(t *testing.T) {
 	longText := strings.Repeat("x", 150)
 	result := formatElementSelection(elementSelectionData{
-		Selector: "p",
-		Tag:      "p",
+		Selector:  "p",
+		Tag:       "p",
 		InnerText: longText,
 	})
 	if !strings.Contains(result, "...") {

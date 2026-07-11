@@ -4,5 +4,5 @@
 package version
 
 // Version is the current build version. It defaults to "dev" and is
-// overridden at build time via main.
+// overridden at build time via: go build -ldflags "-X main.version=1.2.3"
 var Version = "dev"

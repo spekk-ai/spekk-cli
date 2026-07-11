@@ -8,7 +8,7 @@ priority: 2
 
 ## Overview
 
-The observer agent supports layered skill discovery — exactly like coach and builder do today via `SkillResolver`. Users can drop observer-specific skills at the local (`.spekk/skills/observer/`) or global (`~/.spekk/skills/observer/`) layer, and package-shipped skills in `specs/observer-skills/` serve as the fallback.
+The observer agent supports layered skill discovery — exactly like coach and builder do today via `SkillResolver`. Users can drop observer-specific skills at the local (`.spekk/skills/observer/`) or global (`~/.config/spekk/skills/observer/`) layer, and package-shipped skills in `specs/observer-skills/` serve as the fallback.
 
 Layered prompts already work for observer (via `PromptResolver`). This spec closes the remaining gap: skill discovery, invocation, and a structured output contract for observation files.
 
@@ -29,7 +29,7 @@ This made the observer the only agent that couldn't be extended with project-spe
 | Layer | Path | Purpose |
 |-------|------|---------|
 | Local | `.spekk/skills/observer/*.md` | Project-specific observer skills |
-| Global | `~/.spekk/skills/observer/*.md` | User's personal observer skills |
+| Global | `~/.config/spekk/skills/observer/*.md` | User's personal observer skills |
 | Package | `specs/observer-skills/*.md` | Ships with spekk |
 
 First match wins. `SkillResolver` already implements this layering — observer just needs to be registered in `packageSkillDirNames`.

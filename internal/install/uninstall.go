@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
 // UninstallOptions holds parsed `spekk uninstall` arguments.
@@ -163,10 +164,11 @@ func scopeDir(cwd, home string, scope Scope, agent string) (string, error) {
 	var root string
 	switch scope {
 	case ScopeGlobal:
-		if home == "" {
-			return "", fmt.Errorf("home directory is unknown; cannot resolve --global scope")
+		globalDir, err := config.GlobalConfigDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve --global scope: %w", err)
 		}
-		root = home
+		return filepath.Join(globalDir, "skills", agent), nil
 	default:
 		if cwd == "" {
 			return "", fmt.Errorf("working directory is unknown; cannot resolve --local scope")

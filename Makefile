@@ -12,7 +12,7 @@ PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 win
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(SRC)
 
-# Cross-compile for all supported platforms
+# Cross-compile for all supported platforms (CGO_ENABLED=0 for static binaries)
 build-all:
 	@mkdir -p $(DIST)
 	@for platform in $(PLATFORMS); do \

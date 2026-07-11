@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
 func TestLocalDestination_BuildsCwdRelativePath(t *testing.T) {
@@ -86,14 +87,16 @@ func TestWriteSkill_CreatesNestedDirsWhenMissing(t *testing.T) {
 	}
 }
 
-func TestPerformInstall_GlobalScopeWritesUnderHomeAndIsResolvable(t *testing.T) {
-	home := t.TempDir()
+func TestPerformInstall_GlobalScopeWritesUnderConfigDirAndIsResolvable(t *testing.T) {
+	xdgBase := t.TempDir()
+	config.ResetCacheForTest(t)
+	t.Setenv("XDG_CONFIG_HOME", xdgBase)
 	cwd := t.TempDir()
 	body := []byte("---\nid: my-skill\n---\n# global\n")
 
 	out, err := PerformInstall(InstallRequest{
 		Cwd:      cwd,
-		HomeDir:  home,
+		HomeDir:  t.TempDir(),
 		Scope:    ScopeGlobal,
 		Agent:    "builder",
 		Skill:    "my-skill",
@@ -104,9 +107,9 @@ func TestPerformInstall_GlobalScopeWritesUnderHomeAndIsResolvable(t *testing.T) 
 		t.Fatalf("PerformInstall: %v", err)
 	}
 
-	wantPath := filepath.Join(home, ".spekk", "skills", "builder", "my-skill.md")
+	wantPath := filepath.Join(xdgBase, "spekk", "skills", "builder", "my-skill.md")
 	if !strings.Contains(out, wantPath) {
-		t.Errorf("output should include absolute home-resolved path %q, got: %q", wantPath, out)
+		t.Errorf("output should include XDG config path %q, got: %q", wantPath, out)
 	}
 
 	got, err := os.ReadFile(wantPath)
@@ -117,7 +120,7 @@ func TestPerformInstall_GlobalScopeWritesUnderHomeAndIsResolvable(t *testing.T) 
 		t.Errorf("file content mismatch: got %q want %q", got, body)
 	}
 
-	di, err := os.Stat(filepath.Join(home, ".spekk", "skills", "builder"))
+	di, err := os.Stat(filepath.Join(xdgBase, "spekk", "skills", "builder"))
 	if err != nil {
 		t.Fatalf("stat agent dir: %v", err)
 	}
@@ -125,9 +128,8 @@ func TestPerformInstall_GlobalScopeWritesUnderHomeAndIsResolvable(t *testing.T) 
 		t.Errorf("agent dir mode = %o, want 0755", mode)
 	}
 
-	// The success criteria require the installed skill to be discoverable
-	// via SkillResolver.ResolveSkill without any resolver changes.
-	resolver := &cli.SkillResolver{HomeDir: home, Cwd: cwd}
+	// The installed skill must be discoverable via SkillResolver.
+	resolver := &cli.SkillResolver{GlobalConfigDir: filepath.Join(xdgBase, "spekk"), Cwd: cwd}
 	resolved := resolver.ResolveSkill("builder", "my-skill")
 	if resolved == nil {
 		t.Fatalf("SkillResolver.ResolveSkill returned nil for globally-installed skill")

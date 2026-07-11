@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/spekk-ai/spekk-cli/internal/version"
@@ -82,7 +83,7 @@ func TestAssetName(t *testing.T) {
 	}
 }
 
-// roundTripFunc adapts a function to http.RoundTripper for test mocking.
+// roundTripFunc lets us inject a custom HTTP transport in tests.
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -97,8 +98,8 @@ func TestFetchLatestRelease(t *testing.T) {
 
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if got := req.Header.Get("Authorization"); got != "token test-token" {
-				t.Errorf("Authorization = %q, want %q", got, "token test-token")
+			if got := req.Header.Get("Authorization"); got != "" {
+				t.Errorf("unexpected Authorization header: %q", got)
 			}
 			return &http.Response{
 				StatusCode: 200,
@@ -107,7 +108,7 @@ func TestFetchLatestRelease(t *testing.T) {
 		}),
 	}
 
-	release, err := FetchLatestRelease("test-token")
+	release, err := FetchLatestRelease()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,38 +127,70 @@ func TestFetchLatestReleaseAPIError(t *testing.T) {
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
-				StatusCode: 401,
-				Body:       io.NopCloser(bytes.NewBufferString("Bad credentials")),
+				StatusCode: 404,
+				Body:       io.NopCloser(bytes.NewBufferString("Not Found")),
 			}, nil
 		}),
 	}
 
-	_, err := FetchLatestRelease("bad-token")
+	_, err := FetchLatestRelease()
 	if err == nil {
-		t.Fatal("expected error for 401 response")
-	}
-}
-
-func TestRunMissingToken(t *testing.T) {
-	t.Setenv("GH_SPEKK_TOKEN", "")
-	err := Run(false)
-	if err == nil {
-		t.Fatal("expected error for missing GH_SPEKK_TOKEN")
-	}
-	if !bytes.Contains([]byte(err.Error()), []byte("GH_SPEKK_TOKEN")) {
-		t.Errorf("error should mention GH_SPEKK_TOKEN, got: %v", err)
+		t.Fatal("expected error for 404 response")
 	}
 }
 
 func TestRunDevBuild(t *testing.T) {
-	t.Setenv("GH_SPEKK_TOKEN", "test-token")
 	original := version.Version
 	version.Version = "dev"
 	defer func() { version.Version = original }()
 
 	err := Run(false)
-	if err == nil || err.Error() != "cannot update a development build; install a released version first" {
+	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("development build")) {
 		t.Errorf("expected dev build error, got: %v", err)
+	}
+}
+
+func TestDownloadAndReplacePermissionDenied(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions work differently on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root; permission checks do not apply")
+	}
+
+	original := Client
+	defer func() { Client = original }()
+
+	requested := false
+	Client = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requested = true
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewBuffer(nil))}, nil
+		}),
+	}
+
+	dir := t.TempDir()
+	binPath := filepath.Join(dir, "spekk")
+	if err := os.WriteFile(binPath, []byte("old-binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0755) // restore so t.TempDir cleanup works
+
+	err := downloadAndReplace("https://example.com/binary", binPath)
+	if err == nil {
+		t.Fatal("expected permission error")
+	}
+	if !strings.Contains(err.Error(), "sudo spekk update") {
+		t.Errorf("error should suggest sudo, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "~/.local/bin") {
+		t.Errorf("error should suggest reinstalling to a user-owned dir, got: %v", err)
+	}
+	if requested {
+		t.Error("should fail before making any HTTP request")
 	}
 }
 
@@ -165,16 +198,16 @@ func TestDownloadAndReplace(t *testing.T) {
 	original := Client
 	defer func() { Client = original }()
 
-	newContent := []byte("#!/bin/sh\necho new-binary")
+	newContent := []byte("new-binary-content")
 
 	Client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if got := req.Header.Get("Authorization"); got != "token test-token" {
-				t.Errorf("Authorization = %q, want %q", got, "token test-token")
+			if got := req.Header.Get("Authorization"); got != "" {
+				t.Errorf("unexpected Authorization header: %q", got)
 			}
 			return &http.Response{
 				StatusCode: 200,
-				Body:       io.NopCloser(bytes.NewReader(newContent)),
+				Body:       io.NopCloser(bytes.NewBuffer(newContent)),
 			}, nil
 		}),
 	}
@@ -185,7 +218,7 @@ func TestDownloadAndReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := downloadAndReplace("https://example.com/binary", "test-token", binPath)
+	err := downloadAndReplace("https://example.com/binary", binPath)
 	if err != nil {
 		t.Fatalf("downloadAndReplace failed: %v", err)
 	}
@@ -194,7 +227,7 @@ func TestDownloadAndReplace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != string(newContent) {
+	if !bytes.Equal(got, newContent) {
 		t.Errorf("binary content = %q, want %q", got, newContent)
 	}
 

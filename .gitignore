@@ -91,7 +91,15 @@ site/
 # Claude Code local state
 .claude/
 
+# Local development directories (not for public repo)
+personal/
+observations/
+projects/
+
 # Go binaries
 bin/spekk-go
 /spekk
 dist/
+
+# Generated spec-explorer artifact
+.spekk/index.html

@@ -4,7 +4,7 @@ parent: observer-skill-discovery
 created: 2026-05-22T12:00:00Z
 priority: 1
 status: done
-branch: feature/observer-skill-discovery
+branch: feature/extend-observer
 ---
 
 # SkillResolver Includes Observer in Package Directory Map
@@ -16,7 +16,7 @@ branch: feature/observer-skill-discovery
 ## Success Criteria
 
 - `packageSkillDirNames` in `internal/cli/skill.go` includes an entry mapping `"observer"` to `"specs/observer-skills"`
-- `SkillResolver.skillDirs("observer")` returns the three expected layered directories (local `.spekk/skills/observer`, global `~/.spekk/skills/observer`, package `specs/observer-skills`)
+- `SkillResolver.skillDirs("observer")` returns the three expected layered directories (local `.spekk/skills/observer`, global `~/.config/spekk/skills/observer`, package `specs/observer-skills`)
 - `SkillResolver.ResolveSkill("observer", <skill-name>)` returns a resolved skill when one exists at any layer
 - `SkillResolver.ListSkills("observer")` returns observer skills with proper layer-based shadowing (local shadows global shadows package)
 - `legacyAliases` map contains an `"observer"` key (may be empty) so `ListAliases("observer")` never returns nil

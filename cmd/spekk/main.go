@@ -32,6 +32,9 @@ func main() {
 	cli.DefaultEmbeddedFS = spekk.EmbeddedFS
 	cli.DefaultEmbeddedSkillFS = spekk.EmbeddedFS
 
+	// Propagate build-time version to shared package for use by other packages (e.g., self-update).
+	pkgversion.Version = version
+
 	args := os.Args[1:]
 
 	if len(args) == 0 {
@@ -42,6 +45,9 @@ func main() {
 	command := args[0]
 
 	switch command {
+	case "init":
+		runInit(args[1:])
+
 	case "next":
 		runParser(args[1:])
 
@@ -69,6 +75,12 @@ func main() {
 	case "sandbox":
 		launchSandbox(args[1:])
 
+	case "prompt":
+		runPrompt(args[1:])
+
+	case "skill":
+		runSkill(args[1:])
+
 	case "install":
 		runInstall(args[1:])
 
@@ -77,6 +89,7 @@ func main() {
 
 	case "skills":
 		runSkills(args[1:])
+
 
 	case "update":
 		runUpdate(args[1:])
@@ -98,12 +111,12 @@ func main() {
 // Accepts flags: --all, --spec <name>, --assertion <name>, --all-branches, --raw, --specs-dir
 func runParser(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
-		"all":        {Names: []string{"--all"}, Type: cli.BoolFlag},
-		"spec":       {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
-		"assertion":  {Names: []string{"--assertion"}, Type: cli.StringFlag},
-		"allBranch":  {Names: []string{"--all-branches"}, Type: cli.BoolFlag},
-		"raw":        {Names: []string{"--raw"}, Type: cli.BoolFlag},
-		"specsDir":   {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+		"all":       {Names: []string{"--all"}, Type: cli.BoolFlag},
+		"spec":      {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
+		"assertion": {Names: []string{"--assertion"}, Type: cli.StringFlag},
+		"allBranch": {Names: []string{"--all-branches"}, Type: cli.BoolFlag},
+		"raw":       {Names: []string{"--raw"}, Type: cli.BoolFlag},
+		"specsDir":  {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
 	})
 
 	specsDir := flags.String("specsDir")
@@ -231,7 +244,6 @@ func launchCoachAgent(args []string) {
 	// Check for skill subcommand
 	if len(args) > 0 {
 		sr := &cli.SkillResolver{
-			HomeDir:    homeDir(),
 			Cwd:        cwdStr(),
 			InstallDir: installDir,
 		}
@@ -255,11 +267,6 @@ func launchCoachAgent(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-}
-
-func homeDir() string {
-	h, _ := os.UserHomeDir()
-	return h
 }
 
 func cwdStr() string {
@@ -330,28 +337,31 @@ func showStatus() {
 }
 
 // showSpekk generates and displays the spec explorer web interface.
-// Supports --watch / -w flag for live reload.
+// Supports --watch / -w for live reload and --cross-branch (with an optional
+// --branch-filter glob) for merge-preview mode.
 func showSpekk(args []string) {
 	specsDir := findSpecsDir()
 
-	// Check for --watch / -w flag
-	watch := false
-	for _, a := range args {
-		if a == "--watch" || a == "-w" {
-			watch = true
-			break
-		}
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"watch":         {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
+		"cross-branch":  {Names: []string{"--cross-branch"}, Type: cli.BoolFlag},
+		"branch-filter": {Names: []string{"--branch-filter"}, Type: cli.StringFlag},
+	})
+
+	opts := show.Options{
+		CrossBranch:  flags.Bool("cross-branch"),
+		BranchFilter: flags.String("branch-filter"),
 	}
 
-	if watch {
-		if err := show.RunWatch(specsDir); err != nil {
+	if flags.Bool("watch") {
+		if err := show.RunWatch(specsDir, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 
-	if err := show.Run(specsDir); err != nil {
+	if err := show.Run(specsDir, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -443,6 +453,10 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox status <name>")
 			os.Exit(1)
 		}
+		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
 		if err := sandbox.Status(subArgs[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
@@ -450,6 +464,10 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 	case "ssh":
 		if len(subArgs) == 0 {
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox ssh <name> [ssh-flags...]")
+			os.Exit(1)
+		}
+		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 		if err := sandbox.SSH(subArgs[0], subArgs[1:]); err != nil {
@@ -470,6 +488,10 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force]")
 			os.Exit(1)
 		}
+		if err := sandbox.ValidateSandboxName(name); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
 		if err := sandbox.Destroy(name, force); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
@@ -477,6 +499,10 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 	case "deploy":
 		if len(subArgs) == 0 {
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox deploy <name>")
+			os.Exit(1)
+		}
+		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 		if err := sandbox.Deploy(subArgs[0]); err != nil {
@@ -522,6 +548,11 @@ OPTIONS:
 		os.Exit(1)
 	}
 
+	if err := sandbox.ValidateSandboxName(flags.String("name")); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
 	opts := sandbox.CreateOptions{
 		Name:    flags.String("name"),
 		Region:  flags.String("region"),
@@ -535,10 +566,8 @@ OPTIONS:
 	}
 }
 
-// runInstall parses arguments for `spekk install`. The actual fetch/write
-// behavior is implemented by other assertions in the skill-install-system
-// spec; this entry point currently validates arguments and prints usage.
-func runInstall(args []string) {
+// runInstallSkill parses arguments for `spekk install <agent> <skill>`.
+func runInstallSkill(args []string) {
 	opts, err := install.ParseArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n\n", err)
@@ -661,15 +690,11 @@ func runSkillsList(args []string) {
 		os.Exit(1)
 	}
 
-	installDir := findInstallDir()
-	r := &cli.SkillResolver{
-		HomeDir:    homeDir(),
-		Cwd:        cwdStr(),
-		InstallDir: installDir,
-	}
+	r := cli.NewSkillResolver(findInstallDir())
 	skills := r.ListSkills(agent)
 	fmt.Print(install.FormatSkillsList(agent, skills))
 }
+
 
 // runUpdate performs a self-update check and optional install.
 func runUpdate(args []string) {
@@ -688,9 +713,6 @@ USAGE:
 OPTIONS:
   --check, -c   Check for available updates without installing
   --help, -h    Show this help message
-
-ENVIRONMENT:
-  GH_SPEKK_TOKEN   Fine-grained PAT with contents:read on spekk-ai/spekk-cli (required)
 `)
 			return
 		}
@@ -702,6 +724,246 @@ ENVIRONMENT:
 	}
 }
 
+// specsReadme is written by spekk init so the new specs/ directory is
+// non-empty (git tracks it) and explains itself to readers.
+const specsReadme = `# Specs
+
+This directory is a work queue for AI agents, managed with
+[spekk](https://github.com/spekk-ai/spekk-cli).
+
+Each spec is a folder containing a markdown file that states what must be
+true, plus an assertions/ folder breaking that down into small, testable
+assertions:
+
+    specs/
+      my-feature/
+        my-feature.md          # what must be true, and why
+        assertions/
+          first-assertion.md   # one small, verifiable step
+
+Common commands:
+
+    spekk coach      # draft and refine specs with the coach agent
+    spekk builder    # implement the next ready assertion
+    spekk next       # print the next ready assertion
+    spekk status     # overview of all specs and assertions
+`
+
+// runInit creates the specs/ directory so a project can start using spekk.
+func runInit(args []string) {
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			fmt.Print(`
+spekk init - Set up a project for spec-driven development
+
+USAGE:
+  spekk init
+
+Creates a specs/ directory (at the git root if in a repository, otherwise
+in the current directory) with a short README explaining the format.
+Does nothing if specs/ already exists.
+`)
+			return
+		}
+	}
+
+	specsDir := findSpecsDir()
+	if info, err := os.Stat(specsDir); err == nil && info.IsDir() {
+		fmt.Printf("specs/ already exists at %s — you're set.\n", specsDir)
+		fmt.Println(`Run "spekk coach" to draft a spec, or "spekk next" to see what's ready.`)
+		return
+	}
+
+	if err := os.MkdirAll(specsDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: creating %s: %s\n", specsDir, err)
+		os.Exit(1)
+	}
+	readmePath := filepath.Join(specsDir, "README.md")
+	if err := os.WriteFile(readmePath, []byte(specsReadme), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Created %s\n", specsDir)
+	fmt.Println(`
+Next steps:
+  spekk coach      # draft your first spec with the coach agent
+  spekk builder    # implement the next ready assertion
+
+Using a different coding assistant? Register the agents with it:
+  spekk install --target claude-code|copilot|cursor|opencode|codex`)
+}
+
+// runPrompt prints the layered-resolved prompt for an agent to stdout.
+func runPrompt(args []string) {
+	usage := `
+spekk prompt - Print an agent's resolved prompt to stdout
+
+USAGE:
+  spekk prompt <agent>
+
+AGENTS:
+  coach, builder, observer
+
+The prompt is resolved through the standard layers (.spekk/ overrides and
+extensions, then the embedded base), so the output is exactly what
+"spekk <agent>" would launch with. Useful for piping into other tools or
+for host-assistant shims installed via "spekk install".
+`
+	if len(args) == 0 {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(1)
+	}
+	if args[0] == "--help" || args[0] == "-h" {
+		fmt.Print(usage)
+		return
+	}
+
+	resolver := cli.NewPromptResolver()
+	content, err := resolver.GetPromptContent(args[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s (valid agents: coach, builder, observer)\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(content)
+}
+
+// runSkill exposes layered skill discovery: list and show.
+func runSkill(args []string) {
+	usage := `
+spekk skill - Discover and print agent skills
+
+USAGE:
+  spekk skill list <agent>          List available skills and their source layer
+  spekk skill show <agent> <name>   Print a skill's content to stdout
+
+AGENTS:
+  coach, builder
+
+Skills resolve through layers: .spekk/skills/<agent>/ (project), then
+~/.config/spekk/skills/<agent>/ (user), then the skills built into the binary.
+`
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
+		if len(args) == 0 {
+			fmt.Fprint(os.Stderr, usage)
+			os.Exit(1)
+		}
+		fmt.Print(usage)
+		return
+	}
+
+	resolver := cli.NewSkillResolver(findInstallDir())
+
+	switch args[0] {
+	case "list":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: spekk skill list <agent>")
+			os.Exit(1)
+		}
+		for _, entry := range resolver.ListSkills(args[1]) {
+			fmt.Printf("%-40s %s\n", entry.Name, entry.Source)
+		}
+
+	case "show":
+		if len(args) < 3 {
+			fmt.Fprintln(os.Stderr, "Usage: spekk skill show <agent> <name>")
+			os.Exit(1)
+		}
+		skill := resolver.ResolveSkill(args[1], args[2])
+		if skill == nil {
+			fmt.Fprintf(os.Stderr, "Error: skill %q not found for agent %q (try \"spekk skill list %s\")\n", args[2], args[1], args[1])
+			os.Exit(1)
+		}
+		fmt.Println(skill.Content)
+
+	default:
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(1)
+	}
+}
+
+// runInstallTargets writes thin shim subagents into a host coding assistant.
+func runInstallTargets(args []string) {
+	usage := `
+spekk install - Install spekk agents into a coding assistant
+
+USAGE:
+  spekk install --target <tool> [--project]
+
+TARGETS:
+  claude-code (alias: claude)   ~/.claude/agents/
+  copilot                       ~/.copilot/agents/ (project: .github/agents/)
+  cursor                        ~/.cursor/agents/
+  opencode                      ~/.config/opencode/agents/
+  codex                         ~/.codex/prompts/ (global only)
+
+OPTIONS:
+  --target <tool>   Host tool to install into (required)
+  --project         Install into the current project instead of globally
+  --help, -h        Show this help message
+
+Installs thin shims for the coach, builder, and observer agents. Shims
+fetch their full instructions from this binary at session start via
+"spekk prompt <agent>", so they never go stale — updating spekk updates
+every installed agent.
+
+OTHER TOOLS:
+  Any assistant that can run shell commands can use spekk without an
+  installer. Point it at the prompt directly:
+
+    spekk prompt coach        # print the coach prompt
+    spekk prompt builder      # print the builder prompt
+
+  Wire that into your tool's custom-agent or rules mechanism (many tools
+  also read AGENTS.md — paste a line there telling the agent to run
+  "spekk prompt <agent>" when doing spec-driven work).
+`
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			fmt.Print(usage)
+			return
+		}
+	}
+
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"target":  {Names: []string{"--target", "-t"}, Type: cli.StringFlag},
+		"project": {Names: []string{"--project"}, Type: cli.BoolFlag},
+	})
+
+	if flags.String("target") == "" {
+		fmt.Fprintf(os.Stderr, "Error: --target is required (valid targets: %s)\n", strings.Join(install.ValidTargets(), ", "))
+		os.Exit(1)
+	}
+
+	written, err := install.Install(install.Options{
+		Target:  flags.String("target"),
+		Project: flags.Bool("project"),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	for _, path := range written {
+		fmt.Println("installed:", path)
+	}
+}
+
+// runInstall dispatches to the skill installer or the agent-shim installer
+// depending on whether --target is present.
+func runInstall(args []string) {
+	for _, a := range args {
+		if a == "--target" || a == "-t" {
+			runInstallTargets(args)
+			return
+		}
+		if strings.HasPrefix(a, "--target=") || strings.HasPrefix(a, "-t=") {
+			runInstallTargets(args)
+			return
+		}
+	}
+	runInstallSkill(args)
+}
+
 // helpText is the top-level help printed for `spekk help`. Exposed as a
 // constant so tests can verify the commands table without exec'ing the binary.
 const helpText = `
@@ -711,6 +973,7 @@ USAGE:
   spekk [COMMAND]
 
 COMMANDS:
+  init      Set up a project for spec-driven development (creates specs/)
   show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
   serve     Start WebSocket server for browser extension (--port, --host)
@@ -722,11 +985,19 @@ COMMANDS:
   uninstall Remove an installed skill from local or global scope
   skills    Inspect skills available to an agent (list)
   loop      Run orchestration workflows (builder/coach loops)
+  prompt    Print an agent's resolved prompt to stdout
+  skill     List and print agent skills (list, show)
   update    Self-update the spekk CLI to the latest version (--check to preview)
+  version   Print the current version
   help      Show this help message
 
 DEFAULT:
   When no command is provided, spekk runs the spec parser to find the next assertion.
+
+FLAGS for "show":
+  --watch, -w              Watch specs and live-reload the explorer
+  --cross-branch           Merge-preview mode: show spec/assertion state across all branches
+  --branch-filter <glob>   In cross-branch mode, only include branches matching the glob (e.g. 'feat/*')
 
 FLAGS for "next":
   --all             Show all assertions

@@ -229,7 +229,7 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 		Branch:   branch,
 		File:     relFilePath,
 		Title:    extractTitle(body),
-		Content:  content,
+		Content:  strings.TrimSpace(body),
 	}, nil
 }
 
@@ -296,8 +296,32 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		LockedBy:  fm.get("locked-by"),
 		File:      relFilePath,
 		Title:     extractTitle(body),
-		Content:   content,
+		Content:   strings.TrimSpace(body),
 	}, nil
+}
+
+// ParseSpecContent parses spec parent file content (e.g. the text of
+// specs/foo/foo.md) that has been read from somewhere other than disk — such as
+// the bytes of a file at a particular git ref. relFilePath is used only for
+// diagnostics; it does not need to exist on the filesystem.
+//
+// It is a thin exported wrapper over the same per-file parse logic used for
+// working-tree files, so callers (e.g. the cross-branch explorer) reuse the
+// existing frontmatter/title/status parsing rather than re-implementing it.
+func ParseSpecContent(relFilePath string, content string) (*Spec, error) {
+	return parseSpec(relFilePath, content)
+}
+
+// ParseAssertionContent parses assertion file content (e.g. the text of
+// specs/foo/assertions/bar.md) that has been read from somewhere other than
+// disk — such as the bytes of a file at a particular git ref. relFilePath is
+// used only for diagnostics; it does not need to exist on the filesystem.
+//
+// It is a thin exported wrapper over the same per-file parse logic used for
+// working-tree files, so callers (e.g. the cross-branch explorer) reuse the
+// existing frontmatter/title/status parsing rather than re-implementing it.
+func ParseAssertionContent(relFilePath string, content string) (*Assertion, error) {
+	return parseAssertion(relFilePath, content)
 }
 
 // hasFrontmatter reports whether file content starts with a frontmatter delimiter
@@ -505,6 +529,20 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 		Specs:      specs,
 		Assertions: assertions,
 	}, nil
+}
+
+// ParentStatusFromChildStatuses derives a spec's rolled-up status from its child
+// assertions' statuses, using the same rules as the working-tree parser
+// (computeParentStatus). It is exposed so callers that assemble a spec's children
+// from outside the working tree — e.g. the cross-branch explorer synthesizing a
+// foreign spec from assertions parsed out of a git ref — compute a status
+// consistent with how local specs are rolled up.
+func ParentStatusFromChildStatuses(statuses []string) string {
+	children := make([]Assertion, len(statuses))
+	for i, s := range statuses {
+		children[i] = Assertion{Parent: "p", Status: s}
+	}
+	return computeParentStatus("p", children)
 }
 
 // computeParentStatus derives the status of a spec from its child assertions.

@@ -613,6 +613,22 @@ Detailed assertion body text.
 	if !strings.Contains(result.Assertions[0].Content, "Detailed assertion body text") {
 		t.Error("assertion content not preserved")
 	}
+
+	// Content is the markdown body only: the YAML frontmatter (already exposed as
+	// structured fields) must not leak into the rendered content, or it shows up
+	// as messy literal text in `spekk show` and the agent-facing JSON.
+	if strings.Contains(result.Specs[0].Content, "---") ||
+		strings.Contains(result.Specs[0].Content, "id: content-test") {
+		t.Errorf("spec content must not include frontmatter, got:\n%s", result.Specs[0].Content)
+	}
+	if strings.Contains(result.Assertions[0].Content, "---") ||
+		strings.Contains(result.Assertions[0].Content, "parent: content-test") {
+		t.Errorf("assertion content must not include frontmatter, got:\n%s", result.Assertions[0].Content)
+	}
+	// No leading/trailing blank lines around the body.
+	if strings.TrimSpace(result.Specs[0].Content) != result.Specs[0].Content {
+		t.Error("spec content should be trimmed of surrounding whitespace")
+	}
 }
 
 // ---------------------------------------------------------------------------

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
 func TestUninstall_RemovesFileWhenPresent(t *testing.T) {
@@ -76,9 +78,12 @@ func TestUninstall_RefusesToTouchOutsideScopeDir(t *testing.T) {
 	}
 }
 
-func TestUninstall_GlobalScopeUsesHomeDir(t *testing.T) {
-	home := t.TempDir()
-	dest, _ := Destination("/some/cwd", home, ScopeGlobal, "coach", "meeting-notes")
+func TestUninstall_GlobalScopeUsesConfigDir(t *testing.T) {
+	xdgBase := t.TempDir()
+	config.ResetCacheForTest(t)
+	t.Setenv("XDG_CONFIG_HOME", xdgBase)
+
+	dest, _ := Destination("/some/cwd", "", ScopeGlobal, "coach", "meeting-notes")
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -86,11 +91,11 @@ func TestUninstall_GlobalScopeUsesHomeDir(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	removed, err := Uninstall("/some/cwd", home, ScopeGlobal, "coach", "meeting-notes")
+	removed, err := Uninstall("/some/cwd", "", ScopeGlobal, "coach", "meeting-notes")
 	if err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
-	wantPrefix := filepath.Join(home, ".spekk", "skills", "coach")
+	wantPrefix := filepath.Join(xdgBase, "spekk", "skills", "coach")
 	if !strings.HasPrefix(removed, wantPrefix) {
 		t.Errorf("global scope: removed path %q should be under %q", removed, wantPrefix)
 	}

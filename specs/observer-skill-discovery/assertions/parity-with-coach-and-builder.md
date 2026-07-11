@@ -5,7 +5,7 @@ created: 2026-05-22T12:00:00Z
 priority: 3
 status: done
 depends-on: run-observer-detects-skill
-branch: feature/observer-skill-discovery
+branch: feature/extend-observer
 ---
 
 # Observer Has Skill Parity With Coach and Builder
@@ -17,7 +17,7 @@ The observer agent is extensible and overrideable in the same ways coach and bui
 ## Success Criteria
 
 - A new observer skill added to `.spekk/skills/observer/my-skill.md` is invocable as `spekk observer my-skill` without any code changes
-- A global observer skill at `~/.spekk/skills/observer/my-skill.md` works across all projects
+- A global observer skill at `~/.config/spekk/skills/observer/my-skill.md` works across all projects
 - A local skill shadows a global skill of the same name (verified via `ListSkills` returning the local source)
 - Layered prompt customization (already working) and layered skill discovery (this spec) both function for observer — `.spekk/observer.prompt.md` and `.spekk/skills/observer/*.md` can coexist
 - The pattern is documented somewhere a user would find it (README, `specs/layered-skill-discovery/`, or observer agent spec)

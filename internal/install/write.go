@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
 // Destination returns the absolute path where a skill should be written for
@@ -24,10 +26,11 @@ func Destination(cwd, home string, scope Scope, agent, skill string) (string, er
 	var root string
 	switch scope {
 	case ScopeGlobal:
-		if home == "" {
-			return "", errors.New("home directory is unknown; cannot resolve --global scope")
+		globalDir, err := config.GlobalConfigDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve --global scope: %w", err)
 		}
-		root = home
+		return filepath.Join(globalDir, "skills", agent, skill+".md"), nil
 	default:
 		if cwd == "" {
 			return "", errors.New("working directory is unknown; cannot resolve --local scope")

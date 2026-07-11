@@ -126,8 +126,11 @@ func setupObserverSkill(t *testing.T, skillName, content string) string {
 	}
 
 	// Isolate cwd/home so local/global layers don't pick up real skills.
+	// XDG_CONFIG_HOME must be pinned too: config.GlobalConfigDir prefers it
+	// over HOME, so a developer machine with it set would leak real skills.
 	isolated := t.TempDir()
 	t.Setenv("HOME", isolated)
+	t.Setenv("XDG_CONFIG_HOME", isolated)
 	origWd, _ := os.Getwd()
 	if err := os.Chdir(isolated); err != nil {
 		t.Fatal(err)
@@ -145,7 +148,6 @@ func TestExtractSkillArgFromFlagSet_ObserverFlags_SkillFirst(t *testing.T) {
 }
 
 func TestExtractSkillArgFromFlagSet_ObserverFlags_SkipsIntervalValue(t *testing.T) {
-	// --interval takes a string value; "60" must not be treated as a skill name.
 	skill := ExtractSkillArgFromFlagSet([]string{"--interval", "60"}, ObserverFlags)
 	if skill != "" {
 		t.Errorf("expected empty (interval value skipped), got %q", skill)
@@ -166,9 +168,6 @@ func TestExtractSkillArgFromFlagSet_ObserverFlags_NoPositional(t *testing.T) {
 	}
 }
 
-// TestObserverSkillResolution_Found verifies the skill-found path:
-// the observer's resolver picks up a package skill and BuildSkillMessage produces
-// activation content with the skill wrapped in <skill-content> tags.
 func TestObserverSkillResolution_Found(t *testing.T) {
 	install := setupObserverSkill(t, "coverage-gap", "# Coverage Gap Skill\nBody")
 
@@ -179,9 +178,9 @@ func TestObserverSkillResolution_Found(t *testing.T) {
 	}
 
 	sr := &cli.SkillResolver{
-		HomeDir:    os.Getenv("HOME"),
-		Cwd:        mustGetwd(t),
-		InstallDir: install,
+		GlobalConfigDir: os.Getenv("HOME"),
+		Cwd:             mustGetwd(t),
+		InstallDir:      install,
 	}
 	resolved := sr.ResolveSkill("observer", skillName)
 	if resolved == nil {
@@ -203,9 +202,6 @@ func TestObserverSkillResolution_Found(t *testing.T) {
 	}
 }
 
-// TestObserverSkillResolution_NotFound verifies the skill-not-found path:
-// when no positional arg, when arg starts with '-', or when the name doesn't match,
-// BuildSkillMessage returns empty and flag parsing still works.
 func TestObserverSkillResolution_NotFound(t *testing.T) {
 	install := setupObserverSkill(t, "coverage-gap", "# Coverage Gap Skill")
 
@@ -223,16 +219,14 @@ func TestObserverSkillResolution_NotFound(t *testing.T) {
 			skillName := ExtractSkillArgFromFlagSet(tc.args, ObserverFlags)
 
 			sr := &cli.SkillResolver{
-				HomeDir:    os.Getenv("HOME"),
-				Cwd:        mustGetwd(t),
-				InstallDir: install,
+				GlobalConfigDir: os.Getenv("HOME"),
+				Cwd:             mustGetwd(t),
+				InstallDir:      install,
 			}
-			// Either no positional or it doesn't resolve.
 			if skillName != "" && sr.ResolveSkill("observer", skillName) != nil {
 				t.Fatalf("expected no skill match for args %v", tc.args)
 			}
 
-			// Flag-parsing fallback should still succeed for the flag case.
 			if _, err := ParseObserverFlags(tc.args); err != nil {
 				t.Errorf("flag parsing should succeed for fallback path: %v", err)
 			}
@@ -249,9 +243,6 @@ func mustGetwd(t *testing.T) string {
 	return wd
 }
 
-// TestObserverHelp_UsesSharedHelper verifies the observer help path produces
-// the same shape of output as ShowHelp (dynamic skill list + observer-specific
-// options) rather than the old hardcoded string.
 func TestObserverHelp_UsesSharedHelper(t *testing.T) {
 	install := setupObserverSkill(t, "coverage-gap", "# Coverage Gap")
 
@@ -267,7 +258,6 @@ func TestObserverHelp_UsesSharedHelper(t *testing.T) {
 			if !strings.Contains(out, "--interval") || !strings.Contains(out, "--quiet") {
 				t.Errorf("%s: help missing observer-specific options", flag)
 			}
-			// Sanity check: hasHelp() detects this arg.
 			if !hasHelp([]string{flag}) {
 				t.Errorf("hasHelp should detect %q", flag)
 			}

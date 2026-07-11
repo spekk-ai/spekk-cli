@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
 // fakeContentsHandler serves a canned GitHub contents API payload.
@@ -45,12 +47,14 @@ func TestListRemoteSkills_FiltersMarkdownFilesAndAnnotatesInstalled(t *testing.T
 	t.Setenv("SPEKK_SKILLS_API_BASE", srv.URL)
 
 	cwd := t.TempDir()
-	home := t.TempDir()
+	xdgBase := t.TempDir()
+	config.ResetCacheForTest(t)
+	t.Setenv("XDG_CONFIG_HOME", xdgBase)
 	// meeting-notes is installed locally; business-model-validator is global.
 	mustWrite(t, filepath.Join(cwd, ".spekk", "skills", "coach", "meeting-notes.md"), "local body")
-	mustWrite(t, filepath.Join(home, ".spekk", "skills", "coach", "business-model-validator.md"), "global body")
+	mustWrite(t, filepath.Join(xdgBase, "spekk", "skills", "coach", "business-model-validator.md"), "global body")
 
-	skills, err := ListRemoteSkills("coach", cwd, home, FetchListRaw)
+	skills, err := ListRemoteSkills("coach", cwd, "", FetchListRaw)
 	if err != nil {
 		t.Fatalf("ListRemoteSkills: %v", err)
 	}
@@ -89,11 +93,13 @@ func TestListRemoteSkills_BothScopesAnnotation(t *testing.T) {
 	t.Setenv("SPEKK_SKILLS_API_BASE", srv.URL)
 
 	cwd := t.TempDir()
-	home := t.TempDir()
+	xdgBase := t.TempDir()
+	config.ResetCacheForTest(t)
+	t.Setenv("XDG_CONFIG_HOME", xdgBase)
 	mustWrite(t, filepath.Join(cwd, ".spekk", "skills", "builder", "dual.md"), "local")
-	mustWrite(t, filepath.Join(home, ".spekk", "skills", "builder", "dual.md"), "global")
+	mustWrite(t, filepath.Join(xdgBase, "spekk", "skills", "builder", "dual.md"), "global")
 
-	skills, err := ListRemoteSkills("builder", cwd, home, FetchListRaw)
+	skills, err := ListRemoteSkills("builder", cwd, "", FetchListRaw)
 	if err != nil {
 		t.Fatalf("ListRemoteSkills: %v", err)
 	}

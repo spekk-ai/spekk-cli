@@ -21,5 +21,5 @@ The builder CLI (`src/builder/cli.js`) now accepts a skill subcommand as the fir
 - Claude is launched once with the skill-enriched activation message, then exits
 - If the positional arg does not resolve as a skill, normal builder behavior continues
 - `showHelp()` dynamically lists available builder skills from all layers
-- `spekk builder api-audit` discovers and inlines a global skill from `~/.spekk/skills/builder/`
+- `spekk builder api-audit` discovers and inlines a global skill from `~/.config/spekk/skills/builder/`
 - Flag parsing is unaffected — `extractSkillArg()` correctly skips flags and their values

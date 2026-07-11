@@ -18,6 +18,6 @@ The README includes a section early in the document (before detailed CLI usage) 
 
 - README has a "Customizing Agent Prompts" section near the top (setup/getting-started area)
 - Explains the extend vs override distinction with file naming convention
-- Shows the global (`~/.spekk/`) and local (`.spekk/`) paths
+- Shows the global (`~/.config/spekk/`) and local (`.spekk/`) paths
 - Includes at least one example of extending a prompt and one of overriding
 - Mentions that `.spekk/` can be committed or gitignored per team preference

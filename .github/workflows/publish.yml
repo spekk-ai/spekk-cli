@@ -12,29 +12,34 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
       - name: Run tests
         run: go test ./... -count=1 -timeout 120s
 
-      - name: Extract version from tag
-        id: version
+      - name: Build binaries
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          mkdir -p dist
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
           else
-            echo "version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" >> "$GITHUB_OUTPUT"
+            VERSION="$(git describe --tags --always 2>/dev/null || echo dev)"
           fi
+          LDFLAGS="-X main.version=$VERSION"
+          GOOS=linux   GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/spekk-linux-amd64          ./cmd/spekk
+          GOOS=linux   GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/spekk-linux-arm64          ./cmd/spekk
+          GOOS=darwin  GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/spekk-darwin-amd64         ./cmd/spekk
+          GOOS=darwin  GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/spekk-darwin-arm64         ./cmd/spekk
+          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/spekk-windows-amd64.exe    ./cmd/spekk
+          GOOS=windows GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/spekk-windows-arm64.exe    ./cmd/spekk
+          GOOS=linux   GOARCH=amd64 go build -o dist/sandbox-linux-amd64        ./cmd/sandbox
 
-      - name: Build all platform binaries
-        run: make build-all VERSION=${{ steps.version.outputs.version }}
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
         with:
-          files: dist/spekk-*
-          fail_on_unmatched_files: true
+          files: dist/*
+          generate_release_notes: true

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
 // InstallStatus describes whether a remote skill is already installed on disk.
@@ -137,7 +139,10 @@ func ListRemoteSkills(agent, cwd, home string, fetch FetchListFn) ([]RemoteSkill
 // and global scopes and returns the corresponding InstallStatus.
 func classifyInstalled(cwd, home, agent, skill string) InstallStatus {
 	local := cwd != "" && fileExists(filepath.Join(cwd, ".spekk", "skills", agent, skill+".md"))
-	global := home != "" && fileExists(filepath.Join(home, ".spekk", "skills", agent, skill+".md"))
+	var global bool
+	if globalDir, err := config.GlobalConfigDir(); err == nil {
+		global = fileExists(filepath.Join(globalDir, "skills", agent, skill+".md"))
+	}
 	switch {
 	case local && global:
 		return StatusBoth

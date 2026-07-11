@@ -35,8 +35,8 @@ func (s Scope) String() string {
 // ValidAgents are the agent names accepted by `spekk install`.
 var ValidAgents = []string{"coach", "builder", "observer"}
 
-// Options holds parsed `spekk install` arguments.
-type Options struct {
+// SkillInstallOptions holds parsed `spekk install` arguments.
+type SkillInstallOptions struct {
 	// Agent is the agent name (coach, builder, observer).
 	Agent string
 	// Skill is the positional skill name. Empty when --list is used or
@@ -87,13 +87,13 @@ func init() {
 }
 
 // ParseArgs parses the arguments passed to `spekk install`.
-// Returns parsed Options on success, or an error describing the user-facing
+// Returns parsed SkillInstallOptions on success, or an error describing the user-facing
 // problem (e.g. unknown agent, mutually exclusive flags). The caller is
 // expected to print the error and exit non-zero.
-func ParseArgs(args []string) (*Options, error) {
+func ParseArgs(args []string) (*SkillInstallOptions, error) {
 	parsed := cli.ParseFlags(args, installFlags)
 
-	opts := &Options{
+	opts := &SkillInstallOptions{
 		Source: parsed.String("source"),
 		Force:  parsed.Bool("force"),
 		List:   parsed.String("list"),
