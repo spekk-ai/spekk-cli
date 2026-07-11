@@ -1,6 +1,6 @@
-# Spekk CLI 1.10.0 — Observer Curation and Scheduling
+# Spekk CLI 1.10.1 — Observer Curation and Scheduling
 
-This release covers changes since v1.9.0.
+This release covers changes since v1.9.0. v1.10.1 is a patch on top of v1.10.0 fixing a Windows cross-compilation failure in CI; all user-facing features are unchanged.
 
 ## Curator-Not-Firehose Observer (PR #5)
 
@@ -46,6 +46,10 @@ The installed entries:
 Interval validation rejects values that cron can't express exactly (e.g. 90 minutes); only values ≤ 60 or exact multiples of 60 are accepted.
 
 `uninstall-cron` removes only the entries it added (identified by a `# spekk-observer` marker), leaving the rest of the crontab untouched.
+
+## Patch: Windows cross-compilation fix (v1.10.1)
+
+`syscall.Flock`/`LOCK_EX`/`LOCK_NB` are undefined on Windows, causing the CI release build to fail for `windows/amd64` and `windows/arm64` targets. `LaunchHeadless` has been split into platform-specific files: a flock-based implementation for Unix and a flock-free stub for Windows. All Linux and macOS binaries are functionally identical to v1.10.0.
 
 ## Upgrade
 
