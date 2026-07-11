@@ -62,6 +62,20 @@ func BuildObserverOptionsMessage(cfg ObserverConfig) string {
 
 // RunObserver is the main entry point for the observer agent.
 func RunObserver(args []string, installDir string) {
+	// Operational subcommands (Go-native, do not launch Claude Code).
+	// Checked before hasHelp so "install-cron --help" routes to the
+	// subcommand's own help text rather than the observer-level help.
+	if len(args) > 0 {
+		switch args[0] {
+		case "install-cron":
+			RunObserverInstallCron(args[1:])
+			return
+		case "uninstall-cron":
+			RunObserverUninstallCron(args[1:])
+			return
+		}
+	}
+
 	// Handle help
 	if hasHelp(args) {
 		ShowHelp(installDir, "observer")
