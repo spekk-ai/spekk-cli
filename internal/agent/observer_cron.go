@@ -31,6 +31,14 @@ type InstallCronConfig struct {
 	ConsolidateInterval int
 }
 
+// isValidCronInterval reports whether minutes can be expressed exactly as a cron
+// schedule. Only values ≤ 60 (sub-hourly */N) or exact multiples of 60 (hourly
+// 0 */H) are accepted; values like 90 would produce a syntactically invalid or
+// misinterpreted cron expression.
+func isValidCronInterval(minutes int) bool {
+	return minutes <= 60 || minutes%60 == 0
+}
+
 // ParseInstallCronFlags parses args into an InstallCronConfig.
 func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 	cfg := InstallCronConfig{
@@ -45,6 +53,9 @@ func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 		if err != nil || n <= 0 {
 			return cfg, fmt.Errorf("--loop-interval must be a positive number of minutes")
 		}
+		if !isValidCronInterval(n) {
+			return cfg, fmt.Errorf("--loop-interval %d cannot be expressed as a valid cron schedule; use a value ≤ 60 or an exact multiple of 60 (e.g. 30, 60, 120, 360)", n)
+		}
 		cfg.LoopInterval = n
 	}
 
@@ -52,6 +63,9 @@ func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
 			return cfg, fmt.Errorf("--consolidate-interval must be a positive number of minutes")
+		}
+		if !isValidCronInterval(n) {
+			return cfg, fmt.Errorf("--consolidate-interval %d cannot be expressed as a valid cron schedule; use a value ≤ 60 or an exact multiple of 60 (e.g. 60, 120, 360)", n)
 		}
 		cfg.ConsolidateInterval = n
 	}
@@ -61,21 +75,15 @@ func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 
 // minutesToCron converts a positive interval in minutes to a cron schedule expression.
 //
-//   - Intervals < 60 m:   */N * * * *
+//   - Intervals ≤ 60 m:               */N * * * *
 //   - Intervals that are exact multiples of 60:  0 */H * * *
-//   - All other intervals (not an exact hour multiple):  */N * * * *
-//     (cron implementations cap field values at 59; callers should prefer
-//     round-number intervals)
 func minutesToCron(minutes int) string {
-	if minutes < 60 {
+	if minutes <= 60 {
 		return fmt.Sprintf("*/%d * * * *", minutes)
 	}
-	if minutes%60 == 0 {
-		hours := minutes / 60
-		return fmt.Sprintf("0 */%d * * *", hours)
-	}
-	// Non-round interval: fall back to minute-field expression.
-	return fmt.Sprintf("*/%d * * * *", minutes)
+	// Only exact multiples of 60 reach here (validated by ParseInstallCronFlags).
+	hours := minutes / 60
+	return fmt.Sprintf("0 */%d * * *", hours)
 }
 
 // spekkBinaryPath returns the absolute path of the running spekk binary,
@@ -95,8 +103,11 @@ func spekkBinaryPath() string {
 // readCrontab reads the current user crontab. Returns an empty string if no
 // crontab exists yet (crontab -l exits non-zero on empty crontab on many
 // systems and prints "no crontab for <user>").
+// LC_ALL=C is set so the "no crontab" sentinel is matched regardless of locale.
 func readCrontab() (string, error) {
-	out, err := exec.Command("crontab", "-l").Output()
+	cmd := exec.Command("crontab", "-l")
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := cmd.Output()
 	if err != nil {
 		// Treat "no crontab" as an empty one.
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -121,13 +132,29 @@ func writeCrontab(content string) error {
 	return nil
 }
 
-// buildCronLines returns the two cron lines that install-cron would add, given
-// the binary path and config. Exported for testing.
-func buildCronLines(binary string, cfg InstallCronConfig) (loopLine, consolidateLine string) {
-	loopLine = fmt.Sprintf("%s %s observer %s",
-		minutesToCron(cfg.LoopInterval), binary, cronMarker)
-	consolidateLine = fmt.Sprintf("%s %s observer consolidate %s",
-		minutesToCron(cfg.ConsolidateInterval), binary, cronMarker)
+// buildCronLines returns the two cron lines that install-cron would add. The
+// binary path is single-quoted, the project directory is captured at call time,
+// each line changes into the project directory before running, wraps the
+// invocation with flock to prevent overlapping sessions, runs the observer in
+// headless mode (--headless → claude -p, no TTY required), and redirects output
+// to a log file under the project directory.
+func buildCronLines(binary, projectDir string, cfg InstallCronConfig) (loopLine, consolidateLine string) {
+	loopLine = fmt.Sprintf(
+		"%s cd '%s' && flock -n /tmp/spekk-observer-loop.lock '%s' observer --headless >> '%s/.spekk/observer.log' 2>&1 %s",
+		minutesToCron(cfg.LoopInterval),
+		projectDir,
+		binary,
+		projectDir,
+		cronMarker,
+	)
+	consolidateLine = fmt.Sprintf(
+		"%s cd '%s' && flock -n /tmp/spekk-observer-consolidate.lock '%s' observer consolidate --headless >> '%s/.spekk/observer-consolidate.log' 2>&1 %s",
+		minutesToCron(cfg.ConsolidateInterval),
+		projectDir,
+		binary,
+		projectDir,
+		cronMarker,
+	)
 	return
 }
 
@@ -149,6 +176,8 @@ Installs two crontab entries:
   1. spekk observer              (default loop, runs every --loop-interval minutes)
   2. spekk observer consolidate  (consolidation, runs every --consolidate-interval minutes)
 
+Intervals must be ≤ 60 or an exact multiple of 60 (e.g. 30, 60, 120, 360).
+
 Lines are tagged with a comment so uninstall-cron can find and remove them later.
 Run "spekk observer uninstall-cron" to remove the installed entries.
 `)
@@ -161,8 +190,14 @@ Run "spekk observer uninstall-cron" to remove the installed entries.
 		os.Exit(1)
 	}
 
+	projectDir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: cannot determine working directory: %s\n", err)
+		os.Exit(1)
+	}
+
 	binary := spekkBinaryPath()
-	loopLine, consolidateLine := buildCronLines(binary, cfg)
+	loopLine, consolidateLine := buildCronLines(binary, projectDir, cfg)
 
 	existing, err := readCrontab()
 	if err != nil {

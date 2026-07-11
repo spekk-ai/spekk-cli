@@ -13,6 +13,7 @@ import (
 var ObserverFlags = cli.FlagSet{
 	"interval": {Names: []string{"--interval"}, Type: cli.StringFlag},
 	"quiet":    {Names: []string{"--quiet"}, Type: cli.BoolFlag},
+	"headless": {Names: []string{"--headless"}, Type: cli.BoolFlag},
 	"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
@@ -20,6 +21,7 @@ var ObserverFlags = cli.FlagSet{
 type ObserverConfig struct {
 	Interval   int
 	Quiet      bool
+	Headless   bool
 	InstallDir string
 }
 
@@ -27,7 +29,8 @@ type ObserverConfig struct {
 func ParseObserverFlags(args []string) (ObserverConfig, error) {
 	parsed := cli.ParseFlags(args, ObserverFlags)
 	cfg := ObserverConfig{
-		Quiet: parsed.Bool("quiet"),
+		Quiet:    parsed.Bool("quiet"),
+		Headless: parsed.Bool("headless"),
 	}
 
 	if v := parsed.String("interval"); v != "" {
@@ -120,7 +123,11 @@ func RunObserver(args []string, installDir string) {
 				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 				os.Exit(1)
 			}
-			if err := Launch(message); err != nil {
+			launchFn := Launch
+			if cfg.Headless {
+				launchFn = LaunchHeadless
+			}
+			if err := launchFn(message); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 				os.Exit(1)
 			}
@@ -135,11 +142,13 @@ func RunObserver(args []string, installDir string) {
 	}
 	cfg.InstallDir = installDir
 
-	fmt.Println("Launching Observer Agent with Claude Code...")
-	wd, _ := os.Getwd()
-	fmt.Println("Working directory:", wd)
-	fmt.Println("Press Ctrl+C to exit the observation session.")
-	fmt.Println()
+	if !cfg.Headless {
+		fmt.Println("Launching Observer Agent with Claude Code...")
+		wd, _ := os.Getwd()
+		fmt.Println("Working directory:", wd)
+		fmt.Println("Press Ctrl+C to exit the observation session.")
+		fmt.Println()
+	}
 
 	opts := LaunchOptions{
 		Agent:        "observer",
@@ -153,7 +162,11 @@ func RunObserver(args []string, installDir string) {
 		os.Exit(1)
 	}
 
-	if err := Launch(message); err != nil {
+	launchFn := Launch
+	if cfg.Headless {
+		launchFn = LaunchHeadless
+	}
+	if err := launchFn(message); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}

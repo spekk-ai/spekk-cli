@@ -126,6 +126,34 @@ func Launch(message string) error {
 	return nil
 }
 
+// LaunchHeadless spawns `claude -p` (print/non-interactive mode) with the given
+// message. It does not inherit stdin and does not forward signals — suitable for
+// cron jobs where no TTY is present.
+func LaunchHeadless(message string) error {
+	cmd := exec.Command("claude", "-p", "--dangerously-skip-permissions", message)
+	cmd.Stdin = nil
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		if isNotFound(err) {
+			fmt.Fprintln(os.Stderr, "Error: Claude Code CLI not found. Please install Claude Code first.")
+			fmt.Fprintln(os.Stderr, "Visit: https://claude.ai/code for installation instructions.")
+			os.Exit(1)
+		}
+		return fmt.Errorf("Error launching Claude Code headless: %w", err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		return err
+	}
+
+	return nil
+}
+
 // agentHelpExtras supplies agent-specific OPTIONS and EXAMPLES blocks
 // that get inserted into the shared help template. Agents not listed here
 // fall back to the default skill-only template.
