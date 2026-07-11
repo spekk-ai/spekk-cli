@@ -1,9 +1,10 @@
 ---
 id: digest-as-default-surface
 parent: observer-agent
+branch: observer-reimpl
 created: 2026-07-11T15:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: consolidation-skill-exists
 ---
 
