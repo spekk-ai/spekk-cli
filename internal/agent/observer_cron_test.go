@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -109,12 +108,13 @@ func TestMinutesToCron(t *testing.T) {
 }
 
 // TestBuildCronLines verifies that generated lines contain the required elements:
-// quoted binary path, cd into project dir, flock with distinct lock files,
-// headless flag, log file redirect, and the cron marker.
+// quoted binary path, absolute claude path via --claude-path, cd into project dir,
+// headless flag, log file redirect, cron marker, and no shell flock.
 func TestBuildCronLines(t *testing.T) {
 	cfg := InstallCronConfig{LoopInterval: 30, ConsolidateInterval: 360}
-	projectDir := "/home/user/my project" // space in path intentional
-	loop, consolidate := buildCronLines("/usr/local/bin/spekk", projectDir, cfg)
+	projectDir := "/home/user/my project"         // space in path intentional
+	claudePath := "/home/user/.claude/local/claude" // absolute path with no PATH dependency
+	loop, consolidate := buildCronLines("/usr/local/bin/spekk", claudePath, projectDir, cfg)
 
 	// Schedule
 	if !strings.Contains(loop, "*/30 * * * *") {
@@ -140,12 +140,18 @@ func TestBuildCronLines(t *testing.T) {
 		t.Errorf("consolidate line binary path not quoted: %q", consolidate)
 	}
 
-	// flock with distinct lock files
-	if !strings.Contains(loop, "flock -n /tmp/spekk-observer-loop.lock") {
-		t.Errorf("loop line missing flock: %q", loop)
+	// Absolute claude path passed via --claude-path (no shell flock)
+	if !strings.Contains(loop, "--claude-path '/home/user/.claude/local/claude'") {
+		t.Errorf("loop line missing --claude-path: %q", loop)
 	}
-	if !strings.Contains(consolidate, "flock -n /tmp/spekk-observer-consolidate.lock") {
-		t.Errorf("consolidate line missing flock: %q", consolidate)
+	if !strings.Contains(consolidate, "--claude-path '/home/user/.claude/local/claude'") {
+		t.Errorf("consolidate line missing --claude-path: %q", consolidate)
+	}
+	if strings.Contains(loop, "flock") {
+		t.Errorf("loop line must not contain shell flock (overlap guard is in Go): %q", loop)
+	}
+	if strings.Contains(consolidate, "flock") {
+		t.Errorf("consolidate line must not contain shell flock: %q", consolidate)
 	}
 
 	// headless flag
@@ -181,22 +187,18 @@ func TestBuildCronLines(t *testing.T) {
 	}
 }
 
-// TestReadCrontab_LC_ALL verifies that the crontab -l exec is constructed with
-// LC_ALL=C so "no crontab" detection is locale-independent.
-func TestReadCrontab_LC_ALL(t *testing.T) {
-	// Recreate the command construction from readCrontab() and inspect Env.
-	cmd := exec.Command("crontab", "-l")
-	cmd.Env = append(cmd.Env, "LC_ALL=C")
+// TestDoInstallCron_ClaudeNotFound verifies that doInstallCron returns an error
+// when the claude binary cannot be found on PATH, and installs nothing.
+func TestDoInstallCron_ClaudeNotFound(t *testing.T) {
+	// Override PATH to an empty value so exec.LookPath("claude") fails.
+	t.Setenv("PATH", "")
 
-	found := false
-	for _, e := range cmd.Env {
-		if e == "LC_ALL=C" {
-			found = true
-			break
-		}
+	err := doInstallCron([]string{})
+	if err == nil {
+		t.Fatal("expected error when claude is not on PATH")
 	}
-	if !found {
-		t.Error("LC_ALL=C not set in crontab -l command environment")
+	if !strings.Contains(err.Error(), "claude") {
+		t.Errorf("error should mention 'claude': %v", err)
 	}
 }
 

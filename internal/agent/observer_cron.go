@@ -133,29 +133,91 @@ func writeCrontab(content string) error {
 }
 
 // buildCronLines returns the two cron lines that install-cron would add. The
-// binary path is single-quoted, the project directory is captured at call time,
-// each line changes into the project directory before running, wraps the
-// invocation with flock to prevent overlapping sessions, runs the observer in
-// headless mode (--headless → claude -p, no TTY required), and redirects output
-// to a log file under the project directory.
-func buildCronLines(binary, projectDir string, cfg InstallCronConfig) (loopLine, consolidateLine string) {
+// binary and claude paths are single-quoted so paths containing spaces survive.
+// Each line changes into the project directory before running, passes the
+// absolute claude path via --claude-path (so cron's limited PATH is irrelevant),
+// runs the observer in headless mode (--headless → claude -p, no TTY required),
+// and redirects output to a log file under the project directory.
+// Overlap prevention is handled in Go (syscall.Flock inside LaunchHeadless),
+// not via a shell flock wrapper, so no flock appears in the cron line.
+func buildCronLines(binary, claudePath, projectDir string, cfg InstallCronConfig) (loopLine, consolidateLine string) {
 	loopLine = fmt.Sprintf(
-		"%s cd '%s' && flock -n /tmp/spekk-observer-loop.lock '%s' observer --headless >> '%s/.spekk/observer.log' 2>&1 %s",
+		"%s cd '%s' && '%s' observer --headless --claude-path '%s' >> '%s/.spekk/observer.log' 2>&1 %s",
 		minutesToCron(cfg.LoopInterval),
 		projectDir,
 		binary,
+		claudePath,
 		projectDir,
 		cronMarker,
 	)
 	consolidateLine = fmt.Sprintf(
-		"%s cd '%s' && flock -n /tmp/spekk-observer-consolidate.lock '%s' observer consolidate --headless >> '%s/.spekk/observer-consolidate.log' 2>&1 %s",
+		"%s cd '%s' && '%s' observer consolidate --headless --claude-path '%s' >> '%s/.spekk/observer-consolidate.log' 2>&1 %s",
 		minutesToCron(cfg.ConsolidateInterval),
 		projectDir,
 		binary,
+		claudePath,
 		projectDir,
 		cronMarker,
 	)
 	return
+}
+
+// doInstallCron implements the core install-cron logic and returns an error
+// instead of calling os.Exit, making it testable.
+func doInstallCron(args []string) error {
+	cfg, err := ParseInstallCronFlags(args)
+	if err != nil {
+		return err
+	}
+
+	// Resolve claude's absolute path at install time. Cron runs with a minimal
+	// PATH that typically does not include claude's install location, so a bare
+	// "claude" lookup would fail silently. Baking the absolute path into the
+	// cron line ensures the entry is functional.
+	claudePath, err := exec.LookPath("claude")
+	if err != nil {
+		return fmt.Errorf("cannot find 'claude' binary: %w\nInstall Claude Code first: https://claude.ai/code", err)
+	}
+
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("cannot determine working directory: %w", err)
+	}
+
+	// Create .spekk/ before writing the crontab. The installed lines redirect
+	// into <project-dir>/.spekk/ and lock files live there too; the shell
+	// redirect would fail if the directory does not exist.
+	if err := os.MkdirAll(filepath.Join(projectDir, ".spekk"), 0o755); err != nil {
+		return fmt.Errorf("creating .spekk directory: %w", err)
+	}
+
+	binary := spekkBinaryPath()
+	loopLine, consolidateLine := buildCronLines(binary, claudePath, projectDir, cfg)
+
+	existing, err := readCrontab()
+	if err != nil {
+		return err
+	}
+
+	// Remove any previously installed spekk-observer lines so re-running
+	// install-cron is idempotent (it replaces old entries, not duplicates).
+	cleaned := removeCronMarkerLines(existing)
+
+	// Ensure file ends with a newline before appending.
+	if cleaned != "" && !strings.HasSuffix(cleaned, "\n") {
+		cleaned += "\n"
+	}
+
+	newContent := cleaned + loopLine + "\n" + consolidateLine + "\n"
+
+	if err := writeCrontab(newContent); err != nil {
+		return err
+	}
+
+	fmt.Println("Installed crontab entries:")
+	fmt.Println(" ", loopLine)
+	fmt.Println(" ", consolidateLine)
+	return nil
 }
 
 // RunObserverInstallCron implements `spekk observer install-cron`.
@@ -184,46 +246,10 @@ Run "spekk observer uninstall-cron" to remove the installed entries.
 		return
 	}
 
-	cfg, err := ParseInstallCronFlags(args)
-	if err != nil {
+	if err := doInstallCron(args); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-
-	projectDir, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot determine working directory: %s\n", err)
-		os.Exit(1)
-	}
-
-	binary := spekkBinaryPath()
-	loopLine, consolidateLine := buildCronLines(binary, projectDir, cfg)
-
-	existing, err := readCrontab()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
-	}
-
-	// Remove any previously installed spekk-observer lines so re-running
-	// install-cron is idempotent (it replaces old entries, not duplicates).
-	cleaned := removeCronMarkerLines(existing)
-
-	// Ensure file ends with a newline before appending.
-	if cleaned != "" && !strings.HasSuffix(cleaned, "\n") {
-		cleaned += "\n"
-	}
-
-	newContent := cleaned + loopLine + "\n" + consolidateLine + "\n"
-
-	if err := writeCrontab(newContent); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Installed crontab entries:")
-	fmt.Println(" ", loopLine)
-	fmt.Println(" ", consolidateLine)
 }
 
 // RunObserverUninstallCron implements `spekk observer uninstall-cron`.

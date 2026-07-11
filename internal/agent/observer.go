@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -11,10 +12,11 @@ import (
 
 // ObserverFlags defines the flag set for the observer CLI.
 var ObserverFlags = cli.FlagSet{
-	"interval": {Names: []string{"--interval"}, Type: cli.StringFlag},
-	"quiet":    {Names: []string{"--quiet"}, Type: cli.BoolFlag},
-	"headless": {Names: []string{"--headless"}, Type: cli.BoolFlag},
-	"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	"interval":   {Names: []string{"--interval"}, Type: cli.StringFlag},
+	"quiet":      {Names: []string{"--quiet"}, Type: cli.BoolFlag},
+	"headless":   {Names: []string{"--headless"}, Type: cli.BoolFlag},
+	"claudePath": {Names: []string{"--claude-path"}, Type: cli.StringFlag},
+	"help":       {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
 // ObserverConfig holds parsed observer options.
@@ -22,6 +24,7 @@ type ObserverConfig struct {
 	Interval   int
 	Quiet      bool
 	Headless   bool
+	ClaudePath string
 	InstallDir string
 }
 
@@ -29,8 +32,9 @@ type ObserverConfig struct {
 func ParseObserverFlags(args []string) (ObserverConfig, error) {
 	parsed := cli.ParseFlags(args, ObserverFlags)
 	cfg := ObserverConfig{
-		Quiet:    parsed.Bool("quiet"),
-		Headless: parsed.Bool("headless"),
+		Quiet:      parsed.Bool("quiet"),
+		Headless:   parsed.Bool("headless"),
+		ClaudePath: parsed.String("claudePath"),
 	}
 
 	if v := parsed.String("interval"); v != "" {
@@ -123,13 +127,21 @@ func RunObserver(args []string, installDir string) {
 				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 				os.Exit(1)
 			}
-			launchFn := Launch
 			if cfg.Headless {
-				launchFn = LaunchHeadless
-			}
-			if err := launchFn(message); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-				os.Exit(1)
+				wd, _ := os.Getwd()
+				lockFile := filepath.Join(wd, ".spekk", "observer-loop.lock")
+				if skillName == "consolidate" {
+					lockFile = filepath.Join(wd, ".spekk", "observer-consolidate.lock")
+				}
+				if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+					os.Exit(1)
+				}
+			} else {
+				if err := Launch(message); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+					os.Exit(1)
+				}
 			}
 			return
 		}
@@ -162,12 +174,17 @@ func RunObserver(args []string, installDir string) {
 		os.Exit(1)
 	}
 
-	launchFn := Launch
 	if cfg.Headless {
-		launchFn = LaunchHeadless
-	}
-	if err := launchFn(message); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
+		wd, _ := os.Getwd()
+		lockFile := filepath.Join(wd, ".spekk", "observer-loop.lock")
+		if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+	} else {
+		if err := Launch(message); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
 	}
 }
