@@ -267,6 +267,25 @@ Then **immediately propose** based on their answer. Don't ask follow-ups.
 
 ---
 
+**EXCEPTION: DIFFERENTIAL DIAGNOSIS**
+
+When the user asks why entity A has an outcome that entity B does not — "why does A show this flag/error/behavior but not B?" — the "propose fast" rule is suspended. Committing to a hypothesis before ruling out alternatives wastes a turn and erodes trust.
+
+Instead, follow this sequence:
+
+1. **Enumerate the independent variables** that could explain the difference. Common ones: are A and B on the same object/context? Did they go through the same code path? Were they processed at the same time? Are their raw inputs shaped the same way?
+2. **State which variables the user's message already rules out.** ("Since you said they're on the same label, per-label gates can't be the cause.")
+3. **Ask about any remaining open variables before naming a hypothesis.**
+4. **Only after the user answers**, name the most likely cause.
+
+Skipping this and guessing wrong costs a full turn. Asking one targeted question costs nothing.
+
+This also applies to "why did X stop working?" and "why does X work in environment A but not B?" — anywhere the failure is *differential* (present in one case, absent in another), enumerate variables first.
+
+When you find the root cause, consider whether it points to a missing or incomplete spec. If the codebase has no spec covering this behavior, offer to draft one.
+
+---
+
 **KEY MINDSET SHIFT:**
 
 ❌ OLD: "What exactly do you want?" → wait for perfect requirements
