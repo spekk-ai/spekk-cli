@@ -4,7 +4,7 @@ parent: observer-agent
 branch: observer-reimpl
 created: 2026-07-11T15:00:00Z
 priority: 2
-status: done
+status: not_started
 depends-on: digest-as-default-surface
 ---
 
@@ -53,15 +53,43 @@ non-functional. Each installed line must satisfy all of:
   interactive stdout. (Whether the `-p` switch is applied by a cron-only flag
   the installed line passes to `spekk observer`, or by the observer detecting
   a non-interactive session, is the builder's call — the observable
-  requirement is that a cron invocation never blocks on an absent TTY.)
-- **Guards against overlap.** The observer prompt defines an infinite
-  monitoring loop, so launching a fresh session every interval would pile up
-  unbounded concurrent sessions. Each installed line wraps the invocation in
-  `flock` with a non-blocking flag (`flock -n <lockfile> ...`) so a new cron
-  invocation exits immediately when a previous observer session is still
-  running. Use `flock` (available on macOS and Linux), not a hand-rolled
-  lockfile. The loop entry and the consolidate entry use distinct lock files
-  so they do not block each other.
+  requirement is that a cron invocation never blocks on an absent TTY.) The
+  output is redirected to a log under the project's `.spekk/` directory (e.g.
+  `>> <project-dir>/.spekk/observer.log 2>&1`).
+- **`claude` is resolved to an absolute path at install time.** The headless
+  path launches `claude`, but cron's `PATH` is typically just `/usr/bin:/bin`
+  while `claude` normally lives outside it (e.g. `~/.claude/local/claude`), so
+  a bare `claude` name lookup fails silently under cron. `install-cron`
+  resolves the absolute path via `exec.LookPath("claude")` at install time and
+  bakes that absolute path into what the installed line runs. If
+  `exec.LookPath("claude")` fails, `install-cron` exits with a clear error and
+  installs nothing — it must never write a cron entry that is already known to
+  be broken.
+- **The `.spekk/` directory exists before the crontab is written.** The
+  installed line redirects into `<project-dir>/.spekk/` and the Go lock files
+  live there too, so `RunObserverInstallCron` creates
+  `<project-dir>/.spekk/` (if absent) before writing the crontab entry;
+  otherwise the shell redirect fails and the cron command crashes before
+  spekk runs.
+- **Guards against overlap (in Go, not shell `flock`).** The observer prompt
+  defines an infinite monitoring loop, so launching a fresh session every
+  interval would pile up unbounded concurrent sessions. The overlap guard is
+  implemented in Go, not via a shell `flock` wrapper on the cron line —
+  `flock(1)` is a util-linux CLI that macOS does not ship, so a `flock -n ...`
+  cron line would fail with `flock: command not found` on every macOS run. The
+  installed cron line therefore contains no `flock`. Instead, the headless
+  launch path (`spekk observer --headless` / the internal `LaunchHeadless`)
+  acquires a per-project lock via `syscall.Flock` with `LOCK_EX | LOCK_NB` on
+  an `O_CREATE | O_RDWR` file descriptor before launching Claude.
+  `syscall.Flock` is available on both macOS and Linux and needs no external
+  binary; the kernel releases the lock automatically when the process exits. A
+  new invocation that cannot acquire the lock exits 0 silently (this is the
+  normal "already running" case, not an error). The lock files are
+  project-scoped, living under `<project-dir>/.spekk/` (e.g.
+  `.spekk/observer-loop.lock` and `.spekk/observer-consolidate.lock`), never
+  under a global path like `/tmp` — otherwise two projects on the same machine
+  would share one lock and silently starve each other. The loop entry and the
+  consolidate entry use distinct lock files so they do not block each other.
 
 ### Interval validation rejects non-cron-expressible values
 
