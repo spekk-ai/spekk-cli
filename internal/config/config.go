@@ -40,6 +40,14 @@ func GlobalConfigDir() (string, error) {
 	return cachedDir, cachedErr
 }
 
+// ResetCacheForTest clears the cached GlobalConfigDir result so the next call
+// reads the environment again. Only for use in tests; panics outside tests.
+func ResetCacheForTest(t interface{ Cleanup(func()) }) {
+	reset := func() { once = sync.Once{}; cachedDir = ""; cachedErr = nil }
+	reset()
+	t.Cleanup(reset)
+}
+
 // DefaultDir returns the global config path without triggering migration.
 // Use only as a fallback when GlobalConfigDir() has failed.
 func DefaultDir() string {

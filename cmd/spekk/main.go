@@ -25,6 +25,9 @@ import (
 var version = "dev"
 
 func main() {
+	// Propagate build-time version to shared package for use by other packages
+	pkgversion.Version = version
+
 	// Set embedded assets so agents and skills work when binary is installed outside source tree
 	cli.DefaultEmbeddedFS = spekk.EmbeddedFS
 	cli.DefaultEmbeddedSkillFS = spekk.EmbeddedFS
@@ -80,6 +83,13 @@ func main() {
 
 	case "install":
 		runInstall(args[1:])
+
+	case "uninstall":
+		runUninstall(args[1:])
+
+	case "skills":
+		runSkills(args[1:])
+
 
 	case "update":
 		runUpdate(args[1:])
@@ -568,6 +578,136 @@ OPTIONS:
 	}
 }
 
+// runInstallSkill parses arguments for `spekk install <agent> <skill>`.
+func runInstallSkill(args []string) {
+	opts, err := install.ParseArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n\n", err)
+		fmt.Fprint(os.Stderr, install.UsageText)
+		os.Exit(1)
+	}
+	if opts.Help {
+		fmt.Print(install.UsageText)
+		return
+	}
+
+	home, _ := os.UserHomeDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	if opts.List != "" {
+		skills, err := install.ListRemoteSkills(opts.List, cwd, home, install.FetchListRaw)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		fmt.Print(install.FormatList(opts.List, skills))
+		return
+	}
+
+	skill := opts.Skill
+	if opts.Source != "" {
+		skill, err = install.ResolveSourceSkill(opts.Source, opts.Skill)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+	} else if skill == "" {
+		fmt.Fprintf(os.Stderr, "Error: missing <skill> argument\n\n")
+		fmt.Fprint(os.Stderr, install.UsageText)
+		os.Exit(1)
+	}
+
+	msg, err := install.PerformInstall(install.InstallRequest{
+		Cwd:      cwd,
+		HomeDir:  home,
+		Scope:    opts.Scope,
+		Agent:    opts.Agent,
+		Skill:    skill,
+		Source:   opts.Source,
+		Force:    opts.Force,
+		FetchFn:  install.FetchSkill,
+		FetchURL: install.FetchURL,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(msg)
+}
+
+// runUninstall handles `spekk uninstall <agent> <skill> [--global|--local]`.
+func runUninstall(args []string) {
+	opts, err := install.ParseUninstallArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n\n", err)
+		fmt.Fprint(os.Stderr, install.UninstallUsageText)
+		os.Exit(1)
+	}
+	if opts.Help {
+		fmt.Print(install.UninstallUsageText)
+		return
+	}
+
+	home, _ := os.UserHomeDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	removed, err := install.Uninstall(cwd, home, opts.Scope, opts.Agent, opts.Skill)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("removed %s/%s ← %s\n", opts.Agent, opts.Skill, removed)
+}
+
+// runSkills handles `spekk skills <subcommand>`. Today the only subcommand
+// is `list`, which wraps SkillResolver.ListSkills and prints each entry's
+// name and source directory (or "(embedded)").
+func runSkills(args []string) {
+	if len(args) == 0 {
+		fmt.Print(install.SkillsUsageText)
+		return
+	}
+
+	switch args[0] {
+	case "help", "--help", "-h":
+		fmt.Print(install.SkillsUsageText)
+		return
+	case "list":
+		runSkillsList(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown skills subcommand: %s\n\n", args[0])
+		fmt.Fprint(os.Stderr, install.SkillsUsageText)
+		os.Exit(1)
+	}
+}
+
+// runSkillsList handles `spekk skills list <agent>`.
+func runSkillsList(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "Error: missing <agent> argument\n\n")
+		fmt.Fprint(os.Stderr, install.SkillsUsageText)
+		os.Exit(1)
+	}
+	agent := args[0]
+	if err := install.ValidateSkillsAgent(agent); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	r := cli.NewSkillResolver(findInstallDir())
+	skills := r.ListSkills(agent)
+	fmt.Print(install.FormatSkillsList(agent, skills))
+}
+
+
 // runUpdate performs a self-update check and optional install.
 func runUpdate(args []string) {
 	checkOnly := false
@@ -754,8 +894,8 @@ Skills resolve through layers: .spekk/skills/<agent>/ (project), then
 	}
 }
 
-// runInstall writes thin shim subagents into a host coding assistant.
-func runInstall(args []string) {
+// runInstallTargets writes thin shim subagents into a host coding assistant.
+func runInstallTargets(args []string) {
 	usage := `
 spekk install - Install spekk agents into a coding assistant
 
@@ -820,9 +960,25 @@ OTHER TOOLS:
 	}
 }
 
-// printHelp displays the help text with all available commands.
-func printHelp() {
-	fmt.Print(`
+// runInstall dispatches to the skill installer or the agent-shim installer
+// depending on whether --target is present.
+func runInstall(args []string) {
+	for _, a := range args {
+		if a == "--target" || a == "-t" {
+			runInstallTargets(args)
+			return
+		}
+		if strings.HasPrefix(a, "--target=") || strings.HasPrefix(a, "-t=") {
+			runInstallTargets(args)
+			return
+		}
+	}
+	runInstallSkill(args)
+}
+
+// helpText is the top-level help printed for `spekk help`. Exposed as a
+// constant so tests can verify the commands table without exec'ing the binary.
+const helpText = `
 spekk - Spec-driven development CLI
 
 USAGE:
@@ -837,10 +993,12 @@ COMMANDS:
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
+  install   Install a skill for an agent (coach/builder/observer)
+  uninstall Remove an installed skill from local or global scope
+  skills    Inspect skills available to an agent (list)
   loop      Run orchestration workflows (builder/coach loops)
   prompt    Print an agent's resolved prompt to stdout
   skill     List and print agent skills (list, show)
-  install   Install spekk agents into a coding assistant (--target)
   update    Self-update the spekk CLI to the latest version (--check to preview)
   version   Print the current version
   help      Show this help message
@@ -858,5 +1016,9 @@ FLAGS for "next":
   --spec <name>     Filter by spec name
   --assertion <id>  Filter by assertion ID
   --all-branches    Include assertions from all branches
-`)
+`
+
+// printHelp displays the help text with all available commands.
+func printHelp() {
+	fmt.Print(helpText)
 }

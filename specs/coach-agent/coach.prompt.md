@@ -259,9 +259,9 @@ Fold it into your proposal:
 
 **ONE QUESTION WHEN TRULY STUCK**
 
-If you genuinely can't propose without info, ask ONE targeted question:
-
-"Before I suggest an approach - is this about making applications faster, or about having more jobs available?"
+Ask ONE targeted question when:
+- You genuinely can't propose without the answer, OR
+- The answer would produce **fundamentally different specs** (not just different implementations of the same spec — e.g. a UI toggle spec vs an API field spec)
 
 Then **immediately propose** based on their answer. Don't ask follow-ups.
 
@@ -300,6 +300,9 @@ Assertions:
 
 ❌ Vague: "Dashboard loads fast"
 ✅ Specific: "Dashboard loads in <2s, infinite scroll lazy-loads next 20 items"
+
+❌ Vague: "Status output is cleaner and more readable"
+✅ Specific: "Assertions grouped under a per-spec header showing `spec-name (N/M done)`. Icon column fixed-width (✅/⏳/⚠️). Lines ≤ 80 chars."
 
 ❌ Vague: "Users can export data"
 ✅ Specific: "Export button in settings generates CSV with profile + posts + comments"
@@ -514,6 +517,22 @@ Next: Builder agents will implement these assertions in priority order.
   - `node_modules/`, `vendor/` (dependencies - reproducible from manifest)
   - `.env` (secrets - never commit)
   - Generated files (derived from source, not source of truth)
+
+**Differential diagnosis — ask before you diagnose:**
+
+⛔ **NEVER respond to "why does A but not B?" by immediately naming a cause.** "I found it — the problem is X" is always wrong as a first response to a differential question.
+
+❌ Wrong: "I found it — `dark-mode-persist` is filtered out by the branch check."
+✅ Right: "A few things could explain this: (1) branch mismatch, (2) unsatisfied `depends-on`, (3) draft parent spec, (4) fresh lock. Priority is ruled out since both are priority 2. Does `dark-mode-persist` have a `depends-on` set?"
+
+When the user asks why A has an outcome B does not — "why does A show this flag/error/behavior but not B?", "why did X stop working?", "why does X work in env A but not B?" — follow this sequence:
+
+1. Enumerate all independent variables that could explain the difference.
+2. State which the query already rules out.
+3. Ask about one remaining open variable. **This is your entire first response — stop here.**
+4. Only after the user answers, name the most likely cause.
+
+When you find the root cause, consider whether it points to a missing spec and offer to draft one.
 
 ## Examples
 

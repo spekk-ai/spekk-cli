@@ -183,8 +183,11 @@ Shows total specs/assertions, status breakdown, completion percentage, and specs
 Launch the interactive web-based spec explorer.
 
 ```bash
-spekk show             # Open spec explorer
-spekk show --watch     # Live reload on file changes
+spekk show                                          # Open spec explorer
+spekk show --watch                                  # Live reload on file changes
+spekk show --cross-branch                           # Merge-preview mode
+spekk show --cross-branch --branch-filter 'feat/*'  # Filter branches by glob
+spekk show -w --cross-branch                        # Cross-branch with live reload
 ```
 
 **Flags:**
@@ -192,6 +195,8 @@ spekk show --watch     # Live reload on file changes
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--watch` | `-w` | Enable live reload via SSE when spec files change |
+| `--cross-branch` | | Read-only preview of what merging each branch into the current branch would do to the spec corpus |
+| `--branch-filter` | | In cross-branch mode, only include branches matching the glob (e.g. `'feat/*'`) |
 
 Opens a browser with:
 
@@ -202,6 +207,67 @@ Opens a browser with:
 - Completed specs hidden by default (toggle to show)
 - Searchbar filtering by name, status, or priority
 
+### Cross-branch mode
+
+`--cross-branch` answers: *what would merging each other branch into my current branch do to the spec corpus?* It scans every local and remote-tracking branch, classifies each spec and assertion file into one of four states, and renders the results in the explorer — all without touching the working tree or index.
+
+#### Four classification states
+
+| Badge | State | Meaning |
+|-------|-------|---------|
+| `+` | Incoming addition | File exists on another branch but not on yours. Rendered as a "foreign" item with a striped background. |
+| `↻` | Incoming modification | File modified on another branch, unchanged on yours — would merge cleanly. Shows assertion status drift (e.g. `not_started` → `done`). |
+| `⚠` | Conflict | File modified on both branches in incompatible ways. Red border when confirmed (git >= 2.38), orange dashed border when unconfirmed. |
+| `✕` | Incoming deletion | File deleted on another branch but still exists on yours. Shown with a struck-through title. |
+
+When a spec has contributions in multiple states, the summary badge uses the highest precedence: conflict > deletion > addition > modification.
+
+#### Branch discovery and filtering
+
+Cross-branch mode compares against the union of local branches (`refs/heads/*`) and remote-tracking branches (`refs/remotes/*`). The current branch and symbolic refs like `origin/HEAD` are excluded. Branches with the same name in both namespaces are deduplicated (local wins).
+
+Use `--branch-filter` to narrow the scope:
+
+```bash
+spekk show --cross-branch --branch-filter 'feat/*'    # Only feature branches
+spekk show --cross-branch --branch-filter 'hotfix/*'  # Only hotfix branches
+```
+
+The filter matches against the logical branch name with any remote prefix stripped — `origin/feat/login` is matched as `feat/login`, so `feat/*` covers both local and remote-tracking branches (and `origin/*` matches nothing).
+
+The filter uses `filepath.Match` glob semantics: `*` matches non-separator characters, `?` matches one character, `[...]` matches character classes. A malformed pattern returns an error.
+
+#### UI elements
+
+- **Branch banner** at the top of the view listing all compared branches
+- **Branch checkbox dropdown** to filter which branches contribute — deselecting a branch hides its contributions and recalculates badges. Selection persists per project in `localStorage`
+- **Inline badges** on affected specs and assertions in the tree
+- **Contribution details** in the detail panel showing per-branch state and status drift
+- **Foreign items** (incoming additions) appear with a diagonal-stripe background and dimmed title; they disappear when all contributing branches are deselected
+
+#### Git version requirements
+
+Cross-branch mode uses `git merge-tree --write-tree` (git >= 2.38) for accurate three-way conflict detection. The git version is probed once per process.
+
+On older git, the feature **degrades gracefully** rather than failing:
+
+- Additions, modifications, and deletions are still classified correctly
+- Conflicts cannot be confirmed — both-sides-modified files are marked as *potential* conflicts with `⚠` shown in an orange dashed border
+- An orange banner warns that conflict detection is unavailable
+
+#### Read-only guarantee
+
+All git operations are funnelled through a single allowlist chokepoint that permits only a small set of read-only subcommands (`rev-parse`, `for-each-ref`, `merge-tree`, and a few others). No checkout, merge, index mutation, or ref mutation can occur.
+
+#### Watch mode with cross-branch
+
+When combined with `--watch`, cross-branch classification is cached on a git ref-state fingerprint:
+
+- **Working-tree edits** (spec file changes) trigger a cheap re-render reusing the cached classification
+- **Ref changes** (new commits, fetches, branch moves) invalidate the cache and trigger a full reclassification
+- Two independent watchers run: one polling spec files and one polling git ref state
+- Transient git errors are logged once and the watcher recovers automatically when git becomes available again
+
 ---
 
 ## `spekk observer`
@@ -209,9 +275,13 @@ Opens a browser with:
 Monitor spec-code drift.
 
 ```bash
-spekk observer                    # Default monitoring
-spekk observer --interval 30     # Check every 30 seconds
+spekk observer                    # Default monitoring loop
+spekk observer --interval 30      # Check every 30 seconds
 spekk observer --quiet            # Minimal output
+spekk observer coverage-gap       # Run with a specific skill
+spekk observer consolidate        # Curate observations into a digest
+spekk observer install-cron       # Schedule observer via crontab
+spekk observer uninstall-cron     # Remove scheduled cron entries
 ```
 
 **Flags:**
@@ -220,8 +290,40 @@ spekk observer --quiet            # Minimal output
 |------|-------------|
 | `--interval <seconds>` | Preferred scan interval in seconds (positive integer) |
 | `--quiet` | Minimal output mode |
+| `--headless` | Run Claude in non-interactive mode (no TTY); set automatically by `install-cron` |
 
 Detects when code changes but specs don't update (or vice versa). Helps keep specs and implementation synchronized.
+
+The default loop closes each scan cycle with a quiet consolidation pass and reports only a brief summary from `observations/DIGEST.md`. When the digest is empty, the observer stays silent.
+
+**Skills:** Observer supports skills with the same layered resolution as coach and builder (`.spekk/skills/observer/` > `~/.config/spekk/skills/observer/` > package > embedded). Run `spekk observer --help` to see available skills.
+
+**Built-in skills:**
+
+| Skill | Description |
+|-------|-------------|
+| `coverage-gap` | Scans `internal/` for code with no spec backing (inverse lens) |
+| `consolidate` | Reviews all raw observations, archives stale/duplicates, rewrites `observations/DIGEST.md` with at most 5 severity-ranked items |
+
+### `spekk observer install-cron`
+
+Install crontab entries that run the observer on a schedule.
+
+```bash
+spekk observer install-cron                                        # Defaults
+spekk observer install-cron --loop-interval 60                     # Loop every hour
+spekk observer install-cron --consolidate-interval 720             # Consolidate every 12 h
+spekk observer uninstall-cron                                      # Remove spekk-managed entries
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--loop-interval <minutes>` | `30` | How often to run the observer loop (must be ≤ 60 or a multiple of 60) |
+| `--consolidate-interval <minutes>` | `360` | How often to run consolidation (must be ≤ 60 or a multiple of 60) |
+
+The installed entries run in the project directory, use `claude`'s absolute path (resolved at install time — fails clearly if `claude` isn't found), run headless (no TTY), guard against overlapping sessions via a project-scoped lock file, and append output to `.spekk/observer.log` / `.spekk/observer-consolidate.log`. `uninstall-cron` removes only the entries it added, identified by a `# spekk-observer` marker.
 
 ---
 

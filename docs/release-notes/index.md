@@ -8,6 +8,18 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.10.1 -- Observer Curation and Scheduling](RELEASE-NOTES-1.10.1.md)
+
+`spekk observer consolidate` maintains a lean, severity-ranked digest from raw observations. The default loop now closes each cycle with a quiet consolidation pass. New `install-cron` / `uninstall-cron` subcommands schedule the observer via crontab with a Go-level overlap guard, headless Claude launch, and automatic claude path detection. Patch: Windows cross-compilation fix.
+
+## [1.9.0 -- Cross-Branch Merge Preview](RELEASE-NOTES-1.9.0.md)
+
+`spekk show --cross-branch` previews what merging each branch into the current branch would do to the spec corpus — read-only, with inline diff badges, branch filtering, and conflict detection. Observer now supports skills with layered resolution and ships a `coverage-gap` seed skill.
+
+## [1.8.1 -- Show Markdown Rendering Fix](RELEASE-NOTES-1.8.1.md)
+
+The `spekk show` detail panel now renders the markdown body with proper typography — frontmatter stripped, prose styled, monospace reserved for code.
+
 ## [1.8.0 -- Sudo-Free Installs and Updates](RELEASE-NOTES-1.8.0.md)
 
 `install.sh` now defaults to user-owned `~/.local/bin`, so `spekk update` works without sudo. The installer warns (with the exact fix) when the directory isn't on `PATH`, and `spekk update` fails fast with clear guidance when it lacks write permission.
