@@ -22,7 +22,7 @@ The spec parser (default `spekk` command) works when run from any directory, not
 
 ## Context
 
-Currently, the spec parser looks for `specs/` relative to the current working directory. When run from external directories (like `~/thinknimble/vuenome`), it can't find the specs and fails.
+Currently, the spec parser looks for `specs/` relative to the current working directory. When run from external directories (like `~/myproject`), it can't find the specs and fails.
 
 This is the same path resolution issue that affected agent prompts. The parser needs to resolve the specs directory relative to the spekk-cli installation, not the user's working directory.
 

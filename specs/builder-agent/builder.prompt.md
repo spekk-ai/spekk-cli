@@ -54,11 +54,19 @@ The parser returns JSON with the assertion file to work on. Read it to understan
 2. **If testable, write tests first:**
    - Create test file (e.g., `internal/parser/parser_test.go`)
    - Link test in assertion markdown: `**Tests:** internal/parser/parser_test.go`
-   - Write tests that validate the assertion's success criteria
+   - Write tests that validate the assertion's success criteria, including:
+     - Happy path (non-empty, typical input)
+     - Edge cases for each criterion (nil/empty inputs, boundary values, mode combinations)
+     - For criteria with multiple modes (e.g., indent=true vs indent=false), test BOTH modes with edge inputs
 
 3. **Implement to make tests pass**
 
-4. **Run tests to validate:**
+4. **Trace edge cases before marking done:**
+   For any criterion that specifies non-obvious behavior (e.g., "compact regardless of mode"),
+   mentally trace that input through your implementation line-by-line and confirm the output
+   matches the expected value from your test. If it doesn't, fix the implementation.
+
+5. **Run tests to validate:**
    - Tests must pass for assertion to be marked `done`
    - Tests also catch regressions in other assertions
    - Fix any failing tests before proceeding
@@ -92,6 +100,10 @@ The goal is a fast, trustworthy test suite — not maximum line coverage.
 **If status is `failed`:**
 - This indicates a confirmed implementation issue that needs fixing
 - Review the assertion requirements carefully
+- **Verify before fixing:** Trace a specific input through the existing code to confirm the
+  failure. If the code actually satisfies the criterion for the case you traced, do not
+  change it — re-read the criterion and check your interpretation. Only propose a change
+  if you can identify a specific input where the current code produces wrong output.
 - Identify what went wrong with the previous implementation
 - Fix the broken implementation and any related issues
 - Run all tests to ensure the fix works
@@ -259,6 +271,40 @@ This project is built with Go:
 - `go test ./...` - Run all tests
 - `go test ./internal/parser/` - Run parser tests only
 - `go build ./cmd/spekk` - Build the binary
+
+## Preferred Tool Patterns
+
+These patterns minimize token cost and maximize accuracy when navigating the codebase:
+
+**Finding what to work on:**
+```bash
+spekk next                                    # lowest-cost: returns one ready assertion as JSON
+spekk list --status not_started --assertions-only  # enumerate all not_started assertions (~5K tokens)
+```
+Avoid: browsing the full spec directory tree manually. The `spekk` commands enumerate
+exactly what you need without loading the full spec hierarchy (162K+ tokens for large projects).
+
+**Reading a spec assertion:**
+Read the assertion file directly by path (returned in `spekk next` JSON):
+```bash
+# The spekk next JSON includes the file path — use it directly
+cat specs/{spec-name}/assertions/{assertion-id}.md
+```
+Avoid: loading entire spec groups or parent spec files when you only need one assertion.
+
+**Looking up related specs or codebase patterns:**
+```bash
+grep -r "pattern" specs/             # find related assertions or cross-references
+grep -r "function_name" internal/    # find where code lives
+```
+Use grep for cross-reference queries — it reads only matching lines, not entire files.
+Avoid: opening and reading entire source files to find one function or pattern.
+
+**Checking test results:**
+```bash
+go test ./...
+go test ./internal/{package}/ -run TestName  # run a specific test for faster feedback
+```
 
 ## Context Files
 
