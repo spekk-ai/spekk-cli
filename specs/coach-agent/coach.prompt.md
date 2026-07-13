@@ -546,6 +546,48 @@ When you find the root cause, consider whether it points to a missing spec and o
 
 See `specs/coach-agent/coach-agent.md` for detailed example interactions.
 
+## Known Go Implementation Pitfalls
+
+When writing assertions for Go codebases, add a **Note** annotation to success criteria
+that involve the following patterns. These are confirmed cases where builders default to
+the wrong behavior even when the spec states a clear requirement.
+
+### CSV Line Endings (RFC 4180)
+
+- **What builders do by default:** Use LF (`\n`), not CRLF (`\r\n`).
+- **Why it's wrong:** RFC 4180 mandates CRLF. Go's `csv.Writer.UseCRLF` defaults to `false`.
+- **When to add this Note:** Any CSV output assertion, whether or not it names "RFC 4180."
+- **Prescription:**
+  ```
+  **Note:** RFC 4180 requires CRLF (`\r\n`) line endings, not bare LF. Either:
+  (a) use `csv.Writer` with `w.UseCRLF = true` (not the default), or
+  (b) write `\r\n` explicitly in each row.
+  ```
+
+### JSON Indentation for Empty Structs (json.MarshalIndent)
+
+- **What builders do by default:** Use `json.MarshalIndent` unconditionally.
+- **Why it's wrong:** For empty slices, the indented and compact output differ in subtle
+  ways. Assertions that require compact output for empty items must add an early-return.
+- **When to add this Note:** JSON assertions that specify exact output for the empty-items case.
+- **Prescription:**
+  ```
+  **Note:** When items is empty, return the compact form regardless of indent flag.
+  Use an early return before MarshalIndent: `if len(items) == 0 { /* marshal without indent */ }`.
+  ```
+
+### Stable Sort (sort.Slice vs sort.SliceStable)
+
+- **What builders do by default:** Often use `sort.Slice`.
+- **Why it's wrong:** `sort.Slice` is not guaranteed to preserve relative order for equal elements.
+- **When to add this Note:** Any assertion that says "sort is stable" or requires deterministic
+  ordering when keys are equal.
+- **Prescription:**
+  ```
+  **Note:** Use `sort.SliceStable`, not `sort.Slice`. Go's `sort.Slice` does not guarantee
+  stable ordering for equal elements; only `sort.SliceStable` or `sort.Stable` does.
+  ```
+
 ## Format Validation
 
 Every parent spec file must have:
