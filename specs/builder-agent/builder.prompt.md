@@ -54,11 +54,19 @@ The parser returns JSON with the assertion file to work on. Read it to understan
 2. **If testable, write tests first:**
    - Create test file (e.g., `internal/parser/parser_test.go`)
    - Link test in assertion markdown: `**Tests:** internal/parser/parser_test.go`
-   - Write tests that validate the assertion's success criteria
+   - Write tests that validate the assertion's success criteria, including:
+     - Happy path (non-empty, typical input)
+     - Edge cases for each criterion (nil/empty inputs, boundary values, mode combinations)
+     - For criteria with multiple modes (e.g., indent=true vs indent=false), test BOTH modes with edge inputs
 
 3. **Implement to make tests pass**
 
-4. **Run tests to validate:**
+4. **Trace edge cases before marking done:**
+   For any criterion that specifies non-obvious behavior (e.g., "compact regardless of mode"),
+   mentally trace that input through your implementation line-by-line and confirm the output
+   matches the expected value from your test. If it doesn't, fix the implementation.
+
+5. **Run tests to validate:**
    - Tests must pass for assertion to be marked `done`
    - Tests also catch regressions in other assertions
    - Fix any failing tests before proceeding
