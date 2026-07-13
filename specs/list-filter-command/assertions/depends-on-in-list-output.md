@@ -34,10 +34,10 @@ array contains that single string.
   `depends-on` frontmatter shows non-empty `"depends_on"` arrays.
 - `spekk list --assertions-only` on a repo with no `depends-on` frontmatter
   shows `"depends_on": []` (empty array, not null, not absent).
-- `spekk next --all` output is NOT changed — `HierarchyAssertion` is only
-  consumed by `spekk list`; `spekk next --all` uses `FormatHierarchy` which
-  already existed and should remain backward-compatible. If `HierarchyAssertion`
-  is shared, adding a new field is backward-compatible (new key in JSON).
+- `spekk next --all` output gains `depends_on` too, because `HierarchyAssertion`
+  is shared with `FormatHierarchy`. This is intentional: the field is useful
+  there as well and adding a new JSON key is backward-compatible for existing
+  consumers that ignore unknown fields.
 - Unit tests in `internal/parser/output_test.go` verify:
   - An assertion with `DependsOn = "foo"` produces `"depends_on": ["foo"]`.
   - An assertion with `DependsOn = ""` produces `"depends_on": []`.
