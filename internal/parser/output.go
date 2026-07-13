@@ -270,6 +270,17 @@ func FormatEmpty() ([]byte, error) {
 	return marshalJSON(out)
 }
 
+// FormatEmptyFiltered formats an empty-result message that mentions the active
+// status filter, so callers can distinguish "no specs at all" from "filter
+// matched nothing".
+func FormatEmptyFiltered(status string) ([]byte, error) {
+	out := EmptyOutput{
+		Status:  "empty",
+		Message: fmt.Sprintf("No assertions match status '%s'.", status),
+	}
+	return marshalJSON(out)
+}
+
 // FormatError formats an error as JSON.
 func FormatError(msg string) ([]byte, error) {
 	out := ErrorOutput{

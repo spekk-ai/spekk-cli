@@ -104,6 +104,40 @@ func FormatTable(rows []Row, opts Options) string {
 	return sb.String()
 }
 
+// FormatTSVHeader returns the TSV header row only (lowercase, tab-separated,
+// newline-terminated). Useful when the data set is empty but callers still
+// expect a well-formed header.
+func FormatTSVHeader(opts Options) string {
+	hdr := headerRow()
+	cells := columns(hdr, true, opts)
+	var sb strings.Builder
+	for i, c := range cells {
+		if i > 0 {
+			sb.WriteByte('\t')
+		}
+		sb.WriteString(strings.ToLower(c))
+	}
+	sb.WriteByte('\n')
+	return sb.String()
+}
+
+// FormatCSVHeader returns the CSV header row only (lowercase, RFC 4180
+// CRLF-terminated). Useful when the data set is empty but callers still
+// expect a well-formed header.
+func FormatCSVHeader(opts Options) string {
+	hdr := headerRow()
+	cells := columns(hdr, true, opts)
+	var sb strings.Builder
+	for i, c := range cells {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(strings.ToLower(c))
+	}
+	sb.WriteString("\r\n")
+	return sb.String()
+}
+
 // FormatTSV returns tab-separated output. The header is lowercase. No padding.
 // The returned string ends with a newline (caller should use fmt.Print, not
 // fmt.Println, to avoid a duplicate blank line).

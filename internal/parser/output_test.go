@@ -187,6 +187,26 @@ func TestFormatEmpty(t *testing.T) {
 	}
 }
 
+func TestFormatEmptyFiltered(t *testing.T) {
+	data, err := FormatEmptyFiltered("draft")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if result["status"] != "empty" {
+		t.Errorf("expected status=empty, got %v", result["status"])
+	}
+	msg, _ := result["message"].(string)
+	if !strings.Contains(msg, "draft") {
+		t.Errorf("expected message to contain 'draft', got: %q", msg)
+	}
+}
+
 func TestFormatError(t *testing.T) {
 	data, err := FormatError("something broke")
 	if err != nil {

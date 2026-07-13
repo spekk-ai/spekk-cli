@@ -3,6 +3,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -179,6 +180,16 @@ func runParser(args []string) {
 //
 //	--json, --tsv, --csv, --long / -l
 func runList(args []string) {
+	code := execList(args, os.Stdout, os.Stderr, "")
+	if code != 0 {
+		os.Exit(code)
+	}
+}
+
+// execList is the testable core of runList.
+// It writes to stdout/stderr and returns an exit code (0 = success).
+// specsDir: if non-empty, skip findSpecsDir() and use this directly.
+func execList(args []string, stdout, stderr io.Writer, specsDir string) int {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"status":         {Names: []string{"--status"}, Type: cli.StringFlag},
 		"assertionsOnly": {Names: []string{"--assertions-only"}, Type: cli.BoolFlag},
@@ -191,14 +202,14 @@ func runList(args []string) {
 	})
 
 	if flags.Bool("help") {
-		fmt.Print(`
+		fmt.Fprint(stdout, `
 spekk list - List specs and assertions with optional filtering
 
 USAGE:
   spekk list [OPTIONS]
 
 OUTPUT FORMAT (default: table):
-  --json        JSON output (same as previous default; for jq pipelines)
+  --json        JSON output (flat assertion list; for jq pipelines)
   --tsv         Tab-separated values with lowercase header (for awk/cut/sort)
   --csv         RFC 4180 CSV with header row
   --long, -l    Add FILE column to table/TSV/CSV output (JSON always includes file)
@@ -206,9 +217,12 @@ OUTPUT FORMAT (default: table):
 FILTER OPTIONS:
   --status <value>      Filter by assertion status. Valid values:
                           not_started, in_progress, done, draft, failed
-  --assertions-only     Output a flat assertion list instead of grouped hierarchy
+  --assertions-only     Accepted for backward compatibility (now a no-op; assertions are the default)
   --specs-dir <path>    Read specs from a specific directory (default: git root specs/)
   --help, -h            Show this help message
+
+NOTES:
+  The default output shows all assertions. Hierarchy output is available via spekk next --all.
 
 EXAMPLES:
   spekk list
@@ -217,19 +231,22 @@ EXAMPLES:
   spekk list --csv
   spekk list --long
   spekk list --status draft
-  spekk list --status draft --assertions-only
   spekk list --status draft --tsv
   spekk list --assertions-only --csv
   spekk list --specs-dir /path/to/specs
 `)
-		return
+		return 0
 	}
 
-	assertionsOnly := flags.Bool("assertionsOnly")
+	// Assertions are always the default; --assertions-only is accepted for
+	// backward compatibility but is now a no-op.
+	assertionsOnly := true
+	_ = flags.Bool("assertionsOnly") // accepted but redundant
 	useJSON := flags.Bool("json")
 	useTSV := flags.Bool("tsv")
 	useCSV := flags.Bool("csv")
 	showFile := flags.Bool("long")
+	statusVal := flags.String("status")
 
 	// Reject mutually exclusive format flags.
 	formatCount := 0
@@ -239,11 +256,19 @@ EXAMPLES:
 		}
 	}
 	if formatCount > 1 {
-		fmt.Fprintln(os.Stderr, "Error: --json, --tsv, and --csv are mutually exclusive; use at most one")
-		os.Exit(1)
+		fmt.Fprintln(stderr, "Error: --json, --tsv, and --csv are mutually exclusive; use at most one")
+		return 1
 	}
 
-	specsDir := flags.String("specsDir")
+	// Build opts before empty check — opts determines which header columns appear.
+	opts := formatter.Options{
+		ShowParent: assertionsOnly,
+		ShowFile:   showFile,
+	}
+
+	if specsDir == "" {
+		specsDir = flags.String("specsDir")
+	}
 	if specsDir == "" {
 		specsDir = findSpecsDir()
 	}
@@ -251,74 +276,69 @@ EXAMPLES:
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {
 		out, _ := parser.FormatError(err.Error())
-		fmt.Println(string(out))
-		os.Exit(1)
-	}
-
-	if len(result.Specs) == 0 {
-		out, _ := parser.FormatEmpty()
-		fmt.Println(string(out))
-		return
+		fmt.Fprintln(stdout, string(out))
+		return 1
 	}
 
 	// Apply status filter if requested.
-	if statusVal := flags.String("status"); statusVal != "" {
+	if statusVal != "" {
 		filtered, filterErr := parser.FilterByStatus(result, statusVal)
 		if filterErr != nil {
 			// Use FormatError so machine-readable callers get consistent JSON output.
 			out, _ := parser.FormatError(filterErr.Error())
-			fmt.Println(string(out))
-			os.Exit(1)
+			fmt.Fprintln(stdout, string(out))
+			return 1
 		}
 		result = filtered
-		// After filtering, result may be empty (no specs matched).
-		if len(result.Specs) == 0 {
-			out, _ := parser.FormatEmpty()
-			fmt.Println(string(out))
-			return
-		}
 	}
 
-	// --json: preserve the pre-table-format JSON output exactly.
-	if useJSON {
-		if assertionsOnly {
-			out, err := parser.FormatAssertionsFlat(result)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-				os.Exit(1)
+	// Handle empty results with format-aware output.
+	if len(result.Assertions) == 0 {
+		switch {
+		case useTSV:
+			fmt.Fprint(stdout, formatter.FormatTSVHeader(opts))
+		case useCSV:
+			fmt.Fprint(stdout, formatter.FormatCSVHeader(opts))
+		default:
+			var out []byte
+			if statusVal != "" {
+				out, _ = parser.FormatEmptyFiltered(statusVal)
+			} else {
+				out, _ = parser.FormatEmpty()
 			}
-			fmt.Println(string(out))
-			return
+			fmt.Fprintln(stdout, string(out))
 		}
-		out, err := parser.FormatHierarchy(result)
+		return 0
+	}
+
+	// --json: flat assertion JSON, same content as the default table.
+	if useJSON {
+		out, err := parser.FormatAssertionsFlat(result)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
+			out2, _ := parser.FormatError(err.Error())
+			fmt.Fprintln(stdout, string(out2))
+			return 1
 		}
-		fmt.Println(string(out))
-		return
+		fmt.Fprintln(stdout, string(out))
+		return 0
 	}
 
 	// Build rows for table/TSV/CSV formats.
-	opts := formatter.Options{
-		ShowParent: assertionsOnly,
-		ShowFile:   showFile,
-	}
-
 	rows := listRows(result, assertionsOnly)
 
 	switch {
 	case useTSV:
-		// FormatTSV owns its trailing newline; use Print to avoid a duplicate.
-		fmt.Print(formatter.FormatTSV(rows, opts))
+		// FormatTSV owns its trailing newline; use Fprint to avoid a duplicate.
+		fmt.Fprint(stdout, formatter.FormatTSV(rows, opts))
 	case useCSV:
-		// FormatCSV owns its trailing CRLF per RFC 4180; use Print to avoid
+		// FormatCSV owns its trailing CRLF per RFC 4180; use Fprint to avoid
 		// appending a bare LF after the final CRLF.
-		fmt.Print(formatter.FormatCSV(rows, opts))
+		fmt.Fprint(stdout, formatter.FormatCSV(rows, opts))
 	default:
 		// Default: human-readable table.
-		fmt.Println(formatter.FormatTable(rows, opts))
+		fmt.Fprintln(stdout, formatter.FormatTable(rows, opts))
 	}
+	return 0
 }
 
 // listRows converts a ParseResult into formatter.Row slices for table/TSV/CSV,
