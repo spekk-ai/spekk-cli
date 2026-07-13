@@ -28,5 +28,5 @@ is a no-op for `--json`.
   (the `file` field already appears in JSON, so there is no change).
 - `--long` combined with `--assertions-only` adds the file path for each
   assertion.
-- A unit test verifies the presence of the `FILE` column in table output and
-  its absence without `--long`.
+- A unit test in `internal/formatter/formatter_test.go` verifies the presence
+  of the `FILE` column in table output and its absence without `--long`.

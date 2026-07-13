@@ -26,5 +26,5 @@ escaped as `""`.
   is doubled: `"She said ""hello"""`.
 - Fields that contain neither comma nor double quote are not quoted.
 - Each row ends with CRLF (`\r\n`) as specified by RFC 4180.
-- A unit test exercises at least one row with a comma in the title to verify
-  correct quoting.
+- A unit test in `internal/formatter/formatter_test.go` exercises at least one
+  row with a comma in the title to verify correct quoting.

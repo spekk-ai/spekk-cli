@@ -26,5 +26,5 @@ with at least two spaces of padding between columns.
 - Column widths are dynamic: if the longest ID is 30 characters, the ID column
   is at least 30 characters wide (plus separator padding).
 - The output is valid UTF-8 plain text (no ANSI color codes in default mode).
-- A unit test in `internal/formatter/` (or equivalent package) verifies column
+- A unit test in `internal/formatter/formatter_test.go` verifies column
   alignment with a two-row fixture: one short ID, one long ID.

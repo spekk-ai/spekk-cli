@@ -26,5 +26,5 @@ Reliable for shell pipelines (`cut -f2`, `awk '{print $3}'`, `sort -k3`).
 - Values are not quoted or escaped (TSV is not CSV — commas in titles are fine
   as-is; only tabs in values would need escaping, which spekk field values
   never contain).
-- A unit test verifies the tab separation and lowercase header with a two-row
-  fixture.
+- A unit test in `internal/formatter/formatter_test.go` verifies the tab
+  separation and lowercase header with a two-row fixture.

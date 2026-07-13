@@ -28,6 +28,6 @@ ID length distribution.
 - Minimum two spaces of separation between any two adjacent columns.
 - The final column (`TITLE`, or `FILE` when `--long`) is NOT padded on the
   right — it is left-aligned and terminates at the last character.
-- A unit test verifies: given rows ["short", "a very long id indeed"], the
-  second column starts at character position `len("a very long id indeed") + 2`
-  for every row including the header.
+- A unit test in `internal/formatter/formatter_test.go` verifies: given rows
+  ["short", "a very long id indeed"], the second column starts at character
+  position `len("a very long id indeed") + 2` for every row including the header.
