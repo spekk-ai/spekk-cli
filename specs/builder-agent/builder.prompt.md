@@ -260,6 +260,40 @@ This project is built with Go:
 - `go test ./internal/parser/` - Run parser tests only
 - `go build ./cmd/spekk` - Build the binary
 
+## Preferred Tool Patterns
+
+These patterns minimize token cost and maximize accuracy when navigating the codebase:
+
+**Finding what to work on:**
+```bash
+spekk next                                    # lowest-cost: returns one ready assertion as JSON
+spekk list --status not_started --assertions-only  # enumerate all not_started assertions (~5K tokens)
+```
+Avoid: browsing the full spec directory tree manually. The `spekk` commands enumerate
+exactly what you need without loading the full spec hierarchy (162K+ tokens for large projects).
+
+**Reading a spec assertion:**
+Read the assertion file directly by path (returned in `spekk next` JSON):
+```bash
+# The spekk next JSON includes the file path — use it directly
+cat specs/{spec-name}/assertions/{assertion-id}.md
+```
+Avoid: loading entire spec groups or parent spec files when you only need one assertion.
+
+**Looking up related specs or codebase patterns:**
+```bash
+grep -r "pattern" specs/             # find related assertions or cross-references
+grep -r "function_name" internal/    # find where code lives
+```
+Use grep for cross-reference queries — it reads only matching lines, not entire files.
+Avoid: opening and reading entire source files to find one function or pattern.
+
+**Checking test results:**
+```bash
+go test ./...
+go test ./internal/{package}/ -run TestName  # run a specific test for faster feedback
+```
+
 ## Context Files
 
 If you need context:
