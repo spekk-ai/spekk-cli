@@ -3,6 +3,7 @@ package parser
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"sort"
 )
 
@@ -69,11 +70,12 @@ type HierarchySpec struct {
 
 // HierarchyAssertion is an assertion entry within a hierarchy spec.
 type HierarchyAssertion struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Status   string `json:"status"`
-	Priority int    `json:"priority"`
-	File     string `json:"file"`
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	Status    string   `json:"status"`
+	Priority  int      `json:"priority"`
+	File      string   `json:"file"`
+	DependsOn []string `json:"depends_on"`
 }
 
 // CompleteOutput is the JSON output when all specs are done.
@@ -136,12 +138,17 @@ func FormatHierarchy(result *ParseResult) ([]byte, error) {
 		var assertions []HierarchyAssertion
 		for _, a := range result.Assertions {
 			if a.Parent == s.ID {
+				dependsOn := []string{}
+				if a.DependsOn != "" {
+					dependsOn = []string{a.DependsOn}
+				}
 				assertions = append(assertions, HierarchyAssertion{
-					ID:       a.ID,
-					Title:    a.Title,
-					Status:   a.Status,
-					Priority: a.Priority,
-					File:     a.File,
+					ID:        a.ID,
+					Title:     a.Title,
+					Status:    a.Status,
+					Priority:  a.Priority,
+					File:      a.File,
+					DependsOn: dependsOn,
 				})
 			}
 		}
@@ -267,6 +274,97 @@ func FormatError(msg string) ([]byte, error) {
 	out := ErrorOutput{
 		Error:   true,
 		Message: msg,
+	}
+	return marshalJSON(out)
+}
+
+// validStatusValues is the set of allowed assertion status strings for filtering.
+var validStatusValues = map[string]bool{
+	"not_started": true,
+	"in_progress": true,
+	"done":        true,
+	"draft":       true,
+	"failed":      true,
+}
+
+// FilterByStatus returns a new ParseResult containing only assertions with the
+// given status, and only specs that have at least one matching assertion.
+// Spec-level status is not used for filtering.
+// Returns an error if the status value is not one of the valid statuses.
+func FilterByStatus(result *ParseResult, status string) (*ParseResult, error) {
+	if !validStatusValues[status] {
+		return nil, fmt.Errorf("invalid status %q — valid values: not_started, in_progress, done, draft, failed", status)
+	}
+
+	var matchedAssertions []Assertion
+	matchedParents := make(map[string]bool)
+	for _, a := range result.Assertions {
+		if a.Status == status {
+			matchedAssertions = append(matchedAssertions, a)
+			matchedParents[a.Parent] = true
+		}
+	}
+
+	var matchedSpecs []Spec
+	for _, s := range result.Specs {
+		if matchedParents[s.ID] {
+			matchedSpecs = append(matchedSpecs, s)
+		}
+	}
+
+	return &ParseResult{
+		Specs:      matchedSpecs,
+		Assertions: matchedAssertions,
+	}, nil
+}
+
+// AssertionsFlatOutput is the JSON output for `spekk list --assertions-only`.
+type AssertionsFlatOutput struct {
+	Type       string            `json:"type"`
+	Assertions []FlatAssertion   `json:"assertions"`
+}
+
+// FlatAssertion is an entry in the flat assertion list.
+type FlatAssertion struct {
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	Status    string   `json:"status"`
+	Priority  int      `json:"priority"`
+	File      string   `json:"file"`
+	Parent    string   `json:"parent"`
+	DependsOn []string `json:"depends_on"`
+}
+
+// FormatAssertionsFlat produces a flat JSON list of all assertions in result,
+// sorted by priority (ascending) then ID (alphabetical).
+func FormatAssertionsFlat(result *ParseResult) ([]byte, error) {
+	flat := make([]FlatAssertion, 0, len(result.Assertions))
+	for _, a := range result.Assertions {
+		dependsOn := []string{}
+		if a.DependsOn != "" {
+			dependsOn = []string{a.DependsOn}
+		}
+		flat = append(flat, FlatAssertion{
+			ID:        a.ID,
+			Title:     a.Title,
+			Status:    a.Status,
+			Priority:  a.Priority,
+			File:      a.File,
+			Parent:    a.Parent,
+			DependsOn: dependsOn,
+		})
+	}
+
+	sort.Slice(flat, func(i, j int) bool {
+		if flat[i].Priority != flat[j].Priority {
+			return flat[i].Priority < flat[j].Priority
+		}
+		return flat[i].ID < flat[j].ID
+	})
+
+	out := AssertionsFlatOutput{
+		Type:       "assertions",
+		Assertions: flat,
 	}
 	return marshalJSON(out)
 }

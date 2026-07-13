@@ -11,6 +11,8 @@ import (
 	spekk "github.com/spekk-ai/spekk-cli"
 	"github.com/spekk-ai/spekk-cli/internal/agent"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/formatter"
+	"github.com/spekk-ai/spekk-cli/internal/index"
 	"github.com/spekk-ai/spekk-cli/internal/install"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 	"github.com/spekk-ai/spekk-cli/internal/sandbox"
@@ -48,8 +50,17 @@ func main() {
 	case "init":
 		runInit(args[1:])
 
+	case "index":
+		runIndex(args[1:])
+
+	case "query":
+		runQuery(args[1:])
+
 	case "next":
 		runParser(args[1:])
+
+	case "list":
+		runList(args[1:])
 
 	case "coach":
 		launchCoachAgent(args[1:])
@@ -124,6 +135,17 @@ func runParser(args []string) {
 		specsDir = findSpecsDir()
 	}
 
+	// Auto-rebuild the SQLite index silently if it is stale or absent.
+	repoRoot := filepath.Dir(specsDir)
+	dbPath := index.DBPath(repoRoot)
+	if stale, err := index.IsStale(specsDir, dbPath); err == nil && stale {
+		if _, _, buildErr := index.BuildIndex(specsDir, dbPath, false); buildErr != nil {
+			fmt.Fprintf(os.Stderr, "error: auto-rebuild of index failed: %s\n", buildErr)
+			os.Exit(1)
+		}
+		_ = index.EnsureGitignored(repoRoot)
+	}
+
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {
 		out, _ := parser.FormatError(err.Error())
@@ -168,6 +190,255 @@ func runParser(args []string) {
 
 	out, _ := parser.FormatNextAssertion(next, result.Specs)
 	fmt.Println(string(out))
+}
+
+// runList implements the `spekk list` subcommand.
+// Flags: --status <value>, --assertions-only, --specs-dir <path>,
+//
+//	--json, --tsv, --csv, --long / -l
+func runList(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"status":         {Names: []string{"--status"}, Type: cli.StringFlag},
+		"assertionsOnly": {Names: []string{"--assertions-only"}, Type: cli.BoolFlag},
+		"specsDir":       {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+		"json":           {Names: []string{"--json"}, Type: cli.BoolFlag},
+		"tsv":            {Names: []string{"--tsv"}, Type: cli.BoolFlag},
+		"csv":            {Names: []string{"--csv"}, Type: cli.BoolFlag},
+		"long":           {Names: []string{"--long", "-l"}, Type: cli.BoolFlag},
+		"help":           {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(`
+spekk list - List specs and assertions with optional filtering
+
+USAGE:
+  spekk list [OPTIONS]
+
+OUTPUT FORMAT (default: table):
+  --json        JSON output (same as previous default; for jq pipelines)
+  --tsv         Tab-separated values with lowercase header (for awk/cut/sort)
+  --csv         RFC 4180 CSV with header row
+  --long, -l    Add FILE column to any format
+
+FILTER OPTIONS:
+  --status <value>      Filter by assertion status. Valid values:
+                          not_started, in_progress, done, draft, failed
+  --assertions-only     Output a flat assertion list instead of grouped hierarchy
+  --specs-dir <path>    Read specs from a specific directory (default: git root specs/)
+  --help, -h            Show this help message
+
+EXAMPLES:
+  spekk list
+  spekk list --json
+  spekk list --tsv
+  spekk list --csv
+  spekk list --long
+  spekk list --status draft
+  spekk list --status draft --assertions-only
+  spekk list --status draft --tsv
+  spekk list --assertions-only --csv
+  spekk list --specs-dir /path/to/specs
+`)
+		return
+	}
+
+	specsDir := flags.String("specsDir")
+	if specsDir == "" {
+		specsDir = findSpecsDir()
+	}
+
+	result, err := parser.ParseAllSpecs(specsDir)
+	if err != nil {
+		out, _ := parser.FormatError(err.Error())
+		fmt.Println(string(out))
+		os.Exit(1)
+	}
+
+	if len(result.Specs) == 0 {
+		out, _ := parser.FormatEmpty()
+		fmt.Println(string(out))
+		return
+	}
+
+	// Apply status filter if requested.
+	if statusVal := flags.String("status"); statusVal != "" {
+		filtered, err := parser.FilterByStatus(result, statusVal)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		result = filtered
+	}
+
+	assertionsOnly := flags.Bool("assertionsOnly")
+	useJSON := flags.Bool("json")
+	useTSV := flags.Bool("tsv")
+	useCSV := flags.Bool("csv")
+	showFile := flags.Bool("long")
+
+	// --json: preserve the pre-table-format JSON output exactly.
+	if useJSON {
+		if assertionsOnly {
+			out, err := parser.FormatAssertionsFlat(result)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
+			fmt.Println(string(out))
+			return
+		}
+		out, err := parser.FormatHierarchy(result)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(string(out))
+		return
+	}
+
+	// Build rows for table/TSV/CSV formats.
+	opts := formatter.Options{
+		ShowParent: assertionsOnly,
+		ShowFile:   showFile,
+	}
+
+	rows := listRows(result, assertionsOnly)
+
+	switch {
+	case useTSV:
+		fmt.Println(formatter.FormatTSV(rows, opts))
+	case useCSV:
+		fmt.Println(formatter.FormatCSV(rows, opts))
+	default:
+		// Default: human-readable table.
+		fmt.Println(formatter.FormatTable(rows, opts))
+	}
+}
+
+// listRows converts a ParseResult into formatter.Row slices for table/TSV/CSV.
+// When assertionsOnly is true, rows come from result.Assertions (with Parent set).
+// Otherwise rows come from result.Specs (Parent not set).
+func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
+	if assertionsOnly {
+		rows := make([]formatter.Row, 0, len(result.Assertions))
+		for _, a := range result.Assertions {
+			rows = append(rows, formatter.Row{
+				ID:       a.ID,
+				Status:   a.Status,
+				Priority: a.Priority,
+				Title:    a.Title,
+				Parent:   a.Parent,
+				File:     a.File,
+			})
+		}
+		return rows
+	}
+	rows := make([]formatter.Row, 0, len(result.Specs))
+	for _, s := range result.Specs {
+		rows = append(rows, formatter.Row{
+			ID:       s.ID,
+			Status:   s.Status,
+			Priority: s.Priority,
+			Title:    s.Title,
+			File:     s.File,
+		})
+	}
+	return rows
+}
+
+// runIndex implements the `spekk index` subcommand.
+// It builds (or rebuilds) .spekk/index.db from the specs directory.
+// Flags: --specs-dir <path>, --force
+func runIndex(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+		"force":    {Names: []string{"--force"}, Type: cli.BoolFlag},
+	})
+
+	specsDir := flags.String("specsDir")
+	if specsDir == "" {
+		specsDir = findSpecsDir()
+	}
+
+	// Derive repo root from the specs directory.
+	repoRoot := filepath.Dir(specsDir)
+	dbPath := index.DBPath(repoRoot)
+
+	specCount, assertCount, err := index.BuildIndex(specsDir, dbPath, flags.Bool("force"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Ensure .spekk/index.db is in .gitignore.
+	if err := index.EnsureGitignored(repoRoot); err != nil {
+		// Non-fatal: warn but continue.
+		fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %s\n", err)
+	}
+
+	fmt.Printf("Indexed %d specs, %d assertions.\n", specCount, assertCount)
+}
+
+// runQuery implements the `spekk query "<sql>"` subcommand.
+// Executes a SELECT-only SQL query against .spekk/index.db and prints results.
+// Flags: --json, --tsv, --csv, --long (ignored for query output)
+func runQuery(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"json": {Names: []string{"--json"}, Type: cli.BoolFlag},
+		"tsv":  {Names: []string{"--tsv"}, Type: cli.BoolFlag},
+		"csv":  {Names: []string{"--csv"}, Type: cli.BoolFlag},
+		"long": {Names: []string{"--long"}, Type: cli.BoolFlag},
+	})
+
+	// Extract the SQL positional argument (first non-flag arg).
+	knownFlags := map[string]bool{
+		"--json": true, "--tsv": true, "--csv": true, "--long": true,
+	}
+	var sqlStr string
+	for _, arg := range args {
+		if !knownFlags[arg] {
+			sqlStr = arg
+			break
+		}
+	}
+
+	if sqlStr == "" {
+		fmt.Fprintln(os.Stderr, `error: missing SQL argument`)
+		fmt.Fprintln(os.Stderr, `usage: spekk query "<sql>"`)
+		os.Exit(1)
+	}
+
+	// Locate the repo root and the index DB.
+	specsDir := findSpecsDir()
+	repoRoot := filepath.Dir(specsDir)
+	dbPath := index.DBPath(repoRoot)
+
+	result, err := index.RunQuery(dbPath, sqlStr)
+	if err != nil {
+		if err == index.ErrDBNotFound {
+			fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		}
+		os.Exit(1)
+	}
+
+	// Format and print output.
+	var out string
+	switch {
+	case flags.Bool("json"):
+		out = index.FormatQueryJSON(result)
+	case flags.Bool("tsv"):
+		out = index.FormatQueryTSV(result)
+	case flags.Bool("csv"):
+		out = index.FormatQueryCSV(result)
+	default:
+		// Table format (--long is accepted but has no special effect on query output).
+		out = index.FormatQueryTable(result)
+	}
+
+	fmt.Println(out)
 }
 
 // findSpecsDir locates the specs/ directory using git root.
@@ -974,6 +1245,9 @@ USAGE:
 
 COMMANDS:
   init      Set up a project for spec-driven development (creates specs/)
+  index     Build .spekk/index.db SQLite index from specs/ (use --force to rebuild from scratch)
+  query     Execute a SELECT query against .spekk/index.db (supports --json, --tsv, --csv)
+  list      List specs and assertions with optional --status filter and --assertions-only flat output
   show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
   serve     Start WebSocket server for browser extension (--port, --host)

@@ -103,3 +103,4 @@ dist/
 
 # Generated spec-explorer artifact
 .spekk/index.html
+.spekk/index.db
