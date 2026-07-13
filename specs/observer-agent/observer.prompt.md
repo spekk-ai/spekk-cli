@@ -260,7 +260,12 @@ Builders commonly exhibit wrong beliefs about these APIs that cause silent viola
 - **Builder default:** Reaches for `sort.Slice`, which is NOT guaranteed stable.
 - **Why this is drift:** For equal elements, `sort.Slice` may reorder them arbitrarily.
   `sort.SliceStable` (or `sort.Stable`) preserves the original relative order.
-- **Drift indicator:** Code uses `sort.Slice` when the assertion requires a stable sort.
+- **Drift indicator:** Code uses `sort.Slice` when the assertion **explicitly** requires
+  stable sort — for example: "items with equal sort keys appear in the same relative order
+  as in the input."
+- **NOT drift:** `sort.Slice` is correct when the assertion only requires ascending order
+  and does not mention stability or tie-breaking. Do not flag `sort.Slice` as drift unless
+  the assertion explicitly requires stable ordering.
 
 ## Future Validation
 
