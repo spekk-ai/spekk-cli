@@ -95,7 +95,6 @@ func main() {
 	case "skills":
 		runSkills(args[1:])
 
-
 	case "update":
 		runUpdate(args[1:])
 
@@ -886,7 +885,6 @@ func runSkillsList(args []string) {
 	skills := r.ListSkills(agent)
 	fmt.Print(install.FormatSkillsList(agent, skills))
 }
-
 
 // runUpdate performs a self-update check and optional install.
 func runUpdate(args []string) {
