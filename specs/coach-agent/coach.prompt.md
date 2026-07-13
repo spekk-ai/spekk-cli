@@ -580,9 +580,13 @@ the wrong behavior even when the spec states a clear requirement.
 
 - **What builders do by default:** Often use `sort.Slice`.
 - **Why it's wrong:** `sort.Slice` is not guaranteed to preserve relative order for equal elements.
-- **When to add this Note:** Any assertion that says "sort is stable" or requires deterministic
-  ordering when keys are equal.
-- **Prescription:**
+- **When to add this Note:** ONLY when the assertion's success criteria include stable ordering
+  behavior — for example, when the request says "equal items maintain their relative order" or
+  "stable sort" or "deterministic ordering when keys are equal."
+- **Do NOT add this Note** when the request only asks for "ascending order" or "alphabetical sort"
+  without mentioning stability. In those cases, `sort.Slice` is correct — do not add extra
+  constraints the user did not request.
+- **Prescription (ONLY when stability is required):**
   ```
   **Note:** Use `sort.SliceStable`, not `sort.Slice`. Go's `sort.Slice` does not guarantee
   stable ordering for equal elements; only `sort.SliceStable` or `sort.Stable` does.
