@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	spekk "github.com/spekk-ai/spekk-cli"
@@ -201,7 +202,7 @@ OUTPUT FORMAT (default: table):
   --json        JSON output (same as previous default; for jq pipelines)
   --tsv         Tab-separated values with lowercase header (for awk/cut/sort)
   --csv         RFC 4180 CSV with header row
-  --long, -l    Add FILE column to any format
+  --long, -l    Add FILE column to table/TSV/CSV output (JSON always includes file)
 
 FILTER OPTIONS:
   --status <value>      Filter by assertion status. Valid values:
@@ -225,6 +226,24 @@ EXAMPLES:
 		return
 	}
 
+	assertionsOnly := flags.Bool("assertionsOnly")
+	useJSON := flags.Bool("json")
+	useTSV := flags.Bool("tsv")
+	useCSV := flags.Bool("csv")
+	showFile := flags.Bool("long")
+
+	// Reject mutually exclusive format flags.
+	formatCount := 0
+	for _, f := range []bool{useJSON, useTSV, useCSV} {
+		if f {
+			formatCount++
+		}
+	}
+	if formatCount > 1 {
+		fmt.Fprintln(os.Stderr, "Error: --json, --tsv, and --csv are mutually exclusive; use at most one")
+		os.Exit(1)
+	}
+
 	specsDir := flags.String("specsDir")
 	if specsDir == "" {
 		specsDir = findSpecsDir()
@@ -245,19 +264,21 @@ EXAMPLES:
 
 	// Apply status filter if requested.
 	if statusVal := flags.String("status"); statusVal != "" {
-		filtered, err := parser.FilterByStatus(result, statusVal)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		filtered, filterErr := parser.FilterByStatus(result, statusVal)
+		if filterErr != nil {
+			// Use FormatError so machine-readable callers get consistent JSON output.
+			out, _ := parser.FormatError(filterErr.Error())
+			fmt.Println(string(out))
 			os.Exit(1)
 		}
 		result = filtered
+		// After filtering, result may be empty (no specs matched).
+		if len(result.Specs) == 0 {
+			out, _ := parser.FormatEmpty()
+			fmt.Println(string(out))
+			return
+		}
 	}
-
-	assertionsOnly := flags.Bool("assertionsOnly")
-	useJSON := flags.Bool("json")
-	useTSV := flags.Bool("tsv")
-	useCSV := flags.Bool("csv")
-	showFile := flags.Bool("long")
 
 	// --json: preserve the pre-table-format JSON output exactly.
 	if useJSON {
@@ -301,12 +322,15 @@ EXAMPLES:
 	}
 }
 
-// listRows converts a ParseResult into formatter.Row slices for table/TSV/CSV.
+// listRows converts a ParseResult into formatter.Row slices for table/TSV/CSV,
+// sorted by priority (ascending) then ID (alphabetical) — same order as
+// FormatAssertionsFlat, so all output formats agree.
 // When assertionsOnly is true, rows come from result.Assertions (with Parent set).
 // Otherwise rows come from result.Specs (Parent not set).
 func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
+	var rows []formatter.Row
 	if assertionsOnly {
-		rows := make([]formatter.Row, 0, len(result.Assertions))
+		rows = make([]formatter.Row, 0, len(result.Assertions))
 		for _, a := range result.Assertions {
 			rows = append(rows, formatter.Row{
 				ID:       a.ID,
@@ -317,18 +341,24 @@ func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
 				File:     a.File,
 			})
 		}
-		return rows
+	} else {
+		rows = make([]formatter.Row, 0, len(result.Specs))
+		for _, s := range result.Specs {
+			rows = append(rows, formatter.Row{
+				ID:       s.ID,
+				Status:   s.Status,
+				Priority: s.Priority,
+				Title:    s.Title,
+				File:     s.File,
+			})
+		}
 	}
-	rows := make([]formatter.Row, 0, len(result.Specs))
-	for _, s := range result.Specs {
-		rows = append(rows, formatter.Row{
-			ID:       s.ID,
-			Status:   s.Status,
-			Priority: s.Priority,
-			Title:    s.Title,
-			File:     s.File,
-		})
-	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Priority != rows[j].Priority {
+			return rows[i].Priority < rows[j].Priority
+		}
+		return rows[i].ID < rows[j].ID
+	})
 	return rows
 }
 
