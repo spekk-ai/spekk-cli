@@ -99,10 +99,10 @@ func TestResolveSourceSkill_RejectsNonHTTPSchemes(t *testing.T) {
 
 func TestResolveSourceSkill_RejectsMalformedAndHostlessURLs(t *testing.T) {
 	cases := []string{
-		"https://",        // no host
-		"http://",         // no host
-		"://nohost",       // parse error
-		"http://%zz",      // parse error
+		"https://",   // no host
+		"http://",    // no host
+		"://nohost",  // parse error
+		"http://%zz", // parse error
 	}
 	for _, raw := range cases {
 		t.Run(raw, func(t *testing.T) {
