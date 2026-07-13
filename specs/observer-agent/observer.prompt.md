@@ -254,7 +254,11 @@ Builders commonly exhibit wrong beliefs about these APIs that cause silent viola
 - **Correct pattern:** An explicit early return before calling `MarshalIndent`:
   `if len(items) == 0 { return `{"items":[],"count":0}` }`
 - **Drift indicator:** Code calls `json.MarshalIndent` with no early return for the empty case,
-  while the assertion requires compact output for empty items regardless of the indent flag.
+  when the assertion **explicitly** requires compact output for empty items regardless of the indent flag
+  — for example: "When items is nil or empty: always returns compact output regardless of indent."
+- **NOT drift:** `json.MarshalIndent` without an early return is correct when the assertion does not
+  mention the empty/nil case or compact-output requirements. Only flag if the assertion explicitly
+  requires a specific behavior for empty inputs.
 
 ### Stable Sort
 - **Builder default:** Reaches for `sort.Slice`, which is NOT guaranteed stable.
