@@ -8,7 +8,7 @@ priority: 1
 
 ## Problem
 
-When running `spekk coach` from a directory outside the spekk-cli installation (e.g., `~/thinknimble/vuenome`), Claude Code cannot find the coach agent prompt file because it looks for `specs/coach-agent/coach-agent.prompt.md` relative to the current working directory.
+When running `spekk coach` from a directory outside the spekk-cli installation (e.g., `~/myproject`), Claude Code cannot find the coach agent prompt file because it looks for `specs/coach-agent/coach-agent.prompt.md` relative to the current working directory.
 
 The CLI should work from any directory while:
 1. Running Claude Code in the user's working directory (so it can access their project files)
@@ -28,9 +28,9 @@ The CLI should work from any directory while:
 
 ## Success Criteria
 
-- User can run `spekk coach` from `~/thinknimble/vuenome` and Claude Code successfully loads the coach prompt from spekk-cli installation
-- User can run `spekk` from `~/thinknimble/vuenome` and get next assertion from spekk-cli specs
-- Claude Code's working directory remains `~/thinknimble/vuenome` so it can work with user's files
+- User can run `spekk coach` from `~/myproject` and Claude Code successfully loads the coach prompt from spekk-cli installation
+- User can run `spekk` from `~/myproject` and get next assertion from spekk-cli specs
+- Claude Code's working directory remains `~/myproject` so it can work with user's files
 - No temporary files or directories created in user's working directory
 - All commands (coach, builder, observer, parser) work consistently from any directory
 - User's project directory structure is never modified by the CLI
