@@ -592,6 +592,23 @@ the wrong behavior even when the spec states a clear requirement.
   stable ordering for equal elements; only `sort.SliceStable` or `sort.Stable` does.
   ```
 
+### bufio.Scanner Line Length Limit
+
+- **What builders do by default:** Use `bufio.NewScanner(file)` without calling `scanner.Buffer()`.
+- **Why it fails:** `bufio.NewScanner` has a default max token size of 64KB. Lines longer than
+  64KB cause `scanner.Scan()` to return false silently with `scanner.Err() == bufio.ErrTooLong`.
+- **When to add this Note:** ONLY when the request explicitly mentions handling large files,
+  long lines, or unbounded line lengths — for example: "any length," "very long lines,"
+  "lines exceeding 64KB," or "large log files."
+- **Do NOT add this Note** when the request is a simple "reads all lines" without any mention
+  of line size constraints. Adding it for basic file-reading requests adds unnecessary detail.
+- **Prescription (ONLY when large-line handling is required):**
+  ```
+  **Note:** Use `scanner.Buffer(make([]byte, N), N)` where N is larger than
+  `bufio.MaxScanTokenSize` (64KB) to support lines longer than the default limit.
+  Example: `scanner.Buffer(make([]byte, 1<<20), 1<<20)` for 1MB maximum line length.
+  ```
+
 ## Format Validation
 
 Every parent spec file must have:
