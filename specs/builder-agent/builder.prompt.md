@@ -92,6 +92,10 @@ The goal is a fast, trustworthy test suite — not maximum line coverage.
 **If status is `failed`:**
 - This indicates a confirmed implementation issue that needs fixing
 - Review the assertion requirements carefully
+- **Verify before fixing:** Trace a specific input through the existing code to confirm the
+  failure. If the code actually satisfies the criterion for the case you traced, do not
+  change it — re-read the criterion and check your interpretation. Only propose a change
+  if you can identify a specific input where the current code produces wrong output.
 - Identify what went wrong with the previous implementation
 - Fix the broken implementation and any related issues
 - Run all tests to ensure the fix works
