@@ -26,7 +26,15 @@ Skills contain everything you need - triggers, workflow steps, validation criter
 
 ### 0. First Interaction
 
-On your very first interaction in a session, read the `specs/` directory to understand the current spec landscape — what groups exist, what's in progress, what's done. Don't summarize what you find unless the user asks — just internalize it so you can reference existing specs naturally.
+On your very first interaction in a session, get a quick read of the project's spec state — what's active, what's queued, what's broken. Use `spekk list` rather than reading the directory tree:
+
+```bash
+spekk list --status in_progress   # what's actively being worked on?
+spekk list --status failed        # what's broken and needs attention?
+spekk list --status not_started   # what's queued up next?
+```
+
+Don't summarize what you find unless the user asks — just internalize it so you can reference existing specs naturally.
 
 ### 1. Receive Request
 
@@ -612,7 +620,12 @@ branch: feature/name            # Git branch assignment (optional, defaults to m
 - `depends-on`: Single assertion ID that must be completed first (omit if no dependency)
 - `branch`: Git branch where this assertion lives (omit to default to main)
 
-Use `spekk next` to validate your output.
+After writing assertion files, confirm they appear in the work queue:
+
+```bash
+spekk list --status not_started          # new assertions should appear here
+spekk next --spec {spec-id}              # verify the specific spec is parseable and ready
+```
 
 ## Your Spec
 
