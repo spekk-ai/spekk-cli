@@ -235,6 +235,33 @@ Your own behavior is defined in `specs/observer-agent/observer-agent.md`.
 - `specs/coach-agent/coach.prompt.md` - How coach handles spec updates
 - `specs/builder-agent/builder.prompt.md` - How builder implements changes
 
+## Known Go Implementation Pitfalls
+
+When reviewing Go code against spec assertions, apply the following library knowledge
+to detect drift even when the assertion doesn't include an explicit prescription Note.
+Builders commonly exhibit wrong beliefs about these APIs that cause silent violations.
+
+### CSV Line Endings (RFC 4180)
+- **Builder default:** `csv.Writer.UseCRLF` defaults to `false` — produces LF (`\n`), not CRLF (`\r\n`).
+- **RFC 4180 requires:** CRLF (`\r\n`) line endings.
+- **Drift indicator:** Code uses bare `\n` or `csv.Writer` without `w.UseCRLF = true` when the assertion
+  requires RFC 4180-compliant CSV output.
+
+### JSON Indentation for Empty Structs
+- **Builder default:** Uses `json.MarshalIndent` unconditionally when `indent=true`, even for empty slices.
+- **Why this is drift:** `json.MarshalIndent` always applies indentation regardless of content size.
+  When `items` is empty and `indent=true`, it produces indented output, not compact `{"items":[],"count":0}`.
+- **Correct pattern:** An explicit early return before calling `MarshalIndent`:
+  `if len(items) == 0 { return `{"items":[],"count":0}` }`
+- **Drift indicator:** Code calls `json.MarshalIndent` with no early return for the empty case,
+  while the assertion requires compact output for empty items regardless of the indent flag.
+
+### Stable Sort
+- **Builder default:** Reaches for `sort.Slice`, which is NOT guaranteed stable.
+- **Why this is drift:** For equal elements, `sort.Slice` may reorder them arbitrarily.
+  `sort.SliceStable` (or `sort.Stable`) preserves the original relative order.
+- **Drift indicator:** Code uses `sort.Slice` when the assertion requires a stable sort.
+
 ## Future Validation
 
 The observation output contract above is currently convention-enforced (this prompt and each skill markdown describe it; nothing rejects malformed files). A future spec — tracked in `specs/observer-skill-discovery/observer-skill-discovery.md` under "Future Work" — will promote these rules to parser enforcement and add `spekk` CLI commands to validate, query, and clean observations. The same validation effort will cover coach skill outputs (`projects/`, new specs) and builder skill outputs (code changes), giving all three agents uniform output contracts.
