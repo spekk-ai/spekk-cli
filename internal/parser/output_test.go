@@ -2,6 +2,7 @@ package parser
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -186,6 +187,26 @@ func TestFormatEmpty(t *testing.T) {
 	}
 }
 
+func TestFormatEmptyFiltered(t *testing.T) {
+	data, err := FormatEmptyFiltered("draft")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if result["status"] != "empty" {
+		t.Errorf("expected status=empty, got %v", result["status"])
+	}
+	msg, _ := result["message"].(string)
+	if !strings.Contains(msg, "draft") {
+		t.Errorf("expected message to contain 'draft', got: %q", msg)
+	}
+}
+
 func TestFormatError(t *testing.T) {
 	data, err := FormatError("something broke")
 	if err != nil {
@@ -200,6 +221,216 @@ func TestFormatError(t *testing.T) {
 	}
 	if result["message"] != "something broke" {
 		t.Errorf("unexpected message: %v", result["message"])
+	}
+}
+
+func TestFilterByStatus_MatchingAssertions(t *testing.T) {
+	result := &ParseResult{
+		Specs: []Spec{
+			{ID: "spec-a", Title: "Spec A", Status: "in_progress", Priority: 1, File: "specs/spec-a/spec-a.md"},
+			{ID: "spec-b", Title: "Spec B", Status: "not_started", Priority: 1, File: "specs/spec-b/spec-b.md"},
+		},
+		Assertions: []Assertion{
+			{ID: "a1", Parent: "spec-a", Status: "draft", Priority: 1, File: "specs/spec-a/assertions/a1.md"},
+			{ID: "a2", Parent: "spec-a", Status: "not_started", Priority: 2, File: "specs/spec-a/assertions/a2.md"},
+			{ID: "b1", Parent: "spec-b", Status: "draft", Priority: 1, File: "specs/spec-b/assertions/b1.md"},
+		},
+	}
+
+	filtered, err := FilterByStatus(result, "draft")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(filtered.Assertions) != 2 {
+		t.Errorf("expected 2 draft assertions, got %d", len(filtered.Assertions))
+	}
+	for _, a := range filtered.Assertions {
+		if a.Status != "draft" {
+			t.Errorf("expected only draft assertions, got status=%q for %s", a.Status, a.ID)
+		}
+	}
+}
+
+func TestFilterByStatus_ExcludesSpecsWithNoMatch(t *testing.T) {
+	result := &ParseResult{
+		Specs: []Spec{
+			{ID: "spec-a", Title: "Spec A", Priority: 1, File: "specs/spec-a/spec-a.md"},
+			{ID: "spec-b", Title: "Spec B", Priority: 1, File: "specs/spec-b/spec-b.md"},
+		},
+		Assertions: []Assertion{
+			{ID: "a1", Parent: "spec-a", Status: "done", Priority: 1, File: "f"},
+			{ID: "b1", Parent: "spec-b", Status: "not_started", Priority: 1, File: "f"},
+		},
+	}
+
+	filtered, err := FilterByStatus(result, "done")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(filtered.Specs) != 1 || filtered.Specs[0].ID != "spec-a" {
+		t.Errorf("expected only spec-a, got %v", filtered.Specs)
+	}
+}
+
+func TestFilterByStatus_EmptyInput(t *testing.T) {
+	result := &ParseResult{}
+	filtered, err := FilterByStatus(result, "done")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(filtered.Assertions) != 0 || len(filtered.Specs) != 0 {
+		t.Errorf("expected empty result, got %+v", filtered)
+	}
+}
+
+func TestFilterByStatus_InvalidStatus(t *testing.T) {
+	result := &ParseResult{}
+	_, err := FilterByStatus(result, "bogus")
+	if err == nil {
+		t.Fatal("expected error for invalid status, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "bogus") {
+		t.Errorf("error message should mention the invalid value; got: %s", msg)
+	}
+	// Verify at least one known valid value appears in the error message.
+	if !strings.Contains(msg, "not_started") {
+		t.Errorf("error message should list valid status values; got: %s", msg)
+	}
+}
+
+func TestFormatAssertionsFlat_Structure(t *testing.T) {
+	result := &ParseResult{
+		Assertions: []Assertion{
+			{ID: "b1", Parent: "spec-b", Title: "B1", Status: "done", Priority: 2, File: "f"},
+			{ID: "a1", Parent: "spec-a", Title: "A1", Status: "not_started", Priority: 1, File: "f"},
+		},
+	}
+
+	data, err := FormatAssertionsFlat(result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if out["type"] != "assertions" {
+		t.Errorf("expected type=assertions, got %v", out["type"])
+	}
+	if _, ok := out["specs"]; ok {
+		t.Error("unexpected 'specs' key in flat output")
+	}
+	if _, ok := out["observations"]; ok {
+		t.Error("unexpected 'observations' key in flat output")
+	}
+
+	assertions := out["assertions"].([]interface{})
+	if len(assertions) != 2 {
+		t.Fatalf("expected 2 assertions, got %d", len(assertions))
+	}
+
+	// Check sorted order: a1 (priority 1) before b1 (priority 2).
+	first := assertions[0].(map[string]interface{})
+	if first["id"] != "a1" {
+		t.Errorf("expected first entry a1 (priority 1), got %v", first["id"])
+	}
+
+	// Verify all required fields are present.
+	for _, f := range []string{"id", "title", "status", "priority", "file", "parent"} {
+		if _, ok := first[f]; !ok {
+			t.Errorf("missing field %q in flat assertion entry", f)
+		}
+	}
+
+	if first["parent"] != "spec-a" {
+		t.Errorf("expected parent=spec-a, got %v", first["parent"])
+	}
+}
+
+func TestFormatHierarchy_DependsOnField(t *testing.T) {
+	result := &ParseResult{
+		Specs: []Spec{
+			{ID: "spec-a", Title: "Spec A", Status: "in_progress", Priority: 1, File: "specs/spec-a/spec-a.md"},
+		},
+		Assertions: []Assertion{
+			{ID: "a1", Parent: "spec-a", Title: "A1", Status: "done", Priority: 1, File: "f", DependsOn: "foo"},
+			{ID: "a2", Parent: "spec-a", Title: "A2", Status: "not_started", Priority: 2, File: "f", DependsOn: ""},
+		},
+	}
+
+	data, err := FormatHierarchy(result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var out map[string]interface{}
+	json.Unmarshal(data, &out)
+
+	specs := out["specs"].([]interface{})
+	assertions := specs[0].(map[string]interface{})["assertions"].([]interface{})
+
+	// a1 has DependsOn = "foo" → ["foo"]
+	a1 := assertions[0].(map[string]interface{})
+	if a1["id"] != "a1" {
+		t.Fatalf("expected first assertion a1, got %v", a1["id"])
+	}
+	dep1, ok := a1["depends_on"].([]interface{})
+	if !ok || len(dep1) != 1 || dep1[0] != "foo" {
+		t.Errorf("expected depends_on=[\"foo\"], got %v", a1["depends_on"])
+	}
+
+	// a2 has DependsOn = "" → []
+	a2 := assertions[1].(map[string]interface{})
+	if a2["id"] != "a2" {
+		t.Fatalf("expected second assertion a2, got %v", a2["id"])
+	}
+	dep2, ok := a2["depends_on"].([]interface{})
+	if !ok || len(dep2) != 0 {
+		t.Errorf("expected depends_on=[], got %v", a2["depends_on"])
+	}
+}
+
+func TestFormatAssertionsFlat_DependsOnField(t *testing.T) {
+	result := &ParseResult{
+		Assertions: []Assertion{
+			{ID: "a1", Parent: "spec-a", Title: "A1", Status: "done", Priority: 1, File: "f", DependsOn: "foo"},
+			{ID: "a2", Parent: "spec-a", Title: "A2", Status: "not_started", Priority: 2, File: "f", DependsOn: ""},
+		},
+	}
+
+	data, err := FormatAssertionsFlat(result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var out map[string]interface{}
+	json.Unmarshal(data, &out)
+
+	assertions := out["assertions"].([]interface{})
+
+	// a1 (priority 1) comes first, has DependsOn = "foo" → ["foo"]
+	a1 := assertions[0].(map[string]interface{})
+	if a1["id"] != "a1" {
+		t.Fatalf("expected first assertion a1, got %v", a1["id"])
+	}
+	dep1, ok := a1["depends_on"].([]interface{})
+	if !ok || len(dep1) != 1 || dep1[0] != "foo" {
+		t.Errorf("expected depends_on=[\"foo\"], got %v", a1["depends_on"])
+	}
+
+	// a2 (priority 2) comes second, has DependsOn = "" → []
+	a2 := assertions[1].(map[string]interface{})
+	if a2["id"] != "a2" {
+		t.Fatalf("expected second assertion a2, got %v", a2["id"])
+	}
+	dep2, ok := a2["depends_on"].([]interface{})
+	if !ok || len(dep2) != 0 {
+		t.Errorf("expected depends_on=[], got %v", a2["depends_on"])
 	}
 }
 

@@ -56,9 +56,9 @@ func TestParseInstallCronFlags_IntervalValidation(t *testing.T) {
 		flag  string
 		value string
 	}{
-		{"--loop-interval", "90"},   // >60, not a multiple of 60
-		{"--loop-interval", "150"},  // >60, not a multiple of 60
-		{"--loop-interval", "75"},   // >60, not a multiple of 60
+		{"--loop-interval", "90"},  // >60, not a multiple of 60
+		{"--loop-interval", "150"}, // >60, not a multiple of 60
+		{"--loop-interval", "75"},  // >60, not a multiple of 60
 		{"--consolidate-interval", "90"},
 		{"--consolidate-interval", "150"},
 	}
@@ -112,7 +112,7 @@ func TestMinutesToCron(t *testing.T) {
 // headless flag, log file redirect, cron marker, and no shell flock.
 func TestBuildCronLines(t *testing.T) {
 	cfg := InstallCronConfig{LoopInterval: 30, ConsolidateInterval: 360}
-	projectDir := "/home/user/my project"         // space in path intentional
+	projectDir := "/home/user/my project"           // space in path intentional
 	claudePath := "/home/user/.claude/local/claude" // absolute path with no PATH dependency
 	loop, consolidate := buildCronLines("/usr/local/bin/spekk", claudePath, projectDir, cfg)
 
