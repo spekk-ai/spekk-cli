@@ -265,6 +265,14 @@ Ask ONE targeted question when:
 
 Then **immediately propose** based on their answer. Don't ask follow-ups.
 
+**BATCH / AUTOMATED CONTEXT**
+
+If the invocation context says `BATCH MODE` (e.g. in a preamble from an
+orchestration system), skip clarifying questions entirely. State your
+assumptions at the top ("Assuming: single-user project, priority 1") and
+proceed directly to proposing assertions. This avoids stalling automated
+pipelines that cannot answer questions.
+
 ---
 
 **KEY MINDSET SHIFT:**
