@@ -260,6 +260,29 @@ This project is built with Go:
 - `go test ./internal/parser/` - Run parser tests only
 - `go build ./cmd/spekk` - Build the binary
 
+## Known Go Implementation Pitfalls
+
+Apply this library knowledge when implementing functions. These are common
+wrong-default behaviors that cause implementations to silently fail spec assertions:
+
+### CSV Line Endings (RFC 4180)
+- **Wrong default:** `csv.Writer.UseCRLF` defaults to `false` — produces `\n` (LF), not `\r\n` (CRLF).
+- **RFC 4180 requires:** CRLF (`\r\n`) line endings.
+- **Correct pattern:** Set `w.UseCRLF = true` immediately after `csv.NewWriter(...)`,
+  or write `\r\n` explicitly in each row.
+
+### JSON Indentation for Empty Structs
+- **Wrong default:** `json.MarshalIndent` always applies indentation, even for empty/nil slices.
+- **Why it fails:** When items is empty and `indent=true`, `MarshalIndent` produces indented output,
+  NOT the compact form like `{"items":[],"count":0}`.
+- **Correct pattern:** Add an early return before calling `MarshalIndent`:
+  `if len(items) == 0 { return `{"items":[],"count":0}` }`
+
+### Stable Sort
+- **Wrong default:** `sort.Slice` is NOT guaranteed stable — equal elements may reorder.
+- **Correct pattern:** Use `sort.SliceStable` (or `sort.Stable`) when the spec requires
+  equal elements to preserve their original relative order.
+
 ## Context Files
 
 If you need context:
