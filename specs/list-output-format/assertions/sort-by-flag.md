@@ -28,6 +28,9 @@ column in ascending order. Supported columns: `id`, `status`, `priority`,
   by title text.
 - Sort is stable: assertions with equal sort keys appear in their original
   (parser) order relative to each other.
+  **Note:** Use `sort.SliceStable`, not `sort.Slice`. Go's `sort.Slice` does not
+  guarantee stable ordering for equal elements; `sort.SliceStable` (or `sort.Stable`)
+  does.
 - `--sort-by` combines with `--status`, `--priority`, and all format flags.
 - An unsupported column name causes a non-zero exit with a message listing
   the valid column names.
