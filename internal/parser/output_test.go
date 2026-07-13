@@ -2,6 +2,7 @@ package parser
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -268,7 +269,15 @@ func TestFilterByStatus_InvalidStatus(t *testing.T) {
 	result := &ParseResult{}
 	_, err := FilterByStatus(result, "bogus")
 	if err == nil {
-		t.Error("expected error for invalid status, got nil")
+		t.Fatal("expected error for invalid status, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "bogus") {
+		t.Errorf("error message should mention the invalid value; got: %s", msg)
+	}
+	// Verify at least one known valid value appears in the error message.
+	if !strings.Contains(msg, "not_started") {
+		t.Errorf("error message should list valid status values; got: %s", msg)
 	}
 }
 

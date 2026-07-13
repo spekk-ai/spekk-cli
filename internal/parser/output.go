@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // marshalJSON encodes v as indented JSON without escaping HTML entities
@@ -278,22 +279,18 @@ func FormatError(msg string) ([]byte, error) {
 	return marshalJSON(out)
 }
 
-// validStatusValues is the set of allowed assertion status strings for filtering.
-var validStatusValues = map[string]bool{
-	"not_started": true,
-	"in_progress": true,
-	"done":        true,
-	"draft":       true,
-	"failed":      true,
-}
-
 // FilterByStatus returns a new ParseResult containing only assertions with the
 // given status, and only specs that have at least one matching assertion.
 // Spec-level status is not used for filtering.
-// Returns an error if the status value is not one of the valid statuses.
+// Returns an error if status is not one of the values in validStatuses (parser.go).
 func FilterByStatus(result *ParseResult, status string) (*ParseResult, error) {
-	if !validStatusValues[status] {
-		return nil, fmt.Errorf("invalid status %q — valid values: not_started, in_progress, done, draft, failed", status)
+	if !validStatuses[status] {
+		keys := make([]string, 0, len(validStatuses))
+		for k := range validStatuses {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		return nil, fmt.Errorf("invalid status %q — valid values: %s", status, strings.Join(keys, ", "))
 	}
 
 	var matchedAssertions []Assertion
@@ -320,8 +317,8 @@ func FilterByStatus(result *ParseResult, status string) (*ParseResult, error) {
 
 // AssertionsFlatOutput is the JSON output for `spekk list --assertions-only`.
 type AssertionsFlatOutput struct {
-	Type       string            `json:"type"`
-	Assertions []FlatAssertion   `json:"assertions"`
+	Type       string          `json:"type"`
+	Assertions []FlatAssertion `json:"assertions"`
 }
 
 // FlatAssertion is an entry in the flat assertion list.
