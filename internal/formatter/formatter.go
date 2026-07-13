@@ -44,8 +44,8 @@ func columns(r Row, header bool, opts Options) []string {
 }
 
 // headerRow returns a Row whose fields are the column header strings.
-func headerRow(opts Options) Row {
-	r := Row{
+func headerRow() Row {
+	return Row{
 		ID:     "ID",
 		Status: "STATUS",
 		// Priority handled specially in columns()
@@ -53,7 +53,6 @@ func headerRow(opts Options) Row {
 		Parent: "PARENT",
 		File:   "FILE",
 	}
-	return r
 }
 
 // FormatTable returns a space-padded table string. The first row is the header.
@@ -64,7 +63,7 @@ func FormatTable(rows []Row, opts Options) string {
 		return ""
 	}
 
-	hdr := headerRow(opts)
+	hdr := headerRow()
 
 	// Build all rows (header + data) as string slices.
 	all := make([][]string, 0, len(rows)+1)
@@ -106,26 +105,27 @@ func FormatTable(rows []Row, opts Options) string {
 }
 
 // FormatTSV returns tab-separated output. The header is lowercase. No padding.
+// The returned string ends with a newline (caller should use fmt.Print, not
+// fmt.Println, to avoid a duplicate blank line).
 func FormatTSV(rows []Row, opts Options) string {
 	if len(rows) == 0 {
 		return ""
 	}
 
-	hdr := headerRow(opts)
+	hdr := headerRow()
 
 	var sb strings.Builder
 
-	// Header row (lowercase).
 	writeRow := func(cells []string, lowercase bool) {
 		for i, c := range cells {
 			if i > 0 {
 				sb.WriteByte('\t')
 			}
 			if lowercase {
-				sb.WriteString(strings.ToLower(c))
-			} else {
-				sb.WriteString(c)
+				c = strings.ToLower(c)
 			}
+			// TSV has no quoting mechanism; replace control chars with spaces.
+			sb.WriteString(sanitizeTSV(c))
 		}
 		sb.WriteByte('\n')
 	}
@@ -135,20 +135,20 @@ func FormatTSV(rows []Row, opts Options) string {
 		writeRow(columns(r, false, opts), false)
 	}
 
-	// Trim trailing newline to match table behavior (caller uses fmt.Println).
-	result := sb.String()
-	return strings.TrimRight(result, "\n")
+	return sb.String()
 }
 
 // FormatCSV returns RFC 4180 CSV output with a header row. Fields containing
 // commas, double-quotes, or newlines are double-quoted; embedded double-quotes
-// are doubled. Each row ends with CRLF.
+// are doubled. Each row (including the last) ends with CRLF per RFC 4180.
+// The returned string ends with CRLF (caller should use fmt.Print, not
+// fmt.Println, to avoid appending a bare LF after the final CRLF).
 func FormatCSV(rows []Row, opts Options) string {
 	if len(rows) == 0 {
 		return ""
 	}
 
-	hdr := headerRow(opts)
+	hdr := headerRow()
 
 	var sb strings.Builder
 
@@ -170,9 +170,7 @@ func FormatCSV(rows []Row, opts Options) string {
 		writeCSVRow(columns(r, false, opts), false)
 	}
 
-	// Trim the trailing CRLF so fmt.Println doesn't add a blank line.
-	result := sb.String()
-	return strings.TrimRight(result, "\r\n")
+	return sb.String()
 }
 
 // csvField wraps a field in double-quotes when necessary (RFC 4180).
@@ -180,5 +178,15 @@ func csvField(s string) string {
 	if strings.ContainsAny(s, ",\"\r\n") {
 		return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 	}
+	return s
+}
+
+// sanitizeTSV replaces tab, CR, and LF characters with a single space.
+// TSV has no quoting mechanism, so embedded control characters cannot be
+// represented faithfully; replacing them preserves column alignment.
+func sanitizeTSV(s string) string {
+	s = strings.ReplaceAll(s, "\t", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
 	return s
 }

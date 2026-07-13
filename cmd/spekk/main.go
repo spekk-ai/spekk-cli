@@ -289,9 +289,12 @@ EXAMPLES:
 
 	switch {
 	case useTSV:
-		fmt.Println(formatter.FormatTSV(rows, opts))
+		// FormatTSV owns its trailing newline; use Print to avoid a duplicate.
+		fmt.Print(formatter.FormatTSV(rows, opts))
 	case useCSV:
-		fmt.Println(formatter.FormatCSV(rows, opts))
+		// FormatCSV owns its trailing CRLF per RFC 4180; use Print to avoid
+		// appending a bare LF after the final CRLF.
+		fmt.Print(formatter.FormatCSV(rows, opts))
 	default:
 		// Default: human-readable table.
 		fmt.Println(formatter.FormatTable(rows, opts))

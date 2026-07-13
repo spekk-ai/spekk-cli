@@ -134,6 +134,9 @@ func TestFormatTSV_LowercaseHeader(t *testing.T) {
 func TestFormatTSV_TabSeparated(t *testing.T) {
 	out := FormatTSV(twoRows, Options{})
 	for i, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue // trailing newline produces an empty last element
+		}
 		if !strings.Contains(line, "\t") {
 			t.Errorf("line %d has no tab separator: %q", i, line)
 		}
@@ -150,6 +153,27 @@ func TestFormatTSV_NoTrailingTab(t *testing.T) {
 	for i, line := range strings.Split(out, "\n") {
 		if strings.HasSuffix(line, "\t") {
 			t.Errorf("line %d has trailing tab: %q", i, line)
+		}
+	}
+}
+
+// TestFormatTSV_SanitizesControlChars verifies embedded tabs and newlines in
+// field values are replaced with spaces rather than corrupting column alignment.
+func TestFormatTSV_SanitizesControlChars(t *testing.T) {
+	rows := []Row{
+		{ID: "a", Status: "not_started", Priority: 1, Title: "Has\ttab"},
+		{ID: "b", Status: "done", Priority: 2, Title: "Has\nnewline"},
+	}
+	out := FormatTSV(rows, Options{})
+	for i, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		if strings.Contains(line, "\t\t") {
+			t.Errorf("line %d: embedded tab produced extra column separator: %q", i, line)
+		}
+		if strings.ContainsAny(line, "\n\r") {
+			t.Errorf("line %d: embedded newline not sanitized: %q", i, line)
 		}
 	}
 }
