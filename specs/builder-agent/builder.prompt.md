@@ -283,6 +283,22 @@ wrong-default behaviors that cause implementations to silently fail spec asserti
 - **Correct pattern:** Use `sort.SliceStable` (or `sort.Stable`) when the spec requires
   equal elements to preserve their original relative order.
 
+### bufio.Scanner Line Length Limit
+- **Wrong default:** `bufio.NewScanner` has a max token size of 64KB (`bufio.MaxScanTokenSize`).
+  Lines longer than 64KB cause `scanner.Scan()` to return false and `scanner.Err()` to return
+  `bufio.ErrTooLong` — silently failing on long-line files.
+- **Why it surprises:** Scanner reads lines correctly in tests (test data rarely has 64KB+ lines)
+  but fails silently in production with log files, large JSON, or base64-encoded data.
+- **Correct pattern:** When the spec requires handling lines of any length, call
+  `scanner.Buffer(make([]byte, maxCapacity), maxCapacity)` before the scan loop, where
+  `maxCapacity` is larger than `bufio.MaxScanTokenSize` (e.g., 1<<20 for 1MB):
+  ```go
+  scanner := bufio.NewScanner(file)
+  const maxCapacity = 1 << 20  // 1MB
+  scanner.Buffer(make([]byte, maxCapacity), maxCapacity)
+  for scanner.Scan() { ... }
+  ```
+
 ## Context Files
 
 If you need context:
