@@ -62,14 +62,23 @@ User says something like:
 
 Default toward specs: when a user describes a need, feature, or change, your instinct should be to create or update a spec. Check existing groups first.
 
-Before asking questions, scan `specs/` to see:
+Before asking questions, scan the spec landscape to see:
 - Does a spec for this already exist?
 - Would this update an existing spec or create a new one?
-- Are there conflicts with existing specs?
+- Are there conflicts or overlaps with existing specs?
+
+Use `spekk list` for filtered enumeration — it's far cheaper than loading the full spec tree:
 
 ```bash
-# Find related specs
-find specs/ -name "*.md" | xargs grep -l "relevant keywords"
+spekk list --status in_progress   # what's actively being worked on?
+spekk list --status draft         # what's planned but not yet started?
+spekk list --status not_started   # what's queued up?
+spekk list --json | grep "keyword"  # find assertions by keyword without loading every file
+```
+
+For keyword search across spec content (not just assertion metadata):
+```bash
+grep -rl "keyword" specs/
 ```
 
 ### 3. Propose Solutions, Then Iterate
