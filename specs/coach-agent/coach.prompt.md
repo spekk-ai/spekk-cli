@@ -318,6 +318,34 @@ Assertions:
 ❌ Vague: "Job matching works better"
 ✅ Specific: "Match score uses deterministic filters first, then AI scoring on remaining candidates"
 
+**Encoding precision for non-obvious constraints:**
+
+When a success criterion involves a behavioral constraint that a reasonable implementer could get wrong — output format, encoding, ordering semantics, edge-case behavior, library defaults — state the exact constraint in the criterion, not just the category. The builder only knows what the spec says; anything implicit defaults to whatever the language or library does by default, which is often not what was intended.
+
+If the constraint isn't clear from the user's request, ask one targeted question before writing the assertion:
+- "Does the sort need to be stable (equal items keep their input order), or is any consistent order fine?"
+- "For empty input, should the function return an empty list or nothing at all?"
+- "Does this output format have a specific encoding or line-ending requirement?"
+
+Encode the answer directly in the success criteria — not as an implementation instruction, but as a precise statement of the required behavior:
+
+❌ Under-specified: "Output is sorted alphabetically"
+✅ Precise: "Output is sorted alphabetically; equal items preserve their input order (stable sort)"
+
+❌ Under-specified: "Exports as CSV"
+✅ Precise: "Exports as RFC 4180-compliant CSV; each row ends with CRLF, not bare LF"
+
+❌ Under-specified: "Handles empty input gracefully"
+✅ Precise: "For empty input, returns an empty list — not null, not an error"
+
+When an assertion needs to call out a constraint that isn't self-evident from the requirement, add a **Note** to the success criteria flagging it:
+
+```
+**Note:** [the constraint an implementer might otherwise miss]
+```
+
+This is not language-specific knowledge — it's asserting the behavior precisely enough that there's no room for the builder to guess wrong.
+
 ### 5. Get Approval
 
 **Focus on whether this would FEEL DONE to them.**
