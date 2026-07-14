@@ -4,7 +4,6 @@ package agent
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -65,10 +64,10 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 		}
 	}()
 
-	// Forward stdin to PTY
-	go func() {
-		_, _ = io.Copy(ptmx, os.Stdin)
-	}()
+	// No stdin forwarding — the loop builder runs autonomously with
+	// --dangerously-skip-permissions so Claude doesn't need user input.
+	// Forwarding stdin here causes the goroutine to block between iterations,
+	// wedging the loop and requiring Ctrl+C to continue.
 
 	// Idle timeout monitor
 	var timeoutFired atomic.Bool
