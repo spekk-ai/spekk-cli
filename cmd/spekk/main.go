@@ -947,8 +947,10 @@ USAGE:
 
 Creates a specs/ directory (at the git root if in a repository, otherwise
 in the current directory) with a short README explaining the format.
-If specs/README.md already exists with a well-formed managed block, that
-block is regenerated in place (human prose outside it is left untouched).
+If specs/README.md already exists, its managed block is regenerated in
+place (well-formed fence), appended (no fence yet — e.g. a legacy or
+hand-written README), or recovered (a corrupt fence). Human prose outside
+the managed block is always left untouched.
 `)
 			return
 		}
@@ -960,7 +962,7 @@ block is regenerated in place (human prose outside it is left untouched).
 
 		readmePath := filepath.Join(specsDir, "README.md")
 		if existing, err := os.ReadFile(readmePath); err == nil {
-			if updated, ok := replaceManagedReadmeBlock(string(existing)); ok && updated != string(existing) {
+			if updated, changed := regenerateReadmeContent(string(existing)); changed {
 				if err := os.WriteFile(readmePath, []byte(updated), 0o644); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
 					os.Exit(1)

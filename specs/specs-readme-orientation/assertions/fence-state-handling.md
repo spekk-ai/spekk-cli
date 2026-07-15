@@ -3,7 +3,7 @@ id: fence-state-handling
 parent: specs-readme-orientation
 created: 2026-07-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/specs-readme-orientation
 depends-on: idempotent-regeneration
 ---
@@ -50,3 +50,8 @@ markers → original text preserved + one region appended; (b) only a begin
 marker; (c) only an end marker; (d) duplicate begin markers; (e) end-before-begin.
 Each asserts the post-pass file has exactly one well-formed region, that text
 outside any marker is preserved, and that a second pass is byte-identical.
+
+**Tests:** cmd/spekk/readme_test.go (TestRegenerateReadmeContent_FenceStates,
+TestRegenerateReadmeContent_LegacyUpgradeAppendsOneRegion),
+cmd/spekk/init_test.go (TestRunInit_UpgradesLegacyReadme,
+TestRunInit_RecoversCorruptFence)

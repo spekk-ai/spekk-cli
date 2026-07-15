@@ -135,3 +135,101 @@ func spliceManagedReadmeBlock(content, newBlock string) (result string, ok bool)
 func replaceManagedReadmeBlock(content string) (result string, ok bool) {
 	return spliceManagedReadmeBlock(content, renderManagedReadmeBlock())
 }
+
+// appendManagedReadmeBlock appends a fresh managed region to existing, as
+// the final block, separated from it by exactly one blank line and ending
+// in a single trailing newline. If existing is empty (or all newlines), the
+// managed region is the entire result — no leading blank line to nothing.
+//
+// Used both to upgrade a legacy/static README that has no fence yet, and to
+// reassemble a README after a corrupt fence has been stripped down to the
+// human prose around it.
+func appendManagedReadmeBlock(existing string) string {
+	trimmed := strings.TrimRight(existing, "\n")
+	if trimmed == "" {
+		return renderManagedReadmeBlock()
+	}
+	return trimmed + "\n\n" + renderManagedReadmeBlock()
+}
+
+// regenerateReadmeContent is the single entry point spekk init uses to
+// bring an existing specs/README.md in line with the current managed
+// block, no matter what fence state it's in:
+//
+//   - Well-formed fence: exactly one begin marker followed later by exactly
+//     one end marker. Delegates to replaceManagedReadmeBlock, the
+//     idempotent-regeneration happy path (replace in place).
+//   - No fence at all: a legacy/static README (or a hand-written one with
+//     no markers). The entire file is preserved and a fresh managed region
+//     is appended as the final block.
+//   - Anything else is corrupt: a begin with no end after it, an end with
+//     no begin before it, duplicate begins or ends, or an end before a
+//     begin. The CLI never patches a corrupt fence — it deletes every
+//     marker line plus everything the markers (would have) enclosed, then
+//     appends one fresh, well-formed managed region after whatever prose
+//     remains outside that span. When one marker type is entirely absent
+//     (a dangling begin or a dangling end), the enclosed span extends all
+//     the way to the natural boundary it's missing — EOF for a begin with
+//     no end, the start of the file for an end with no begin — since that
+//     span is exactly what a previous, now-broken managed region would
+//     have occupied. Otherwise (both types present at least once) the
+//     span runs from the earliest to the latest marker line.
+//
+// Detection and stripping use marker-line identity and index arithmetic
+// only — no markdown/HTML parsing, no fuzzy matching. changed reports
+// whether result differs from content.
+func regenerateReadmeContent(content string) (result string, changed bool) {
+	lines := strings.Split(content, "\n")
+
+	var beginLines, endLines []int
+	for i, line := range lines {
+		switch line {
+		case readmeManagedBeginMarker:
+			beginLines = append(beginLines, i)
+		case readmeManagedEndMarker:
+			endLines = append(endLines, i)
+		}
+	}
+
+	wellFormed := len(beginLines) == 1 && len(endLines) == 1 && beginLines[0] < endLines[0]
+	noFence := len(beginLines) == 0 && len(endLines) == 0
+
+	switch {
+	case noFence:
+		updated := appendManagedReadmeBlock(content)
+		return updated, updated != content
+
+	case wellFormed:
+		updated, _ := replaceManagedReadmeBlock(content)
+		return updated, updated != content
+
+	default:
+		var first, last int
+		switch {
+		case len(endLines) == 0:
+			// Dangling begin(s), no end anywhere: the span they would
+			// have enclosed runs to EOF.
+			first, last = beginLines[0], len(lines)-1
+		case len(beginLines) == 0:
+			// Dangling end(s), no begin anywhere: the span they would
+			// have enclosed runs back to the start of the file.
+			first, last = 0, endLines[len(endLines)-1]
+		default:
+			// Both marker types appear at least once (duplicates and/or
+			// out of order): strip from the earliest to the latest
+			// marker line.
+			markerLines := append(append([]int{}, beginLines...), endLines...)
+			first, last = markerLines[0], markerLines[0]
+			for _, m := range markerLines[1:] {
+				first = min(first, m)
+				last = max(last, m)
+			}
+		}
+
+		preserved := append(append([]string{}, lines[:first]...), lines[last+1:]...)
+		outer := strings.Join(preserved, "\n")
+
+		updated := appendManagedReadmeBlock(outer)
+		return updated, true
+	}
+}
