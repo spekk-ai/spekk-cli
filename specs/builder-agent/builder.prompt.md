@@ -251,6 +251,28 @@ status: not_started           # not_started | in_progress | done | failed | draf
 What must be true for this to be considered done...
 ```
 
+**If you author a new assertion file** (e.g., splitting an assertion into
+sub-assertions, or bootstrapping `specs/spec-parser/`), begin it with an
+HTML-comment header immediately after the closing `---` and before the `# `
+title. It renders invisibly on GitHub but stays visible in raw view and
+editors — a cold reader opening the single file understands every field
+without leaving it. Keep it terse; `specs/README.md` is the fuller reference.
+Copy the literal block below (do not paraphrase it):
+
+```
+<!--
+  id         — kebab-case identifier for this assertion
+  parent     — id of the spec this assertion belongs to
+  created    — ISO 8601 UTC timestamp of when this assertion was authored
+  priority   — 1 (highest) | 2 (medium) | 3 (lowest)
+  status     — not_started | in_progress | done | draft | failed
+  branch     — git branch this assertion's work lives on (optional; omit for main)
+  depends-on — id of an assertion that must be done first (optional)
+  locked-by  — builder-{hostname}-{pid}-{timestamp}; set only while in_progress
+  See specs/README.md for the full concept + frontmatter reference.
+-->
+```
+
 ## Key Rules
 
 - Work at the **assertion level** (not spec level)

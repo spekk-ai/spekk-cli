@@ -3,7 +3,7 @@ id: self-documenting-file-headers
 parent: specs-readme-orientation
 created: 2026-07-15T00:00:00Z
 priority: 2
-status: not_started
+status: done
 branch: feat/specs-readme-orientation
 depends-on: managed-readme-block
 ---
@@ -67,3 +67,23 @@ HTML-comment header template for both spec and assertion files, the header names
 every frontmatter field, and it contains the `specs/README.md` pointer line;
 the builder prompt contains the assertion header template. (No Go runtime code
 path here — the check is on the committed prompt text.)
+
+**Tests:** Verified by manual inspection of the committed prompt text (no Go
+runtime code path exists for this assertion):
+- `specs/coach-agent/coach.prompt.md` contains a literal `<!-- ... -->` header
+  template for spec files (documenting `id, created, priority, branch`, plus a
+  line explaining `status` is computed/not stored on specs) and a second
+  literal template for assertion files (documenting `id, parent, created,
+  priority, status, branch, depends-on, locked-by`), each ending with the line
+  `See specs/README.md for the full concept + frontmatter reference.`
+- `specs/builder-agent/builder.prompt.md` carries the same literal assertion
+  header template and pointer line, for the case where the builder authors a
+  new assertion file.
+- Field docs were cross-checked against `internal/parser/parser.go` (valid
+  `status` values: `not_started`, `in_progress`, `done`, `draft`, `failed`)
+  and against real committed spec/assertion files for the `id`/`created`/
+  `priority`/`branch`/`depends-on`/`locked-by` shapes.
+- No `.go` files were touched by this assertion (prompt-only change); no new
+  Go test is added or required — a concurrent builder owns the Go-side work
+  for this feature (`cmd/spekk/readme.go`, `readme_test.go`), and this
+  assertion is intentionally scoped to the two prompt files only.
