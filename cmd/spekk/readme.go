@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // specSchemaVersion is the current version of the specs/ frontmatter schema
 // documented in the managed region of specs/README.md. Bump it whenever the
@@ -94,4 +97,41 @@ func renderManagedReadmeBlock() string {
 // result always ends in exactly one trailing newline.
 func renderSpecsReadme() string {
 	return specsReadmeIntro + "\n" + renderManagedReadmeBlock()
+}
+
+// spliceManagedReadmeBlock replaces the span from the begin-marker line
+// through the end-marker line (inclusive) in content with newBlock, using
+// marker-delimited string searching only (no markdown/HTML parser, no
+// line-by-line diff). Everything before the begin marker and everything
+// after the end marker's line is preserved byte-for-byte.
+//
+// ok is false when content does not contain a well-formed fence — a begin
+// marker followed later by an end marker — in which case content is
+// returned unchanged. Callers that need to handle malformed or missing
+// fences do so themselves; this function only knows the happy path.
+func spliceManagedReadmeBlock(content, newBlock string) (result string, ok bool) {
+	beginIdx := strings.Index(content, readmeManagedBeginMarker)
+	if beginIdx == -1 {
+		return content, false
+	}
+	endIdx := strings.Index(content[beginIdx:], readmeManagedEndMarker)
+	if endIdx == -1 {
+		return content, false
+	}
+	endIdx += beginIdx
+
+	// newBlock already supplies the newline that terminates the end
+	// marker's line, so drop the corresponding newline from what follows
+	// in content to avoid doubling it.
+	after := strings.TrimPrefix(content[endIdx+len(readmeManagedEndMarker):], "\n")
+
+	return content[:beginIdx] + newBlock + after, true
+}
+
+// replaceManagedReadmeBlock regenerates the managed region of an existing
+// specs/README.md in place, using the current renderManagedReadmeBlock
+// output. See spliceManagedReadmeBlock for the splice contract and the
+// meaning of ok.
+func replaceManagedReadmeBlock(content string) (result string, ok bool) {
+	return spliceManagedReadmeBlock(content, renderManagedReadmeBlock())
 }

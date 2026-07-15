@@ -60,3 +60,73 @@ func TestRenderManagedReadmeBlock_Pure(t *testing.T) {
 		t.Fatalf("expected renderManagedReadmeBlock to be pure, got two different renders:\n---\n%s\n---\n%s", first, second)
 	}
 }
+
+// TestSpliceManagedReadmeBlock_PreservesOuterProse asserts that splicing a
+// new managed block into a README replaces only the span from the begin
+// marker line through the end marker line, leaving the surrounding human
+// prose byte-for-byte untouched.
+func TestSpliceManagedReadmeBlock_PreservesOuterProse(t *testing.T) {
+	before := "# My Project\n\nSome human intro that spekk does not own.\n\n"
+	after := "\n## Human Notes\n\nDon't touch this section.\n"
+	oldBlock := readmeManagedBeginMarker + "\nold body\n" + readmeManagedEndMarker + "\n"
+	content := before + oldBlock + after
+
+	newBlock := renderManagedReadmeBlock()
+	got, ok := spliceManagedReadmeBlock(content, newBlock)
+	if !ok {
+		t.Fatalf("expected a well-formed fence to be found in:\n%s", content)
+	}
+
+	want := before + newBlock + after
+	if got != want {
+		t.Fatalf("splice did not preserve outer prose / swap the managed body correctly\ngot:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// TestReplaceManagedReadmeBlock_Idempotent is the headline idempotency
+// guarantee: regenerating a README that already contains the current
+// render, with no change to specSchemaVersion, must be a byte-exact no-op,
+// and regenerating twice in a row must produce identical output both times.
+func TestReplaceManagedReadmeBlock_Idempotent(t *testing.T) {
+	before := "# Notes\n\nHuman prose before the fence.\n\n"
+	after := "\nHuman prose after the fence.\n"
+	content := before + renderManagedReadmeBlock() + after
+
+	first, ok := replaceManagedReadmeBlock(content)
+	if !ok {
+		t.Fatalf("expected a well-formed fence to be found in:\n%s", content)
+	}
+	if first != content {
+		t.Fatalf("expected regeneration with an unchanged schema version to be a no-op\ngot:\n%q\nwant:\n%q", first, content)
+	}
+
+	second, ok := replaceManagedReadmeBlock(first)
+	if !ok {
+		t.Fatalf("expected a well-formed fence to be found on the second pass")
+	}
+	if second != first {
+		t.Fatalf("expected two consecutive regenerations to be byte-identical\nfirst:\n%q\nsecond:\n%q", first, second)
+	}
+}
+
+// TestSpliceManagedReadmeBlock_VersionChangePreservesOuterProse simulates a
+// schema version bump (a different rendered managed block) and asserts the
+// splice still replaces only the fenced span, preserving human prose outside
+// it verbatim rather than corrupting the file.
+func TestSpliceManagedReadmeBlock_VersionChangePreservesOuterProse(t *testing.T) {
+	before := "# Notes\n\nHuman prose before the fence.\n\n"
+	after := "\nHuman prose after the fence.\n"
+	oldBlock := readmeManagedBeginMarker + "\nschema v1 body\n" + readmeManagedEndMarker + "\n"
+	newBlock := readmeManagedBeginMarker + "\nschema v2 body\n" + readmeManagedEndMarker + "\n"
+	content := before + oldBlock + after
+
+	got, ok := spliceManagedReadmeBlock(content, newBlock)
+	if !ok {
+		t.Fatalf("expected a well-formed fence to be found in:\n%s", content)
+	}
+
+	want := before + newBlock + after
+	if got != want {
+		t.Fatalf("expected version-bumped block to replace old block while preserving outer prose\ngot:\n%q\nwant:\n%q", got, want)
+	}
+}

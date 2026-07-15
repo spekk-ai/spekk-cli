@@ -3,7 +3,7 @@ id: idempotent-regeneration
 parent: specs-readme-orientation
 created: 2026-07-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/specs-readme-orientation
 depends-on: managed-readme-block
 ---
@@ -56,3 +56,8 @@ outro`; run regeneration; assert (1) the outer text is byte-identical to the
 input outside the fence, (2) the managed region equals the current render, and
 (3) a second regeneration yields output byte-identical to the first. Add a case
 that bumps the version constant and asserts the outer prose still survives.
+
+**Tests:** `cmd/spekk/readme_test.go` (splice preserves outer prose, idempotent
+regeneration is byte-exact, a simulated version bump still preserves outer
+prose), `cmd/spekk/init_test.go` (CLI-level: a re-run of `spekk init` is
+byte-identical; a re-run preserves human prose appended after the fence).

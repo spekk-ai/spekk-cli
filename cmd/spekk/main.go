@@ -947,7 +947,8 @@ USAGE:
 
 Creates a specs/ directory (at the git root if in a repository, otherwise
 in the current directory) with a short README explaining the format.
-Does nothing if specs/ already exists.
+If specs/README.md already exists with a well-formed managed block, that
+block is regenerated in place (human prose outside it is left untouched).
 `)
 			return
 		}
@@ -956,6 +957,18 @@ Does nothing if specs/ already exists.
 	specsDir := findSpecsDir()
 	if info, err := os.Stat(specsDir); err == nil && info.IsDir() {
 		fmt.Printf("specs/ already exists at %s — you're set.\n", specsDir)
+
+		readmePath := filepath.Join(specsDir, "README.md")
+		if existing, err := os.ReadFile(readmePath); err == nil {
+			if updated, ok := replaceManagedReadmeBlock(string(existing)); ok && updated != string(existing) {
+				if err := os.WriteFile(readmePath, []byte(updated), 0o644); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
+					os.Exit(1)
+				}
+				fmt.Println("Refreshed the managed block in specs/README.md.")
+			}
+		}
+
 		fmt.Println(`Run "spekk coach" to draft a spec, or "spekk next" to see what's ready.`)
 		return
 	}
