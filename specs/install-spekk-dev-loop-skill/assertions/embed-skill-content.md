@@ -3,7 +3,7 @@ id: embed-skill-content
 parent: install-spekk-dev-loop-skill
 created: 2026-07-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # The `spekk-dev-loop` Skill Content Ships in the Binary
