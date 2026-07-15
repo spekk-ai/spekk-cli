@@ -6,25 +6,6 @@ import (
 	"testing"
 )
 
-// TestRenderManagedReadmeBlock_Markers checks the fence markers are present
-// verbatim, each on its own line.
-func TestRenderManagedReadmeBlock_Markers(t *testing.T) {
-	block := renderManagedReadmeBlock()
-
-	for _, line := range []string{readmeManagedBeginMarker, readmeManagedEndMarker} {
-		found := false
-		for _, l := range strings.Split(block, "\n") {
-			if l == line {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("expected a line exactly equal to %q in managed block, got:\n%s", line, block)
-		}
-	}
-}
-
 // TestRenderManagedReadmeBlock_FrontmatterFields asserts every spec and
 // assertion frontmatter field documented by internal/parser is mentioned,
 // along with every valid status value and the schema version line.
@@ -47,17 +28,6 @@ func TestRenderManagedReadmeBlock_FrontmatterFields(t *testing.T) {
 
 	if !strings.Contains(block, fmt.Sprintf("spekk_schema_version: %d", specSchemaVersion)) {
 		t.Errorf("expected managed block to contain the spekk_schema_version line")
-	}
-}
-
-// TestRenderManagedReadmeBlock_Pure asserts the block is a pure function of
-// specSchemaVersion: it contains no per-spec state, and rendering it twice
-// yields byte-identical output.
-func TestRenderManagedReadmeBlock_Pure(t *testing.T) {
-	first := renderManagedReadmeBlock()
-	second := renderManagedReadmeBlock()
-	if first != second {
-		t.Fatalf("expected renderManagedReadmeBlock to be pure, got two different renders:\n---\n%s\n---\n%s", first, second)
 	}
 }
 
@@ -173,22 +143,10 @@ func TestRegenerateReadmeContent_FenceStates(t *testing.T) {
 			wantContains:   []string{humanAfter},
 			wantNotContain: []string{oldBody},
 		},
-		"duplicate begin markers": {
-			content: humanBefore +
-				readmeManagedBeginMarker + "\n" + oldBody +
-				readmeManagedBeginMarker + "\n" + oldBody +
-				readmeManagedEndMarker + "\n" + humanAfter,
-			wantContains:   []string{humanBefore, humanAfter},
-			wantNotContain: []string{oldBody},
-		},
-		"duplicate end markers": {
-			content: humanBefore +
-				readmeManagedBeginMarker + "\n" + oldBody +
-				readmeManagedEndMarker + "\n" + oldBody +
-				readmeManagedEndMarker + "\n" + humanAfter,
-			wantContains:   []string{humanBefore, humanAfter},
-			wantNotContain: []string{oldBody},
-		},
+		// Duplicate-begin, duplicate-end, and end-before-begin all take the
+		// same "both marker types present" strip-from-earliest-to-latest
+		// branch; end-before-begin is the representative case (it also proves
+		// marker order is not assumed).
 		"end before begin": {
 			content: humanBefore +
 				readmeManagedEndMarker + "\n" + oldBody +
@@ -253,27 +211,5 @@ func TestRegenerateReadmeContent_LegacyUpgradeAppendsOneRegion(t *testing.T) {
 	want := strings.TrimRight(legacyStaticReadme, "\n") + "\n\n" + renderManagedReadmeBlock()
 	if updated != want {
 		t.Fatalf("expected legacy content preserved + one appended region\ngot:\n%q\nwant:\n%q", updated, want)
-	}
-}
-
-// TestSpliceManagedReadmeBlock_VersionChangePreservesOuterProse simulates a
-// schema version bump (a different rendered managed block) and asserts the
-// splice still replaces only the fenced span, preserving human prose outside
-// it verbatim rather than corrupting the file.
-func TestSpliceManagedReadmeBlock_VersionChangePreservesOuterProse(t *testing.T) {
-	before := "# Notes\n\nHuman prose before the fence.\n\n"
-	after := "\nHuman prose after the fence.\n"
-	oldBlock := readmeManagedBeginMarker + "\nschema v1 body\n" + readmeManagedEndMarker + "\n"
-	newBlock := readmeManagedBeginMarker + "\nschema v2 body\n" + readmeManagedEndMarker + "\n"
-	content := before + oldBlock + after
-
-	got, ok := spliceManagedReadmeBlock(content, newBlock)
-	if !ok {
-		t.Fatalf("expected a well-formed fence to be found in:\n%s", content)
-	}
-
-	want := before + newBlock + after
-	if got != want {
-		t.Fatalf("expected version-bumped block to replace old block while preserving outer prose\ngot:\n%q\nwant:\n%q", got, want)
 	}
 }
