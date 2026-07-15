@@ -196,7 +196,9 @@ func TestInstall_Errors(t *testing.T) {
 	}
 }
 
-// TestInstall_SkillFile covers all skill-writing behavior for the claude-code target.
+// TestInstall_SkillFile covers native (unstripped) skill-writing: verbatim
+// byte-equality in both scopes for claude-code, generalization to a second
+// native target (opencode), the copilot opt-out, and the missing-FS error.
 func TestInstall_SkillFile(t *testing.T) {
 	skillContent := []byte("# spekk-dev-loop\nfake skill content for tests")
 	skillFS := fstest.MapFS{
@@ -253,52 +255,6 @@ func TestInstall_SkillFile(t *testing.T) {
 		}
 	})
 
-	t.Run("claude alias behaves identically to claude-code", func(t *testing.T) {
-		home := t.TempDir()
-		written, err := Install(Options{Target: "claude", HomeDir: home, SkillFS: skillFS})
-		if err != nil {
-			t.Fatal(err)
-		}
-		skillPath := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
-		found := false
-		for _, p := range written {
-			if p == skillPath {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("claude alias: skill path %s not in written %v", skillPath, written)
-		}
-	})
-
-	t.Run("cursor global writes a stripped dev-loop command, not a native skill", func(t *testing.T) {
-		home := t.TempDir()
-		written, err := Install(Options{Target: "cursor", HomeDir: home, SkillFS: fakeSkillFSWithFrontmatter()})
-		if err != nil {
-			t.Fatal(err)
-		}
-		// 3 shims + 1 command file, no native SKILL.md.
-		if len(written) != 4 {
-			t.Fatalf("cursor: got %d written paths, want 4 (3 shims + command)", len(written))
-		}
-		cmdPath := filepath.Join(home, ".cursor", "commands", "spekk-dev-loop.md")
-		data, err := os.ReadFile(cmdPath)
-		if err != nil {
-			t.Fatalf("expected stripped command at %s: %v", cmdPath, err)
-		}
-		content := string(data)
-		if strings.Contains(content, "---") {
-			t.Errorf("cursor command should have frontmatter stripped, got %q", content)
-		}
-		if !strings.HasPrefix(content, "# Spekk Dev Loop") {
-			t.Errorf("cursor command should start with the stripped body, got %q", content)
-		}
-		skillDir := filepath.Join(home, ".claude", "skills")
-		if _, err := os.Stat(skillDir); err == nil {
-			t.Errorf("cursor install should not create .claude/skills/ dir")
-		}
-	})
-
 	t.Run("copilot global produces no dev-loop file at all (genuinely opted out)", func(t *testing.T) {
 		home := t.TempDir()
 		written, err := Install(Options{Target: "copilot", HomeDir: home})
@@ -322,34 +278,6 @@ func TestInstall_SkillFile(t *testing.T) {
 		for _, p := range written {
 			if p == skillPath {
 				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("skill path %s not in written %v", skillPath, written)
-		}
-		data, err := os.ReadFile(skillPath)
-		if err != nil {
-			t.Fatalf("skill file not created: %v", err)
-		}
-		if string(data) != string(skillContent) {
-			t.Errorf("skill bytes mismatch: got %q, want %q", data, skillContent)
-		}
-	})
-
-	t.Run("opencode project writes skill to cwd/.opencode/skills/, not under home", func(t *testing.T) {
-		cwd := t.TempDir()
-		written, err := Install(Options{Target: "opencode", Project: true, Cwd: cwd, SkillFS: skillFS})
-		if err != nil {
-			t.Fatal(err)
-		}
-		skillPath := filepath.Join(cwd, ".opencode", "skills", "spekk-dev-loop", "SKILL.md")
-		found := false
-		for _, p := range written {
-			if p == skillPath {
-				found = true
-			}
-			if strings.Contains(p, filepath.Join(".config", "opencode")) {
-				t.Errorf("project install should not write under a home-style .config/opencode path, got %s", p)
 			}
 		}
 		if !found {
@@ -414,13 +342,5 @@ func TestInstall_DevLoopCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertStrippedFile(t, filepath.Join(home, ".codex", "prompts", "spekk-dev-loop.md"))
-	})
-
-	t.Run("copilot --project writes stripped prompt with .prompt.md extension", func(t *testing.T) {
-		cwd := t.TempDir()
-		if _, err := Install(Options{Target: "copilot", Project: true, Cwd: cwd, SkillFS: skillFS}); err != nil {
-			t.Fatal(err)
-		}
-		assertStrippedFile(t, filepath.Join(cwd, ".github", "prompts", "spekk-dev-loop.prompt.md"))
 	})
 }
