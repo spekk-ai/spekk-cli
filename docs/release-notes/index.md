@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.10.7 -- Init Creates the README in Pre-Existing `specs/`](RELEASE-NOTES-1.10.7.md)
+
+Fixes a 1.10.6 gap: `spekk init` on a project whose `specs/` directory already existed but had no `README.md` wrote nothing. It now creates the managed README, covering all four states (missing, legacy, well-formed, corrupt).
+
 ## [1.10.6 -- Self-Documenting `specs/` Tree](RELEASE-NOTES-1.10.6.md)
 
 `spekk init` writes a `specs/README.md` with a CLI-managed, idempotently-regenerated block documenting the concept model, frontmatter schema, and a `spekk_schema_version` — human prose outside the fence is never touched, and legacy/corrupt READMEs are upgraded or recovered in place. The coach and builder agents also add inline frontmatter-header comments to newly authored spec/assertion files.
