@@ -92,8 +92,8 @@ func TestInstall_Targets(t *testing.T) {
 		{"copilot", true, []string{".github", "agents"}, "spekk-coach.agent.md", "", "", nil},
 		{"cursor", false, []string{".cursor", "agents"}, "spekk-coach.md", "name: spekk-coach", "", nil},
 		{"cursor", true, []string{".cursor", "agents"}, "spekk-coach.md", "", "", nil},
-		{"opencode", false, []string{".config", "opencode", "agents"}, "spekk-coach.md", "mode: subagent", "name:", nil},
-		{"opencode", true, []string{".opencode", "agents"}, "spekk-coach.md", "", "", nil},
+		{"opencode", false, []string{".config", "opencode", "agents"}, "spekk-coach.md", "mode: subagent", "name:", fakeSkillFS()},
+		{"opencode", true, []string{".opencode", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
 		{"codex", false, []string{".codex", "prompts"}, "spekk-coach.md", "", "---", nil},
 	}
 
@@ -251,6 +251,59 @@ func TestInstall_SkillFile(t *testing.T) {
 		skillDir := filepath.Join(home, ".claude", "skills")
 		if _, err := os.Stat(skillDir); err == nil {
 			t.Errorf("cursor install should not create .claude/skills/ dir")
+		}
+	})
+
+	t.Run("opencode global writes skill to home/.config/opencode/skills/", func(t *testing.T) {
+		home := t.TempDir()
+		written, err := Install(Options{Target: "opencode", HomeDir: home, SkillFS: skillFS})
+		if err != nil {
+			t.Fatal(err)
+		}
+		skillPath := filepath.Join(home, ".config", "opencode", "skills", "spekk-dev-loop", "SKILL.md")
+		found := false
+		for _, p := range written {
+			if p == skillPath {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("skill path %s not in written %v", skillPath, written)
+		}
+		data, err := os.ReadFile(skillPath)
+		if err != nil {
+			t.Fatalf("skill file not created: %v", err)
+		}
+		if string(data) != string(skillContent) {
+			t.Errorf("skill bytes mismatch: got %q, want %q", data, skillContent)
+		}
+	})
+
+	t.Run("opencode project writes skill to cwd/.opencode/skills/, not under home", func(t *testing.T) {
+		cwd := t.TempDir()
+		written, err := Install(Options{Target: "opencode", Project: true, Cwd: cwd, SkillFS: skillFS})
+		if err != nil {
+			t.Fatal(err)
+		}
+		skillPath := filepath.Join(cwd, ".opencode", "skills", "spekk-dev-loop", "SKILL.md")
+		found := false
+		for _, p := range written {
+			if p == skillPath {
+				found = true
+			}
+			if strings.Contains(p, filepath.Join(".config", "opencode")) {
+				t.Errorf("project install should not write under a home-style .config/opencode path, got %s", p)
+			}
+		}
+		if !found {
+			t.Fatalf("skill path %s not in written %v", skillPath, written)
+		}
+		data, err := os.ReadFile(skillPath)
+		if err != nil {
+			t.Fatalf("skill file not created: %v", err)
+		}
+		if string(data) != string(skillContent) {
+			t.Errorf("skill bytes mismatch: got %q, want %q", data, skillContent)
 		}
 	})
 

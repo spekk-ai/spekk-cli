@@ -3,7 +3,7 @@ id: install-writes-skill-for-opencode
 parent: install-spekk-dev-loop-skill
 created: 2026-07-15T00:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: install-writes-skill-for-claude-code
 ---
 

@@ -91,6 +91,13 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return fmt.Sprintf("---\ndescription: %q\nmode: subagent\n---\n", descriptions[agent])
 		},
+		globalPath: func(home string) string {
+			return filepath.Join(home, ".config", "opencode", "skills", "spekk-dev-loop", "SKILL.md")
+		},
+		projectPath: func(cwd string) string {
+			return filepath.Join(cwd, ".opencode", "skills", "spekk-dev-loop", "SKILL.md")
+		},
+		strip: false,
 	},
 	"codex": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".codex", "prompts") },
