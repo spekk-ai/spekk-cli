@@ -58,6 +58,16 @@ type target struct {
 	projectDir  string // empty means --project is unsupported
 	fileExt     string // defaults to ".md"
 	frontmatter func(agent string) string
+
+	// Skill destination: where the bundled spekk-dev-loop skill/command
+	// goes for this host tool. Either func may be nil/return "" to opt
+	// that scope out of writing a dev-loop file. strip controls whether
+	// the embedded skill's YAML frontmatter is removed before writing
+	// (command/prompt harnesses) or written verbatim (native-skill
+	// harnesses).
+	globalPath  func(home string) string
+	projectPath func(cwd string) string
+	strip       bool
 }
 
 var targets = map[string]target{
@@ -67,6 +77,13 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
 		},
+		globalPath: func(home string) string {
+			return filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+		},
+		projectPath: func(cwd string) string {
+			return filepath.Join(cwd, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+		},
+		strip: false,
 	},
 	"opencode": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".config", "opencode", "agents") },
@@ -191,29 +208,53 @@ func Install(opts Options) ([]string, error) {
 		written = append(written, path)
 	}
 
-	// claude-code also installs the bundled spekk-dev-loop skill.
-	if name == "claude-code" {
+	// Resolve the descriptor's dev-loop destination for the active scope.
+	// A "" path opts this target+scope out: no FS read, no file written.
+	var skillPath string
+	if opts.Project {
+		if t.projectPath != nil {
+			skillPath = t.projectPath(base)
+		}
+	} else {
+		if t.globalPath != nil {
+			skillPath = t.globalPath(base)
+		}
+	}
+
+	if skillPath != "" {
 		skillFS := opts.SkillFS
 		if skillFS == nil {
 			skillFS = DefaultSkillFS
 		}
 		if skillFS == nil {
-			return nil, fmt.Errorf("no skill FS available for claude-code install; set install.DefaultSkillFS in main or provide Options.SkillFS")
+			return nil, fmt.Errorf("no skill FS available for %s install; set install.DefaultSkillFS in main or provide Options.SkillFS", name)
 		}
 		data, err := fs.ReadFile(skillFS, skillEmbedPath)
 		if err != nil {
 			return nil, fmt.Errorf("reading embedded skill %s: %w", skillEmbedPath, err)
 		}
-		skillDir := filepath.Join(base, ".claude", "skills", "spekk-dev-loop")
+		content := data
+		if t.strip {
+			content = stripFrontmatter(content)
+		}
+		skillDir := filepath.Dir(skillPath)
 		if err := os.MkdirAll(skillDir, 0o755); err != nil {
 			return nil, fmt.Errorf("creating %s: %w", skillDir, err)
 		}
-		skillPath := filepath.Join(skillDir, "SKILL.md")
-		if err := os.WriteFile(skillPath, data, 0o644); err != nil {
+		if err := os.WriteFile(skillPath, content, 0o644); err != nil {
 			return nil, fmt.Errorf("writing %s: %w", skillPath, err)
 		}
 		written = append(written, skillPath)
 	}
 
 	return written, nil
+}
+
+// stripFrontmatter removes a leading YAML frontmatter block (the opening
+// "---", the fields, the closing "---", and the following blank line) from
+// content destined for command/prompt harnesses. No populated target sets
+// strip:true yet, so this is a placeholder no-op; the real implementation
+// belongs to install-writes-devloop-command-for-prompt-targets.
+func stripFrontmatter(data []byte) []byte {
+	return data
 }
