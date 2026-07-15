@@ -322,7 +322,7 @@ status: not_started
 	data := buildShowData(specsDir, result)
 	jsonBytes, _ := json.Marshal(data)
 	html := strings.Replace(templateHTML, "/*__SPEKK_DATA__*/", string(jsonBytes), 1)
-	html = strings.Replace(html, "</body>", sseClientScript+"\n</body>", 1)
+	html = injectSSEClient(html)
 
 	if !strings.Contains(html, "EventSource") {
 		t.Error("watch-mode HTML should contain EventSource SSE client")
@@ -332,5 +332,38 @@ status: not_started
 	}
 	if !strings.Contains(html, "test-spec") {
 		t.Error("HTML should contain spec data")
+	}
+	// Regression (watch mode broke when a bundled DOMPurify build introduced a
+	// literal "</body></html>" in its source before the real closing tag): the
+	// client must be injected exactly once, at the LAST </body>, never inside
+	// an earlier library <script>. If it split the library, the client would
+	// sit before the final </body> AND the tail of the library would follow it.
+	if got := strings.Count(html, sseClientScript); got != 1 {
+		t.Fatalf("SSE client should be injected exactly once, got %d", got)
+	}
+	if strings.LastIndex(html, sseClientScript) != strings.LastIndex(html, "</body>")-len(sseClientScript)-1 {
+		t.Error("SSE client must be injected immediately before the final </body>")
+	}
+}
+
+// TestInjectSSEClient_TargetsLastBodyTag pins the anchor choice directly: with
+// an earlier "</body>" inside a script (as the bundled sanitizer's source
+// has), the client must land before the trailing document </body>, not the
+// decoy — otherwise its </script> prematurely closes the library block.
+func TestInjectSSEClient_TargetsLastBodyTag(t *testing.T) {
+	html := `<html><head><script>var x="</body></html>";</script></head><body><h1>hi</h1></body></html>`
+	out := injectSSEClient(html)
+
+	if strings.Count(out, sseClientScript) != 1 {
+		t.Fatalf("expected exactly one injection, got %d", strings.Count(out, sseClientScript))
+	}
+	// The injection must sit after the decoy </body> (inside the script) and
+	// immediately before the real trailing one.
+	decoyEnd := strings.Index(html, `</html>";`)
+	if strings.Index(out, sseClientScript) <= decoyEnd {
+		t.Error("injected before the decoy </body> inside the script — would break the library")
+	}
+	if !strings.Contains(out, sseClientScript+"\n</body></html>") {
+		t.Error("injection should be immediately before the final </body>")
 	}
 }

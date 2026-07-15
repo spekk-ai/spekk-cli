@@ -54,6 +54,7 @@ nav = [
   { "Migration (npm → Go)" = "migration.md" },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.10.10 — Fix Broken Markdown in spekk show --watch" = "release-notes/RELEASE-NOTES-1.10.10.md" },
     { "1.10.9 — Remove Self-Documenting Spec Headers" = "release-notes/RELEASE-NOTES-1.10.9.md" },
     { "1.10.8 — Dev-Loop Skill for Every Harness" = "release-notes/RELEASE-NOTES-1.10.8.md" },
     { "1.10.7 — Init Creates README in Pre-Existing specs/" = "release-notes/RELEASE-NOTES-1.10.7.md" },
