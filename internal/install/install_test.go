@@ -17,6 +17,39 @@ func fakeSkillFS() fs.FS {
 	}
 }
 
+// fakeSkillContentWithFrontmatter mirrors the real embedded skill's shape
+// (YAML frontmatter, blank line, then the body) so strip-specific tests
+// actually exercise stripFrontmatter instead of a no-op.
+const fakeSkillContentWithFrontmatter = "---\nname: spekk-dev-loop\ndescription: \"fake\"\n---\n\n# Spekk Dev Loop\nfake skill content for tests\n"
+
+// fakeSkillFSWithFrontmatter returns an in-memory FS whose skill content has
+// a real leading frontmatter block, for command/prompt targets that strip it.
+func fakeSkillFSWithFrontmatter() fs.FS {
+	return fstest.MapFS{
+		skillEmbedPath: &fstest.MapFile{Data: []byte(fakeSkillContentWithFrontmatter)},
+	}
+}
+
+// TestStripFrontmatter covers the shared helper directly: it must remove a
+// leading YAML frontmatter block through the closing "---" and the single
+// blank line after it, and must leave content without a leading "---\n"
+// untouched.
+func TestStripFrontmatter(t *testing.T) {
+	got := stripFrontmatter([]byte(fakeSkillContentWithFrontmatter))
+	want := "# Spekk Dev Loop\nfake skill content for tests\n"
+	if string(got) != want {
+		t.Errorf("stripFrontmatter(with frontmatter) = %q, want %q", got, want)
+	}
+	if strings.Contains(string(got), "---") {
+		t.Errorf("stripped content should not contain a frontmatter delimiter: %q", got)
+	}
+
+	noFrontmatter := []byte("# Spekk Dev Loop\nno frontmatter here\n")
+	if got := stripFrontmatter(noFrontmatter); string(got) != string(noFrontmatter) {
+		t.Errorf("stripFrontmatter(no leading ---) = %q, want input unchanged %q", got, noFrontmatter)
+	}
+}
+
 // TestInstall_ShimContent verifies the full shim contract on the claude-code
 // target, and that re-installing overwrites cleanly.
 func TestInstall_ShimContent(t *testing.T) {
@@ -89,12 +122,12 @@ func TestInstall_Targets(t *testing.T) {
 		{"claude", false, []string{".claude", "agents"}, "spekk-coach.md", "name: spekk-coach", "", fakeSkillFS()},
 		{"claude-code", true, []string{".claude", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
 		{"copilot", false, []string{".copilot", "agents"}, "spekk-coach.agent.md", "name: spekk-coach", "", nil},
-		{"copilot", true, []string{".github", "agents"}, "spekk-coach.agent.md", "", "", nil},
-		{"cursor", false, []string{".cursor", "agents"}, "spekk-coach.md", "name: spekk-coach", "", nil},
-		{"cursor", true, []string{".cursor", "agents"}, "spekk-coach.md", "", "", nil},
+		{"copilot", true, []string{".github", "agents"}, "spekk-coach.agent.md", "", "", fakeSkillFS()},
+		{"cursor", false, []string{".cursor", "agents"}, "spekk-coach.md", "name: spekk-coach", "", fakeSkillFS()},
+		{"cursor", true, []string{".cursor", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
 		{"opencode", false, []string{".config", "opencode", "agents"}, "spekk-coach.md", "mode: subagent", "name:", fakeSkillFS()},
 		{"opencode", true, []string{".opencode", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
-		{"codex", false, []string{".codex", "prompts"}, "spekk-coach.md", "", "---", nil},
+		{"codex", false, []string{".codex", "prompts"}, "spekk-coach.md", "", "---", fakeSkillFS()},
 	}
 
 	for _, tt := range tests {
@@ -238,19 +271,43 @@ func TestInstall_SkillFile(t *testing.T) {
 		}
 	})
 
-	t.Run("non-claude-code target produces no skill file", func(t *testing.T) {
+	t.Run("cursor global writes a stripped dev-loop command, not a native skill", func(t *testing.T) {
 		home := t.TempDir()
-		written, err := Install(Options{Target: "cursor", HomeDir: home})
+		written, err := Install(Options{Target: "cursor", HomeDir: home, SkillFS: fakeSkillFSWithFrontmatter()})
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Only the 3 shim files; no SKILL.md
-		if len(written) != 3 {
-			t.Fatalf("cursor: got %d written paths, want 3", len(written))
+		// 3 shims + 1 command file, no native SKILL.md.
+		if len(written) != 4 {
+			t.Fatalf("cursor: got %d written paths, want 4 (3 shims + command)", len(written))
+		}
+		cmdPath := filepath.Join(home, ".cursor", "commands", "spekk-dev-loop.md")
+		data, err := os.ReadFile(cmdPath)
+		if err != nil {
+			t.Fatalf("expected stripped command at %s: %v", cmdPath, err)
+		}
+		content := string(data)
+		if strings.Contains(content, "---") {
+			t.Errorf("cursor command should have frontmatter stripped, got %q", content)
+		}
+		if !strings.HasPrefix(content, "# Spekk Dev Loop") {
+			t.Errorf("cursor command should start with the stripped body, got %q", content)
 		}
 		skillDir := filepath.Join(home, ".claude", "skills")
 		if _, err := os.Stat(skillDir); err == nil {
 			t.Errorf("cursor install should not create .claude/skills/ dir")
+		}
+	})
+
+	t.Run("copilot global produces no dev-loop file at all (genuinely opted out)", func(t *testing.T) {
+		home := t.TempDir()
+		written, err := Install(Options{Target: "copilot", HomeDir: home})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Only the 3 shim files; no dev-loop file, no SkillFS needed.
+		if len(written) != 3 {
+			t.Fatalf("copilot global: got %d written paths, want 3, got %v", len(written), written)
 		}
 	})
 
@@ -318,5 +375,52 @@ func TestInstall_SkillFile(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error when both SkillFS and DefaultSkillFS are nil")
 		}
+	})
+}
+
+// TestInstall_DevLoopCommand covers the frontmatter-stripped /spekk-dev-loop
+// command written for cursor, codex, and copilot: the command/prompt
+// harnesses that render a whole file as a prompt (and, for cursor, forbid
+// YAML frontmatter outright).
+func TestInstall_DevLoopCommand(t *testing.T) {
+	skillFS := fakeSkillFSWithFrontmatter()
+
+	assertStrippedFile := func(t *testing.T, path string) {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("expected dev-loop file at %s: %v", path, err)
+		}
+		content := string(data)
+		if strings.Contains(content, "---") {
+			t.Errorf("%s: content should have frontmatter stripped, got %q", path, content)
+		}
+		if !strings.HasPrefix(content, "# Spekk Dev Loop") {
+			t.Errorf("%s: content should start with the stripped body, got %q", path, content)
+		}
+	}
+
+	t.Run("cursor --project writes stripped command to cwd/.cursor/commands/", func(t *testing.T) {
+		cwd := t.TempDir()
+		if _, err := Install(Options{Target: "cursor", Project: true, Cwd: cwd, SkillFS: skillFS}); err != nil {
+			t.Fatal(err)
+		}
+		assertStrippedFile(t, filepath.Join(cwd, ".cursor", "commands", "spekk-dev-loop.md"))
+	})
+
+	t.Run("codex global writes stripped prompt to home/.codex/prompts/", func(t *testing.T) {
+		home := t.TempDir()
+		if _, err := Install(Options{Target: "codex", HomeDir: home, SkillFS: skillFS}); err != nil {
+			t.Fatal(err)
+		}
+		assertStrippedFile(t, filepath.Join(home, ".codex", "prompts", "spekk-dev-loop.md"))
+	})
+
+	t.Run("copilot --project writes stripped prompt with .prompt.md extension", func(t *testing.T) {
+		cwd := t.TempDir()
+		if _, err := Install(Options{Target: "copilot", Project: true, Cwd: cwd, SkillFS: skillFS}); err != nil {
+			t.Fatal(err)
+		}
+		assertStrippedFile(t, filepath.Join(cwd, ".github", "prompts", "spekk-dev-loop.prompt.md"))
 	})
 }

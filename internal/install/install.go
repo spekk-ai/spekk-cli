@@ -5,6 +5,7 @@
 package install
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
@@ -105,6 +106,12 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return ""
 		},
+		globalPath: func(home string) string {
+			return filepath.Join(home, ".codex", "prompts", "spekk-dev-loop.md")
+		},
+		// No projectPath: codex already has no --project support (projectDir
+		// is "" above), so --project errors before skill logic is reached.
+		strip: true,
 	},
 	"copilot": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".copilot", "agents") },
@@ -113,6 +120,12 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
 		},
+		// No globalPath: copilot has no standard global filesystem path for
+		// a personal prompt file, so global installs write no dev-loop file.
+		projectPath: func(cwd string) string {
+			return filepath.Join(cwd, ".github", "prompts", "spekk-dev-loop.prompt.md")
+		},
+		strip: true,
 	},
 	"cursor": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".cursor", "agents") },
@@ -120,6 +133,13 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
 		},
+		globalPath: func(home string) string {
+			return filepath.Join(home, ".cursor", "commands", "spekk-dev-loop.md")
+		},
+		projectPath: func(cwd string) string {
+			return filepath.Join(cwd, ".cursor", "commands", "spekk-dev-loop.md")
+		},
+		strip: true,
 	},
 }
 
@@ -259,9 +279,24 @@ func Install(opts Options) ([]string, error) {
 
 // stripFrontmatter removes a leading YAML frontmatter block (the opening
 // "---", the fields, the closing "---", and the following blank line) from
-// content destined for command/prompt harnesses. No populated target sets
-// strip:true yet, so this is a placeholder no-op; the real implementation
-// belongs to install-writes-devloop-command-for-prompt-targets.
+// content destined for command/prompt harnesses, which render the whole
+// file as a prompt and don't understand (or forbid) YAML frontmatter.
+// Content that does not begin with "---\n" is returned unchanged.
 func stripFrontmatter(data []byte) []byte {
-	return data
+	const opening = "---\n"
+	if !bytes.HasPrefix(data, []byte(opening)) {
+		return data
+	}
+	rest := data[len(opening):]
+
+	const closing = "\n---\n"
+	idx := bytes.Index(rest, []byte(closing))
+	if idx == -1 {
+		// No closing delimiter found; don't guess, return unchanged.
+		return data
+	}
+	body := rest[idx+len(closing):]
+	// Drop the single blank line that follows the closing delimiter.
+	body = bytes.TrimPrefix(body, []byte("\n"))
+	return body
 }
