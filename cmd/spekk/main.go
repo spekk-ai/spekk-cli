@@ -935,31 +935,6 @@ OPTIONS:
 	}
 }
 
-// specsReadme is written by spekk init so the new specs/ directory is
-// non-empty (git tracks it) and explains itself to readers.
-const specsReadme = `# Specs
-
-This directory is a work queue for AI agents, managed with
-[spekk](https://github.com/spekk-ai/spekk-cli).
-
-Each spec is a folder containing a markdown file that states what must be
-true, plus an assertions/ folder breaking that down into small, testable
-assertions:
-
-    specs/
-      my-feature/
-        my-feature.md          # what must be true, and why
-        assertions/
-          first-assertion.md   # one small, verifiable step
-
-Common commands:
-
-    spekk coach      # draft and refine specs with the coach agent
-    spekk builder    # implement the next ready assertion
-    spekk next       # print the next ready assertion
-    spekk status     # overview of all specs and assertions
-`
-
 // runInit creates the specs/ directory so a project can start using spekk.
 func runInit(args []string) {
 	for _, a := range args {
@@ -972,7 +947,10 @@ USAGE:
 
 Creates a specs/ directory (at the git root if in a repository, otherwise
 in the current directory) with a short README explaining the format.
-Does nothing if specs/ already exists.
+If specs/README.md already exists, its managed block is regenerated in
+place (well-formed fence), appended (no fence yet — e.g. a legacy or
+hand-written README), or recovered (a corrupt fence). Human prose outside
+the managed block is always left untouched.
 `)
 			return
 		}
@@ -981,6 +959,18 @@ Does nothing if specs/ already exists.
 	specsDir := findSpecsDir()
 	if info, err := os.Stat(specsDir); err == nil && info.IsDir() {
 		fmt.Printf("specs/ already exists at %s — you're set.\n", specsDir)
+
+		readmePath := filepath.Join(specsDir, "README.md")
+		if existing, err := os.ReadFile(readmePath); err == nil {
+			if updated, changed := regenerateReadmeContent(string(existing)); changed {
+				if err := os.WriteFile(readmePath, []byte(updated), 0o644); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
+					os.Exit(1)
+				}
+				fmt.Println("Refreshed the managed block in specs/README.md.")
+			}
+		}
+
 		fmt.Println(`Run "spekk coach" to draft a spec, or "spekk next" to see what's ready.`)
 		return
 	}
@@ -990,7 +980,7 @@ Does nothing if specs/ already exists.
 		os.Exit(1)
 	}
 	readmePath := filepath.Join(specsDir, "README.md")
-	if err := os.WriteFile(readmePath, []byte(specsReadme), 0o644); err != nil {
+	if err := os.WriteFile(readmePath, []byte(renderSpecsReadme()), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
 		os.Exit(1)
 	}

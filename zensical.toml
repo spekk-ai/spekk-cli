@@ -54,6 +54,7 @@ nav = [
   { "Migration (npm → Go)" = "migration.md" },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.10.6 — Self-Documenting specs/ Tree" = "release-notes/RELEASE-NOTES-1.10.6.md" },
     { "1.10.5 — Dev-Loop Skill + Coach Declarative Rewrite" = "release-notes/RELEASE-NOTES-1.10.5.md" },
     { "1.10.4 — spekk list + Coach Precision" = "release-notes/RELEASE-NOTES-1.10.4.md" },
     { "1.10.3 — Differential Diagnosis Placement Fix" = "release-notes/RELEASE-NOTES-1.10.3.md" },
