@@ -6,11 +6,22 @@ package install
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// skillEmbedPath is the path inside the skill FS where the bundled
+// spekk-dev-loop skill lives.
+const skillEmbedPath = "specs/install-spekk-dev-loop-skill/spekk-dev-loop-skill.md"
+
+// DefaultSkillFS is the FS used to read the bundled spekk-dev-loop skill.
+// Set in main() to spekk.EmbeddedFS; may be overridden per-call via
+// Options.SkillFS. internal/install must not depend on internal/cli, so this
+// is a separate var from cli.DefaultEmbeddedSkillFS.
+var DefaultSkillFS fs.FS
 
 // agents lists the spekk agents installed as shims.
 var agents = []string{"coach", "builder", "observer"}
@@ -37,6 +48,7 @@ type Options struct {
 	Project bool   // install into the project instead of globally
 	HomeDir string // defaults to os.UserHomeDir()
 	Cwd     string // defaults to os.Getwd()
+	SkillFS fs.FS  // FS to read the bundled skill from; falls back to DefaultSkillFS
 }
 
 // target describes where shims go and how their frontmatter is rendered
@@ -134,6 +146,7 @@ func Install(opts Options) ([]string, error) {
 	}
 
 	var dir string
+	var base string // home or cwd, used to compute the skill destination
 	if opts.Project {
 		if t.projectDir == "" {
 			return nil, fmt.Errorf("target %q does not support --project installs; omit --project to install globally", name)
@@ -146,6 +159,7 @@ func Install(opts Options) ([]string, error) {
 			}
 		}
 		dir = filepath.Join(cwd, t.projectDir)
+		base = cwd
 	} else {
 		home := opts.HomeDir
 		if home == "" {
@@ -155,6 +169,7 @@ func Install(opts Options) ([]string, error) {
 			}
 		}
 		dir = t.globalDir(home)
+		base = home
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -175,5 +190,30 @@ func Install(opts Options) ([]string, error) {
 		}
 		written = append(written, path)
 	}
+
+	// claude-code also installs the bundled spekk-dev-loop skill.
+	if name == "claude-code" {
+		skillFS := opts.SkillFS
+		if skillFS == nil {
+			skillFS = DefaultSkillFS
+		}
+		if skillFS == nil {
+			return nil, fmt.Errorf("no skill FS available for claude-code install; set install.DefaultSkillFS in main or provide Options.SkillFS")
+		}
+		data, err := fs.ReadFile(skillFS, skillEmbedPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading embedded skill %s: %w", skillEmbedPath, err)
+		}
+		skillDir := filepath.Join(base, ".claude", "skills", "spekk-dev-loop")
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			return nil, fmt.Errorf("creating %s: %w", skillDir, err)
+		}
+		skillPath := filepath.Join(skillDir, "SKILL.md")
+		if err := os.WriteFile(skillPath, data, 0o644); err != nil {
+			return nil, fmt.Errorf("writing %s: %w", skillPath, err)
+		}
+		written = append(written, skillPath)
+	}
+
 	return written, nil
 }

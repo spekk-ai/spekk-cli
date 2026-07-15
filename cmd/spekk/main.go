@@ -34,6 +34,7 @@ func main() {
 	// Set embedded assets so agents and skills work when binary is installed outside source tree
 	cli.DefaultEmbeddedFS = spekk.EmbeddedFS
 	cli.DefaultEmbeddedSkillFS = spekk.EmbeddedFS
+	install.DefaultSkillFS = spekk.EmbeddedFS
 
 	// Propagate build-time version to shared package for use by other packages (e.g., self-update).
 	pkgversion.Version = version
