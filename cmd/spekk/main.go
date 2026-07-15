@@ -961,7 +961,8 @@ the managed block is always left untouched.
 		fmt.Printf("specs/ already exists at %s — you're set.\n", specsDir)
 
 		readmePath := filepath.Join(specsDir, "README.md")
-		if existing, err := os.ReadFile(readmePath); err == nil {
+		switch existing, err := os.ReadFile(readmePath); {
+		case err == nil:
 			if updated, changed := regenerateReadmeContent(string(existing)); changed {
 				if err := os.WriteFile(readmePath, []byte(updated), 0o644); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
@@ -969,6 +970,13 @@ the managed block is always left untouched.
 				}
 				fmt.Println("Refreshed the managed block in specs/README.md.")
 			}
+		case os.IsNotExist(err):
+			// specs/ predates this feature (or the README was removed): create it.
+			if err := os.WriteFile(readmePath, []byte(renderSpecsReadme()), 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
+				os.Exit(1)
+			}
+			fmt.Println("Created specs/README.md.")
 		}
 
 		fmt.Println(`Run "spekk coach" to draft a spec, or "spekk next" to see what's ready.`)

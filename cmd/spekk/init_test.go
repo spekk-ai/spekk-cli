@@ -46,6 +46,40 @@ func TestRunInit_FreshWritesManagedReadme(t *testing.T) {
 	}
 }
 
+// TestRunInit_CreatesReadmeWhenMissingInExistingSpecs confirms that running
+// spekk init in a project whose specs/ directory predates this feature (the
+// directory exists but has no README.md) creates the managed README rather
+// than silently no-opping.
+func TestRunInit_CreatesReadmeWhenMissingInExistingSpecs(t *testing.T) {
+	dir := chdirTemp(t)
+	specsDir := filepath.Join(dir, "specs")
+	if err := os.MkdirAll(specsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	runInit(nil)
+
+	readmePath := filepath.Join(specsDir, "README.md")
+	content, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatalf("expected %s to be created: %v", readmePath, err)
+	}
+	got := string(content)
+	if !strings.Contains(got, readmeManagedBeginMarker) || !strings.Contains(got, readmeManagedEndMarker) {
+		t.Errorf("expected created README to contain both fence markers, got:\n%s", got)
+	}
+
+	// A second run must converge (byte-identical) via the regenerate path.
+	runInit(nil)
+	second, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatalf("reading %s after second init: %v", readmePath, err)
+	}
+	if got != string(second) {
+		t.Fatalf("expected a second init to be byte-identical, but it changed")
+	}
+}
+
 // TestRunInit_UpgradesLegacyReadme confirms that running spekk init against
 // a pre-existing specs/README.md with no managed fence (the historical
 // static README, or any hand-written one) preserves that file's content and
