@@ -474,7 +474,7 @@ Skills resolve through layers: `.spekk/skills/<agent>/` (project), then `~/.conf
 
 ## `spekk install`
 
-Install spekk agents (coach, builder, observer) into a coding assistant as subagents.
+Install spekk agents (coach, builder, observer) into a coding assistant as subagents, plus the `spekk-dev-loop` orchestration skill.
 
 ```bash
 spekk install --target claude-code   # ~/.claude/agents/
@@ -492,6 +492,20 @@ spekk install --target codex         # ~/.codex/prompts/ (global only)
 | `--project` | Install into the current project instead of globally |
 
 Installs thin shims that fetch their full instructions from the binary at session start via `spekk prompt <agent>`, so they never go stale — updating spekk updates every installed agent. For tools not listed, wire `spekk prompt <agent>` into the tool's custom-agent or rules mechanism directly.
+
+### The `spekk-dev-loop` skill
+
+Every install also writes the `spekk-dev-loop` skill — the outer coach → coordinate → builders → review pipeline — in whatever form the target uses for a reusable, agent-invokable workflow:
+
+| Target | Written as | Location |
+|--------|-----------|----------|
+| `claude-code` | native skill | `~/.claude/skills/spekk-dev-loop/SKILL.md` |
+| `opencode` | native skill | `~/.config/opencode/skills/spekk-dev-loop/SKILL.md` |
+| `cursor` | `/spekk-dev-loop` command | `~/.cursor/commands/spekk-dev-loop.md` |
+| `codex` | `/spekk-dev-loop` prompt | `~/.codex/prompts/spekk-dev-loop.md` (global only) |
+| `copilot` | `/spekk-dev-loop` prompt | `.github/prompts/spekk-dev-loop.prompt.md` (`--project` only) |
+
+On the native-skill harnesses (claude-code, opencode) the model can invoke it automatically; on cursor, codex, and copilot it's a manually-invoked `/spekk-dev-loop` command. `--project` writes to the project's equivalent directory instead of the global one. Copilot's dev-loop prompt is project-only (personal prompts are IDE-managed); codex is global-only.
 
 ---
 

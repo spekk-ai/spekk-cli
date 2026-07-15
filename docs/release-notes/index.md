@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.10.8 -- Dev-Loop Skill for Every Harness](RELEASE-NOTES-1.10.8.md)
+
+`spekk install` now writes the `spekk-dev-loop` orchestration skill into every supported harness, not just Claude Code. Native-skill harnesses (claude-code, opencode) get the skill verbatim; cursor, codex, and copilot get a frontmatter-stripped `/spekk-dev-loop` command. One embedded source, mapped to each tool's native location.
+
 ## [1.10.7 -- Init Creates the README in Pre-Existing `specs/`](RELEASE-NOTES-1.10.7.md)
 
 Fixes a 1.10.6 gap: `spekk init` on a project whose `specs/` directory already existed but had no `README.md` wrote nothing. It now creates the managed README, covering all four states (missing, legacy, well-formed, corrupt).
