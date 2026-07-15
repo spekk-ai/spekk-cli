@@ -97,6 +97,26 @@ const sseClientScript = `
 })();
 </script>`
 
+// injectSSEClient inserts the live-reload client immediately before the
+// document's closing </body>.
+//
+// It targets the LAST "</body>" in the page, not the first. The template
+// bundles the DOMPurify sanitizer, whose minified source contains a literal
+// "</body></html>" string (its application/xhtml+xml parsing branch) that
+// appears well before the real closing tag. A first-match insert would drop
+// this <script> inside DOMPurify's own <script> block, where the client's
+// closing </script> would prematurely terminate that block and spill the rest
+// of the library into the page as visible text. The document's real </body> is
+// always last, so LastIndex is the safe anchor. Returns the input unchanged if
+// there is no </body> at all.
+func injectSSEClient(html string) string {
+	idx := strings.LastIndex(html, "</body>")
+	if idx == -1 {
+		return html
+	}
+	return html[:idx] + sseClientScript + "\n" + html[idx:]
+}
+
 // RunWatch starts the watch-mode HTTP server with SSE live reload.
 //
 // opts mirrors show.Run's Options so the watch path stays consistent. When
@@ -192,8 +212,7 @@ func RunWatch(specsDir string, opts Options) error {
 		}
 
 		html := strings.Replace(templateHTML, "/*__SPEKK_DATA__*/", string(jsonBytes), 1)
-		// Inject SSE client script before </body>
-		html = strings.Replace(html, "</body>", sseClientScript+"\n</body>", 1)
+		html = injectSSEClient(html)
 		return html, nil
 	}
 

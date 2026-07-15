@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.10.10 -- Fix Broken Markdown in `spekk show --watch`](RELEASE-NOTES-1.10.10.md)
+
+Watch mode could render as raw JavaScript instead of the spec explorer. The live-reload injector matched a `</body>` inside the bundled sanitizer's source before the real one, splitting the library onto the page as text. It now anchors on the document's final `</body>`.
+
 ## [1.10.9 -- Remove Self-Documenting Spec Headers](RELEASE-NOTES-1.10.9.md)
 
 Reverts the second half of 1.10.6: the coach and builder agents no longer prepend an HTML-comment frontmatter-explainer header to newly authored spec/assertion files. It cluttered every file with boilerplate that `specs/README.md` already covers. The managed `specs/README.md` itself is unchanged.
