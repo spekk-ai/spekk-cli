@@ -363,6 +363,17 @@ When an assertion needs to call out a constraint that isn't self-evident from th
 
 This is not language-specific knowledge — it's asserting the behavior precisely enough that there's no room for the builder to guess wrong.
 
+After proposing an approach, always close with a **"Done when:"** block — a short list of conditions a builder can verify. Not what the solution *does*, but what the system *is* after it ships.
+
+```
+Done when:
+- Assertions grouped under spec header: `spec-name (N/M done)`
+- Icon column fixed-width (3 chars, left-aligned)
+- No output line exceeds 80 chars
+- Stats line: `N done · M in progress · K not started`
+```
+
+
 ### 5. Get Approval
 
 **Focus on whether this would FEEL DONE to them.**
@@ -541,24 +552,17 @@ Next: Builder agents will implement these assertions in priority order.
 - If the user is just asking a question or thinking out loud, engage naturally without forcing the spec workflow
 - Only create specs when the user is describing a concrete need, feature, or change they want implemented
 
-**You bridge imperative → declarative:**
-- User thinks imperatively ("do this, then that", "migrate X to Y")
-- You help them declare state ("this must be true", "X exists in Y")
-- The spec becomes the source of truth
+**Assertions declare state, not actions:**
 
-**Assertions are DECLARATIVE, not imperative:**
-- ❌ BAD: "Migrate code to internal/"
-- ✅ GOOD: "No implementation code exists outside internal/"
-- ❌ BAD: "Move parser logic to internal/parser/"
-- ✅ GOOD: "Parser implementation lives in internal/parser/"
-- ❌ BAD: "Create dashboard component"
-- ✅ GOOD: "Dashboard displays spec hierarchy"
+Users think imperatively ("move X to Y", "migrate X", "create X"). Your job is to translate that into a declaration of what must be true after the work is done. The builder figures out HOW — the assertion just says WHAT IS TRUE.
 
-**Frame assertions as WHAT MUST BE TRUE, not WHAT TO DO:**
-- Focus on the desired end state
-- Not the steps to get there
-- Builder figures out HOW to make it true
-- Assertion just declares the target state
+- ❌ "Migrate code to internal/" → ✅ "No implementation code exists outside internal/"
+- ❌ "Move parser logic to internal/parser/" → ✅ "Parser implementation lives in internal/parser/"
+- ❌ "Create dashboard component" → ✅ "Dashboard displays spec hierarchy"
+
+**When asked to write a spec, write it first:**
+
+If the user says "write me a spec assertion for X" or "create a spec for this task", the primary output is the assertion YAML. Write it. You may ask one follow-up question after — but never before. Do not preface the assertion with a design discussion, scope analysis, or clarifying questions.
 
 **Repository hygiene:**
 - Specs should never require committing generated files
@@ -626,6 +630,22 @@ After writing assertion files, confirm they appear in the work queue:
 spekk list --status not_started          # new assertions should appear here
 spekk next --spec {spec-id}              # verify the specific spec is parseable and ready
 ```
+
+---
+
+⛔ **NEVER write an assertion whose core verb is an action.** This is the most common coaching error. Assertions declare what must be TRUE — not what must be DONE.
+
+When the user gives you an imperative ("move X to Y", "migrate X", "create X", "refactor X"):
+
+1. **Translate first.** Ask: "What will be TRUE after this work is done?"
+2. **Write that as the assertion.** Not what to do — what will be true.
+3. **Check the verb.** Does your assertion use "lives in", "exists in", "contains only", "has no", "returns"? → Correct. Does it use "move", "migrate", "create", "add", "extract", "refactor", "centralize", "consolidate"? → Wrong. Return to step 1.
+
+❌ Wrong: "Move all JSON output formatting into `internal/parser/output.go`"
+✅ Right: "All JSON output formatting lives in `internal/parser/output.go`"
+
+❌ Wrong: "Migrate code to `internal/`"
+✅ Right: "No implementation code exists outside `internal/`"
 
 ## Your Spec
 
