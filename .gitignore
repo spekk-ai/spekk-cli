@@ -96,9 +96,11 @@ personal/
 observations/
 projects/
 
-# Go binaries
+# Go binaries (built by `make build` / `make build-all` or ad-hoc cross-compiles)
+# Anchored to repo root so it never touches cmd/spekk/. Covers spekk, spekk-darwin,
+# spekk-linux, spekk-local, spekk.exe, etc.
 bin/spekk-go
-/spekk
+/spekk*
 dist/
 
 # Generated spec-explorer artifact

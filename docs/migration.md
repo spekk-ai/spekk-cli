@@ -22,18 +22,21 @@ npm uninstall spekk-cli
 
 ## 2. Install the new Go binary
 
-Download the `spekk` binary from the Slack message and place it on your PATH:
+Install the latest release with the one-line installer, which downloads the
+right binary for your platform from GitHub Releases and places it on your PATH:
 
 ```bash
-# Move the binary to a directory on your PATH
-mv ~/Downloads/spekk /usr/local/bin/spekk
-
-# Make it executable
-chmod +x /usr/local/bin/spekk
+curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 
 # Verify
 spekk help
 ```
+
+By default it installs to `~/.local/bin`. On Windows, download
+`spekk-windows-amd64.exe` (or the `arm64` variant) from the
+[latest release](https://github.com/spekk-ai/spekk-cli/releases/latest) and
+place it on your PATH. Once installed, `spekk update` self-updates to the
+latest release.
 
 > **Note:** The binary is a standalone executable — no npm, no Node.js, no dependencies required.
 
@@ -54,7 +57,7 @@ spekk install coach meeting-notes          # install to current project
 spekk install coach meeting-notes --global # install for all projects
 spekk install --list coach                 # see available skills
 spekk uninstall coach meeting-notes        # remove a skill
-spekk skills list coach                    # see all skills (local + global + embedded)
+spekk skill list coach                     # see all skills (local + global + embedded)
 ```
 
 **Important:** There are no packages in the registry yet — the infrastructure is in place but the community skill library is empty for now. The embedded seed skills (shipped with the binary) still work as before.
@@ -97,7 +100,6 @@ spekk sandbox     # cloud sandbox management
 ## 4. Quick checklist
 
 - [ ] Run `npm uninstall -g spekk-cli`
-- [ ] Download the new binary from Slack
-- [ ] Place it at `/usr/local/bin/spekk` (or anywhere on your PATH)
-- [ ] Run `chmod +x /usr/local/bin/spekk`
+- [ ] Install the Go binary: `curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh`
 - [ ] Run `spekk help` to verify
+- [ ] (Optional) Run `spekk update` to confirm self-update works
