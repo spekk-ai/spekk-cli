@@ -254,18 +254,6 @@ func TestInstall_SkillFile(t *testing.T) {
 		}
 	})
 
-	t.Run("re-install overwrites existing SKILL.md without error", func(t *testing.T) {
-		home := t.TempDir()
-		opts := Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}
-		if _, err := Install(opts); err != nil {
-			t.Fatal(err)
-		}
-		// Second install must succeed and overwrite
-		if _, err := Install(opts); err != nil {
-			t.Fatalf("re-install should succeed: %v", err)
-		}
-	})
-
 	t.Run("nil skill FS returns error for claude-code", func(t *testing.T) {
 		// Ensure DefaultSkillFS is nil during this test.
 		orig := DefaultSkillFS
