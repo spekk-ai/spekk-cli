@@ -3,7 +3,7 @@ id: managed-readme-block
 parent: specs-readme-orientation
 created: 2026-07-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/specs-readme-orientation
 ---
 
@@ -61,3 +61,6 @@ block, that the `spekk_schema_version` line appears, and that rendering twice
 returns byte-identical output (purity). A fresh-init CLI smoke test (empty temp
 dir) confirms `specs/README.md` is created containing the managed region and a
 single trailing newline.
+
+**Tests:** `cmd/spekk/readme_test.go` (marker presence, frontmatter field and
+status coverage, purity), `cmd/spekk/init_test.go` (fresh-init smoke test).

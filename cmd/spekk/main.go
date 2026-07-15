@@ -935,31 +935,6 @@ OPTIONS:
 	}
 }
 
-// specsReadme is written by spekk init so the new specs/ directory is
-// non-empty (git tracks it) and explains itself to readers.
-const specsReadme = `# Specs
-
-This directory is a work queue for AI agents, managed with
-[spekk](https://github.com/spekk-ai/spekk-cli).
-
-Each spec is a folder containing a markdown file that states what must be
-true, plus an assertions/ folder breaking that down into small, testable
-assertions:
-
-    specs/
-      my-feature/
-        my-feature.md          # what must be true, and why
-        assertions/
-          first-assertion.md   # one small, verifiable step
-
-Common commands:
-
-    spekk coach      # draft and refine specs with the coach agent
-    spekk builder    # implement the next ready assertion
-    spekk next       # print the next ready assertion
-    spekk status     # overview of all specs and assertions
-`
-
 // runInit creates the specs/ directory so a project can start using spekk.
 func runInit(args []string) {
 	for _, a := range args {
@@ -990,7 +965,7 @@ Does nothing if specs/ already exists.
 		os.Exit(1)
 	}
 	readmePath := filepath.Join(specsDir, "README.md")
-	if err := os.WriteFile(readmePath, []byte(specsReadme), 0o644); err != nil {
+	if err := os.WriteFile(readmePath, []byte(renderSpecsReadme()), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
 		os.Exit(1)
 	}
