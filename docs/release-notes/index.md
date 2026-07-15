@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.10.9 -- Remove Self-Documenting Spec Headers](RELEASE-NOTES-1.10.9.md)
+
+Reverts the second half of 1.10.6: the coach and builder agents no longer prepend an HTML-comment frontmatter-explainer header to newly authored spec/assertion files. It cluttered every file with boilerplate that `specs/README.md` already covers. The managed `specs/README.md` itself is unchanged.
+
 ## [1.10.8 -- Dev-Loop Skill for Every Harness](RELEASE-NOTES-1.10.8.md)
 
 `spekk install` now writes the `spekk-dev-loop` orchestration skill into every supported harness, not just Claude Code. Native-skill harnesses (claude-code, opencode) get the skill verbatim; cursor, codex, and copilot get a frontmatter-stripped `/spekk-dev-loop` command. One embedded source, mapped to each tool's native location.
