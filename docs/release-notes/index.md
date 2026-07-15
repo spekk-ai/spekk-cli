@@ -8,6 +8,22 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.10.5 -- Dev-Loop Skill + Coach Declarative Rewrite](RELEASE-NOTES-1.10.5.md)
+
+`spekk install --target claude-code` now writes a `spekk-dev-loop` skill alongside the agent shims. The coach's declarative-framing section is rewritten with a write-first rule and a `Done when:` block. Repository hygiene: stray committed binaries removed and gitignored, obsolete loop scripts deleted, migration guide moved into docs.
+
+## [1.10.4 -- `spekk list` + Coach Precision](RELEASE-NOTES-1.10.4.md)
+
+New `spekk list` subcommand for filtered spec/assertion enumeration with `--json`/`--tsv`/`--csv`/`--long` output — 16× fewer tokens than a full scan. Coach gains encoding-precision guidance for non-obvious behavioral constraints.
+
+## [1.10.3 -- Differential Diagnosis Placement Fix](RELEASE-NOTES-1.10.3.md)
+
+Moves the coach's differential diagnosis protocol to the end of the prompt with the prohibition first, so it fires reliably across all three supported models. Eval COACH-01: 0/FAIL → 2/PASS across 3 models.
+
+## [1.10.2 -- Differential Diagnosis Protocol](RELEASE-NOTES-1.10.2.md)
+
+Adds a diagnostic protocol to the coach: for "why does X work for A but not B?" questions, it enumerates variables and asks before hypothesizing instead of proposing fast.
+
 ## [1.10.1 -- Observer Curation and Scheduling](RELEASE-NOTES-1.10.1.md)
 
 `spekk observer consolidate` maintains a lean, severity-ranked digest from raw observations. The default loop now closes each cycle with a quiet consolidation pass. New `install-cron` / `uninstall-cron` subcommands schedule the observer via crontab with a Go-level overlap guard, headless Claude launch, and automatic claude path detection. Patch: Windows cross-compilation fix.

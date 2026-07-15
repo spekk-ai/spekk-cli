@@ -51,8 +51,13 @@ nav = [
   { "CLI Reference" = "cli-reference.md" },
   { "Skills" = "coach-skills.md" },
   { "Configuration" = "configuration.md" },
+  { "Migration (npm → Go)" = "migration.md" },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.10.5 — Dev-Loop Skill + Coach Declarative Rewrite" = "release-notes/RELEASE-NOTES-1.10.5.md" },
+    { "1.10.4 — spekk list + Coach Precision" = "release-notes/RELEASE-NOTES-1.10.4.md" },
+    { "1.10.3 — Differential Diagnosis Placement Fix" = "release-notes/RELEASE-NOTES-1.10.3.md" },
+    { "1.10.2 — Differential Diagnosis Protocol" = "release-notes/RELEASE-NOTES-1.10.2.md" },
     { "1.10.1 — Observer Curation and Scheduling" = "release-notes/RELEASE-NOTES-1.10.1.md" },
     { "1.9.0 — Cross-Branch Merge Preview" = "release-notes/RELEASE-NOTES-1.9.0.md" },
     { "1.8.1 — Show Markdown Rendering Fix" = "release-notes/RELEASE-NOTES-1.8.1.md" },
