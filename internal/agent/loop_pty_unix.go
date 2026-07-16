@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,15 @@ import (
 	"time"
 
 	"github.com/creack/pty/v2"
+)
+
+const (
+	// doneMarker is the completion signal the builder agent prints when it
+	// finishes work (configured in ~/.config/spekk/builder.prompt.md).
+	// When detected, the loop gives the process a short grace period to
+	// exit cleanly before force-stopping it.
+	doneMarker      = "[SPEKK_DONE]"
+	doneMarkerGrace = 5 * time.Second
 )
 
 // launchClaudeWithPTY spawns claude inside a pseudo-terminal for idle timeout detection.
@@ -49,14 +59,34 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 	var lastActivity atomic.Int64
 	lastActivity.Store(time.Now().UnixNano())
 
-	// Copy PTY output to stdout, tracking activity on each read
+	var timeoutFired atomic.Bool
+	var markerDetected atomic.Bool
+	done := make(chan struct{})
+
+	// Copy PTY output to stdout, tracking activity on each read.
+	// Also detect the done marker so we can force-stop a hung process.
 	go func() {
 		buf := make([]byte, 4096)
+		markerSeen := false
 		for {
 			n, readErr := ptmx.Read(buf)
 			if n > 0 {
 				lastActivity.Store(time.Now().UnixNano())
 				os.Stdout.Write(buf[:n])
+
+				if !markerSeen && bytes.Contains(buf[:n], []byte(doneMarker)) {
+					markerSeen = true
+					markerDetected.Store(true)
+					go func() {
+						select {
+						case <-done:
+							return
+						case <-time.After(doneMarkerGrace):
+							colorLog(colorYellow, "\nDone marker seen but process still running. Force-stopping...")
+							cmd.Process.Signal(syscall.SIGTERM)
+						}
+					}()
+				}
 			}
 			if readErr != nil {
 				return
@@ -70,8 +100,6 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 	// wedging the loop and requiring Ctrl+C to continue.
 
 	// Idle timeout monitor
-	var timeoutFired atomic.Bool
-	done := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
@@ -93,6 +121,12 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 
 	waitErr := cmd.Wait()
 	close(done)
+
+	// Done marker means the builder completed its work — treat as success
+	// even if the process exited uncleanly (it was force-stopped).
+	if markerDetected.Load() {
+		return true, false, nil
+	}
 
 	if timeoutFired.Load() {
 		return false, true, nil
