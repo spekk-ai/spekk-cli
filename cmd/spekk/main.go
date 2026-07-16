@@ -3,14 +3,17 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	spekk "github.com/spekk-ai/spekk-cli"
 	"github.com/spekk-ai/spekk-cli/internal/agent"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/formatter"
 	"github.com/spekk-ai/spekk-cli/internal/install"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 	"github.com/spekk-ai/spekk-cli/internal/sandbox"
@@ -31,6 +34,7 @@ func main() {
 	// Set embedded assets so agents and skills work when binary is installed outside source tree
 	cli.DefaultEmbeddedFS = spekk.EmbeddedFS
 	cli.DefaultEmbeddedSkillFS = spekk.EmbeddedFS
+	install.DefaultSkillFS = spekk.EmbeddedFS
 
 	// Propagate build-time version to shared package for use by other packages (e.g., self-update).
 	pkgversion.Version = version
@@ -47,6 +51,9 @@ func main() {
 	switch command {
 	case "init":
 		runInit(args[1:])
+
+	case "list":
+		runList(args[1:])
 
 	case "next":
 		runParser(args[1:])
@@ -89,7 +96,6 @@ func main() {
 
 	case "skills":
 		runSkills(args[1:])
-
 
 	case "update":
 		runUpdate(args[1:])
@@ -168,6 +174,212 @@ func runParser(args []string) {
 
 	out, _ := parser.FormatNextAssertion(next, result.Specs)
 	fmt.Println(string(out))
+}
+
+// runList implements the `spekk list` subcommand.
+// Flags: --status <value>, --assertions-only, --specs-dir <path>,
+//
+//	--json, --tsv, --csv, --long / -l
+func runList(args []string) {
+	code := execList(args, os.Stdout, os.Stderr, "")
+	if code != 0 {
+		os.Exit(code)
+	}
+}
+
+// execList is the testable core of runList.
+// It writes to stdout/stderr and returns an exit code (0 = success).
+// specsDir: if non-empty, skip findSpecsDir() and use this directly.
+func execList(args []string, stdout, stderr io.Writer, specsDir string) int {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"status":         {Names: []string{"--status"}, Type: cli.StringFlag},
+		"assertionsOnly": {Names: []string{"--assertions-only"}, Type: cli.BoolFlag},
+		"specsDir":       {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+		"json":           {Names: []string{"--json"}, Type: cli.BoolFlag},
+		"tsv":            {Names: []string{"--tsv"}, Type: cli.BoolFlag},
+		"csv":            {Names: []string{"--csv"}, Type: cli.BoolFlag},
+		"long":           {Names: []string{"--long", "-l"}, Type: cli.BoolFlag},
+		"help":           {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Fprint(stdout, `
+spekk list - List specs and assertions with optional filtering
+
+USAGE:
+  spekk list [OPTIONS]
+
+OUTPUT FORMAT (default: table):
+  --json        JSON output (flat assertion list; for jq pipelines)
+  --tsv         Tab-separated values with lowercase header (for awk/cut/sort)
+  --csv         RFC 4180 CSV with header row
+  --long, -l    Add FILE column to table/TSV/CSV output (JSON always includes file)
+
+FILTER OPTIONS:
+  --status <value>      Filter by assertion status. Valid values:
+                          not_started, in_progress, done, draft, failed
+  --assertions-only     Accepted for backward compatibility (now a no-op; assertions are the default)
+  --specs-dir <path>    Read specs from a specific directory (default: git root specs/)
+  --help, -h            Show this help message
+
+NOTES:
+  The default output shows all assertions. Hierarchy output is available via spekk next --all.
+
+EXAMPLES:
+  spekk list
+  spekk list --json
+  spekk list --tsv
+  spekk list --csv
+  spekk list --long
+  spekk list --status draft
+  spekk list --status draft --tsv
+  spekk list --assertions-only --csv
+  spekk list --specs-dir /path/to/specs
+`)
+		return 0
+	}
+
+	// Assertions are always the default; --assertions-only is accepted for
+	// backward compatibility but is now a no-op.
+	assertionsOnly := true
+	_ = flags.Bool("assertionsOnly") // accepted but redundant
+	useJSON := flags.Bool("json")
+	useTSV := flags.Bool("tsv")
+	useCSV := flags.Bool("csv")
+	showFile := flags.Bool("long")
+	statusVal := flags.String("status")
+
+	// Reject mutually exclusive format flags.
+	formatCount := 0
+	for _, f := range []bool{useJSON, useTSV, useCSV} {
+		if f {
+			formatCount++
+		}
+	}
+	if formatCount > 1 {
+		fmt.Fprintln(stderr, "Error: --json, --tsv, and --csv are mutually exclusive; use at most one")
+		return 1
+	}
+
+	// Build opts before empty check — opts determines which header columns appear.
+	opts := formatter.Options{
+		ShowParent: assertionsOnly,
+		ShowFile:   showFile,
+	}
+
+	if specsDir == "" {
+		specsDir = flags.String("specsDir")
+	}
+	if specsDir == "" {
+		specsDir = findSpecsDir()
+	}
+
+	result, err := parser.ParseAllSpecs(specsDir)
+	if err != nil {
+		out, _ := parser.FormatError(err.Error())
+		fmt.Fprintln(stdout, string(out))
+		return 1
+	}
+
+	// Apply status filter if requested.
+	if statusVal != "" {
+		filtered, filterErr := parser.FilterByStatus(result, statusVal)
+		if filterErr != nil {
+			// Use FormatError so machine-readable callers get consistent JSON output.
+			out, _ := parser.FormatError(filterErr.Error())
+			fmt.Fprintln(stdout, string(out))
+			return 1
+		}
+		result = filtered
+	}
+
+	// Handle empty results with format-aware output.
+	if len(result.Assertions) == 0 {
+		switch {
+		case useTSV:
+			fmt.Fprint(stdout, formatter.FormatTSVHeader(opts))
+		case useCSV:
+			fmt.Fprint(stdout, formatter.FormatCSVHeader(opts))
+		default:
+			var out []byte
+			if statusVal != "" {
+				out, _ = parser.FormatEmptyFiltered(statusVal)
+			} else {
+				out, _ = parser.FormatEmpty()
+			}
+			fmt.Fprintln(stdout, string(out))
+		}
+		return 0
+	}
+
+	// --json: flat assertion JSON, same content as the default table.
+	if useJSON {
+		out, err := parser.FormatAssertionsFlat(result)
+		if err != nil {
+			out2, _ := parser.FormatError(err.Error())
+			fmt.Fprintln(stdout, string(out2))
+			return 1
+		}
+		fmt.Fprintln(stdout, string(out))
+		return 0
+	}
+
+	// Build rows for table/TSV/CSV formats.
+	rows := listRows(result, assertionsOnly)
+
+	switch {
+	case useTSV:
+		// FormatTSV owns its trailing newline; use Fprint to avoid a duplicate.
+		fmt.Fprint(stdout, formatter.FormatTSV(rows, opts))
+	case useCSV:
+		// FormatCSV owns its trailing CRLF per RFC 4180; use Fprint to avoid
+		// appending a bare LF after the final CRLF.
+		fmt.Fprint(stdout, formatter.FormatCSV(rows, opts))
+	default:
+		// Default: human-readable table.
+		fmt.Fprintln(stdout, formatter.FormatTable(rows, opts))
+	}
+	return 0
+}
+
+// listRows converts a ParseResult into formatter.Row slices for table/TSV/CSV,
+// sorted by priority (ascending) then ID (alphabetical) — same order as
+// FormatAssertionsFlat, so all output formats agree.
+// When assertionsOnly is true, rows come from result.Assertions (with Parent set).
+// Otherwise rows come from result.Specs (Parent not set).
+func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
+	var rows []formatter.Row
+	if assertionsOnly {
+		rows = make([]formatter.Row, 0, len(result.Assertions))
+		for _, a := range result.Assertions {
+			rows = append(rows, formatter.Row{
+				ID:       a.ID,
+				Status:   a.Status,
+				Priority: a.Priority,
+				Title:    a.Title,
+				Parent:   a.Parent,
+				File:     a.File,
+			})
+		}
+	} else {
+		rows = make([]formatter.Row, 0, len(result.Specs))
+		for _, s := range result.Specs {
+			rows = append(rows, formatter.Row{
+				ID:       s.ID,
+				Status:   s.Status,
+				Priority: s.Priority,
+				Title:    s.Title,
+				File:     s.File,
+			})
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Priority != rows[j].Priority {
+			return rows[i].Priority < rows[j].Priority
+		}
+		return rows[i].ID < rows[j].ID
+	})
+	return rows
 }
 
 // findSpecsDir locates the specs/ directory using git root.
@@ -707,7 +919,6 @@ func runSkillsList(args []string) {
 	fmt.Print(install.FormatSkillsList(agent, skills))
 }
 
-
 // runUpdate performs a self-update check and optional install.
 func runUpdate(args []string) {
 	checkOnly := false
@@ -736,31 +947,6 @@ OPTIONS:
 	}
 }
 
-// specsReadme is written by spekk init so the new specs/ directory is
-// non-empty (git tracks it) and explains itself to readers.
-const specsReadme = `# Specs
-
-This directory is a work queue for AI agents, managed with
-[spekk](https://github.com/spekk-ai/spekk-cli).
-
-Each spec is a folder containing a markdown file that states what must be
-true, plus an assertions/ folder breaking that down into small, testable
-assertions:
-
-    specs/
-      my-feature/
-        my-feature.md          # what must be true, and why
-        assertions/
-          first-assertion.md   # one small, verifiable step
-
-Common commands:
-
-    spekk coach      # draft and refine specs with the coach agent
-    spekk builder    # implement the next ready assertion
-    spekk next       # print the next ready assertion
-    spekk status     # overview of all specs and assertions
-`
-
 // runInit creates the specs/ directory so a project can start using spekk.
 func runInit(args []string) {
 	for _, a := range args {
@@ -773,7 +959,10 @@ USAGE:
 
 Creates a specs/ directory (at the git root if in a repository, otherwise
 in the current directory) with a short README explaining the format.
-Does nothing if specs/ already exists.
+If specs/README.md already exists, its managed block is regenerated in
+place (well-formed fence), appended (no fence yet — e.g. a legacy or
+hand-written README), or recovered (a corrupt fence). Human prose outside
+the managed block is always left untouched.
 `)
 			return
 		}
@@ -782,6 +971,26 @@ Does nothing if specs/ already exists.
 	specsDir := findSpecsDir()
 	if info, err := os.Stat(specsDir); err == nil && info.IsDir() {
 		fmt.Printf("specs/ already exists at %s — you're set.\n", specsDir)
+
+		readmePath := filepath.Join(specsDir, "README.md")
+		switch existing, err := os.ReadFile(readmePath); {
+		case err == nil:
+			if updated, changed := regenerateReadmeContent(string(existing)); changed {
+				if err := os.WriteFile(readmePath, []byte(updated), 0o644); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
+					os.Exit(1)
+				}
+				fmt.Println("Refreshed the managed block in specs/README.md.")
+			}
+		case os.IsNotExist(err):
+			// specs/ predates this feature (or the README was removed): create it.
+			if err := os.WriteFile(readmePath, []byte(renderSpecsReadme()), 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
+				os.Exit(1)
+			}
+			fmt.Println("Created specs/README.md.")
+		}
+
 		fmt.Println(`Run "spekk coach" to draft a spec, or "spekk next" to see what's ready.`)
 		return
 	}
@@ -791,7 +1000,7 @@ Does nothing if specs/ already exists.
 		os.Exit(1)
 	}
 	readmePath := filepath.Join(specsDir, "README.md")
-	if err := os.WriteFile(readmePath, []byte(specsReadme), 0o644); err != nil {
+	if err := os.WriteFile(readmePath, []byte(renderSpecsReadme()), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: writing %s: %s\n", readmePath, err)
 		os.Exit(1)
 	}
@@ -986,6 +1195,7 @@ USAGE:
 
 COMMANDS:
   init      Set up a project for spec-driven development (creates specs/)
+  list      List specs and assertions with optional --status filter and --assertions-only flat output
   show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
   serve     Start WebSocket server for browser extension (--port, --host)

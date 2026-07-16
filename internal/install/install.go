@@ -5,12 +5,24 @@
 package install
 
 import (
+	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// skillEmbedPath is the path inside the skill FS where the bundled
+// spekk-dev-loop skill lives.
+const skillEmbedPath = "specs/install-spekk-dev-loop-skill/spekk-dev-loop-skill.md"
+
+// DefaultSkillFS is the FS used to read the bundled spekk-dev-loop skill.
+// Set in main() to spekk.EmbeddedFS; may be overridden per-call via
+// Options.SkillFS. internal/install must not depend on internal/cli, so this
+// is a separate var from cli.DefaultEmbeddedSkillFS.
+var DefaultSkillFS fs.FS
 
 // agents lists the spekk agents installed as shims.
 var agents = []string{"coach", "builder", "observer"}
@@ -37,6 +49,7 @@ type Options struct {
 	Project bool   // install into the project instead of globally
 	HomeDir string // defaults to os.UserHomeDir()
 	Cwd     string // defaults to os.Getwd()
+	SkillFS fs.FS  // FS to read the bundled skill from; falls back to DefaultSkillFS
 }
 
 // target describes where shims go and how their frontmatter is rendered
@@ -46,6 +59,16 @@ type target struct {
 	projectDir  string // empty means --project is unsupported
 	fileExt     string // defaults to ".md"
 	frontmatter func(agent string) string
+
+	// Skill destination: where the bundled spekk-dev-loop skill/command
+	// goes for this host tool. Either func may be nil/return "" to opt
+	// that scope out of writing a dev-loop file. strip controls whether
+	// the embedded skill's YAML frontmatter is removed before writing
+	// (command/prompt harnesses) or written verbatim (native-skill
+	// harnesses).
+	globalPath  func(home string) string
+	projectPath func(cwd string) string
+	strip       bool
 }
 
 var targets = map[string]target{
@@ -55,6 +78,13 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
 		},
+		globalPath: func(home string) string {
+			return filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+		},
+		projectPath: func(cwd string) string {
+			return filepath.Join(cwd, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+		},
+		strip: false,
 	},
 	"opencode": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".config", "opencode", "agents") },
@@ -62,6 +92,13 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return fmt.Sprintf("---\ndescription: %q\nmode: subagent\n---\n", descriptions[agent])
 		},
+		globalPath: func(home string) string {
+			return filepath.Join(home, ".config", "opencode", "skills", "spekk-dev-loop", "SKILL.md")
+		},
+		projectPath: func(cwd string) string {
+			return filepath.Join(cwd, ".opencode", "skills", "spekk-dev-loop", "SKILL.md")
+		},
+		strip: false,
 	},
 	"codex": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".codex", "prompts") },
@@ -69,6 +106,12 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return ""
 		},
+		globalPath: func(home string) string {
+			return filepath.Join(home, ".codex", "prompts", "spekk-dev-loop.md")
+		},
+		// No projectPath: codex already has no --project support (projectDir
+		// is "" above), so --project errors before skill logic is reached.
+		strip: true,
 	},
 	"copilot": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".copilot", "agents") },
@@ -77,6 +120,12 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
 		},
+		// No globalPath: copilot has no standard global filesystem path for
+		// a personal prompt file, so global installs write no dev-loop file.
+		projectPath: func(cwd string) string {
+			return filepath.Join(cwd, ".github", "prompts", "spekk-dev-loop.prompt.md")
+		},
+		strip: true,
 	},
 	"cursor": {
 		globalDir:  func(home string) string { return filepath.Join(home, ".cursor", "agents") },
@@ -84,6 +133,13 @@ var targets = map[string]target{
 		frontmatter: func(agent string) string {
 			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
 		},
+		globalPath: func(home string) string {
+			return filepath.Join(home, ".cursor", "commands", "spekk-dev-loop.md")
+		},
+		projectPath: func(cwd string) string {
+			return filepath.Join(cwd, ".cursor", "commands", "spekk-dev-loop.md")
+		},
+		strip: true,
 	},
 }
 
@@ -134,6 +190,7 @@ func Install(opts Options) ([]string, error) {
 	}
 
 	var dir string
+	var base string // home or cwd, used to compute the skill destination
 	if opts.Project {
 		if t.projectDir == "" {
 			return nil, fmt.Errorf("target %q does not support --project installs; omit --project to install globally", name)
@@ -146,6 +203,7 @@ func Install(opts Options) ([]string, error) {
 			}
 		}
 		dir = filepath.Join(cwd, t.projectDir)
+		base = cwd
 	} else {
 		home := opts.HomeDir
 		if home == "" {
@@ -155,6 +213,7 @@ func Install(opts Options) ([]string, error) {
 			}
 		}
 		dir = t.globalDir(home)
+		base = home
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -175,5 +234,69 @@ func Install(opts Options) ([]string, error) {
 		}
 		written = append(written, path)
 	}
+
+	// Resolve the descriptor's dev-loop destination for the active scope.
+	// A "" path opts this target+scope out: no FS read, no file written.
+	var skillPath string
+	if opts.Project {
+		if t.projectPath != nil {
+			skillPath = t.projectPath(base)
+		}
+	} else {
+		if t.globalPath != nil {
+			skillPath = t.globalPath(base)
+		}
+	}
+
+	if skillPath != "" {
+		skillFS := opts.SkillFS
+		if skillFS == nil {
+			skillFS = DefaultSkillFS
+		}
+		if skillFS == nil {
+			return nil, fmt.Errorf("no skill FS available for %s install; set install.DefaultSkillFS in main or provide Options.SkillFS", name)
+		}
+		data, err := fs.ReadFile(skillFS, skillEmbedPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading embedded skill %s: %w", skillEmbedPath, err)
+		}
+		content := data
+		if t.strip {
+			content = stripFrontmatter(content)
+		}
+		skillDir := filepath.Dir(skillPath)
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			return nil, fmt.Errorf("creating %s: %w", skillDir, err)
+		}
+		if err := os.WriteFile(skillPath, content, 0o644); err != nil {
+			return nil, fmt.Errorf("writing %s: %w", skillPath, err)
+		}
+		written = append(written, skillPath)
+	}
+
 	return written, nil
+}
+
+// stripFrontmatter removes a leading YAML frontmatter block (the opening
+// "---", the fields, the closing "---", and the following blank line) from
+// content destined for command/prompt harnesses, which render the whole
+// file as a prompt and don't understand (or forbid) YAML frontmatter.
+// Content that does not begin with "---\n" is returned unchanged.
+func stripFrontmatter(data []byte) []byte {
+	const opening = "---\n"
+	if !bytes.HasPrefix(data, []byte(opening)) {
+		return data
+	}
+	rest := data[len(opening):]
+
+	const closing = "\n---\n"
+	idx := bytes.Index(rest, []byte(closing))
+	if idx == -1 {
+		// No closing delimiter found; don't guess, return unchanged.
+		return data
+	}
+	body := rest[idx+len(closing):]
+	// Drop the single blank line that follows the closing delimiter.
+	body = bytes.TrimPrefix(body, []byte("\n"))
+	return body
 }

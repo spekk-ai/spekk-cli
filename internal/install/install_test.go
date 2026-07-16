@@ -1,24 +1,68 @@
 package install
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
+
+// fakeSkillFS returns a minimal in-memory FS that satisfies the skill embed
+// path, so tests don't need the real embedded binary asset.
+func fakeSkillFS() fs.FS {
+	return fstest.MapFS{
+		skillEmbedPath: &fstest.MapFile{Data: []byte("# spekk-dev-loop\nfake skill content for tests")},
+	}
+}
+
+// fakeSkillContentWithFrontmatter mirrors the real embedded skill's shape
+// (YAML frontmatter, blank line, then the body) so strip-specific tests
+// actually exercise stripFrontmatter instead of a no-op.
+const fakeSkillContentWithFrontmatter = "---\nname: spekk-dev-loop\ndescription: \"fake\"\n---\n\n# Spekk Dev Loop\nfake skill content for tests\n"
+
+// fakeSkillFSWithFrontmatter returns an in-memory FS whose skill content has
+// a real leading frontmatter block, for command/prompt targets that strip it.
+func fakeSkillFSWithFrontmatter() fs.FS {
+	return fstest.MapFS{
+		skillEmbedPath: &fstest.MapFile{Data: []byte(fakeSkillContentWithFrontmatter)},
+	}
+}
+
+// TestStripFrontmatter covers the shared helper directly: it must remove a
+// leading YAML frontmatter block through the closing "---" and the single
+// blank line after it, and must leave content without a leading "---\n"
+// untouched.
+func TestStripFrontmatter(t *testing.T) {
+	got := stripFrontmatter([]byte(fakeSkillContentWithFrontmatter))
+	want := "# Spekk Dev Loop\nfake skill content for tests\n"
+	if string(got) != want {
+		t.Errorf("stripFrontmatter(with frontmatter) = %q, want %q", got, want)
+	}
+	if strings.Contains(string(got), "---") {
+		t.Errorf("stripped content should not contain a frontmatter delimiter: %q", got)
+	}
+
+	noFrontmatter := []byte("# Spekk Dev Loop\nno frontmatter here\n")
+	if got := stripFrontmatter(noFrontmatter); string(got) != string(noFrontmatter) {
+		t.Errorf("stripFrontmatter(no leading ---) = %q, want input unchanged %q", got, noFrontmatter)
+	}
+}
 
 // TestInstall_ShimContent verifies the full shim contract on the claude-code
 // target, and that re-installing overwrites cleanly.
 func TestInstall_ShimContent(t *testing.T) {
 	home := t.TempDir()
-	opts := Options{Target: "claude-code", HomeDir: home}
+	opts := Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()}
 
 	written, err := Install(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(written) != 3 {
-		t.Fatalf("got %d files, want 3 (coach, builder, observer)", len(written))
+	// 3 shims (coach, builder, observer) + 1 skill file
+	if len(written) != 4 {
+		t.Fatalf("got %d files, want 4 (coach, builder, observer shims + skill)", len(written))
 	}
 
 	for _, agent := range []string{"coach", "builder", "observer"} {
@@ -45,6 +89,18 @@ func TestInstall_ShimContent(t *testing.T) {
 		}
 	}
 
+	// Skill file must also be in the returned slice
+	skillPath := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+	found := false
+	for _, p := range written {
+		if p == skillPath {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("skill path %s not in written %v", skillPath, written)
+	}
+
 	// Idempotent: re-install overwrites without error
 	if _, err := Install(opts); err != nil {
 		t.Fatalf("re-install should succeed: %v", err)
@@ -61,16 +117,17 @@ func TestInstall_Targets(t *testing.T) {
 		wantFile string
 		contains string
 		excludes string
+		skillFS  fs.FS // non-nil for claude/claude-code targets (required by new logic)
 	}{
-		{"claude", false, []string{".claude", "agents"}, "spekk-coach.md", "name: spekk-coach", ""},
-		{"claude-code", true, []string{".claude", "agents"}, "spekk-coach.md", "", ""},
-		{"copilot", false, []string{".copilot", "agents"}, "spekk-coach.agent.md", "name: spekk-coach", ""},
-		{"copilot", true, []string{".github", "agents"}, "spekk-coach.agent.md", "", ""},
-		{"cursor", false, []string{".cursor", "agents"}, "spekk-coach.md", "name: spekk-coach", ""},
-		{"cursor", true, []string{".cursor", "agents"}, "spekk-coach.md", "", ""},
-		{"opencode", false, []string{".config", "opencode", "agents"}, "spekk-coach.md", "mode: subagent", "name:"},
-		{"opencode", true, []string{".opencode", "agents"}, "spekk-coach.md", "", ""},
-		{"codex", false, []string{".codex", "prompts"}, "spekk-coach.md", "", "---"},
+		{"claude", false, []string{".claude", "agents"}, "spekk-coach.md", "name: spekk-coach", "", fakeSkillFS()},
+		{"claude-code", true, []string{".claude", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
+		{"copilot", false, []string{".copilot", "agents"}, "spekk-coach.agent.md", "name: spekk-coach", "", nil},
+		{"copilot", true, []string{".github", "agents"}, "spekk-coach.agent.md", "", "", fakeSkillFS()},
+		{"cursor", false, []string{".cursor", "agents"}, "spekk-coach.md", "name: spekk-coach", "", fakeSkillFS()},
+		{"cursor", true, []string{".cursor", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
+		{"opencode", false, []string{".config", "opencode", "agents"}, "spekk-coach.md", "mode: subagent", "name:", fakeSkillFS()},
+		{"opencode", true, []string{".opencode", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
+		{"codex", false, []string{".codex", "prompts"}, "spekk-coach.md", "", "---", fakeSkillFS()},
 	}
 
 	for _, tt := range tests {
@@ -80,7 +137,7 @@ func TestInstall_Targets(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			base := t.TempDir()
-			opts := Options{Target: tt.target, Project: tt.project}
+			opts := Options{Target: tt.target, Project: tt.project, SkillFS: tt.skillFS}
 			if tt.project {
 				opts.Cwd = base
 			} else {
@@ -137,4 +194,153 @@ func TestInstall_Errors(t *testing.T) {
 	if !strings.Contains(err.Error(), "spekk prompt") {
 		t.Errorf("error should point at spekk prompt fallback, got: %v", err)
 	}
+}
+
+// TestInstall_SkillFile covers native (unstripped) skill-writing: verbatim
+// byte-equality in both scopes for claude-code, generalization to a second
+// native target (opencode), the copilot opt-out, and the missing-FS error.
+func TestInstall_SkillFile(t *testing.T) {
+	skillContent := []byte("# spekk-dev-loop\nfake skill content for tests")
+	skillFS := fstest.MapFS{
+		skillEmbedPath: &fstest.MapFile{Data: skillContent},
+	}
+
+	t.Run("global writes skill to home/.claude/skills/", func(t *testing.T) {
+		home := t.TempDir()
+		written, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS})
+		if err != nil {
+			t.Fatal(err)
+		}
+		skillPath := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+		found := false
+		for _, p := range written {
+			if p == skillPath {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("skill path %s not in written %v", skillPath, written)
+		}
+		data, err := os.ReadFile(skillPath)
+		if err != nil {
+			t.Fatalf("skill file not created: %v", err)
+		}
+		if string(data) != string(skillContent) {
+			t.Errorf("skill bytes mismatch: got %q, want %q", data, skillContent)
+		}
+	})
+
+	t.Run("project writes skill to cwd/.claude/skills/", func(t *testing.T) {
+		cwd := t.TempDir()
+		written, err := Install(Options{Target: "claude-code", Project: true, Cwd: cwd, SkillFS: skillFS})
+		if err != nil {
+			t.Fatal(err)
+		}
+		skillPath := filepath.Join(cwd, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+		found := false
+		for _, p := range written {
+			if p == skillPath {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("skill path %s not in written %v", skillPath, written)
+		}
+		data, err := os.ReadFile(skillPath)
+		if err != nil {
+			t.Fatalf("skill file not created: %v", err)
+		}
+		if string(data) != string(skillContent) {
+			t.Errorf("skill bytes mismatch: got %q, want %q", data, skillContent)
+		}
+	})
+
+	t.Run("copilot global produces no dev-loop file at all (genuinely opted out)", func(t *testing.T) {
+		home := t.TempDir()
+		written, err := Install(Options{Target: "copilot", HomeDir: home})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Only the 3 shim files; no dev-loop file, no SkillFS needed.
+		if len(written) != 3 {
+			t.Fatalf("copilot global: got %d written paths, want 3, got %v", len(written), written)
+		}
+	})
+
+	t.Run("opencode global writes skill to home/.config/opencode/skills/", func(t *testing.T) {
+		home := t.TempDir()
+		written, err := Install(Options{Target: "opencode", HomeDir: home, SkillFS: skillFS})
+		if err != nil {
+			t.Fatal(err)
+		}
+		skillPath := filepath.Join(home, ".config", "opencode", "skills", "spekk-dev-loop", "SKILL.md")
+		found := false
+		for _, p := range written {
+			if p == skillPath {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("skill path %s not in written %v", skillPath, written)
+		}
+		data, err := os.ReadFile(skillPath)
+		if err != nil {
+			t.Fatalf("skill file not created: %v", err)
+		}
+		if string(data) != string(skillContent) {
+			t.Errorf("skill bytes mismatch: got %q, want %q", data, skillContent)
+		}
+	})
+
+	t.Run("nil skill FS returns error for claude-code", func(t *testing.T) {
+		// Ensure DefaultSkillFS is nil during this test.
+		orig := DefaultSkillFS
+		DefaultSkillFS = nil
+		defer func() { DefaultSkillFS = orig }()
+
+		home := t.TempDir()
+		_, err := Install(Options{Target: "claude-code", HomeDir: home})
+		if err == nil {
+			t.Fatal("expected error when both SkillFS and DefaultSkillFS are nil")
+		}
+	})
+}
+
+// TestInstall_DevLoopCommand covers the frontmatter-stripped /spekk-dev-loop
+// command written for cursor, codex, and copilot: the command/prompt
+// harnesses that render a whole file as a prompt (and, for cursor, forbid
+// YAML frontmatter outright).
+func TestInstall_DevLoopCommand(t *testing.T) {
+	skillFS := fakeSkillFSWithFrontmatter()
+
+	assertStrippedFile := func(t *testing.T, path string) {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("expected dev-loop file at %s: %v", path, err)
+		}
+		content := string(data)
+		if strings.Contains(content, "---") {
+			t.Errorf("%s: content should have frontmatter stripped, got %q", path, content)
+		}
+		if !strings.HasPrefix(content, "# Spekk Dev Loop") {
+			t.Errorf("%s: content should start with the stripped body, got %q", path, content)
+		}
+	}
+
+	t.Run("cursor --project writes stripped command to cwd/.cursor/commands/", func(t *testing.T) {
+		cwd := t.TempDir()
+		if _, err := Install(Options{Target: "cursor", Project: true, Cwd: cwd, SkillFS: skillFS}); err != nil {
+			t.Fatal(err)
+		}
+		assertStrippedFile(t, filepath.Join(cwd, ".cursor", "commands", "spekk-dev-loop.md"))
+	})
+
+	t.Run("codex global writes stripped prompt to home/.codex/prompts/", func(t *testing.T) {
+		home := t.TempDir()
+		if _, err := Install(Options{Target: "codex", HomeDir: home, SkillFS: skillFS}); err != nil {
+			t.Fatal(err)
+		}
+		assertStrippedFile(t, filepath.Join(home, ".codex", "prompts", "spekk-dev-loop.md"))
+	})
 }

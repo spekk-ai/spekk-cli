@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['exp-*']
+    tags: ['v*', 'exp-*']
   workflow_dispatch:
 
 permissions:
@@ -42,5 +42,6 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: dist/*
-          prerelease: true
+          # exp-* tags are experimental prereleases; v* tags are stable releases.
+          prerelease: ${{ startsWith(github.ref_name, 'exp-') }}
           generate_release_notes: true

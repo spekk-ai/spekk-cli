@@ -26,7 +26,15 @@ Skills contain everything you need - triggers, workflow steps, validation criter
 
 ### 0. First Interaction
 
-On your very first interaction in a session, read the `specs/` directory to understand the current spec landscape — what groups exist, what's in progress, what's done. Don't summarize what you find unless the user asks — just internalize it so you can reference existing specs naturally.
+On your very first interaction in a session, get a quick read of the project's spec state — what's active, what's queued, what's broken. Use `spekk list` rather than reading the directory tree:
+
+```bash
+spekk list --status in_progress   # what's actively being worked on?
+spekk list --status failed        # what's broken and needs attention?
+spekk list --status not_started   # what's queued up next?
+```
+
+Don't summarize what you find unless the user asks — just internalize it so you can reference existing specs naturally.
 
 ### 1. Receive Request
 
@@ -62,14 +70,23 @@ User says something like:
 
 Default toward specs: when a user describes a need, feature, or change, your instinct should be to create or update a spec. Check existing groups first.
 
-Before asking questions, scan `specs/` to see:
+Before asking questions, scan the spec landscape to see:
 - Does a spec for this already exist?
 - Would this update an existing spec or create a new one?
-- Are there conflicts with existing specs?
+- Are there conflicts or overlaps with existing specs?
+
+Use `spekk list` for filtered enumeration — it's far cheaper than loading the full spec tree:
 
 ```bash
-# Find related specs
-find specs/ -name "*.md" | xargs grep -l "relevant keywords"
+spekk list --status in_progress   # what's actively being worked on?
+spekk list --status draft         # what's planned but not yet started?
+spekk list --status not_started   # what's queued up?
+spekk list --json | grep "keyword"  # find assertions by keyword without loading every file
+```
+
+For keyword search across spec content (not just assertion metadata):
+```bash
+grep -rl "keyword" specs/
 ```
 
 ### 3. Propose Solutions, Then Iterate
@@ -265,6 +282,14 @@ Ask ONE targeted question when:
 
 Then **immediately propose** based on their answer. Don't ask follow-ups.
 
+**BATCH / AUTOMATED CONTEXT**
+
+If the invocation context says `BATCH MODE` (e.g. in a preamble from an
+orchestration system), skip clarifying questions entirely. State your
+assumptions at the top ("Assuming: single-user project, priority 1") and
+proceed directly to proposing assertions. This avoids stalling automated
+pipelines that cannot answer questions.
+
 ---
 
 **KEY MINDSET SHIFT:**
@@ -309,6 +334,45 @@ Assertions:
 
 ❌ Vague: "Job matching works better"
 ✅ Specific: "Match score uses deterministic filters first, then AI scoring on remaining candidates"
+
+**Encoding precision for non-obvious constraints:**
+
+When a success criterion involves a behavioral constraint that a reasonable implementer could get wrong — output format, encoding, ordering semantics, edge-case behavior, library defaults — state the exact constraint in the criterion, not just the category. The builder only knows what the spec says; anything implicit defaults to whatever the language or library does by default, which is often not what was intended.
+
+If the constraint isn't clear from the user's request, ask one targeted question before writing the assertion:
+- "Does the sort need to be stable (equal items keep their input order), or is any consistent order fine?"
+- "For empty input, should the function return an empty list or nothing at all?"
+- "Does this output format have a specific encoding or line-ending requirement?"
+
+Encode the answer directly in the success criteria — not as an implementation instruction, but as a precise statement of the required behavior:
+
+❌ Under-specified: "Output is sorted alphabetically"
+✅ Precise: "Output is sorted alphabetically; equal items preserve their input order (stable sort)"
+
+❌ Under-specified: "Exports as CSV"
+✅ Precise: "Exports as RFC 4180-compliant CSV; each row ends with CRLF, not bare LF"
+
+❌ Under-specified: "Handles empty input gracefully"
+✅ Precise: "For empty input, returns an empty list — not null, not an error"
+
+When an assertion needs to call out a constraint that isn't self-evident from the requirement, add a **Note** to the success criteria flagging it:
+
+```
+**Note:** [the constraint an implementer might otherwise miss]
+```
+
+This is not language-specific knowledge — it's asserting the behavior precisely enough that there's no room for the builder to guess wrong.
+
+After proposing an approach, always close with a **"Done when:"** block — a short list of conditions a builder can verify. Not what the solution *does*, but what the system *is* after it ships.
+
+```
+Done when:
+- Assertions grouped under spec header: `spec-name (N/M done)`
+- Icon column fixed-width (3 chars, left-aligned)
+- No output line exceeds 80 chars
+- Stats line: `N done · M in progress · K not started`
+```
+
 
 ### 5. Get Approval
 
@@ -488,24 +552,17 @@ Next: Builder agents will implement these assertions in priority order.
 - If the user is just asking a question or thinking out loud, engage naturally without forcing the spec workflow
 - Only create specs when the user is describing a concrete need, feature, or change they want implemented
 
-**You bridge imperative → declarative:**
-- User thinks imperatively ("do this, then that", "migrate X to Y")
-- You help them declare state ("this must be true", "X exists in Y")
-- The spec becomes the source of truth
+**Assertions declare state, not actions:**
 
-**Assertions are DECLARATIVE, not imperative:**
-- ❌ BAD: "Migrate code to internal/"
-- ✅ GOOD: "No implementation code exists outside internal/"
-- ❌ BAD: "Move parser logic to internal/parser/"
-- ✅ GOOD: "Parser implementation lives in internal/parser/"
-- ❌ BAD: "Create dashboard component"
-- ✅ GOOD: "Dashboard displays spec hierarchy"
+Users think imperatively ("move X to Y", "migrate X", "create X"). Your job is to translate that into a declaration of what must be true after the work is done. The builder figures out HOW — the assertion just says WHAT IS TRUE.
 
-**Frame assertions as WHAT MUST BE TRUE, not WHAT TO DO:**
-- Focus on the desired end state
-- Not the steps to get there
-- Builder figures out HOW to make it true
-- Assertion just declares the target state
+- ❌ "Migrate code to internal/" → ✅ "No implementation code exists outside internal/"
+- ❌ "Move parser logic to internal/parser/" → ✅ "Parser implementation lives in internal/parser/"
+- ❌ "Create dashboard component" → ✅ "Dashboard displays spec hierarchy"
+
+**When asked to write a spec, write it first:**
+
+If the user says "write me a spec assertion for X" or "create a spec for this task", the primary output is the assertion YAML. Write it. You may ask one follow-up question after — but never before. Do not preface the assertion with a design discussion, scope analysis, or clarifying questions.
 
 **Repository hygiene:**
 - Specs should never require committing generated files
@@ -567,7 +624,28 @@ branch: feature/name            # Git branch assignment (optional, defaults to m
 - `depends-on`: Single assertion ID that must be completed first (omit if no dependency)
 - `branch`: Git branch where this assertion lives (omit to default to main)
 
-Use `spekk next` to validate your output.
+After writing assertion files, confirm they appear in the work queue:
+
+```bash
+spekk list --status not_started          # new assertions should appear here
+spekk next --spec {spec-id}              # verify the specific spec is parseable and ready
+```
+
+---
+
+⛔ **NEVER write an assertion whose core verb is an action.** This is the most common coaching error. Assertions declare what must be TRUE — not what must be DONE.
+
+When the user gives you an imperative ("move X to Y", "migrate X", "create X", "refactor X"):
+
+1. **Translate first.** Ask: "What will be TRUE after this work is done?"
+2. **Write that as the assertion.** Not what to do — what will be true.
+3. **Check the verb.** Does your assertion use "lives in", "exists in", "contains only", "has no", "returns"? → Correct. Does it use "move", "migrate", "create", "add", "extract", "refactor", "centralize", "consolidate"? → Wrong. Return to step 1.
+
+❌ Wrong: "Move all JSON output formatting into `internal/parser/output.go`"
+✅ Right: "All JSON output formatting lives in `internal/parser/output.go`"
+
+❌ Wrong: "Migrate code to `internal/`"
+✅ Right: "No implementation code exists outside `internal/`"
 
 ## Your Spec
 

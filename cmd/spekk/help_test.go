@@ -64,14 +64,14 @@ func TestReadmeDocumentsInstallSystem(t *testing.T) {
 	section := installingSkillsSection(readme)
 
 	wantSubstrings := map[string]string{
-		"registry install example":   "spekk install coach meeting-notes",
-		"--global install example":   "--global",
-		"--source install example":   "--source https://",
-		"uninstall example":          "spekk uninstall",
-		"registry repo path":         "github.com/spekk-ai/spekk-skills",
-		"raw mirror env var":         "SPEKK_SKILLS_RAW_BASE",
-		"api mirror env var":         "SPEKK_SKILLS_API_BASE",
-		"--force overwrite mention":  "--force",
+		"registry install example":  "spekk install coach meeting-notes",
+		"--global install example":  "--global",
+		"--source install example":  "--source https://",
+		"uninstall example":         "spekk uninstall",
+		"registry repo path":        "github.com/spekk-ai/spekk-skills",
+		"raw mirror env var":        "SPEKK_SKILLS_RAW_BASE",
+		"api mirror env var":        "SPEKK_SKILLS_API_BASE",
+		"--force overwrite mention": "--force",
 	}
 	for label, needle := range wantSubstrings {
 		if !strings.Contains(section, needle) {

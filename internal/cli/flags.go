@@ -1,6 +1,8 @@
 // Package cli provides shared utilities for CLI command parsing.
 package cli
 
+import "strings"
+
 // FlagType represents the type of a CLI flag.
 type FlagType int
 
@@ -67,7 +69,11 @@ func ParseFlags(args []string, flags FlagSet) *ParseResult {
 		case BoolFlag:
 			result.Bools[e.key] = true
 		case StringFlag:
-			if i+1 < len(args) {
+			// Only consume the next token as a value when it does not look like
+			// a flag. Tokens that start with "--" or with "-" followed by a
+			// letter (e.g. "-l") are treated as flags; tokens like "-5" (dash
+			// then digit) are valid negative-number values and are consumed.
+			if i+1 < len(args) && !looksLikeFlag(args[i+1]) {
 				i++
 				result.Strings[e.key] = args[i]
 			}
@@ -75,4 +81,17 @@ func ParseFlags(args []string, flags FlagSet) *ParseResult {
 	}
 
 	return result
+}
+
+// looksLikeFlag reports whether s is a flag token rather than a plain value.
+// "--anything" and "-<letter>" patterns are flags; "-5" (dash+digit) is a value.
+func looksLikeFlag(s string) bool {
+	if strings.HasPrefix(s, "--") {
+		return true
+	}
+	if len(s) >= 2 && s[0] == '-' {
+		c := s[1]
+		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+	}
+	return false
 }
