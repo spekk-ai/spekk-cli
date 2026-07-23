@@ -3,7 +3,7 @@ id: coach-prompt-untrusted-input
 parent: untrusted-input-guidance
 created: 2026-07-23T21:10:51Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Coach prompt warns that ingested content is untrusted
