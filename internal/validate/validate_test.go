@@ -209,6 +209,34 @@ func TestRun_DanglingDependsOn_Fails(t *testing.T) {
 	hasFailureContaining(t, result, "non-existent assertion")
 }
 
+// TestRun_DependsOnCycle_Fails covers checkCycles, the only non-trivial graph
+// logic in the package: a 3-cycle must be flagged on every
+// member (so the mistake is visible from whichever file a reader opens), not
+// just one.
+func TestRun_DependsOnCycle_Fails(t *testing.T) {
+	specsDir := t.TempDir()
+	writeSpec(t, specsDir, "my-spec", "")
+	base := "parent: my-spec\ncreated: 2026-01-01T00:00:00Z\npriority: 1\nstatus: not_started\n"
+	writeAssertion(t, specsDir, "my-spec", "a", "id: a\n"+base+"depends-on: b\n")
+	writeAssertion(t, specsDir, "my-spec", "b", "id: b\n"+base+"depends-on: c\n")
+	writeAssertion(t, specsDir, "my-spec", "c", "id: c\n"+base+"depends-on: a\n")
+
+	result, err := Run(specsDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cycleFailures := 0
+	for _, f := range result.Failures {
+		if strings.Contains(f.Message, "depends-on cycle") {
+			cycleFailures++
+		}
+	}
+	if cycleFailures != 3 {
+		t.Errorf("expected all 3 cycle members flagged, got %d cycle failures in: %v", cycleFailures, result.Failures)
+	}
+}
+
 func TestRun_NoSpecsDir_PassesEmpty(t *testing.T) {
 	specsDir := filepath.Join(t.TempDir(), "does-not-exist")
 

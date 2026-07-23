@@ -305,6 +305,11 @@ func checkCycles(assertions []parser.Assertion, result *Result) {
 		if a.DependsOn == "" || reported[a.ID] {
 			continue
 		}
+		// Self-references are a degenerate cycle already reported by
+		// checkDependsOn with a clearer message; don't double-report them here.
+		if a.DependsOn == a.ID {
+			continue
+		}
 
 		visited := map[string]bool{}
 		var path []string
