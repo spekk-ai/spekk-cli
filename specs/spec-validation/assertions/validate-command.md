@@ -43,7 +43,12 @@ fixed set of invariants and exits non-zero if any is violated. It reuses the
 6. **Parent has no rolled-up status.** A parent spec file's frontmatter has no
    `status` field, OR its only value is `draft`. Any other value
    (`done`, `in_progress`, `failed`, `not_started`) is a failure, because the
-   parser silently overwrites it.
+   parser silently overwrites it. **Detection uses the raw frontmatter, not the
+   parsed `Spec.Status`:** `ParseSpecContent` defaults an *absent* `status` to
+   `"not_started"`, so it cannot distinguish "no status field" (pass) from a
+   literal `status: not_started` (fail). Validate checks whether the `status:`
+   key is literally present in the parent's frontmatter — a key-presence/value
+   check, which is not the same as re-implementing the frontmatter parser.
 
 ### Exit-code and output contract
 - **All invariants hold:** exit code `0` and one concise success line to stdout,
@@ -54,9 +59,13 @@ fixed set of invariants and exits non-zero if any is violated. It reuses the
   `specs/foo/assertions/bar.md: status is in_progress but locked-by is missing`.
   Failures are printed deterministically (sorted by file path, then by message)
   so output is stable across runs and diffable in CI.
-- No spurious stderr warnings leak into the failure report — a clean file
-  produces no output beyond the summary; a bad file produces exactly its failure
-  lines.
+- Validate's own report is on **stdout** and is clean: an all-valid run prints
+  only the summary line; a run with failures prints only the sorted failure
+  lines (plus the non-zero exit). Validate itself introduces no spurious
+  diagnostics into that report. Advisory warnings the *reused parser* already
+  emits to stderr (e.g. `validateBranch`'s "non-standard branch pattern" notice,
+  which fires for many existing assertions) are not validation failures, must
+  not appear as failure lines, and validate is not required to suppress them.
 
 ### Tests
 - `internal/validate/` has a test (`validate_test.go`) that drives validation
