@@ -3,8 +3,7 @@ id: validate-command
 parent: spec-validation
 created: 2026-07-23T21:10:51Z
 priority: 1
-status: in_progress
-locked-by: builder-home-wsl2-411981-1784842032
+status: done
 ---
 
 # `spekk validate` enforces spec invariants with a non-zero exit gate
@@ -82,3 +81,12 @@ fixed set of invariants and exits non-zero if any is violated. It reuses the
 **Note:** The failure report's value is the exit code (the CI/loop contract) plus
 enough text for a human to fix the file. Keep it plain text — no JSON, no
 severity levels, no config flags in v1.
+
+**Tests:** `internal/validate/validate_test.go` — all-valid tree (pass);
+`in_progress` missing `locked-by` (fail); `done` with `locked-by` still set
+(fail); malformed assertion (bad priority/status) failing instead of being
+silently skipped; duplicate assertion id (fail); parent `status: done` (fail)
+vs parent `status: draft` (pass); the absent-status-vs-explicit-`not_started`
+regression case; dangling `depends-on` (fail); missing `specs/` dir (pass,
+trivially). `cmd/spekk/main_test.go` (new) covers the CLI wiring: exit codes
+and stdout content for `execValidate` against a clean vs. broken fixture.
