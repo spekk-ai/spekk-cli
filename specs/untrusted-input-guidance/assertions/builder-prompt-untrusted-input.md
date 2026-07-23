@@ -3,8 +3,7 @@ id: builder-prompt-untrusted-input
 parent: untrusted-input-guidance
 created: 2026-07-23T21:10:51Z
 priority: 1
-status: in_progress
-locked-by: builder-home-wsl2-408398-1784841592
+status: done
 ---
 
 # Builder prompt warns that assertion bodies are untrusted prose
