@@ -3,7 +3,8 @@ id: validate-command
 parent: spec-validation
 created: 2026-07-23T21:10:51Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-home-wsl2-411981-1784842032
 ---
 
 # `spekk validate` enforces spec invariants with a non-zero exit gate
