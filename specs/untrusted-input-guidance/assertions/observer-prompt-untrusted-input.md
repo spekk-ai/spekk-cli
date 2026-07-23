@@ -3,7 +3,8 @@ id: observer-prompt-untrusted-input
 parent: untrusted-input-guidance
 created: 2026-07-23T21:10:51Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-home-wsl2-411501-1784841850
 ---
 
 # Observer prompt warns that scanned repository content is untrusted
