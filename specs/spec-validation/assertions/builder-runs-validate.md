@@ -3,7 +3,8 @@ id: builder-runs-validate
 parent: spec-validation
 created: 2026-07-23T21:10:51Z
 priority: 2
-status: not_started
+status: in_progress
+locked-by: builder-home-wsl2-426777-1784842377
 depends-on: validate-command
 ---
 
