@@ -21,6 +21,7 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/show"
 	"github.com/spekk-ai/spekk-cli/internal/status"
 	"github.com/spekk-ai/spekk-cli/internal/update"
+	"github.com/spekk-ai/spekk-cli/internal/validate"
 	pkgversion "github.com/spekk-ai/spekk-cli/internal/version"
 )
 
@@ -72,6 +73,9 @@ func main() {
 
 	case "status":
 		showStatus()
+
+	case "validate":
+		runValidate(args[1:])
 
 	case "show":
 		showSpekk(args[1:])
@@ -380,6 +384,77 @@ func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
 		return rows[i].ID < rows[j].ID
 	})
 	return rows
+}
+
+// runValidate implements the `spekk validate` subcommand.
+func runValidate(args []string) {
+	code := execValidate(args, os.Stdout, "")
+	if code != 0 {
+		os.Exit(code)
+	}
+}
+
+// validateUsage is the help text for `spekk validate`.
+const validateUsage = `
+spekk validate - Check every spec and assertion under specs/ against a fixed
+set of invariants and exit non-zero if any is violated.
+
+USAGE:
+  spekk validate [OPTIONS]
+
+OPTIONS:
+  --specs-dir <path>   Read specs from a specific directory (default: git root specs/)
+  --help, -h           Show this help message
+
+Checks (all in one pass): frontmatter well-formedness (no silent skips — a
+malformed spec or assertion file is a failure here, unlike "spekk next"),
+parent resolution, depends-on validity (kebab-case, exists, no self-reference,
+no cycles), no duplicate spec or assertion ids, lock-state pairing
+(in_progress requires locked-by; every other status forbids it), and parent
+specs carrying no rolled-up status field (absent, or the literal value
+"draft").
+
+Exit 0 and a one-line summary on stdout when everything is valid. Exit 1 and
+one plain-text failure line per violation (file + problem), sorted by file
+then message, when anything is invalid.
+`
+
+// execValidate is the testable core of runValidate. It writes the report to
+// stdout and returns an exit code (0 = pass, 1 = at least one failure).
+// specsDir: if non-empty, skip findSpecsDir() and use this directly.
+func execValidate(args []string, stdout io.Writer, specsDir string) int {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Fprint(stdout, validateUsage)
+		return 0
+	}
+
+	if specsDir == "" {
+		specsDir = flags.String("specsDir")
+	}
+	if specsDir == "" {
+		specsDir = findSpecsDir()
+	}
+
+	result, err := validate.Run(specsDir)
+	if err != nil {
+		fmt.Fprintf(stdout, "validate: %s\n", err.Error())
+		return 1
+	}
+
+	if result.Passed() {
+		fmt.Fprintf(stdout, "validate: %d specs, %d assertions OK\n", result.SpecCount, result.AssertionCount)
+		return 0
+	}
+
+	for _, f := range result.Failures {
+		fmt.Fprintln(stdout, f.String())
+	}
+	return 1
 }
 
 // findSpecsDir locates the specs/ directory using git root.
@@ -1186,6 +1261,7 @@ COMMANDS:
   list      List specs and assertions with optional --status filter and --assertions-only flat output
   show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
+  validate  Check specs/ against a fixed set of invariants; exit non-zero on any violation
   serve     Start WebSocket server for browser extension (--port, --host)
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
