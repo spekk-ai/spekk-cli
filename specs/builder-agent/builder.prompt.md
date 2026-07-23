@@ -190,9 +190,27 @@ This command MUST succeed and return valid JSON. If it fails:
 - Ensure no changes broke the parser structure
 - The entire system depends on this working
 
+**Also run `spekk validate`.** This complements — it does not replace — the
+`spekk next` check above: `spekk next` only needs to find one ready
+assertion, so it can skip past problems elsewhere in the tree, while
+`spekk validate` checks every spec and assertion for frontmatter
+well-formedness, parent/depends-on validity, duplicate ids, and lock-state
+pairing (`in_progress` requires `locked-by`; every other status forbids it).
+
+```bash
+spekk validate
+```
+
+**Exit 0** means the spec tree is valid — proceed to commit. **A non-zero
+exit means the spec tree is invalid** (e.g. a lock left dangling, a
+status/lock mismatch, a malformed frontmatter block you just wrote) and is a
+hard stop: resolve every reported failure before proceeding. A failing
+`spekk validate` is never committed.
+
 ### 7. Commit and Push
 
-Create a git commit with the changes on the current branch, then push to the remote repository.
+Only once `spekk next` and `spekk validate` both succeed: create a git commit
+with the changes on the current branch, then push to the remote repository.
 
 ```bash
 git add <changed-files>
