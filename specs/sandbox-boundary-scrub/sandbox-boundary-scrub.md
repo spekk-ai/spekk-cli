@@ -48,29 +48,46 @@ Concrete leak sites found by sweeping `*.go` / `*.yaml` in shipped code:
   `https://%s/staff/agent/agent/add/`").
 - `cmd/sandbox/client.go` — the agent auth token is embedded in the WebSocket
   URL path; move it to an `Authorization` header (hardening, coordinated with
-  the control host).
+  the control host). The additive header landed in `ws-auth-header`; the
+  follow-up removal of the path token is tracked in `ws-drop-path-token`.
 
-## Out of scope for this cycle (flagged, not fixed here)
+## Deferred to later cycles (now tracked as queued assertions below)
 
-The sweep also found these public-file mentions; they are deliberately left out
-so this cycle stays lean and touches only the shipped sandbox code:
+The sweep also found these mentions. They were left out of the original code
+cycle so it stayed lean, and are now queued as their own lower-priority
+assertions rather than left unaddressed:
 
 - `docs/release-notes/RELEASE-NOTES-1.3.0.md` names the stack and presents one
-  chat surface as *the* integration. Release notes are published history;
-  editing them is a separate decision.
-- `specs/sandbox-go-release/` (spec text and an assertion) names the private
-  repo and is also stale (it still describes the pre-Go `*.js` layout). That is
-  spec drift for the observer/coach to reconcile, not shipped code.
+  chat surface as *the* integration. Release notes are published history, so
+  the edit is a meaning-preserving generalization — tracked in
+  `release-notes-history-generalize` (P3).
 - `.gitignore` ignores a `spekk-app-reference/` path, which names the private
-  repo. Renaming it forces a local-workflow change, so it is a separate call.
+  repo. Renaming it forces a local-workflow change — tracked in
+  `gitignore-neutral-reference-path` (P3).
+
+Already reconciled (no queued assertion needed):
+
+- `specs/sandbox-go-release/` (spec text and its assertions) named the private
+  repo and still described the pre-Go `*.js` layout. That spec drift has been
+  corrected in place to describe the current Go reality (Go binary downloaded
+  from the public `spekk-ai/spekk-cli` release, cloud-init embedded).
+
+Intentionally left alone (not leaks):
+
 - Example prompt snippets in `README.md`, `docs/configuration.md`, and the
   `layered-prompt-system` spec say things like "a Django/HTMX project" — these
   describe a hypothetical *user's* project, not the control host, so they are
-  not leaks and are intentionally left alone.
+  not leaks.
 
 ## Assertions
 
 1. `cloud-init-neutral-comments` — scrub cloud-init.yaml comments
 2. `release-comment-generic` — scrub the release.go comment
 3. `cli-output-no-stack` — scrub the sandbox CLI's "add this agent" output
-4. `ws-auth-header` — move the auth token to an Authorization header
+4. `ws-auth-header` — move the auth token to an Authorization header (done)
+5. `ws-drop-path-token` — remove the token from the WebSocket URL path (P2,
+   draft; blocked on the control host reading the header)
+6. `release-notes-history-generalize` — generalize control-host internals in
+   published release notes (P3, queued)
+7. `gitignore-neutral-reference-path` — rename the private-named ignored path
+   (P3, queued)
