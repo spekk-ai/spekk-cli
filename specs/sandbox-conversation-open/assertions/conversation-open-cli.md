@@ -3,7 +3,8 @@ id: conversation-open-cli
 parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-home-wsl2-654406-1784854100
 depends-on: conversation-open-contract
 ---
 
