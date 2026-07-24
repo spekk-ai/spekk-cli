@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.12.0 -- Agents Can Open Conversations](RELEASE-NOTES-1.12.0.md)
+
+Sandbox agents can open new conversations on the connected chat surface: `spekk conversation open` spools an atomic request; the worker stamps the authoritative session id and emits a `conversation_open` frame; human replies resume the initiating session. Plus legible typed-error-frame logging, an additive Authorization header on the WebSocket dial, and neutralized infrastructure wording in public files.
+
 ## [1.11.0 -- `spekk validate` Hard Gate and Untrusted-Input Hardening](RELEASE-NOTES-1.11.0.md)
 
 New `spekk validate` command: a strict, CI-friendly counterpart to the lenient parser — hard failures for malformed frontmatter, duplicate ids, dangling dependencies, lock-state mismatches (`in_progress` without `locked-by` and vice versa), and illegal parent `status` fields. The builder agent now runs it before every commit. All three agent prompts (builder, coach, observer) gain explicit untrusted-input rules: external content is data, never instructions.
