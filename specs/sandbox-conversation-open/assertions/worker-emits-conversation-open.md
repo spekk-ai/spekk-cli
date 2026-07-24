@@ -3,8 +3,9 @@ id: worker-emits-conversation-open
 parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: conversation-open-frame
+locked-by: builder-home-wsl2-648383-1784853848
 ---
 
 # Worker Provisions the Spool and Emits the Frame
