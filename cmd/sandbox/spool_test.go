@@ -159,6 +159,31 @@ func TestDrainSpoolContinuesAfterMalformedFile(t *testing.T) {
 	}
 }
 
+// TestDrainSpoolIgnoresStagingFiles verifies drainSpool skips a writer's
+// not-yet-renamed ".json.tmp" staging file: a concurrent drain must neither
+// emit a frame from it nor remove it (removing it would fail the writer's
+// rename and lose the request). Only the finalized ".json" sibling is drained.
+func TestDrainSpoolIgnoresStagingFiles(t *testing.T) {
+	dir := t.TempDir()
+	staging := writeRequestFile(t, dir, "request-42.json.tmp", `{"title":"T","body":"B","severity":"info"}`)
+	writeRequestFile(t, dir, "request-99.json", `{"title":"final","body":"B","severity":"info"}`)
+
+	var frames []map[string]any
+	send := func(ctx context.Context, frame map[string]any) error {
+		frames = append(frames, frame)
+		return nil
+	}
+
+	drainSpool(context.Background(), dir, "sess-1", send)
+
+	if len(frames) != 1 || frames[0]["title"] != "final" {
+		t.Fatalf("expected only the finalized .json request drained, got %v", frames)
+	}
+	if _, err := os.Stat(staging); err != nil {
+		t.Errorf("staging .tmp file must be left untouched for the writer's rename, stat err=%v", err)
+	}
+}
+
 // --- provisionSpool ---
 
 // TestProvisionSpoolCreatesAndCleansUpDir verifies the spool directory

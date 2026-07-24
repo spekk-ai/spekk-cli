@@ -6,9 +6,17 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
 )
+
+// requestFileExt is the extension of a finalized request file. The writer
+// (spekk conversation open) stages each request as "<name>.json.tmp" and
+// atomically renames it to "<name>.json"; drainSpool only ever considers
+// files with this extension so it can never observe — and destroy — a
+// staging file whose rename has not yet committed.
+const requestFileExt = ".json"
 
 // frameSender is the narrow boundary drainSpool sends built frames through.
 // In production it wraps wsjson.Write on the session's WebSocket connection;
@@ -41,6 +49,13 @@ func drainSpool(ctx context.Context, spoolDir, sessionID string, send frameSende
 
 	for _, entry := range entries {
 		if entry.IsDir() {
+			continue
+		}
+		// Skip staging files (e.g. "request-*.json.tmp") a concurrent writer
+		// has created but not yet renamed into place. Consuming one would
+		// remove it out from under the writer, failing its rename and losing
+		// the request.
+		if !strings.HasSuffix(entry.Name(), requestFileExt) {
 			continue
 		}
 		drainOne(ctx, filepath.Join(spoolDir, entry.Name()), sessionID, send)
