@@ -86,6 +86,9 @@ func main() {
 	case "sandbox":
 		launchSandbox(args[1:])
 
+	case "conversation":
+		runConversation(args[1:])
+
 	case "prompt":
 		runPrompt(args[1:])
 
@@ -1267,6 +1270,7 @@ COMMANDS:
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
+  conversation  Request a conversation on the connected chat surface (open)
   install   Install a skill for an agent (coach/builder/observer)
   uninstall Remove an installed skill from local or global scope
   skills    Inspect skills available to an agent (list)

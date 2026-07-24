@@ -3,8 +3,7 @@ id: conversation-open-cli
 parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-home-wsl2-654406-1784854100
+status: done
 depends-on: conversation-open-contract
 ---
 
@@ -47,3 +46,5 @@ connection and never supplies a session id.
   one well-formed request file (with no `session_id` key); a missing required
   flag and an invalid severity each return a non-zero result with a legible
   message; and an unset spool variable returns a non-zero result.
+
+**Tests:** cmd/spekk/conversation_test.go
