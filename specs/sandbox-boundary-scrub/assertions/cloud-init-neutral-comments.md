@@ -3,8 +3,7 @@ id: cloud-init-neutral-comments
 parent: sandbox-boundary-scrub
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-home-wsl2-659100-1784854336
+status: done
 ---
 
 # cloud-init.yaml Comments Are Stack- and Host-Neutral
