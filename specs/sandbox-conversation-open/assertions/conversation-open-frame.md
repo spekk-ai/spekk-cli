@@ -3,8 +3,9 @@ id: conversation-open-frame
 parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: conversation-open-contract
+locked-by: builder-home-wsl2-644046-1784853646
 ---
 
 # Worker Builds a Well-Formed conversation_open Frame
