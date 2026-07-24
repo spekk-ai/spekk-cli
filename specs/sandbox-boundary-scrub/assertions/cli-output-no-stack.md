@@ -3,8 +3,7 @@ id: cli-output-no-stack
 parent: sandbox-boundary-scrub
 created: 2026-07-23T00:00:00Z
 priority: 2
-status: in_progress
-locked-by: builder-home-wsl2-664779-1784854634
+status: done
 ---
 
 # Sandbox CLI Output Names No Stack or Internal Admin URL
