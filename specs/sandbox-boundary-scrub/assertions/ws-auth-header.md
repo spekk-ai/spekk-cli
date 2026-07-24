@@ -3,7 +3,8 @@ id: ws-auth-header
 parent: sandbox-boundary-scrub
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-home-wsl2-660943-1784854522
 ---
 
 # Agent Auth Token Travels in an Authorization Header
