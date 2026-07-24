@@ -8,22 +8,29 @@ branch: feature/sandbox-go-release
 depends-on: sandbox-release-downloader
 ---
 
-# Sandbox Deploy Uses Go Binary
+# Sandbox Create and Deploy Share One Go Deploy Path
 
-Both `sandbox create` and `sandbox deploy` use a single shared function to deploy the Go agent binary. No Python, uv, or venv steps remain.
+Both `sandbox create` and `sandbox deploy` deploy the Go agent binary through a
+single shared function. No Python, uv, or venv steps remain.
 
 ## Success Criteria
 
-- `src/sandbox/agent.js` exports `deployAgent(ip, artifacts?)` which:
-  - Uses provided `artifacts` or calls `fetchReleaseArtifacts()` to get the binary path and version
-  - rsyncs the binary to `root@{ip}:/opt/spekk/agent-client`
-  - SSHes to set `chmod +x /opt/spekk/agent-client`
-  - Creates `/var/log/spekk` with `agent:agent` ownership
-  - Writes the Go systemd unit file to `/etc/systemd/system/spekk-agent.service` (replacing any legacy Python unit), with stdout/stderr logging to `/var/log/spekk/agent.log`
-  - SSHes to run `systemctl daemon-reload && systemctl restart spekk-agent`
-  - Prints the deployed version (e.g. `Agent v1.2.3 deployed`)
-- `src/sandbox/create.js` calls `deployAgent(ip, releaseArtifacts)` instead of the inline `deployAgentClient` function, reusing artifacts already fetched for cloud-init
-- `src/sandbox/deploy.js` calls `deployAgent(ip)` instead of its inline deploy logic
-- `src/sandbox/create.js` passes `cloudInitPath` (from `fetchReleaseArtifacts()`) to `createDroplet` as user data instead of reading the bundled template
-- No calls to `uv`, `pip`, or `websockets` remain in any sandbox source file
-- `src/sandbox/templates/cloud-init.yaml` does not exist
+- `internal/sandbox/commands.go` defines
+  `deployAgent(ip, keyPath, name string, artifacts *releaseArtifacts)` which:
+  - scp's `artifacts.BinaryPath` to `root@{ip}:/opt/spekk/agent-client`
+  - runs one remote script over SSH that `chmod +x /opt/spekk/agent-client`,
+    creates `/opt/spekk/workspace`, chowns `/opt/spekk` to `agent:agent`, and
+    creates `/var/log/spekk` owned by `agent:agent`
+  - writes the Go systemd unit to `/etc/systemd/system/spekk-agent.service`
+    (ExecStart `/opt/spekk/agent-client`, stdout/stderr appended to
+    `/var/log/spekk/agent.log`)
+  - runs `systemctl daemon-reload && systemctl enable spekk-agent && systemctl restart spekk-agent`
+- `Create` (in `commands.go`) fetches artifacts via
+  `fetchReleaseArtifacts("latest")`, renders the embedded cloud-init with the
+  sandbox's public key (`renderCloudInit`) and passes it to `createDroplet` as
+  droplet user-data, then calls `deployAgent(ip, keyPath, name, artifacts)` with
+  the already-fetched artifacts
+- `Deploy` (in `commands.go`) fetches artifacts via
+  `fetchReleaseArtifacts("latest")` and calls the same `deployAgent(...)`
+- No calls to `uv`, `pip`, or `websockets`, and no `src/sandbox/**` JS files,
+  remain in the sandbox source
