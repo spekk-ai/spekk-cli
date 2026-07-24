@@ -3,11 +3,12 @@ id: ws-auth-header
 parent: sandbox-boundary-scrub
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-home-wsl2-660943-1784854522
+status: done
 ---
 
 # Agent Auth Token Travels in an Authorization Header
+
+**Tests:** cmd/sandbox/client_test.go (`TestDialOptionsSendsAuthorizationHeader`)
 
 `cmd/sandbox/client.go`'s `wsURL()` embeds the agent auth token in the
 WebSocket URL path (`wss://<host>/ws/agent/<token>/`). Tokens in URLs leak into

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -35,7 +36,25 @@ func (c *AgentClient) wsURL() string {
 	if contains(c.cfg.Host, "localhost") {
 		scheme = "ws"
 	}
+	// The path token is the current (soon-to-be-deprecated) auth carrier:
+	// the control host authenticates the agent from this path segment today.
+	// Removing it is deferred until the control host reads the Authorization
+	// header sent alongside it in dialOptions below (a coordinated
+	// cross-repo follow-up).
 	return fmt.Sprintf("%s://%s/ws/agent/%s/", scheme, c.cfg.Host, c.cfg.Token)
+}
+
+// dialOptions builds the websocket.DialOptions used to connect. The agent
+// token is sent as an Authorization header in addition to (not instead of)
+// the path token wsURL() embeds — see the comment on wsURL(). Split out from
+// connect() so the header construction is exercisable without a real dial.
+func (c *AgentClient) dialOptions() *websocket.DialOptions {
+	return &websocket.DialOptions{
+		CompressionMode: websocket.CompressionDisabled,
+		HTTPHeader: http.Header{
+			"Authorization": []string{"Bearer " + c.cfg.Token},
+		},
+	}
 }
 
 func (c *AgentClient) Run(ctx context.Context) {
@@ -56,10 +75,7 @@ func (c *AgentClient) Run(ctx context.Context) {
 }
 
 func (c *AgentClient) connect(ctx context.Context) error {
-	opts := &websocket.DialOptions{
-		CompressionMode: websocket.CompressionDisabled,
-	}
-	conn, _, err := websocket.Dial(ctx, c.wsURL(), opts)
+	conn, _, err := websocket.Dial(ctx, c.wsURL(), c.dialOptions())
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}

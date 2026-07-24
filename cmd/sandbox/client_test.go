@@ -8,6 +8,29 @@ import (
 	"testing"
 )
 
+// --- ws auth ---
+
+// TestDialOptionsSendsAuthorizationHeader verifies the dial options carry
+// the agent token as a Bearer Authorization header, in addition to (not
+// instead of) the token wsURL() still embeds in the path. This is additive:
+// the control host authenticates on the path token today and does not yet
+// read the header, so both carriers must be present this cycle.
+func TestDialOptionsSendsAuthorizationHeader(t *testing.T) {
+	c := &AgentClient{cfg: Config{Token: "secret-token", Host: "example.com"}}
+
+	opts := c.dialOptions()
+
+	got := opts.HTTPHeader.Get("Authorization")
+	want := "Bearer secret-token"
+	if got != want {
+		t.Errorf("Authorization header = %q, want %q", got, want)
+	}
+
+	if url := c.wsURL(); !strings.Contains(url, "/ws/agent/secret-token/") {
+		t.Errorf("wsURL() = %q, still expected to carry the path token", url)
+	}
+}
+
 // captureLog redirects the standard logger's output to a buffer for the
 // duration of the test and restores it on cleanup.
 func captureLog(t *testing.T) *bytes.Buffer {
