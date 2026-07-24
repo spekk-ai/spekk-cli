@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -35,7 +36,25 @@ func (c *AgentClient) wsURL() string {
 	if contains(c.cfg.Host, "localhost") {
 		scheme = "ws"
 	}
+	// The path token is the current (soon-to-be-deprecated) auth carrier:
+	// the control host authenticates the agent from this path segment today.
+	// Removing it is deferred until the control host reads the Authorization
+	// header sent alongside it in dialOptions below (a coordinated
+	// cross-repo follow-up).
 	return fmt.Sprintf("%s://%s/ws/agent/%s/", scheme, c.cfg.Host, c.cfg.Token)
+}
+
+// dialOptions builds the websocket.DialOptions used to connect. The agent
+// token is sent as an Authorization header in addition to (not instead of)
+// the path token wsURL() embeds — see the comment on wsURL(). Split out from
+// connect() so the header construction is exercisable without a real dial.
+func (c *AgentClient) dialOptions() *websocket.DialOptions {
+	return &websocket.DialOptions{
+		CompressionMode: websocket.CompressionDisabled,
+		HTTPHeader: http.Header{
+			"Authorization": []string{"Bearer " + c.cfg.Token},
+		},
+	}
 }
 
 func (c *AgentClient) Run(ctx context.Context) {
@@ -56,10 +75,7 @@ func (c *AgentClient) Run(ctx context.Context) {
 }
 
 func (c *AgentClient) connect(ctx context.Context) error {
-	opts := &websocket.DialOptions{
-		CompressionMode: websocket.CompressionDisabled,
-	}
-	conn, _, err := websocket.Dial(ctx, c.wsURL(), opts)
+	conn, _, err := websocket.Dial(ctx, c.wsURL(), c.dialOptions())
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
@@ -99,17 +115,54 @@ func (c *AgentClient) readLoop(ctx context.Context, conn *websocket.Conn) error 
 			return err
 		}
 
-		switch msg.Type {
-		case MessageTypeMessage:
-			c.handleMessage(ctx, conn, msg)
-		case MessageTypeCancel:
-			c.handleCancel(msg)
-		case MessageTypeHeartbeatAck:
-			// ignore
-		default:
-			log.Printf("Unknown message type: %s", msg.Type)
-		}
+		c.handleInbound(ctx, conn, msg)
 	}
+}
+
+// handleInbound dispatches a single decoded inbound frame. Split out from
+// readLoop so the dispatch logic is exercisable in tests without a real
+// websocket connection.
+func (c *AgentClient) handleInbound(ctx context.Context, conn *websocket.Conn, msg Message) {
+	switch msg.Type {
+	case MessageTypeMessage:
+		c.handleMessage(ctx, conn, msg)
+	case MessageTypeCancel:
+		c.handleCancel(msg)
+	case MessageTypeHeartbeatAck:
+		// ignore
+	case MessageTypeError:
+		handleErrorFrame(msg)
+	default:
+		log.Printf("Unknown message type: %s", msg.Type)
+	}
+}
+
+// conversationOpenErrorCodes are the error codes the control host sends in
+// reply to a rejected conversation_open request. Frames carrying one of
+// these are logged as conversation_open rejections rather than generic
+// errors.
+var conversationOpenErrorCodes = map[string]bool{
+	"conversation_open_invalid":    true,
+	"conversation_open_no_channel": true,
+	"conversation_open_failed":     true,
+}
+
+// handleErrorFrame logs an inbound "error" frame legibly. It never tears
+// down the connection or the worker — receiving an error frame is a
+// non-fatal event, on par with any other frame this loop handles.
+func handleErrorFrame(msg Message) {
+	if conversationOpenErrorCodes[msg.Error] {
+		log.Printf("conversation_open rejected: %s — %s", msg.Error, msg.Detail)
+		return
+	}
+	if msg.Error == "" && msg.Detail == "" {
+		// A control host predating the typed error contract sends error
+		// frames without code/detail fields; say so rather than logging an
+		// empty "—".
+		log.Printf("error frame received with no code/detail (control host may predate the typed error contract)")
+		return
+	}
+	log.Printf("error frame received: %s — %s", msg.Error, msg.Detail)
 }
 
 func (c *AgentClient) handleMessage(ctx context.Context, conn *websocket.Conn, msg Message) {

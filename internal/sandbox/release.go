@@ -45,9 +45,10 @@ type githubRelease struct {
 }
 
 // fetchReleaseArtifacts downloads the sandbox binary and cloud-init template
-// from a spekk-app GitHub release. tag may be empty or "latest" for the latest
-// published release, or a specific tag. The binary is written to a temp file
-// whose path is returned in BinaryPath; callers should os.Remove it when done.
+// from the GitHub release named by releaseRepo. tag may be empty or "latest"
+// for the latest published release, or a specific tag. The binary is written
+// to a temp file whose path is returned in BinaryPath; callers should
+// os.Remove it when done.
 func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
