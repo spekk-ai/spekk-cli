@@ -3,7 +3,7 @@ id: ws-drop-path-token
 parent: sandbox-boundary-scrub
 created: 2026-07-23T00:00:00Z
 priority: 2
-status: draft
+status: not_started
 ---
 
 # Agent Auth Token Leaves the WebSocket URL Path
