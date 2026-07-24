@@ -154,7 +154,7 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 // renames it into place, so a concurrent drain of spoolDir never observes a
 // partially written file.
 func writeRequestFile(spoolDir string, data []byte) error {
-	tmp, err := os.CreateTemp(spoolDir, "request-*.json.tmp")
+	tmp, err := os.CreateTemp(spoolDir, conversation.RequestFilePattern)
 	if err != nil {
 		return fmt.Errorf("creating request file in %s: %w", spoolDir, err)
 	}
@@ -172,7 +172,7 @@ func writeRequestFile(spoolDir string, data []byte) error {
 
 	// The final name reuses the same random component os.CreateTemp already
 	// generated for tmpPath, so it is just as collision-proof.
-	finalPath := tmpPath[:len(tmpPath)-len(".tmp")]
+	finalPath := strings.TrimSuffix(tmpPath, conversation.StagingSuffix)
 	if err := os.Rename(tmpPath, finalPath); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("finalizing request file: %w", err)

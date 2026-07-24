@@ -155,6 +155,13 @@ func handleErrorFrame(msg Message) {
 		log.Printf("conversation_open rejected: %s — %s", msg.Error, msg.Detail)
 		return
 	}
+	if msg.Error == "" && msg.Detail == "" {
+		// A control host predating the typed error contract sends error
+		// frames without code/detail fields; say so rather than logging an
+		// empty "—".
+		log.Printf("error frame received with no code/detail (control host may predate the typed error contract)")
+		return
+	}
 	log.Printf("error frame received: %s — %s", msg.Error, msg.Detail)
 }
 

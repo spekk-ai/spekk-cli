@@ -29,6 +29,24 @@ const (
 // DefaultSeverity is used when a request does not specify a severity.
 const DefaultSeverity = SeverityInfo
 
+// Request-file naming is part of the contract: the writer stages a request
+// as "<name>.json.tmp" and atomically renames it to "<name>.json"; the
+// drainer only ever considers finalized ".json" files, so it can never
+// observe — and destroy — a staging file whose rename has not yet
+// committed. Both sides must agree on these exact suffixes: if they drift,
+// finalized requests are silently ignored.
+const (
+	// RequestFileExt is the extension of a finalized request file — the only
+	// kind the drainer consumes.
+	RequestFileExt = ".json"
+	// StagingSuffix is appended to RequestFileExt while the writer is still
+	// writing; the atomic rename strips it.
+	StagingSuffix = ".tmp"
+	// RequestFilePattern is the os.CreateTemp pattern the writer stages new
+	// request files with.
+	RequestFilePattern = "request-*" + RequestFileExt + StagingSuffix
+)
+
 // Request is the on-disk shape of one conversation-open request file. It
 // carries only what the requester supplies; the session id is not part of
 // this contract because the request file never carries it — the drainer
