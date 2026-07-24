@@ -3,12 +3,13 @@ id: conversation-open-frame
 parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: conversation-open-contract
-locked-by: builder-home-wsl2-644046-1784853646
 ---
 
 # Worker Builds a Well-Formed conversation_open Frame
+
+**Tests:** cmd/sandbox/conversation_test.go
 
 The worker has a single, typed way to construct the `conversation_open` frame
 it sends to the control host, so the shape and its encoding rules live in one

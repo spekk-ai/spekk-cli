@@ -10,13 +10,14 @@ type Message struct {
 }
 
 const (
-	MessageTypeMessage      = "message"
-	MessageTypeCancel       = "cancel"
-	MessageTypeHeartbeat    = "heartbeat"
-	MessageTypeHeartbeatAck = "heartbeat_ack"
-	MessageTypeStream       = "stream"
-	MessageTypeResult       = "result"
-	MessageTypeError        = "error"
+	MessageTypeMessage          = "message"
+	MessageTypeCancel           = "cancel"
+	MessageTypeHeartbeat        = "heartbeat"
+	MessageTypeHeartbeatAck     = "heartbeat_ack"
+	MessageTypeStream           = "stream"
+	MessageTypeResult           = "result"
+	MessageTypeError            = "error"
+	MessageTypeConversationOpen = "conversation_open"
 )
 
 type Attachment struct {
