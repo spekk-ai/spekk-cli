@@ -80,11 +80,15 @@ the thin CLI wrapper is the boring, self-documenting interface.
 
 ## The request-file contract (shared source of truth)
 
-Both the CLI (writer) and the worker (drainer) must agree on this:
+Both the CLI (writer) and the worker (drainer) live in separate `main` packages
+(`cmd/spekk` and `cmd/sandbox`), so the contract they share — the env-var name,
+the request-file JSON shape, and the severity set — lives in a single shared
+internal package (`internal/conversation`) that both import, rather than being
+re-declared on each side where the two copies could drift. They must agree on:
 
 - Location: the directory named by the environment variable the worker sets on
-  the spawned process (name it once, e.g. `SPEKK_CONVERSATION_SPOOL`, and use
-  that everywhere).
+  the spawned process. Its name is the shared package's env-var constant
+  (`SPEKK_CONVERSATION_SPOOL`), declared once and imported everywhere.
 - One request per file. The file is a JSON object carrying `title`, `body`, and
   `severity` only — **never** `session_id` (the worker stamps that).
 - Files are written atomically (write-then-rename) so the worker never reads a
@@ -102,7 +106,9 @@ behavior is a later cycle).
 
 ## Assertions
 
-1. `conversation-open-frame` — the frame shape and its encoding constraints
-2. `conversation-open-cli` — the `spekk conversation open` agent trigger
-3. `worker-emits-conversation-open` — the worker drains the spool and emits
-4. `conversation-open-error-frames` — inbound typed rejections are logged
+1. `conversation-open-contract` — shared `internal/conversation` package: the
+   env-var name, request-file struct, and severity set both binaries import
+2. `conversation-open-frame` — the frame shape and its encoding constraints
+3. `conversation-open-cli` — the `spekk conversation open` agent trigger
+4. `worker-emits-conversation-open` — the worker drains the spool and emits
+5. `conversation-open-error-frames` — inbound typed rejections are logged

@@ -4,6 +4,7 @@ parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
 status: not_started
+depends-on: conversation-open-contract
 ---
 
 # Worker Builds a Well-Formed conversation_open Frame
@@ -34,7 +35,10 @@ place rather than being hand-assembled at each call site.
 - `severity` is constrained to exactly one of `info`, `warning`, `critical`.
   An absent or empty severity serializes as `info` (the default). A value
   outside the three is not sent as-is — it is rejected or coerced, never passed
-  through verbatim.
+  through verbatim. **Note:** the severity constants, the `info` default, and the
+  validity check come from the shared `conversation` package
+  (`conversation-open-contract`); this constructor does not re-declare its own
+  severity value set.
 - `metadata` is optional. When there is no metadata, the field is omitted from
   the serialized JSON (or sent as an empty object) rather than sent as `null`.
   **Note:** pick one representation and keep it consistent; the point is that

@@ -4,6 +4,7 @@ parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
 status: not_started
+depends-on: conversation-open-contract
 ---
 
 # Agent Trigger: `spekk conversation open`
@@ -23,10 +24,13 @@ connection and never supplies a session id.
   - `--body <text>` — required.
   - `--severity <info|warning|critical>` — optional, defaults to `info`.
 - The command discovers the spool directory from the environment variable the
-  worker sets on the session (the single agreed name, e.g.
-  `SPEKK_CONVERSATION_SPOOL`). It writes exactly one JSON file into that
-  directory containing `title`, `body`, and `severity` — and **no**
-  `session_id`. On success it exits 0.
+  worker sets on the session, reading its name from the shared `conversation`
+  package's env-var constant (`SPEKK_CONVERSATION_SPOOL`) rather than a local
+  literal. It writes exactly one JSON file into that directory using the shared
+  package's request struct, containing `title`, `body`, and `severity` — and
+  **no** `session_id`. On success it exits 0. **Note:** severity validation uses
+  the shared package's constants/validity check, so the CLI and the worker agree
+  on the allowed values (see `conversation-open-contract`).
 - The request file is written atomically: written to a temporary name and
   renamed into place, so a concurrent worker drain never observes a partial
   file. **Note:** distinct invocations must not collide on a filename (e.g. use

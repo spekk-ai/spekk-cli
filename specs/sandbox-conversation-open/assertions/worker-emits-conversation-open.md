@@ -27,7 +27,9 @@ stamping the authoritative session id itself.
   on that one command — **not** via `os.Setenv` on the worker, which is
   process-global and would make concurrent sessions share (and clobber) one
   spool. Appending to a copy of `os.Environ()` preserves the existing
-  inheritance while scoping the new variable to the single spawned process.
+  inheritance while scoping the new variable to the single spawned process. The
+  variable name comes from the shared `conversation` package's env-var constant
+  (`conversation-open-contract`), not a local literal.
 - Request files that appear in the spool during the session are read, and for
   each the worker emits one `conversation_open` frame (via the constructor from
   `conversation-open-frame`) on the session's WebSocket connection.
@@ -49,9 +51,12 @@ stamping the authoritative session id itself.
   spec's no-buffering scope). In practice the `init` event precedes any
   tool-invoked request, so the id is known by the first drain and this is a rare
   edge, not the common path.
-- `title`, `body`, and `severity` come from the request file. A request missing
-  a required field or carrying an out-of-range severity is dropped with a log
-  line and does not send a frame and does not crash the worker.
+- `title`, `body`, and `severity` come from the request file, decoded into the
+  shared `conversation` package's request struct (`conversation-open-contract`)
+  rather than an ad-hoc struct declared in the worker. A request missing a
+  required field or carrying an out-of-range severity (checked via the shared
+  validity helper) is dropped with a log line and does not send a frame and does
+  not crash the worker.
 - **Fire once, no buffering:** each request produces at most one frame. After a
   request is emitted its file is removed. There is no retry, no queue, and no
   offline buffering — if the WebSocket write fails, the failure is logged and
