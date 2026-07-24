@@ -18,8 +18,11 @@ log them legibly.
 ## Success Criteria
 
 - `cmd/sandbox/client.go`'s `readLoop` handles inbound frames of type `"error"`
-  as their own case rather than letting them hit the `default`
-  (`Unknown message type`) branch.
+  as their own `switch msg.Type` case rather than letting them hit the `default`
+  (`Unknown message type`) branch. **Note:** a `MessageTypeError = "error"`
+  constant already exists in `cmd/sandbox/message.go`; the new case matches on
+  that constant (consistent with the existing `MessageTypeMessage` /
+  `MessageTypeCancel` cases), not a bare literal.
 - The inbound error frame's `error` code and `detail` are parsed and written to
   the log in a single legible line that includes both (e.g.
   `conversation_open rejected: conversation_open_no_channel — <detail>`).

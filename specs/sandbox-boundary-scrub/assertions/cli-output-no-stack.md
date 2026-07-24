@@ -18,11 +18,13 @@ exposes its internal admin URL structure in output shipped from a public repo.
 - The printed guidance no longer names the stack. The word "Django" does not
   appear in the message; it refers to the destination generically (e.g. "the
   control host admin").
+- The internal admin path `/staff/agent/agent/add/` is **removed** from the
+  output — not merely the stack name. It leaks the private app's URL structure,
+  so it must go. Replace it with the host root (`https://%s/`) or drop the URL
+  from the message entirely; the output must not contain the `/staff/` path (or
+  any deeper admin path).
 - The message still tells the operator that they need to register the agent
   (name, sandbox id, auth token) so the next step is not lost.
 - A case-insensitive search for `django` in `internal/sandbox/commands.go`
+  returns nothing, and a search for `/staff/` in the "add this agent" output
   returns nothing.
-- **Note:** the hard-coded internal path `/staff/agent/agent/add/` also reveals
-  control-host internals. Prefer replacing it with the host root
-  (`https://%s/`) or dropping the path; if it is kept, that is a conscious
-  decision to surface, not an oversight. The stack name must go regardless.

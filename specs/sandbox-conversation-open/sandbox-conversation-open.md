@@ -57,9 +57,10 @@ Instead, the trigger is a small **CLI subcommand the agent runs as a tool**,
 backed by a **per-session spool directory the worker drains**:
 
 - The worker creates a private spool directory for each session and points the
-  spawned `claude` process at it via an environment variable. Because
-  `invoke.go` lets `claude` inherit the worker's environment, the agent's shell
-  tools see that variable.
+  spawned `claude` process at it via an environment variable set on that one
+  command (`cmd.Env = append(os.Environ(), …)` in `invoke.go`), so the variable
+  is scoped to that process — not the whole worker — and the agent's shell tools
+  inherit it alongside the rest of the worker's environment.
 - `spekk conversation open --title … --body … [--severity …]` writes one
   request file into that spool directory (atomically) and exits. It does **not**
   supply a session id.

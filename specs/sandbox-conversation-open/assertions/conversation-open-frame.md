@@ -20,7 +20,12 @@ place rather than being hand-assembled at each call site.
   duplicated across call sites.
 - A single constructor/serializer produces the outgoing frame with exactly
   these fields: `type` (the constant), `session_id`, `title`, `body`,
-  `severity`, and `metadata`.
+  `severity`, and `metadata`. **Note:** `conversation_open` is worker→control-host
+  only; it must **not** be added as a field or case to the inbound `Message`
+  struct or `readLoop`. Existing outbound frames (`stream`, `result`, `error`)
+  are hand-assembled as `map[string]any` at their call sites; this constructor
+  centralizes the one frame with encoding rules worth pinning, and is written
+  over the WebSocket the same way (e.g. via `wsjson.Write`).
 - `session_id` is always populated with a non-empty value in a frame that gets
   sent. **Note:** the contract requires `session_id`; the constructor (or its
   caller) must not emit a frame with an empty `session_id` — if the session id
