@@ -7,6 +7,8 @@ type Message struct {
 	SessionID      string       `json:"session_id"`
 	AgentSessionID string       `json:"agent_session_id"`
 	Attachments    []Attachment `json:"attachments"`
+	Error          string       `json:"error"`
+	Detail         string       `json:"detail"`
 }
 
 const (

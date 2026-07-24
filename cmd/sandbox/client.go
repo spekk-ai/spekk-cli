@@ -99,17 +99,47 @@ func (c *AgentClient) readLoop(ctx context.Context, conn *websocket.Conn) error 
 			return err
 		}
 
-		switch msg.Type {
-		case MessageTypeMessage:
-			c.handleMessage(ctx, conn, msg)
-		case MessageTypeCancel:
-			c.handleCancel(msg)
-		case MessageTypeHeartbeatAck:
-			// ignore
-		default:
-			log.Printf("Unknown message type: %s", msg.Type)
-		}
+		c.handleInbound(ctx, conn, msg)
 	}
+}
+
+// handleInbound dispatches a single decoded inbound frame. Split out from
+// readLoop so the dispatch logic is exercisable in tests without a real
+// websocket connection.
+func (c *AgentClient) handleInbound(ctx context.Context, conn *websocket.Conn, msg Message) {
+	switch msg.Type {
+	case MessageTypeMessage:
+		c.handleMessage(ctx, conn, msg)
+	case MessageTypeCancel:
+		c.handleCancel(msg)
+	case MessageTypeHeartbeatAck:
+		// ignore
+	case MessageTypeError:
+		handleErrorFrame(msg)
+	default:
+		log.Printf("Unknown message type: %s", msg.Type)
+	}
+}
+
+// conversationOpenErrorCodes are the error codes the control host sends in
+// reply to a rejected conversation_open request. Frames carrying one of
+// these are logged as conversation_open rejections rather than generic
+// errors.
+var conversationOpenErrorCodes = map[string]bool{
+	"conversation_open_invalid":    true,
+	"conversation_open_no_channel": true,
+	"conversation_open_failed":     true,
+}
+
+// handleErrorFrame logs an inbound "error" frame legibly. It never tears
+// down the connection or the worker — receiving an error frame is a
+// non-fatal event, on par with any other frame this loop handles.
+func handleErrorFrame(msg Message) {
+	if conversationOpenErrorCodes[msg.Error] {
+		log.Printf("conversation_open rejected: %s — %s", msg.Error, msg.Detail)
+		return
+	}
+	log.Printf("error frame received: %s — %s", msg.Error, msg.Detail)
 }
 
 func (c *AgentClient) handleMessage(ctx context.Context, conn *websocket.Conn, msg Message) {

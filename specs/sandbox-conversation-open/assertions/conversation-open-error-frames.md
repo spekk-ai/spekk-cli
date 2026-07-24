@@ -3,8 +3,7 @@ id: conversation-open-error-frames
 parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-home-wsl2-657032-1784854245
+status: done
 ---
 
 # Inbound conversation_open Rejections Are Logged Legibly
@@ -39,3 +38,5 @@ log them legibly.
 - A test feeds a `type: "error"` frame with a conversation_open code and detail
   through the inbound-handling path and asserts the log line contains both the
   code and the detail, and that the frame is not treated as an unknown type.
+
+**Tests:** cmd/sandbox/client_test.go
