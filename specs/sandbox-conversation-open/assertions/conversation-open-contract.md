@@ -3,8 +3,7 @@ id: conversation-open-contract
 parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-home-wsl2-632627-1784853437
+status: done
 ---
 
 # Shared Package Holds the Request-File Contract
@@ -52,3 +51,12 @@ a single shared internal package is the source of truth both import.
   JSON with exactly `{title, body, severity}` and no `session_id` key; an absent
   severity is representable and the default constant is `info`; and the validity
   check accepts the three severities and rejects anything else.
+
+**Tests:** internal/conversation/conversation_test.go
+
+**Note:** the two `cmd/spekk` / `cmd/sandbox` import criteria above describe
+the end state once the writer and drainer exist. As of this assertion neither
+consumer has been implemented yet (they land in `conversation-open-cli` and
+`conversation-open-frame`, both of which depend on this one) — verified here
+by confirming neither package declares a competing `session_id`/`severity`
+literal set or spool env-var string to drift against.
