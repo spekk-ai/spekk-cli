@@ -63,7 +63,7 @@ write_files:
     content: |
       # Required: Agent auth token for WebSocket connection to the control host
       SPEKK_AGENT_TOKEN=
-      # Required: Spekk app host (e.g., your-control-host.example)
+      # Required: Control host (e.g., your-control-host.example)
       SPEKK_HOST=
       # Required: Anthropic API key for Claude Code
       ANTHROPIC_API_KEY=
