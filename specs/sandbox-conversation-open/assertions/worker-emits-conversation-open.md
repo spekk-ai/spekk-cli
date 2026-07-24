@@ -3,12 +3,13 @@ id: worker-emits-conversation-open
 parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: conversation-open-frame
-locked-by: builder-home-wsl2-648383-1784853848
 ---
 
 # Worker Provisions the Spool and Emits the Frame
+
+**Tests:** cmd/sandbox/spool_test.go
 
 When the worker runs a Claude session it gives that session a private spool
 directory to drop conversation requests into, then drains the directory and
