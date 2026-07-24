@@ -3,8 +3,7 @@ id: release-comment-generic
 parent: sandbox-boundary-scrub
 created: 2026-07-23T00:00:00Z
 priority: 2
-status: in_progress
-locked-by: builder-home-wsl2-666031-1784854694
+status: done
 ---
 
 # release.go Comment Names No Private Repo
