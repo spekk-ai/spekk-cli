@@ -3,7 +3,8 @@ id: conversation-open-error-frames
 parent: sandbox-conversation-open
 created: 2026-07-23T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-home-wsl2-657032-1784854245
 ---
 
 # Inbound conversation_open Rejections Are Logged Legibly
