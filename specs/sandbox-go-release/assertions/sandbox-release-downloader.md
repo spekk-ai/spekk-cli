@@ -34,5 +34,8 @@ infrastructure files are bundled or fetched from a private repo.
   (`internal/sandbox/embed.go`), returned in the `CloudInit` field as in-memory
   bytes and sent straight to the DO API as droplet user-data — it is not a
   downloaded release asset.
-- A case-insensitive search for `spekk-app` in `internal/sandbox/release.go`
-  returns nothing.
+- No private repository or application names appear in
+  `internal/sandbox/release.go` — the only repository it references is the
+  public one in its `releaseRepo` constant. (Verify with a case-insensitive
+  search for the repository name this file referenced before this spec was
+  reconciled; see the file's git history.)
