@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.14.0 -- Query Your Specs with SQL](RELEASE-NOTES-1.14.0.md)
+
+New `spekk index` builds a pure-Go SQLite index of the spec tree (`specs`, `assertions`, `depends_on`), and `spekk query` runs read-only `SELECT`s against it with `--json`/`--tsv`/`--csv` output — filtering, counting, grouping, and dependency joins in SQL. The index is a gitignored derived artifact, refreshed automatically when specs change, schema-versioned so upgrades rebuild it transparently, and opened read-only so a query can never mutate it.
+
 ## [1.13.0 -- The `prune` Observer Skill](RELEASE-NOTES-1.13.0.md)
 
 New opt-in `spekk observer prune` skill surfaces genuinely-unused code and design-level redundancy (duplication, over-abstraction, dead config) as observations for human review — recommend-only and precision-biased, keyed on disuse rather than the absence of a spec. The existing `coverage-gap` skill is realigned to the same progressive-spec philosophy (optional documentation opportunities, no "no spec → delete" framing), and the coach/builder agents now soft-wrap spec prose to keep diffs minimal.
