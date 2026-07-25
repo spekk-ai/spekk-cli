@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.13.0 -- The `prune` Observer Skill](RELEASE-NOTES-1.13.0.md)
+
+New opt-in `spekk observer prune` skill surfaces genuinely-unused code and design-level redundancy (duplication, over-abstraction, dead config) as observations for human review — recommend-only and precision-biased, keyed on disuse rather than the absence of a spec. The existing `coverage-gap` skill is realigned to the same progressive-spec philosophy (optional documentation opportunities, no "no spec → delete" framing), and the coach/builder agents now soft-wrap spec prose to keep diffs minimal.
+
 ## [1.12.0 -- Agents Can Open Conversations](RELEASE-NOTES-1.12.0.md)
 
 Sandbox agents can open new conversations on the connected chat surface: `spekk conversation open` spools an atomic request; the worker stamps the authoritative session id and emits a `conversation_open` frame; human replies resume the initiating session. Plus legible typed-error-frame logging, an additive Authorization header on the WebSocket dial, and neutralized infrastructure wording in public files.
