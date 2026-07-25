@@ -40,23 +40,29 @@ assertions in `embedded_test.go`; do not invent new lint machinery).
   `## Examples`.
 - The `## Workflow` defines exactly these four detection lenses, each described
   as evidence-backed and conservative:
-  - **(a) Deletion candidate** — code with **no owning assertion AND no caller
-    AND no test**. This is the removal counterpart to `coverage-gap`'s
-    "document it" recommendation.
-  - **(b) Duplication** — near-identical code that should be consolidated to a
-    single source of truth.
+  - **(a) Unused code** — code with **no caller, no test, and no
+    reachable/reflected/generated reference** (genuinely dead). **Spec status is
+    explicitly irrelevant to this lens** — the presence or absence of an
+    assertion is not evidence either way.
+  - **(b) Duplication → consolidation** — near-identical code that may point to
+    a missing shared abstraction; framed as a **design candidate for a human**,
+    not a prescribed merge.
   - **(c) Over-abstraction** — speculative generality (interfaces, options,
-    layers) that has no current use.
+    layers) that has no current use; a design judgment surfaced for review.
   - **(d) Dead configuration** — flags, options, or config keys that are never
     read or exercised.
 - The `## Workflow` explicitly states the skill is **recommend-only** and MUST
   NOT delete, edit, or move any code or spec — it only writes an observation
   (the observer's read-only contract, worded as in `coverage-gap-skill.md`).
-- The `## Workflow` **cross-references `coverage-gap`**: the deletion lens (a)
-  keys off the same orphan signal as `coverage-gap` but makes the **opposite**
-  recommendation (remove vs document); the skill states that the human decides
-  document-vs-remove, and that `prune` should not re-report a region already
-  captured by a recent `coverage-gap` observation.
+- The `## Workflow` explicitly states that **the absence of a spec is never a
+  signal to delete** — specs are progressive, so most code legitimately has no
+  owning assertion, and un-spec'd code must not be flagged on that basis. It
+  distinguishes `prune` from `coverage-gap`: `coverage-gap` encourages
+  *documenting* used-but-unspec'd code, whereas `prune` flags code that is
+  genuinely *unused* or redundant *by design*; the two overlap only at truly
+  dead code.
+- The `## Workflow` frames deletion and consolidation as **architecture/design
+  decisions the skill only surfaces** for a human — not mechanical outputs.
 - The `## Workflow` states a **bias toward NOT flagging**: when any plausible
   reason to keep the code exists (public/exported API surface, a caller the
   scan may not have resolved, reflection/plugin/generated usage, or a recent

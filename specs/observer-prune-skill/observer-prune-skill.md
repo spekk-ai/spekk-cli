@@ -13,12 +13,21 @@ codebases accumulate dead code, duplication, speculative abstractions, and
 unused flags with no counter-pressure.
 
 This spec adds an **opt-in observer skill** named `prune` that surfaces
-deletion and simplification candidates as observations for human review. It is
-a **skill**, not core drift, for the same reason `coverage-gap` is a skill:
-spekk already ships `coverage-gap` for the objective "code with no spec" case.
-`prune` is its sibling that takes the **REMOVAL / CONSOLIDATION** angle
-`coverage-gap` doesn't — same orphan signal, opposite recommendation (document
-it vs remove it — the human decides).
+genuinely-unused code and design-level redundancy as candidates for human
+review. It is a **skill**, not core drift, because deletion and consolidation
+are judgment-heavy **architecture/design decisions** (precision-critical — a
+false "delete this" is dangerous), best applied deliberately rather than on
+every scan.
+
+**Crucially, `prune` reasons about usage and design — not spec coverage.**
+spekk specs are *progressive*: adoption is encouraged but always incomplete, so
+the vast majority of code legitimately has no owning assertion. The **absence of
+a spec is therefore never a signal to delete**. This is what distinguishes
+`prune` from `coverage-gap`: `coverage-gap` encourages *documenting* used code
+that lacks a spec (advancing adoption), whereas `prune` flags code that is
+genuinely *unused* (no caller/test/reference) or redundant *by design*. The two
+overlap only at truly dead code — worth neither documenting nor keeping — and
+`prune` never treats "no spec" as evidence of that.
 
 ## Architecture (matches the existing observer-skill pattern)
 
@@ -41,11 +50,10 @@ it vs remove it — the human decides).
 
 ## Naming & type decisions (decided, not open)
 
-- **`prune`, not `simplify`.** The skill's angle is REMOVAL — deletion,
-  consolidation, cutting dead surface. `prune` names that sharply and reads as
-  the deletion counterpart to `coverage-gap`. `simplify` is broader, overlaps
-  with general refactoring, and blurs the "what to delete" focus that makes
-  this skill useful.
+- **`prune`, not `simplify`.** The skill's angle is removing genuinely-unused
+  code and cutting design-level redundancy. `prune` names that sharply.
+  `simplify` is broader, overlaps with general refactoring, and blurs the "what
+  is actually unused / redundant" focus that makes this skill useful and safe.
 - **One observation type `prune_candidate`, not a deletion/consolidation
   split.** The `type` field is coarse routing for `consolidate`/`DIGEST`;
   sub-classification (deletion vs duplication vs over-abstraction vs dead flag)
