@@ -14,6 +14,7 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/agent"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
 	"github.com/spekk-ai/spekk-cli/internal/formatter"
+	"github.com/spekk-ai/spekk-cli/internal/index"
 	"github.com/spekk-ai/spekk-cli/internal/install"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 	"github.com/spekk-ai/spekk-cli/internal/sandbox"
@@ -55,6 +56,12 @@ func main() {
 
 	case "list":
 		runList(args[1:])
+
+	case "index":
+		runIndex(args[1:])
+
+	case "query":
+		runQuery(args[1:])
 
 	case "next":
 		runParser(args[1:])
@@ -135,6 +142,17 @@ func runParser(args []string) {
 	specsDir := flags.String("specsDir")
 	if specsDir == "" {
 		specsDir = findSpecsDir()
+	}
+
+	// Auto-rebuild the SQLite index silently if it is stale, absent, or built
+	// against an older schema. EnsureFresh is the single freshness gate shared
+	// with `spekk query`.
+	repoRoot := filepath.Dir(specsDir)
+	if rebuilt, err := index.EnsureFresh(specsDir, index.DBPath(repoRoot)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: auto-rebuild of index failed: %s\n", err)
+		os.Exit(1)
+	} else if rebuilt {
+		_ = index.EnsureGitignored(repoRoot)
 	}
 
 	result, err := parser.ParseAllSpecs(specsDir)
@@ -458,6 +476,155 @@ func execValidate(args []string, stdout io.Writer, specsDir string) int {
 		fmt.Fprintln(stdout, f.String())
 	}
 	return 1
+}
+
+// indexUsage is the help text for `spekk index`.
+const indexUsage = `
+spekk index - Build .spekk/index.db, a SQLite index of the spec tree, for use
+by "spekk query". The Markdown files remain the source of truth; the database
+is a derived artifact and is added to .gitignore automatically.
+
+USAGE:
+  spekk index [OPTIONS]
+
+OPTIONS:
+  --force              Drop and recreate all tables from scratch
+  --specs-dir <path>   Read specs from a specific directory (default: git root specs/)
+  --help, -h           Show this help message
+
+The index is rebuilt automatically when it is stale, absent, or built against an
+older schema, so running this by hand is rarely necessary.
+`
+
+// queryUsage is the help text for `spekk query`.
+const queryUsage = `
+spekk query "<sql>" - Run a read-only SELECT against .spekk/index.db and print
+the result. The index is refreshed automatically first, so results always
+reflect the current specs.
+
+USAGE:
+  spekk query "<sql>" [OPTIONS]
+
+OPTIONS:
+  --json               JSON array of objects
+  --tsv                Tab-separated values with a lowercase header
+  --csv                RFC 4180 CSV with a header row
+  --help, -h           Show this help message
+
+Only SELECT (and WITH ... SELECT) statements are permitted; the database is
+opened read-only. Tables: specs(id, title, status, priority, branch, file),
+assertions(id, parent_id, title, status, priority, branch, file),
+depends_on(assertion_id, depends_on_id).
+`
+
+// runIndex implements the `spekk index` subcommand.
+// It builds (or rebuilds) .spekk/index.db from the specs directory.
+// Flags: --specs-dir <path>, --force
+func runIndex(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+		"force":    {Names: []string{"--force"}, Type: cli.BoolFlag},
+		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(indexUsage)
+		return
+	}
+
+	specsDir := flags.String("specsDir")
+	if specsDir == "" {
+		specsDir = findSpecsDir()
+	}
+
+	// Derive repo root from the specs directory.
+	repoRoot := filepath.Dir(specsDir)
+	dbPath := index.DBPath(repoRoot)
+
+	specCount, assertCount, err := index.BuildIndex(specsDir, dbPath, flags.Bool("force"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Ensure .spekk/index.db is in .gitignore.
+	if err := index.EnsureGitignored(repoRoot); err != nil {
+		// Non-fatal: warn but continue.
+		fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %s\n", err)
+	}
+
+	fmt.Printf("Indexed %d specs, %d assertions.\n", specCount, assertCount)
+}
+
+// runQuery implements the `spekk query "<sql>"` subcommand.
+// Executes a SELECT-only SQL query against .spekk/index.db and prints results.
+// Flags: --json, --tsv, --csv
+func runQuery(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"json": {Names: []string{"--json"}, Type: cli.BoolFlag},
+		"tsv":  {Names: []string{"--tsv"}, Type: cli.BoolFlag},
+		"csv":  {Names: []string{"--csv"}, Type: cli.BoolFlag},
+		"help": {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(queryUsage)
+		return
+	}
+
+	// Extract the SQL positional argument (first non-flag arg).
+	knownFlags := map[string]bool{
+		"--json": true, "--tsv": true, "--csv": true, "--help": true, "-h": true,
+	}
+	var sqlStr string
+	for _, arg := range args {
+		if !knownFlags[arg] {
+			sqlStr = arg
+			break
+		}
+	}
+
+	if sqlStr == "" {
+		fmt.Fprintln(os.Stderr, `error: missing SQL argument`)
+		fmt.Fprintln(os.Stderr, `usage: spekk query "<sql>"`)
+		os.Exit(1)
+	}
+
+	// Locate the repo root and the index DB.
+	specsDir := findSpecsDir()
+	repoRoot := filepath.Dir(specsDir)
+	dbPath := index.DBPath(repoRoot)
+
+	// Refresh the index before querying so results reflect the current specs
+	// (and rebuild if it was built against an older schema). Same freshness gate
+	// as `spekk next`.
+	if rebuilt, err := index.EnsureFresh(specsDir, dbPath); err != nil {
+		fmt.Fprintf(os.Stderr, "error: could not refresh index: %s\n", err)
+		os.Exit(1)
+	} else if rebuilt {
+		_ = index.EnsureGitignored(repoRoot)
+	}
+
+	result, err := index.RunQuery(dbPath, sqlStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Format and print output.
+	var out string
+	switch {
+	case flags.Bool("json"):
+		out = index.FormatQueryJSON(result)
+	case flags.Bool("tsv"):
+		out = index.FormatQueryTSV(result)
+	case flags.Bool("csv"):
+		out = index.FormatQueryCSV(result)
+	default:
+		out = index.FormatQueryTable(result)
+	}
+
+	fmt.Println(out)
 }
 
 // findSpecsDir locates the specs/ directory using git root.
@@ -1262,6 +1429,8 @@ USAGE:
 COMMANDS:
   init      Set up a project for spec-driven development (creates specs/)
   list      List specs and assertions with optional --status filter and --assertions-only flat output
+  index     Build .spekk/index.db SQLite index from specs/ (use --force to rebuild from scratch)
+  query     Execute a SELECT query against .spekk/index.db (supports --json, --tsv, --csv)
   show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
   validate  Check specs/ against a fixed set of invariants; exit non-zero on any violation

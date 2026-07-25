@@ -178,6 +178,45 @@ Shows total specs/assertions, status breakdown, completion percentage, and specs
 
 ---
 
+## `spekk index`
+
+Build `.spekk/index.db`, a SQLite index of the spec tree, for use by `spekk query`.
+
+```bash
+spekk index [--force] [--specs-dir <path>]
+```
+
+The Markdown files remain the source of truth; the database is a derived artifact and is added to `.gitignore` automatically. `--force` drops and recreates all tables.
+
+You rarely need to run this by hand: the index is rebuilt automatically whenever it is stale, absent, or built against an older schema (see `spekk query` and `spekk next`). Because it is derived, an index from an older spekk version is detected via its stamped schema version and transparently rebuilt — there is no manual migration.
+
+---
+
+## `spekk query`
+
+Run a read-only `SELECT` against the SQLite index and print the result.
+
+```bash
+spekk query "SELECT status, COUNT(*) FROM assertions GROUP BY status"
+spekk query "SELECT id, title FROM specs WHERE status = 'draft'" --json
+```
+
+The index is refreshed automatically first, so results always reflect the current specs. Only `SELECT` (and `WITH … SELECT`) statements are permitted, and the database is opened read-only, so a query can never mutate it.
+
+Output flags: `--json` (array of objects), `--tsv`, `--csv`. Default is a padded table.
+
+Schema:
+
+| Table | Columns |
+|---|---|
+| `specs` | `id`, `title`, `status`, `priority`, `branch`, `file` |
+| `assertions` | `id`, `parent_id` (→ `specs.id`), `title`, `status`, `priority`, `branch`, `file` |
+| `depends_on` | `assertion_id`, `depends_on_id` (both → `assertions.id`) |
+
+`depends_on` holds **assertion-level** edges only; spec-level relationships are not modeled as data (see the spec bodies).
+
+---
+
 ## `spekk show`
 
 Launch the interactive web-based spec explorer.
