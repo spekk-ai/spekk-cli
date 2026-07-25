@@ -287,6 +287,7 @@ What must be true for this to be considered done...
 - Status must be accurate: only mark `done` when all success criteria met
 - Priority tie-breaking: oldest `created` timestamp wins
 - Three priority levels only: 1, 2, 3
+- Markdown prose: **one line per paragraph** (soft-wrap); never hard-wrap at a fixed column (e.g. 80) — Markdown renders single newlines as spaces, so it only makes diffs noisy. Lists, tables, and code fences keep their own line structure.
 
 ## Your Spec
 
