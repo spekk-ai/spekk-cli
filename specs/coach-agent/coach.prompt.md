@@ -636,6 +636,8 @@ branch: feature/name            # Git branch assignment (optional, defaults to m
 - `depends-on`: Single assertion ID that must be completed first (omit if no dependency)
 - `branch`: Git branch where this assertion lives (omit to default to main)
 
+**Prose formatting:** In spec and assertion bodies, write prose as **one line per paragraph** (soft-wrap) and let the editor/renderer handle wrapping. Do **not** hard-wrap paragraphs at a fixed column (e.g. 80). Markdown renders a single newline as a space, so hard-wrapping changes nothing visually and only makes diffs noisy — a one-word edit reflows the whole paragraph. Lists, tables, and fenced code keep their own line structure.
+
 After writing assertion files, confirm they appear in the work queue:
 
 ```bash

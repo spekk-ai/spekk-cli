@@ -279,6 +279,7 @@ spekk observer                    # Default monitoring loop
 spekk observer --interval 30      # Check every 30 seconds
 spekk observer --quiet            # Minimal output
 spekk observer coverage-gap       # Run with a specific skill
+spekk observer prune              # Surface unused-code / consolidation candidates (recommend-only)
 spekk observer consolidate        # Curate observations into a digest
 spekk observer install-cron       # Schedule observer via crontab
 spekk observer uninstall-cron     # Remove scheduled cron entries
@@ -302,7 +303,8 @@ The default loop closes each scan cycle with a quiet consolidation pass and repo
 
 | Skill | Description |
 |-------|-------------|
-| `coverage-gap` | Scans `internal/` for code with no spec backing (inverse lens) |
+| `coverage-gap` | Surfaces code a spec could optionally document — a progressive-adoption aid, not a defect report (un-spec'd code is normal) |
+| `prune` | Surfaces genuinely-unused code and design-level redundancy (duplication, over-abstraction, dead config) as candidates for human review — recommend-only, never deletes; a missing spec is never a signal |
 | `consolidate` | Reviews all raw observations, archives stale/duplicates, rewrites `observations/DIGEST.md` with at most 5 severity-ranked items |
 
 ### `spekk observer install-cron`

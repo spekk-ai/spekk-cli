@@ -2,6 +2,7 @@ package spekk
 
 import (
 	"io/fs"
+	"os"
 	"strings"
 	"testing"
 )
@@ -45,6 +46,54 @@ func TestEmbeddedFS_ObserverCoverageGapSkill(t *testing.T) {
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("embedded coverage-gap skill missing %q", want)
+		}
+	}
+}
+
+// TestEmbeddedFS_ObserverPruneSkill verifies the prune observer skill ships
+// with the binary via the embedded FS, and that its frontmatter/body declare
+// the id, description, and required sections per the assertion.
+func TestEmbeddedFS_ObserverPruneSkill(t *testing.T) {
+	const path = "specs/observer-skills/prune-skill.md"
+
+	data, err := fs.ReadFile(EmbeddedFS, path)
+	if err != nil {
+		t.Fatalf("expected %s in embedded FS: %v", path, err)
+	}
+
+	content := string(data)
+	for _, want := range []string{
+		"id: prune",
+		"description:",
+		"## Triggers",
+		"## Workflow",
+		"## Output Format",
+		"## Validation",
+		"## Examples",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("embedded prune skill missing %q", want)
+		}
+	}
+}
+
+// TestPruneCandidateType_RegisteredInBothContractDocs verifies the
+// prune_candidate observation type is registered in both places the
+// Observation Output Contract's allowed-type list lives, per the
+// prune-candidate-type-registered assertion. Read from disk (not the
+// embedded FS) since observer-skill-discovery.md is a spec doc, not a
+// packaged skill, and is never embedded.
+func TestPruneCandidateType_RegisteredInBothContractDocs(t *testing.T) {
+	for _, path := range []string{
+		"specs/observer-agent/observer.prompt.md",
+		"specs/observer-skill-discovery/observer-skill-discovery.md",
+	} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("reading %s: %v", path, err)
+		}
+		if !strings.Contains(string(data), "prune_candidate") {
+			t.Errorf("%s: expected allowed-type list to include \"prune_candidate\"", path)
 		}
 	}
 }
