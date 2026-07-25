@@ -143,6 +143,7 @@ affected_files:                     # list of file paths, can be empty
 - `compression_opportunity` — default loop
 - `spec_conflicts` — default loop
 - `coverage_gap` — coverage-gap skill (code with no spec backing)
+- `prune_candidate` — prune skill (deletion / consolidation candidates)
 - Future skills register their own types in their skill markdown
 
 **Required body sections (in this order):**

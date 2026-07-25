@@ -3,7 +3,7 @@ id: prune-candidate-type-registered
 parent: observer-prune-skill
 created: 2026-07-25T12:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/observer-prune-skill
 ---
 

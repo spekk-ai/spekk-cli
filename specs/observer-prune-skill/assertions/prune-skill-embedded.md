@@ -3,7 +3,7 @@ id: prune-skill-embedded
 parent: observer-prune-skill
 created: 2026-07-25T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: prune-skill-markdown-exists
 branch: feature/observer-prune-skill
 ---

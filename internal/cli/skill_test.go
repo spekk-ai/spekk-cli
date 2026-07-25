@@ -462,6 +462,9 @@ func TestListAliases_ObserverNeverNil(t *testing.T) {
 	if aliases["coverage-gap"] != "coverage-gap-skill" {
 		t.Errorf("expected coverage-gap alias to map to coverage-gap-skill, got %q", aliases["coverage-gap"])
 	}
+	if aliases["prune"] != "prune-skill" {
+		t.Errorf("expected prune alias to map to prune-skill, got %q", aliases["prune"])
+	}
 }
 
 func TestResolveSkill_ObserverEmbeddedCoverageGapAlias(t *testing.T) {
@@ -482,5 +485,40 @@ func TestResolveSkill_ObserverEmbeddedCoverageGapAlias(t *testing.T) {
 		if skill.Source != "(embedded)" {
 			t.Errorf("%s: expected source (embedded), got %s", name, skill.Source)
 		}
+	}
+}
+
+// TestResolveSkill_ObserverEmbeddedPruneAlias mirrors
+// TestResolveSkill_ObserverEmbeddedCoverageGapAlias for the prune skill
+// (assertion: prune-skill-discoverable).
+func TestResolveSkill_ObserverEmbeddedPruneAlias(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/observer-skills/prune-skill.md": &fstest.MapFile{
+			Data: []byte("---\nid: prune\n---\n# Prune"),
+		},
+	}
+	home, cwd, install := setupSkillDirs(t, "observer")
+	r := newSkillResolver(home, cwd, install)
+	r.EmbeddedFS = efs
+
+	for _, name := range []string{"prune", "prune-skill"} {
+		skill := r.ResolveSkill("observer", name)
+		if skill == nil {
+			t.Fatalf("expected embedded observer skill to resolve via %q", name)
+		}
+		if skill.Source != "(embedded)" {
+			t.Errorf("%s: expected source (embedded), got %s", name, skill.Source)
+		}
+	}
+
+	skills := r.ListSkills("observer")
+	found := false
+	for _, s := range skills {
+		if s.Name == "prune-skill" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected ListSkills(observer) to include prune-skill, got %v", skills)
 	}
 }

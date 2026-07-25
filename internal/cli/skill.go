@@ -21,6 +21,7 @@ var legacyAliases = map[string]map[string]string{
 	"builder": {},
 	"observer": {
 		"coverage-gap": "coverage-gap-skill",
+		"prune":        "prune-skill",
 	},
 }
 
