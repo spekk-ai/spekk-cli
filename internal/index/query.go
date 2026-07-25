@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/spekk-ai/spekk-cli/internal/formatter"
 )
 
 // QueryResult holds the column names and rows returned by a SELECT query.
@@ -31,7 +33,11 @@ func RunQuery(dbPath, sqlStr string) (*QueryResult, error) {
 		return nil, ErrDBNotFound
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	// Open read-only. This is the real enforcement of "queries never mutate":
+	// the isSelectStatement prefix check is only a fast, friendly early error and
+	// is bypassable (e.g. "WITH x AS (...) DELETE ..."), but a read-only
+	// connection rejects any write regardless of how the SQL is phrased.
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
 	if err != nil {
 		return nil, fmt.Errorf("cannot open index.db: %w", err)
 	}
@@ -94,135 +100,50 @@ func firstWord(s string) string {
 	return s[:end]
 }
 
-// FormatQueryTable renders a QueryResult as a space-padded table.
+// The FormatQuery* functions render a QueryResult through the shared
+// internal/formatter renderers, so query and `spekk list` share one definition
+// of each output format (correct RFC 4180 CSV, sanitized TSV, valid JSON). Query
+// uses arbitrary SELECT columns, so it calls the column-generic Render* entry
+// points rather than the Row-typed ones.
+
+// FormatQueryTable renders a QueryResult as a space-padded table with an
+// uppercased header row.
 func FormatQueryTable(r *QueryResult) string {
 	if r == nil || len(r.Columns) == 0 {
 		return ""
 	}
-
-	// Build all rows: header + data.
-	all := make([][]string, 0, len(r.Rows)+1)
-	// Header: uppercase column names.
+	matrix := make([][]string, 0, len(r.Rows)+1)
 	hdr := make([]string, len(r.Columns))
 	for i, c := range r.Columns {
 		hdr[i] = strings.ToUpper(c)
 	}
-	all = append(all, hdr)
-	all = append(all, r.Rows...)
-
-	// Compute column widths.
-	widths := make([]int, len(r.Columns))
-	for _, row := range all {
-		for ci, cell := range row {
-			if len(cell) > widths[ci] {
-				widths[ci] = len(cell)
-			}
-		}
-	}
-
-	var sb strings.Builder
-	numCols := len(r.Columns)
-	for ri, row := range all {
-		if ri > 0 {
-			sb.WriteByte('\n')
-		}
-		for ci, cell := range row {
-			if ci < numCols-1 {
-				sb.WriteString(fmt.Sprintf("%-*s  ", widths[ci], cell))
-			} else {
-				sb.WriteString(cell)
-			}
-		}
-	}
-	return sb.String()
+	matrix = append(matrix, hdr)
+	matrix = append(matrix, r.Rows...)
+	return formatter.RenderTable(matrix)
 }
 
-// FormatQueryTSV renders a QueryResult as tab-separated values with a lowercase header.
+// FormatQueryTSV renders a QueryResult as tab-separated values with a lowercase
+// header. Cells are sanitized (no tab/CR/LF corruption).
 func FormatQueryTSV(r *QueryResult) string {
 	if r == nil || len(r.Columns) == 0 {
 		return ""
 	}
-	var sb strings.Builder
-
-	// Header (lowercase).
-	for i, c := range r.Columns {
-		if i > 0 {
-			sb.WriteByte('\t')
-		}
-		sb.WriteString(strings.ToLower(c))
-	}
-	sb.WriteByte('\n')
-
-	for _, row := range r.Rows {
-		for i, cell := range row {
-			if i > 0 {
-				sb.WriteByte('\t')
-			}
-			sb.WriteString(cell)
-		}
-		sb.WriteByte('\n')
-	}
-
-	return strings.TrimRight(sb.String(), "\n")
+	return strings.TrimRight(formatter.RenderTSV(r.Columns, r.Rows), "\n")
 }
 
-// FormatQueryCSV renders a QueryResult as RFC 4180 CSV with a header row.
+// FormatQueryCSV renders a QueryResult as RFC 4180 CSV with a lowercase header.
 func FormatQueryCSV(r *QueryResult) string {
 	if r == nil || len(r.Columns) == 0 {
 		return ""
 	}
-	var sb strings.Builder
-
-	writeCSVRow := func(cells []string, lowercase bool) {
-		for i, c := range cells {
-			if i > 0 {
-				sb.WriteByte(',')
-			}
-			if lowercase {
-				c = strings.ToLower(c)
-			}
-			sb.WriteString(csvQueryField(c))
-		}
-		sb.WriteString("\r\n")
-	}
-
-	writeCSVRow(r.Columns, true)
-	for _, row := range r.Rows {
-		writeCSVRow(row, false)
-	}
-
-	result := sb.String()
-	return strings.TrimRight(result, "\r\n")
+	return strings.TrimRight(formatter.RenderCSV(r.Columns, r.Rows), "\r\n")
 }
 
-// FormatQueryJSON renders a QueryResult as a JSON array of objects.
+// FormatQueryJSON renders a QueryResult as a JSON array of objects, keys in
+// column order, via encoding/json.
 func FormatQueryJSON(r *QueryResult) string {
 	if r == nil || len(r.Columns) == 0 {
 		return "[]"
 	}
-	var sb strings.Builder
-	sb.WriteString("[\n")
-	for ri, row := range r.Rows {
-		sb.WriteString("  {")
-		for ci, col := range r.Columns {
-			if ci > 0 {
-				sb.WriteString(", ")
-			}
-			sb.WriteString(fmt.Sprintf("%q: %q", col, row[ci]))
-		}
-		sb.WriteString("}")
-		if ri < len(r.Rows)-1 {
-			sb.WriteByte(',')
-		}
-		sb.WriteByte('\n')
-	}
-	sb.WriteString("]")
-	return sb.String()
-}
-
-func csvQueryField(s string) string {
-	if strings.ContainsAny(s, ",\"\r\n") {
-		return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
-	}
-	return s
+	return formatter.RenderJSON(r.Columns, r.Rows)
 }

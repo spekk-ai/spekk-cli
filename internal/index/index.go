@@ -47,6 +47,13 @@ DROP TABLE IF EXISTS assertions;
 DROP TABLE IF EXISTS specs;
 `
 
+// schemaVersion is the current on-disk index schema. Bump it whenever the table
+// shape changes. Because the index is a derived artifact, migration is never an
+// ALTER — readers (via EnsureFresh) rebuild any database whose stored
+// user_version differs from this value, so a spekk upgrade heals the index on
+// first use.
+const schemaVersion = 1
+
 // DBPath returns the canonical path for the index database given the repo root.
 func DBPath(repoRoot string) string {
 	return filepath.Join(repoRoot, ".spekk", "index.db")
@@ -128,7 +135,77 @@ func BuildIndex(specsDir, dbPath string, force bool) (int, int, error) {
 		return 0, 0, fmt.Errorf("cannot commit transaction: %w", err)
 	}
 
+	// Stamp the schema version so a future binary can detect and rebuild an
+	// index built against an older schema. PRAGMA takes no bound parameters;
+	// schemaVersion is a trusted integer constant.
+	if _, err = db.Exec(fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
+		return 0, 0, fmt.Errorf("cannot set schema version: %w", err)
+	}
+
 	return len(result.Specs), len(result.Assertions), nil
+}
+
+// readSchemaVersion returns the user_version stamped into the index database.
+// A database built by a version-unaware spekk (or any fresh SQLite file) reports
+// 0, which never equals a real schemaVersion, so it is always treated as stale.
+func readSchemaVersion(dbPath string) (int, error) {
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return 0, fmt.Errorf("cannot open index.db: %w", err)
+	}
+	defer db.Close()
+
+	var v int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&v); err != nil {
+		return 0, fmt.Errorf("cannot read schema version: %w", err)
+	}
+	return v, nil
+}
+
+// EnsureFresh rebuilds the index at dbPath from specsDir when it is absent,
+// older than the specs (mtime), or stamped with a schema version other than the
+// current one. It reports whether a rebuild happened. A schema-version mismatch
+// forces a drop-and-recreate so a changed schema never leaves old-shaped tables
+// in place; a plain content-staleness rebuild does not need to force.
+//
+// This is the single freshness gate every index reader should call, so the
+// "when do we rebuild" rule lives in exactly one place.
+func EnsureFresh(specsDir, dbPath string) (bool, error) {
+	if _, err := os.Stat(dbPath); err != nil {
+		if os.IsNotExist(err) {
+			if _, _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
+				return false, buildErr
+			}
+			return true, nil
+		}
+		return false, fmt.Errorf("cannot stat index.db: %w", err)
+	}
+
+	// The database exists: a schema-version mismatch requires a force rebuild.
+	v, err := readSchemaVersion(dbPath)
+	if err != nil {
+		return false, err
+	}
+	if v != schemaVersion {
+		if _, _, buildErr := BuildIndex(specsDir, dbPath, true); buildErr != nil {
+			return false, buildErr
+		}
+		return true, nil
+	}
+
+	// Schema is current: rebuild only if the specs are newer than the index.
+	stale, err := IsStale(specsDir, dbPath)
+	if err != nil {
+		return false, err
+	}
+	if stale {
+		if _, _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
+			return false, buildErr
+		}
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // IsStale reports whether the index at dbPath is absent or older than the

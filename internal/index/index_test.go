@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -246,5 +247,114 @@ func TestEnsureGitignored(t *testing.T) {
 	content2, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
 	if string(content2) != ".spekk/index.db\n" {
 		t.Errorf("duplicate entry added: %q", string(content2))
+	}
+}
+
+// setUserVersion stamps an arbitrary user_version onto an existing index, to
+// simulate a database built by a different schema version.
+func setUserVersion(t *testing.T, dbPath string, v int) {
+	t.Helper()
+	db := openDB(t, dbPath)
+	defer db.Close()
+	if _, err := db.Exec("PRAGMA user_version = " + strconv.Itoa(v)); err != nil {
+		t.Fatalf("set user_version: %v", err)
+	}
+}
+
+func getUserVersion(t *testing.T, dbPath string) int {
+	t.Helper()
+	db := openDB(t, dbPath)
+	defer db.Close()
+	var v int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&v); err != nil {
+		t.Fatalf("read user_version: %v", err)
+	}
+	return v
+}
+
+// TestEnsureFreshBuildsWhenAbsent: no db yet → EnsureFresh builds it.
+func TestEnsureFreshBuildsWhenAbsent(t *testing.T) {
+	specsDir := makeSpecs(t)
+	dbPath := index.DBPath(filepath.Dir(specsDir))
+
+	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
+	if err != nil {
+		t.Fatalf("EnsureFresh: %v", err)
+	}
+	if !rebuilt {
+		t.Errorf("expected rebuilt=true for absent index")
+	}
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatalf("index not created: %v", err)
+	}
+}
+
+// TestEnsureFreshNoRebuildWhenFresh: freshly built + current schema → no rebuild.
+func TestEnsureFreshNoRebuildWhenFresh(t *testing.T) {
+	specsDir := makeSpecs(t)
+	dbPath := index.DBPath(filepath.Dir(specsDir))
+	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+		t.Fatalf("BuildIndex: %v", err)
+	}
+
+	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
+	if err != nil {
+		t.Fatalf("EnsureFresh: %v", err)
+	}
+	if rebuilt {
+		t.Errorf("expected no rebuild for a fresh, current-schema index")
+	}
+}
+
+// TestEnsureFreshRebuildsOnStaleSpecs: a spec modified after the build → rebuild.
+func TestEnsureFreshRebuildsOnStaleSpecs(t *testing.T) {
+	specsDir := makeSpecs(t)
+	dbPath := index.DBPath(filepath.Dir(specsDir))
+	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+		t.Fatalf("BuildIndex: %v", err)
+	}
+	// Make a spec newer than the db.
+	future := time.Now().Add(2 * time.Hour)
+	specFile := filepath.Join(specsDir, "spec-a", "spec-a.md")
+	if err := os.Chtimes(specFile, future, future); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
+	if err != nil {
+		t.Fatalf("EnsureFresh: %v", err)
+	}
+	if !rebuilt {
+		t.Errorf("expected rebuild when specs are newer than the index")
+	}
+}
+
+// TestEnsureFreshRebuildsOnSchemaMismatch: a db stamped with a foreign schema
+// version is force-rebuilt, and the version is reset to the current one. This is
+// the migration path that makes `spekk update` self-healing.
+func TestEnsureFreshRebuildsOnSchemaMismatch(t *testing.T) {
+	specsDir := makeSpecs(t)
+	dbPath := index.DBPath(filepath.Dir(specsDir))
+	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+		t.Fatalf("BuildIndex: %v", err)
+	}
+	// Simulate an index built by a different schema version.
+	setUserVersion(t, dbPath, 999)
+
+	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
+	if err != nil {
+		t.Fatalf("EnsureFresh: %v", err)
+	}
+	if !rebuilt {
+		t.Errorf("expected rebuild on schema-version mismatch")
+	}
+	if v := getUserVersion(t, dbPath); v == 999 {
+		t.Errorf("schema version was not reset (still 999); rebuild did not re-stamp")
+	}
+	// Data is still queryable after the forced rebuild.
+	db := openDB(t, dbPath)
+	defer db.Close()
+	if n := countRows(t, db, "assertions"); n != 2 {
+		t.Errorf("assertions after rebuild: expected 2, got %d", n)
 	}
 }

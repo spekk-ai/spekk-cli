@@ -148,3 +148,35 @@ func TestFormatQueryCSV(t *testing.T) {
 		t.Errorf("CSV row: expected 'foo,\"Foo, Bar\"', got %q", lines[1])
 	}
 }
+
+// TestRunQuery_ReadOnlyRejectsDisguisedWrite verifies that a write which slips
+// past the first-keyword SELECT check (a leading WITH) is still rejected,
+// because the connection is opened read-only. This is the real enforcement of
+// "queries never mutate".
+func TestRunQuery_ReadOnlyRejectsDisguisedWrite(t *testing.T) {
+	dbPath := buildTestDB(t)
+
+	// Sanity: two assertions in the fixture before the attempted write.
+	before, err := index.RunQuery(dbPath, "SELECT COUNT(*) FROM assertions")
+	if err != nil {
+		t.Fatalf("count query: %v", err)
+	}
+	if before.Rows[0][0] != "2" {
+		t.Fatalf("fixture precondition: expected 2 assertions, got %s", before.Rows[0][0])
+	}
+
+	// A DELETE disguised behind a CTE passes the first-keyword check (WITH) but
+	// must fail on the read-only connection.
+	if _, err := index.RunQuery(dbPath, "WITH x AS (SELECT 1) DELETE FROM assertions"); err == nil {
+		t.Fatal("expected disguised write to be rejected, got nil error")
+	}
+
+	// The table must be untouched.
+	after, err := index.RunQuery(dbPath, "SELECT COUNT(*) FROM assertions")
+	if err != nil {
+		t.Fatalf("count query after: %v", err)
+	}
+	if after.Rows[0][0] != "2" {
+		t.Errorf("assertions were modified by a disguised write: now %s, want 2", after.Rows[0][0])
+	}
+}

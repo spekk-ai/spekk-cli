@@ -3,6 +3,7 @@
 package formatter
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -65,20 +66,35 @@ func FormatTable(rows []Row, opts Options) string {
 
 	hdr := headerRow()
 
-	// Build all rows (header + data) as string slices.
+	// Build all rows (header + data) as string slices, then render.
 	all := make([][]string, 0, len(rows)+1)
 	all = append(all, columns(hdr, true, opts))
 	for _, r := range rows {
 		all = append(all, columns(r, false, opts))
 	}
 
-	numCols := len(all[0])
+	return RenderTable(all)
+}
+
+// RenderTable renders a matrix of string cells as a space-padded table. The
+// first row is the header (rendering is uniform; the header is only special
+// visually). Column widths are the widest value in each column; the last column
+// has no trailing padding. There is no trailing newline. Empty input yields "".
+//
+// This is the column-generic core shared by FormatTable (fixed spec/assertion
+// columns) and spekk query (arbitrary SELECT columns).
+func RenderTable(matrix [][]string) string {
+	if len(matrix) == 0 {
+		return ""
+	}
+
+	numCols := len(matrix[0])
 
 	// Compute column widths.
 	widths := make([]int, numCols)
-	for _, row := range all {
+	for _, row := range matrix {
 		for ci, cell := range row {
-			if len(cell) > widths[ci] {
+			if ci < numCols && len(cell) > widths[ci] {
 				widths[ci] = len(cell)
 			}
 		}
@@ -86,7 +102,7 @@ func FormatTable(rows []Row, opts Options) string {
 
 	// Render rows.
 	var sb strings.Builder
-	for ri, row := range all {
+	for ri, row := range matrix {
 		if ri > 0 {
 			sb.WriteByte('\n')
 		}
@@ -147,7 +163,18 @@ func FormatTSV(rows []Row, opts Options) string {
 	}
 
 	hdr := headerRow()
+	data := make([][]string, len(rows))
+	for i, r := range rows {
+		data[i] = columns(r, false, opts)
+	}
+	return RenderTSV(columns(hdr, true, opts), data)
+}
 
+// RenderTSV renders headers + rows as tab-separated values. The header row is
+// lowercased; every cell is sanitized (TSV has no quoting, so tab/CR/LF become
+// spaces to preserve column alignment). The result ends with a newline. This is
+// the column-generic core shared by FormatTSV and spekk query.
+func RenderTSV(headers []string, rows [][]string) string {
 	var sb strings.Builder
 
 	writeRow := func(cells []string, lowercase bool) {
@@ -158,15 +185,14 @@ func FormatTSV(rows []Row, opts Options) string {
 			if lowercase {
 				c = strings.ToLower(c)
 			}
-			// TSV has no quoting mechanism; replace control chars with spaces.
 			sb.WriteString(sanitizeTSV(c))
 		}
 		sb.WriteByte('\n')
 	}
 
-	writeRow(columns(hdr, true, opts), true)
+	writeRow(headers, true)
 	for _, r := range rows {
-		writeRow(columns(r, false, opts), false)
+		writeRow(r, false)
 	}
 
 	return sb.String()
@@ -183,7 +209,18 @@ func FormatCSV(rows []Row, opts Options) string {
 	}
 
 	hdr := headerRow()
+	data := make([][]string, len(rows))
+	for i, r := range rows {
+		data[i] = columns(r, false, opts)
+	}
+	return RenderCSV(columns(hdr, true, opts), data)
+}
 
+// RenderCSV renders headers + rows as RFC 4180 CSV. The header row is
+// lowercased; fields containing commas, quotes, or newlines are double-quoted
+// with embedded quotes doubled; every row ends with CRLF. This is the
+// column-generic core shared by FormatCSV and spekk query.
+func RenderCSV(headers []string, rows [][]string) string {
 	var sb strings.Builder
 
 	writeCSVRow := func(cells []string, lowercase bool) {
@@ -199,11 +236,47 @@ func FormatCSV(rows []Row, opts Options) string {
 		sb.WriteString("\r\n")
 	}
 
-	writeCSVRow(columns(hdr, true, opts), true)
+	writeCSVRow(headers, true)
 	for _, r := range rows {
-		writeCSVRow(columns(r, false, opts), false)
+		writeCSVRow(r, false)
 	}
 
+	return sb.String()
+}
+
+// RenderJSON renders headers + rows as a JSON array of objects, one object per
+// row, with keys in SELECT/column order. Keys and values are encoded with
+// encoding/json (correct escaping); all values are strings. Empty input yields
+// "[]". Shared by spekk query's --json output.
+func RenderJSON(headers []string, rows [][]string) string {
+	if len(headers) == 0 {
+		return "[]"
+	}
+	var sb strings.Builder
+	sb.WriteString("[\n")
+	for ri, row := range rows {
+		sb.WriteString("  {")
+		for ci, h := range headers {
+			if ci > 0 {
+				sb.WriteString(", ")
+			}
+			key, _ := json.Marshal(h)
+			val := ""
+			if ci < len(row) {
+				val = row[ci]
+			}
+			value, _ := json.Marshal(val)
+			sb.Write(key)
+			sb.WriteString(": ")
+			sb.Write(value)
+		}
+		sb.WriteString("}")
+		if ri < len(rows)-1 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('\n')
+	}
+	sb.WriteString("]")
 	return sb.String()
 }
 
