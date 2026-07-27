@@ -8,6 +8,13 @@
 // other's concerns.
 package conversation
 
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+)
+
 // SpoolEnvVar is the name of the environment variable that points a session
 // at its private spool directory: the writer drops request files there, and
 // the drainer reads them from there. Both sides must agree on this exact
@@ -66,4 +73,43 @@ func IsValidSeverity(s string) bool {
 	default:
 		return false
 	}
+}
+
+// WriteRequest atomically writes req as a new request file in spoolDir. It
+// stages the file with os.CreateTemp (random name, no collision with
+// concurrent writers) and renames it into place, so a concurrent drain of
+// spoolDir never observes a partially written file. Both writers of the
+// contract (the conversation CLI subcommand and the observer announce step)
+// share this single implementation.
+func WriteRequest(spoolDir string, req Request) error {
+	data, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("encoding request: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(spoolDir, RequestFilePattern)
+	if err != nil {
+		return fmt.Errorf("creating request file in %s: %w", spoolDir, err)
+	}
+	tmpPath := tmp.Name()
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("writing request file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("closing request file: %w", err)
+	}
+
+	// The final name reuses the same random component os.CreateTemp already
+	// generated for tmpPath, so it is just as collision-proof.
+	finalPath := strings.TrimSuffix(tmpPath, StagingSuffix)
+	if err := os.Rename(tmpPath, finalPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("finalizing request file: %w", err)
+	}
+
+	return nil
 }

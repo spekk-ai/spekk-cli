@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/conversation"
 	"github.com/spekk-ai/spekk-cli/internal/observation"
+	"github.com/spekk-ai/spekk-cli/internal/observer"
 )
 
 // observerGoSubcommands lists the Go-native observer subcommands that must
@@ -18,6 +20,53 @@ import (
 var observerGoSubcommands = map[string]func(args []string){
 	"digest":     runObserverDigest,
 	"scan-check": runObserverScanCheck,
+	"announce":   runObserverAnnounce,
+}
+
+// observerAnnounceUsage is the help text for `spekk observer announce --help`.
+const observerAnnounceUsage = `
+spekk observer announce - Announce the top unannounced observation
+
+USAGE:
+  spekk observer announce
+
+OPTIONS:
+  --help, -h  Show this help message
+
+One invocation, in order: run git fetch (the only remote read); refresh the
+index; pick the top unannounced open observation — severity high or medium
+only (low never announces), oldest first within a severity, and only from
+observer/* branches visible on origin; open one conversation for it via the
+sandbox conversation spool; then commit the announced: frontmatter flip to
+the observer branch and push.
+
+Hard caps enforced in code: at most ONE announcement per invocation, and an
+observation without affected evidence paths never announces. With nothing
+eligible the command prints "nothing to announce" and exits 0.
+
+This command must run inside a sandbox session: delivery writes to the spool
+directory named by the ` + conversation.SpoolEnvVar + ` environment
+variable. When that variable is unset the command fails with a clear error,
+appends to ` + observer.LogFileName + `, and exits non-zero — it never
+pretends to announce. Every other failure follows the same rule: log line,
+non-zero exit, and no announced: flip, so the next run retries.
+`
+
+// runObserverAnnounce implements `spekk observer announce`.
+func runObserverAnnounce(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"help": {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Print(observerAnnounceUsage)
+		return
+	}
+	if code := observer.Announce(observer.AnnounceOptions{
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}); code != 0 {
+		os.Exit(code)
+	}
 }
 
 // observerDigestUsage is the help text for `spekk observer digest --help`.

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -133,50 +132,11 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 		Body:     body,
 		Severity: conversation.Severity(severity),
 	}
-	data, err := json.Marshal(req)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error: encoding request: %s\n", err)
-		return 1
-	}
-
-	if err := writeRequestFile(spoolDir, data); err != nil {
+	if err := conversation.WriteRequest(spoolDir, req); err != nil {
 		fmt.Fprintf(stderr, "Error: %s\n", err)
 		return 1
 	}
 
 	fmt.Fprintln(stdout, "conversation request queued")
 	return 0
-}
-
-// writeRequestFile atomically writes data as a new request file in spoolDir.
-// It writes to a temp file first (created with a random component via
-// os.CreateTemp, guaranteeing no collision with concurrent invocations) and
-// renames it into place, so a concurrent drain of spoolDir never observes a
-// partially written file.
-func writeRequestFile(spoolDir string, data []byte) error {
-	tmp, err := os.CreateTemp(spoolDir, conversation.RequestFilePattern)
-	if err != nil {
-		return fmt.Errorf("creating request file in %s: %w", spoolDir, err)
-	}
-	tmpPath := tmp.Name()
-
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return fmt.Errorf("writing request file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("closing request file: %w", err)
-	}
-
-	// The final name reuses the same random component os.CreateTemp already
-	// generated for tmpPath, so it is just as collision-proof.
-	finalPath := strings.TrimSuffix(tmpPath, conversation.StagingSuffix)
-	if err := os.Rename(tmpPath, finalPath); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("finalizing request file: %w", err)
-	}
-
-	return nil
 }
