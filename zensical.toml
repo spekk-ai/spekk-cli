@@ -52,6 +52,10 @@ nav = [
   { "Skills" = "coach-skills.md" },
   { "Configuration" = "configuration.md" },
   { "Migration (npm → Go)" = "migration.md" },
+  { "Advanced" = [
+    "advanced/index.md",
+    { "Sandbox Agent Architecture" = "advanced/sandbox-architecture.md" },
+  ] },
   { "Release Notes" = [
     "release-notes/index.md",
     { "1.10.10 — Fix Broken Markdown in spekk show --watch" = "release-notes/RELEASE-NOTES-1.10.10.md" },

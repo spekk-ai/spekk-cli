@@ -409,12 +409,16 @@ spekk install      # Install agents into a coding assistant (--target)
 spekk prompt       # Print an agent's resolved prompt
 spekk skill        # List and print agent skills (list, show)
 spekk serve        # Start WebSocket server for browser extension
-spekk sandbox      # Manage cloud sandbox environments
+spekk sandbox      # Manage cloud sandbox environments (remote agents)
 spekk loop         # Run orchestration workflows
 spekk update       # Self-update to the latest release
 spekk version      # Print the current version
 spekk help         # Show help message
 ```
+
+### Sandbox (Remote Agents)
+
+`spekk sandbox` provisions cloud VMs running a generic Claude Code agent. The agent connects **out** to a control host over WebSocket — it is not spec-aware and knows nothing about the spekk workflow. The control host decides what to send; the agent runs it. See [Sandbox Architecture](./docs/advanced/sandbox-architecture.md) for the connection model, message protocol, and worker pool details.
 
 ### Builder Flags
 
