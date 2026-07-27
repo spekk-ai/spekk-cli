@@ -3,7 +3,7 @@ id: announce-selection
 parent: observer-announce
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: cross-branch-observation-indexing
 ---
 
@@ -41,3 +41,13 @@ cap live in Go code, not in a prompt.
 - Running on a schedule (cron) is safe by construction: each run announces at
   most one finding, so a backlog drains one Slack conversation per run rather
   than flooding the channel.
+
+**Decision (recorded):** unpushed local observer branches are SKIPPED —
+only branches visible on origin are announce-eligible. Pushing the branch
+is the scan's job, not announce's; a skipped local-only branch simply waits
+for its push. With every candidate skipped the run prints "nothing to
+announce" and exits 0.
+
+**Tests:** internal/observer/announce_test.go (TestSelectCandidatesRules,
+TestAnnounceSelectsHighestSeverityOldestFirst,
+TestAnnounceSkipsUnpushedLocalBranches)

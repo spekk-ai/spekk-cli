@@ -3,7 +3,7 @@ id: announce-conversation-open
 parent: observer-announce
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: announce-selection
 ---
 
@@ -42,3 +42,13 @@ body whose shape is fixed in code.
 the resolution of the parent spec's open question (proposed: substitute the
 branch reference for the PR URL rather than blocking the announcement) —
 whichever way it is settled, record the decision here.
+
+**Decision (recorded):** when `pr:` is absent at announce time, the
+announcement proceeds with the branch reference substituted into the same
+pointer line: `Proposed fix in PR: observer/<slug> — merge to accept, close
+to dismiss. Reply here to discuss.` The branch — not the PR — is the state
+carrier, so a missing PR never blocks an announcement.
+
+**Tests:** internal/observer/announce_test.go
+(TestAnnounceSuccessDeliversAndMarks, TestComposeRequestWithPRURL,
+TestAnnounceFailsLoudlyWithoutSpool)

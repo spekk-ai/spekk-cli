@@ -3,7 +3,7 @@ id: announce-failure-log
 parent: observer-announce
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: announce-conversation-open
 ---
 
@@ -40,3 +40,7 @@ log file for the human who investigates.
 **Note:** three days of silence was the original incident. The invariant this
 assertion encodes: an announce that did not happen must be *observable* —
 through exit code and log — without anyone remembering to check Slack.
+
+**Tests:** internal/observer/announce_test.go
+(TestAnnounceFailsLoudlyWithoutSpool, TestAnnounceSuccessDeliversAndMarks —
+success writes no log)

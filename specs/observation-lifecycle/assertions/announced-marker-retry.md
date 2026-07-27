@@ -3,7 +3,7 @@ id: announced-marker-retry
 parent: observation-lifecycle
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: observations-born-on-branches
 ---
 
@@ -37,3 +37,8 @@ interrupted announce is therefore a pure function of git state.
 losing an untracked ledger file caused re-announce storms or silence; here the
 marker travels with the observation on a pushed branch, so it survives clone
 hygiene, fresh checkouts, and sandbox rebuilds.
+
+**Tests:** internal/observer/announce_test.go
+(TestAnnounceSuccessDeliversAndMarks — flip commit and idempotent retry;
+TestAnnounceFailsLoudlyWithoutSpool — failed send leaves frontmatter
+untouched), internal/observation/observation_test.go (TestMarkAnnounced)

@@ -3,7 +3,7 @@ id: announce-marks-branch
 parent: observer-announce
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: announce-conversation-open
 ---
 
@@ -37,3 +37,8 @@ the Go-side half of the idempotent-retry contract.
 **Note:** ordering is deliberate — deliver first, then mark. The failure
 domain is chosen so that the recoverable error (duplicate ping) is preferred
 over the unrecoverable one (silent drop).
+
+**Tests:** internal/observer/announce_test.go
+(TestAnnounceSuccessDeliversAndMarks — one-file flip commit, push,
+idempotent second run; TestAnnounceFailsLoudlyWithoutSpool — no flip on
+failure)
