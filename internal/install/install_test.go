@@ -56,7 +56,8 @@ func TestInstall_ShimContent(t *testing.T) {
 	home := t.TempDir()
 	opts := Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()}
 
-	written, err := Install(opts)
+	res, err := Install(opts)
+	written := res.Written
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,8 @@ func TestInstall_Targets(t *testing.T) {
 				opts.HomeDir = base
 			}
 
-			written, err := Install(opts)
+			res, err := Install(opts)
+			written := res.Written
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -207,7 +209,8 @@ func TestInstall_SkillFile(t *testing.T) {
 
 	t.Run("global writes skill to home/.claude/skills/", func(t *testing.T) {
 		home := t.TempDir()
-		written, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS})
+		res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS})
+		written := res.Written
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -225,14 +228,19 @@ func TestInstall_SkillFile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("skill file not created: %v", err)
 		}
-		if string(data) != string(skillContent) {
-			t.Errorf("skill bytes mismatch: got %q, want %q", data, skillContent)
+		body, _, managed := ParseStamp(data)
+		if !managed {
+			t.Errorf("skill file is not stamped: %q", data)
+		}
+		if string(body) != string(skillContent) {
+			t.Errorf("skill body mismatch: got %q, want %q", body, skillContent)
 		}
 	})
 
 	t.Run("project writes skill to cwd/.claude/skills/", func(t *testing.T) {
 		cwd := t.TempDir()
-		written, err := Install(Options{Target: "claude-code", Project: true, Cwd: cwd, SkillFS: skillFS})
+		res, err := Install(Options{Target: "claude-code", Project: true, Cwd: cwd, SkillFS: skillFS})
+		written := res.Written
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -250,14 +258,19 @@ func TestInstall_SkillFile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("skill file not created: %v", err)
 		}
-		if string(data) != string(skillContent) {
-			t.Errorf("skill bytes mismatch: got %q, want %q", data, skillContent)
+		body, _, managed := ParseStamp(data)
+		if !managed {
+			t.Errorf("skill file is not stamped: %q", data)
+		}
+		if string(body) != string(skillContent) {
+			t.Errorf("skill body mismatch: got %q, want %q", body, skillContent)
 		}
 	})
 
 	t.Run("copilot global produces no dev-loop file at all (genuinely opted out)", func(t *testing.T) {
 		home := t.TempDir()
-		written, err := Install(Options{Target: "copilot", HomeDir: home})
+		res, err := Install(Options{Target: "copilot", HomeDir: home})
+		written := res.Written
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -269,7 +282,8 @@ func TestInstall_SkillFile(t *testing.T) {
 
 	t.Run("opencode global writes skill to home/.config/opencode/skills/", func(t *testing.T) {
 		home := t.TempDir()
-		written, err := Install(Options{Target: "opencode", HomeDir: home, SkillFS: skillFS})
+		res, err := Install(Options{Target: "opencode", HomeDir: home, SkillFS: skillFS})
+		written := res.Written
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -287,8 +301,12 @@ func TestInstall_SkillFile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("skill file not created: %v", err)
 		}
-		if string(data) != string(skillContent) {
-			t.Errorf("skill bytes mismatch: got %q, want %q", data, skillContent)
+		body, _, managed := ParseStamp(data)
+		if !managed {
+			t.Errorf("skill file is not stamped: %q", data)
+		}
+		if string(body) != string(skillContent) {
+			t.Errorf("skill body mismatch: got %q, want %q", body, skillContent)
 		}
 	})
 

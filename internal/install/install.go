@@ -177,104 +177,142 @@ down.
 `, display, agent, agent)
 }
 
-// Install writes shim files for all spekk agents into the host tool's agent
-// directory and returns the written paths.
-func Install(opts Options) ([]string, error) {
+// agentDir returns the directory where this target's agent shims live for the
+// given scope.
+func (t target) agentDir(project bool, home, cwd string) string {
+	if project {
+		return filepath.Join(cwd, t.projectDir)
+	}
+	return t.globalDir(home)
+}
+
+// skillPath returns the destination of the bundled dev-loop skill for the given
+// scope, or "" when this target+scope writes no skill file.
+func (t target) skillPath(project bool, home, cwd string) string {
+	if project {
+		if t.projectPath != nil {
+			return t.projectPath(cwd)
+		}
+		return ""
+	}
+	if t.globalPath != nil {
+		return t.globalPath(home)
+	}
+	return ""
+}
+
+// ext returns the shim file extension for this target.
+func (t target) ext() string {
+	if t.fileExt != "" {
+		return t.fileExt
+	}
+	return ".md"
+}
+
+// managedDirs returns every directory a scan must read to find the files this
+// target owns for the given scope.
+func (t target) managedDirs(project bool, home, cwd string) []string {
+	candidates := []string{t.agentDir(project, home, cwd)}
+	if sp := t.skillPath(project, home, cwd); sp != "" {
+		candidates = append(candidates, filepath.Dir(sp))
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, d := range candidates {
+		if d == "" || seen[d] {
+			continue
+		}
+		seen[d] = true
+		out = append(out, d)
+	}
+	return out
+}
+
+// desiredPaths returns the destination paths this target writes for the given
+// scope. It reads no files, so a caller that needs only paths (CheckStale)
+// avoids touching the embedded skill.
+func (t target) desiredPaths(project bool, home, cwd string) []string {
+	dir := t.agentDir(project, home, cwd)
+	ext := t.ext()
+	paths := make([]string, 0, len(agents)+1)
+	for _, agent := range agents {
+		paths = append(paths, filepath.Join(dir, "spekk-"+agent+ext))
+	}
+	if sp := t.skillPath(project, home, cwd); sp != "" {
+		paths = append(paths, sp)
+	}
+	return paths
+}
+
+// desiredFiles returns the destination path -> unstamped body for every file
+// this target writes for the given scope.
+func (t target) desiredFiles(project bool, home, cwd string, skillFS fs.FS) (map[string][]byte, error) {
+	dir := t.agentDir(project, home, cwd)
+	ext := t.ext()
+	desired := map[string][]byte{}
+	for _, agent := range agents {
+		path := filepath.Join(dir, "spekk-"+agent+ext)
+		desired[path] = []byte(t.frontmatter(agent) + shimBody(agent))
+	}
+	if sp := t.skillPath(project, home, cwd); sp != "" {
+		if skillFS == nil {
+			return nil, fmt.Errorf("no skill FS available; set install.DefaultSkillFS in main or provide Options.SkillFS")
+		}
+		data, err := fs.ReadFile(skillFS, skillEmbedPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading embedded skill %s: %w", skillEmbedPath, err)
+		}
+		if t.strip {
+			data = stripFrontmatter(data)
+		}
+		desired[sp] = data
+	}
+	return desired, nil
+}
+
+// Install reconciles the managed files for one target and scope to their desired
+// final state. It writes the desired files (each stamped), removes owned files
+// that are no longer desired, and never clobbers a file the user changed.
+func Install(opts Options) (Result, error) {
 	name := opts.Target
 	if canonical, ok := targetAliases[name]; ok {
 		name = canonical
 	}
 	t, ok := targets[name]
 	if !ok {
-		return nil, fmt.Errorf("unknown target %q: valid targets are %s\nFor other tools, use \"spekk prompt <agent>\" directly — see \"spekk install --help\"", opts.Target, strings.Join(ValidTargets(), ", "))
+		return Result{}, fmt.Errorf("unknown target %q: valid targets are %s\nFor other tools, use \"spekk prompt <agent>\" directly — see \"spekk install --help\"", opts.Target, strings.Join(ValidTargets(), ", "))
 	}
 
-	var dir string
-	var base string // home or cwd, used to compute the skill destination
+	home := opts.HomeDir
+	cwd := opts.Cwd
 	if opts.Project {
 		if t.projectDir == "" {
-			return nil, fmt.Errorf("target %q does not support --project installs; omit --project to install globally", name)
+			return Result{}, fmt.Errorf("target %q does not support --project installs; omit --project to install globally", name)
 		}
-		cwd := opts.Cwd
 		if cwd == "" {
 			var err error
 			if cwd, err = os.Getwd(); err != nil {
-				return nil, fmt.Errorf("determining working directory: %w", err)
+				return Result{}, fmt.Errorf("determining working directory: %w", err)
 			}
 		}
-		dir = filepath.Join(cwd, t.projectDir)
-		base = cwd
 	} else {
-		home := opts.HomeDir
 		if home == "" {
 			var err error
 			if home, err = os.UserHomeDir(); err != nil {
-				return nil, fmt.Errorf("determining home directory: %w", err)
+				return Result{}, fmt.Errorf("determining home directory: %w", err)
 			}
 		}
-		dir = t.globalDir(home)
-		base = home
 	}
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("creating %s: %w", dir, err)
+	skillFS := opts.SkillFS
+	if skillFS == nil {
+		skillFS = DefaultSkillFS
 	}
-
-	ext := t.fileExt
-	if ext == "" {
-		ext = ".md"
+	desired, err := t.desiredFiles(opts.Project, home, cwd, skillFS)
+	if err != nil {
+		return Result{}, err
 	}
-
-	var written []string
-	for _, agent := range agents {
-		path := filepath.Join(dir, "spekk-"+agent+ext)
-		content := t.frontmatter(agent) + shimBody(agent)
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			return nil, fmt.Errorf("writing %s: %w", path, err)
-		}
-		written = append(written, path)
-	}
-
-	// Resolve the descriptor's dev-loop destination for the active scope.
-	// A "" path opts this target+scope out: no FS read, no file written.
-	var skillPath string
-	if opts.Project {
-		if t.projectPath != nil {
-			skillPath = t.projectPath(base)
-		}
-	} else {
-		if t.globalPath != nil {
-			skillPath = t.globalPath(base)
-		}
-	}
-
-	if skillPath != "" {
-		skillFS := opts.SkillFS
-		if skillFS == nil {
-			skillFS = DefaultSkillFS
-		}
-		if skillFS == nil {
-			return nil, fmt.Errorf("no skill FS available for %s install; set install.DefaultSkillFS in main or provide Options.SkillFS", name)
-		}
-		data, err := fs.ReadFile(skillFS, skillEmbedPath)
-		if err != nil {
-			return nil, fmt.Errorf("reading embedded skill %s: %w", skillEmbedPath, err)
-		}
-		content := data
-		if t.strip {
-			content = stripFrontmatter(content)
-		}
-		skillDir := filepath.Dir(skillPath)
-		if err := os.MkdirAll(skillDir, 0o755); err != nil {
-			return nil, fmt.Errorf("creating %s: %w", skillDir, err)
-		}
-		if err := os.WriteFile(skillPath, content, 0o644); err != nil {
-			return nil, fmt.Errorf("writing %s: %w", skillPath, err)
-		}
-		written = append(written, skillPath)
-	}
-
-	return written, nil
+	return reconcile(desired, t.managedDirs(opts.Project, home, cwd))
 }
 
 // stripFrontmatter removes a leading YAML frontmatter block (the opening
