@@ -30,7 +30,7 @@ user changed the file.
 - A pristine file (the hash agrees) is written over or removed with no backup and
   no warning.
 - A file with no stamp at a desired path is checked by content. If the content
-  is a spekk file (it has the spekk shim signature), the reconciler owns it: it
+  is a spekk file (a role shim or the dev-loop skill), the reconciler owns it: it
   makes a `.bak` backup and updates the file to the current stamped content. This
   migrates a file that an older, pre-stamp version wrote. If the content is not a
   spekk file, the reconciler treats it as user content: it makes a `.bak` backup
