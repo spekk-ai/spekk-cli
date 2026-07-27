@@ -3,7 +3,7 @@ id: cross-branch-observation-indexing
 parent: observation-index
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: observation-tables-schema
 ---
 
@@ -38,3 +38,8 @@ plus main contributes rows, read directly from git refs without checkouts.
 and as a remote-tracking ref for the same tip; `internal/crossbranch` already
 handles this dedup for `spekk show` — reuse it rather than re-deriving the
 rules.
+
+**Tests:** internal/index/observation_test.go
+(TestObservationSameSlugMultipleRefs,
+TestEnsureFreshRebuildsOnNewObserverBranch),
+internal/observation/union_test.go (TestLoadUnionSeesRemoteTrackingRefs)

@@ -1,6 +1,16 @@
-// Package index builds and queries a SQLite index of the spec tree.
+// Package index builds and queries a SQLite index of the spec tree and of
+// the cross-branch observation set.
 // The index is stored at .spekk/index.db at the repo root (adjacent to specs/).
 // It is a derived artifact — the Markdown files remain the source of truth.
+//
+// The invariant: every table in .spekk/index.db is either rebuildable from
+// plaintext in the repo/branch set, or safe to lose. SQLite is strictly a
+// derived, ephemeral layer — deleting .spekk/index.db loses nothing, and a
+// rebuild reproduces it from the working tree and the visible git refs. No
+// lifecycle state exists only here. Prompts and agents get SELECT-only
+// access via `spekk query` (read-only connection); all writes happen through
+// Go code paths in this package. The index may cache, accelerate, and join;
+// it may never remember.
 package index
 
 import (
@@ -14,6 +24,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/spekk-ai/spekk-cli/internal/observation"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
@@ -39,12 +50,46 @@ CREATE TABLE IF NOT EXISTS depends_on (
   assertion_id  TEXT REFERENCES assertions(id),
   depends_on_id TEXT REFERENCES assertions(id)
 );
+-- Observation tables mirror the observation frontmatter schema
+-- (specs/observation-lifecycle/): one row per (slug, ref) pair read from the
+-- visible observer/* branches plus main. announced is NULL when the
+-- frontmatter field is absent — the announce eligibility test is
+-- "announced IS NULL", so absence must stay distinguishable from any value.
+CREATE TABLE IF NOT EXISTS observations (
+  slug      TEXT,
+  ref       TEXT,
+  type      TEXT,
+  severity  TEXT,
+  status    TEXT,
+  created   TEXT,
+  announced TEXT,
+  pr        TEXT,
+  title     TEXT,
+  file      TEXT,
+  PRIMARY KEY (slug, ref)
+);
+-- One evidence row per affected: path, keyed to the same (slug, ref).
+CREATE TABLE IF NOT EXISTS observation_files (
+  slug TEXT,
+  ref  TEXT,
+  path TEXT
+);
+-- Internal bookkeeping (derived, like everything else): the fingerprint of
+-- the observation-relevant refs the last build saw, so freshness checks can
+-- detect fetched, created, or deleted observer branches.
+CREATE TABLE IF NOT EXISTS index_meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
 `
 
 const dropTables = `
 DROP TABLE IF EXISTS depends_on;
 DROP TABLE IF EXISTS assertions;
 DROP TABLE IF EXISTS specs;
+DROP TABLE IF EXISTS observation_files;
+DROP TABLE IF EXISTS observations;
+DROP TABLE IF EXISTS index_meta;
 `
 
 // schemaVersion is the current on-disk index schema. Bump it whenever the table
@@ -52,53 +97,72 @@ DROP TABLE IF EXISTS specs;
 // ALTER — readers (via EnsureFresh) rebuild any database whose stored
 // user_version differs from this value, so a spekk upgrade heals the index on
 // first use.
-const schemaVersion = 1
+//
+// Version history: 1 = specs/assertions/depends_on; 2 adds the observation
+// tables (observations, observation_files, index_meta).
+const schemaVersion = 2
+
+// observationRefsKey is the index_meta key holding the observation
+// RefsFingerprint the last build saw.
+const observationRefsKey = "observation_refs"
 
 // DBPath returns the canonical path for the index database given the repo root.
 func DBPath(repoRoot string) string {
 	return filepath.Join(repoRoot, ".spekk", "index.db")
 }
 
-// BuildIndex creates or updates the SQLite index at dbPath from specsDir.
-// If force is true all tables are dropped and recreated from scratch.
-// Returns (specCount, assertionCount, err).
-func BuildIndex(specsDir, dbPath string, force bool) (int, int, error) {
+// Stats reports what a build indexed. Warnings name observation files that
+// were skipped because they failed validation (including the evidence gate);
+// such files are never silently indexed as valid.
+type Stats struct {
+	Specs        int
+	Assertions   int
+	Observations int
+	Warnings     []string
+}
+
+// BuildIndex creates or updates the SQLite index at dbPath from specsDir and
+// from the visible git refs (observations). If force is true all tables are
+// dropped and recreated from scratch.
+func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
+	var stats Stats
+
 	// Ensure the .spekk directory exists.
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return 0, 0, fmt.Errorf("cannot create .spekk directory: %w", err)
+		return stats, fmt.Errorf("cannot create .spekk directory: %w", err)
 	}
 
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		return 0, 0, fmt.Errorf("cannot open index.db: %w", err)
+		return stats, fmt.Errorf("cannot open index.db: %w", err)
 	}
 	defer db.Close()
 
 	if force {
 		if _, err = db.Exec(dropTables); err != nil {
-			return 0, 0, fmt.Errorf("cannot drop tables: %w", err)
+			return stats, fmt.Errorf("cannot drop tables: %w", err)
 		}
 	}
 
 	if _, err = db.Exec(createSchema); err != nil {
-		return 0, 0, fmt.Errorf("cannot create schema: %w", err)
+		return stats, fmt.Errorf("cannot create schema: %w", err)
 	}
 
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {
-		return 0, 0, fmt.Errorf("cannot parse specs: %w", err)
+		return stats, fmt.Errorf("cannot parse specs: %w", err)
 	}
 
 	tx, err := db.Begin()
 	if err != nil {
-		return 0, 0, fmt.Errorf("cannot begin transaction: %w", err)
+		return stats, fmt.Errorf("cannot begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
 	// Clear existing rows for idempotency (delete-all + re-insert).
-	for _, table := range []string{"depends_on", "assertions", "specs"} {
+	for _, table := range []string{"depends_on", "assertions", "specs", "observation_files", "observations", "index_meta"} {
 		if _, err = tx.Exec("DELETE FROM " + table); err != nil {
-			return 0, 0, fmt.Errorf("cannot clear %s: %w", table, err)
+			return stats, fmt.Errorf("cannot clear %s: %w", table, err)
 		}
 	}
 
@@ -108,7 +172,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (int, int, error) {
 			`INSERT INTO specs (id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?)`,
 			s.ID, s.Title, s.Status, s.Priority, s.Branch, s.File,
 		); err != nil {
-			return 0, 0, fmt.Errorf("cannot insert spec %q: %w", s.ID, err)
+			return stats, fmt.Errorf("cannot insert spec %q: %w", s.ID, err)
 		}
 	}
 
@@ -118,7 +182,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (int, int, error) {
 			`INSERT INTO assertions (id, parent_id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			a.ID, a.Parent, a.Title, a.Status, a.Priority, a.Branch, a.File,
 		); err != nil {
-			return 0, 0, fmt.Errorf("cannot insert assertion %q: %w", a.ID, err)
+			return stats, fmt.Errorf("cannot insert assertion %q: %w", a.ID, err)
 		}
 
 		if a.DependsOn != "" {
@@ -126,23 +190,97 @@ func BuildIndex(specsDir, dbPath string, force bool) (int, int, error) {
 				`INSERT INTO depends_on (assertion_id, depends_on_id) VALUES (?, ?)`,
 				a.ID, a.DependsOn,
 			); err != nil {
-				return 0, 0, fmt.Errorf("cannot insert depends_on edge for %q: %w", a.ID, err)
+				return stats, fmt.Errorf("cannot insert depends_on edge for %q: %w", a.ID, err)
 			}
 		}
 	}
 
+	// Observation pass: read the cross-branch union from git refs.
+	obsCount, warnings, err := indexObservations(tx)
+	if err != nil {
+		return stats, err
+	}
+
 	if err = tx.Commit(); err != nil {
-		return 0, 0, fmt.Errorf("cannot commit transaction: %w", err)
+		return stats, fmt.Errorf("cannot commit transaction: %w", err)
 	}
 
 	// Stamp the schema version so a future binary can detect and rebuild an
 	// index built against an older schema. PRAGMA takes no bound parameters;
 	// schemaVersion is a trusted integer constant.
 	if _, err = db.Exec(fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
-		return 0, 0, fmt.Errorf("cannot set schema version: %w", err)
+		return stats, fmt.Errorf("cannot set schema version: %w", err)
 	}
 
-	return len(result.Specs), len(result.Assertions), nil
+	stats.Specs = len(result.Specs)
+	stats.Assertions = len(result.Assertions)
+	stats.Observations = obsCount
+	stats.Warnings = warnings
+	return stats, nil
+}
+
+// indexObservations populates the observation tables inside the build
+// transaction. It reads the observation union from the visible observer/*
+// branches plus main via git object reads (internal/crossbranch) — never by
+// checking branches out — and performs no remote operations: it indexes
+// whatever refs are already visible, and keeping remote-tracking refs
+// current is the caller's job (git fetch).
+//
+// Outside a git repository (RefsFingerprint returns "") the pass indexes
+// nothing and records an empty fingerprint, so specs-only uses of the index
+// keep working unchanged.
+func indexObservations(tx *sql.Tx) (int, []string, error) {
+	fingerprint, err := observation.RefsFingerprint()
+	if err != nil {
+		return 0, nil, fmt.Errorf("cannot fingerprint observation refs: %w", err)
+	}
+
+	count := 0
+	var warnings []string
+	if fingerprint != "" {
+		u, err := observation.LoadUnion()
+		if err != nil {
+			return 0, nil, fmt.Errorf("cannot load observation union: %w", err)
+		}
+		warnings = u.Warnings
+
+		for _, o := range u.Observations {
+			// announced must be SQL NULL when the frontmatter field is
+			// absent, never the empty string.
+			var announced any
+			if o.Announced != "" {
+				announced = o.Announced
+			}
+			var pr any
+			if o.PR != "" {
+				pr = o.PR
+			}
+			if _, err := tx.Exec(
+				`INSERT INTO observations (slug, ref, type, severity, status, created, announced, pr, title, file)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				o.Slug, o.Ref, o.Type, o.Severity, o.Status, o.Created, announced, pr, o.Title, o.File,
+			); err != nil {
+				return 0, nil, fmt.Errorf("cannot insert observation %q at %q: %w", o.Slug, o.Ref, err)
+			}
+			for _, path := range o.Affected {
+				if _, err := tx.Exec(
+					`INSERT INTO observation_files (slug, ref, path) VALUES (?, ?, ?)`,
+					o.Slug, o.Ref, path,
+				); err != nil {
+					return 0, nil, fmt.Errorf("cannot insert observation file for %q: %w", o.Slug, err)
+				}
+			}
+			count++
+		}
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO index_meta (key, value) VALUES (?, ?)`,
+		observationRefsKey, fingerprint,
+	); err != nil {
+		return 0, nil, fmt.Errorf("cannot record observation refs fingerprint: %w", err)
+	}
+	return count, warnings, nil
 }
 
 // readSchemaVersion returns the user_version stamped into the index database.
@@ -163,17 +301,19 @@ func readSchemaVersion(dbPath string) (int, error) {
 }
 
 // EnsureFresh rebuilds the index at dbPath from specsDir when it is absent,
-// older than the specs (mtime), or stamped with a schema version other than the
-// current one. It reports whether a rebuild happened. A schema-version mismatch
-// forces a drop-and-recreate so a changed schema never leaves old-shaped tables
-// in place; a plain content-staleness rebuild does not need to force.
+// older than the specs (mtime), stamped with a schema version other than the
+// current one, or built against a different set of observation refs (an
+// observer branch was fetched, created, or deleted since the last build). It
+// reports whether a rebuild happened. A schema-version mismatch forces a
+// drop-and-recreate so a changed schema never leaves old-shaped tables in
+// place; a plain content-staleness rebuild does not need to force.
 //
 // This is the single freshness gate every index reader should call, so the
 // "when do we rebuild" rule lives in exactly one place.
 func EnsureFresh(specsDir, dbPath string) (bool, error) {
 	if _, err := os.Stat(dbPath); err != nil {
 		if os.IsNotExist(err) {
-			if _, _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
+			if _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
 				return false, buildErr
 			}
 			return true, nil
@@ -187,25 +327,57 @@ func EnsureFresh(specsDir, dbPath string) (bool, error) {
 		return false, err
 	}
 	if v != schemaVersion {
-		if _, _, buildErr := BuildIndex(specsDir, dbPath, true); buildErr != nil {
+		if _, buildErr := BuildIndex(specsDir, dbPath, true); buildErr != nil {
 			return false, buildErr
 		}
 		return true, nil
 	}
 
-	// Schema is current: rebuild only if the specs are newer than the index.
+	// Schema is current: rebuild if the specs are newer than the index, or
+	// the observation refs changed since the last build.
 	stale, err := IsStale(specsDir, dbPath)
 	if err != nil {
 		return false, err
 	}
+	if !stale {
+		stale, err = observationRefsChanged(dbPath)
+		if err != nil {
+			return false, err
+		}
+	}
 	if stale {
-		if _, _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
+		if _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
 			return false, buildErr
 		}
 		return true, nil
 	}
 
 	return false, nil
+}
+
+// observationRefsChanged reports whether the observation-relevant refs
+// differ from the fingerprint recorded at the last build.
+func observationRefsChanged(dbPath string) (bool, error) {
+	current, err := observation.RefsFingerprint()
+	if err != nil {
+		return false, fmt.Errorf("cannot fingerprint observation refs: %w", err)
+	}
+
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	if err != nil {
+		return false, fmt.Errorf("cannot open index.db: %w", err)
+	}
+	defer db.Close()
+
+	var stored string
+	err = db.QueryRow("SELECT value FROM index_meta WHERE key = ?", observationRefsKey).Scan(&stored)
+	if err == sql.ErrNoRows {
+		return true, nil // no fingerprint recorded → treat as changed
+	}
+	if err != nil {
+		return false, fmt.Errorf("cannot read observation refs fingerprint: %w", err)
+	}
+	return stored != current, nil
 }
 
 // IsStale reports whether the index at dbPath is absent or older than the

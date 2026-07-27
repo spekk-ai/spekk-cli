@@ -549,11 +549,12 @@ func runIndex(args []string) {
 	repoRoot := filepath.Dir(specsDir)
 	dbPath := index.DBPath(repoRoot)
 
-	specCount, assertCount, err := index.BuildIndex(specsDir, dbPath, flags.Bool("force"))
+	stats, err := index.BuildIndex(specsDir, dbPath, flags.Bool("force"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
 	}
+	warn(os.Stderr, stats.Warnings)
 
 	// Ensure .spekk/index.db is in .gitignore.
 	if err := index.EnsureGitignored(repoRoot); err != nil {
@@ -561,7 +562,7 @@ func runIndex(args []string) {
 		fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %s\n", err)
 	}
 
-	fmt.Printf("Indexed %d specs, %d assertions.\n", specCount, assertCount)
+	fmt.Printf("Indexed %d specs, %d assertions, %d observations.\n", stats.Specs, stats.Assertions, stats.Observations)
 }
 
 // runQuery implements the `spekk query "<sql>"` subcommand.

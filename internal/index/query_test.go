@@ -15,7 +15,7 @@ func buildTestDB(t *testing.T) string {
 	specsDir := makeSpecs(t)
 	repoRoot := filepath.Dir(specsDir)
 	dbPath := index.DBPath(repoRoot)
-	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
 		t.Fatalf("BuildIndex: %v", err)
 	}
 	return dbPath

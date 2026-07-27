@@ -85,16 +85,16 @@ func TestBuildIndex(t *testing.T) {
 	repoRoot := filepath.Dir(specsDir)
 	dbPath := index.DBPath(repoRoot)
 
-	specs, assertions, err := index.BuildIndex(specsDir, dbPath, false)
+	stats, err := index.BuildIndex(specsDir, dbPath, false)
 	if err != nil {
 		t.Fatalf("BuildIndex: %v", err)
 	}
 
-	if specs != 1 {
-		t.Errorf("expected 1 spec, got %d", specs)
+	if stats.Specs != 1 {
+		t.Errorf("expected 1 spec, got %d", stats.Specs)
 	}
-	if assertions != 2 {
-		t.Errorf("expected 2 assertions, got %d", assertions)
+	if stats.Assertions != 2 {
+		t.Errorf("expected 2 assertions, got %d", stats.Assertions)
 	}
 
 	if _, err := os.Stat(dbPath); err != nil {
@@ -129,10 +129,10 @@ func TestBuildIndexIdempotent(t *testing.T) {
 	repoRoot := filepath.Dir(specsDir)
 	dbPath := index.DBPath(repoRoot)
 
-	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
 		t.Fatalf("first BuildIndex: %v", err)
 	}
-	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
 		t.Fatalf("second BuildIndex: %v", err)
 	}
 
@@ -152,10 +152,10 @@ func TestBuildIndexForce(t *testing.T) {
 	dbPath := index.DBPath(repoRoot)
 
 	// Build once, then force rebuild.
-	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
 		t.Fatalf("initial BuildIndex: %v", err)
 	}
-	if _, _, err := index.BuildIndex(specsDir, dbPath, true); err != nil {
+	if _, err := index.BuildIndex(specsDir, dbPath, true); err != nil {
 		t.Fatalf("force BuildIndex: %v", err)
 	}
 
@@ -184,7 +184,7 @@ func TestIsStale(t *testing.T) {
 	}
 
 	// Build the index so DB exists.
-	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
 		t.Fatalf("BuildIndex: %v", err)
 	}
 
@@ -293,7 +293,7 @@ func TestEnsureFreshBuildsWhenAbsent(t *testing.T) {
 func TestEnsureFreshNoRebuildWhenFresh(t *testing.T) {
 	specsDir := makeSpecs(t)
 	dbPath := index.DBPath(filepath.Dir(specsDir))
-	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
 		t.Fatalf("BuildIndex: %v", err)
 	}
 
@@ -310,7 +310,7 @@ func TestEnsureFreshNoRebuildWhenFresh(t *testing.T) {
 func TestEnsureFreshRebuildsOnStaleSpecs(t *testing.T) {
 	specsDir := makeSpecs(t)
 	dbPath := index.DBPath(filepath.Dir(specsDir))
-	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
 		t.Fatalf("BuildIndex: %v", err)
 	}
 	// Make a spec newer than the db.
@@ -335,7 +335,7 @@ func TestEnsureFreshRebuildsOnStaleSpecs(t *testing.T) {
 func TestEnsureFreshRebuildsOnSchemaMismatch(t *testing.T) {
 	specsDir := makeSpecs(t)
 	dbPath := index.DBPath(filepath.Dir(specsDir))
-	if _, _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
 		t.Fatalf("BuildIndex: %v", err)
 	}
 	// Simulate an index built by a different schema version.

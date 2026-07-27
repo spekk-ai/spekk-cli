@@ -3,7 +3,7 @@ id: derived-only-invariant
 parent: observation-index
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Every Index Table Is Rebuildable From Plaintext or Safe to Lose; Prompts Get SELECT-Only Access; Writes Are Go-Only
@@ -39,3 +39,5 @@ SELECT, and only Go code paths write.
 that exists only in a derived or untracked artifact will eventually be lost
 or self-referential. The index may cache, accelerate, and join; it may never
 remember.
+
+**Tests:** internal/index/observation_test.go (TestObservationIndexRoundTrip)
