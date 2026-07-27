@@ -3,7 +3,7 @@ id: dont-flag-file-schema
 parent: observer-dont-flag
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # `.spekk/dont-flag.yaml` Has a Defined, Validated Entry Schema
@@ -36,3 +36,14 @@ fails loudly on malformed ones.
 **Note:** `reason` and `by` being required is the point of the mechanism —
 a suppression with no owner or rationale is exactly the prompt-side invisible
 state this design exists to eliminate.
+
+**Decision (recorded):** `until` is a date-only value interpreted as
+end-of-day UTC — the entry suppresses through the whole named day and
+expires at the following UTC midnight. Expiry is silent in v1 (no
+warnings). An unknown entry field is an error, not ignored: a typo like
+`untill` silently dropped would turn an intended-to-expire suppression into
+a permanent one.
+
+**Tests:** internal/dontflag/dontflag_test.go (TestParseValidFile,
+TestParseRejectsMalformedEntries, TestUntilExpiresEndOfDayUTC),
+cmd/spekk/observer_test.go (TestScanCheckMalformedDontFlagFailsLoudly)

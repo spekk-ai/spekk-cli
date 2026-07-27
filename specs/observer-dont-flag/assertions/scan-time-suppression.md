@@ -3,7 +3,7 @@ id: scan-time-suppression
 parent: observer-dont-flag
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: dont-flag-file-schema
 ---
 
@@ -37,3 +37,7 @@ downstream lifecycle.
 **Note:** the match target for path globs is the drift's evidence paths (what
 would become `affected`), not every file the scan happened to read while
 finding it.
+
+**Tests:** internal/dontflag/dontflag_test.go (TestEntryMatching,
+TestSuppressed), cmd/spekk/observer_test.go (TestScanCheckSuppression —
+path glob, slug pattern, expiry, and committed-on-main precedence)

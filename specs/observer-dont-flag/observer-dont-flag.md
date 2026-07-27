@@ -41,13 +41,14 @@ Entry shape:
 - `until` — optional date; when present, the entry expires and stops
   suppressing after that date; absent means permanent
 
-## Open Questions
+## Resolved Questions
 
-- **Expiry surfacing:** should the scan (or `spekk validate`) warn when an
-  entry has expired or is about to, so stale suppressions get cleaned up, or
-  is silent expiry enough? Left to the builder; silent expiry is the minimum.
-- **Timezone of `until`:** proposed as a date-only value interpreted as
-  end-of-day UTC; confirm before implementing.
+- **Expiry surfacing:** silent expiry in v1 — no warnings from the scan or
+  `spekk validate` when an entry has expired or is about to. An expired
+  entry simply stops suppressing, and the next scan may re-flag the drift.
+- **Timezone of `until`:** a date-only value interpreted as end-of-day UTC:
+  the entry suppresses through the whole named day and expires at the
+  following UTC midnight.
 
 ## Assertions
 
