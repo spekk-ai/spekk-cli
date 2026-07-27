@@ -1178,6 +1178,26 @@ OPTIONS:
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
+	if !checkOnly {
+		warnStaleInstall()
+	}
+}
+
+// warnStaleInstall checks every install location for managed files that the
+// current binary no longer writes (an old layout), and warns. It changes no
+// file — the migration is the shown "spekk install" command.
+func warnStaleInstall() {
+	home, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
+	stale, err := install.CheckStale(home, cwd)
+	if err != nil || len(stale) == 0 {
+		return
+	}
+	fmt.Fprintln(os.Stderr, "\nwarning: some installed spekk files are from an old layout:")
+	for _, s := range stale {
+		fmt.Fprintln(os.Stderr, "  "+s)
+	}
+	fmt.Fprintln(os.Stderr, "Re-run the shown install command to migrate.")
 }
 
 // runInit creates the specs/ directory so a project can start using spekk.
@@ -1389,7 +1409,7 @@ OTHER TOOLS:
 		os.Exit(1)
 	}
 
-	written, err := install.Install(install.Options{
+	res, err := install.Install(install.Options{
 		Target:  flags.String("target"),
 		Project: flags.Bool("project"),
 	})
@@ -1397,8 +1417,14 @@ OTHER TOOLS:
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-	for _, path := range written {
+	for _, w := range res.Warnings {
+		fmt.Fprintln(os.Stderr, "warning:", w)
+	}
+	for _, path := range res.Written {
 		fmt.Println("installed:", path)
+	}
+	for _, path := range res.Removed {
+		fmt.Println("removed:", path)
 	}
 }
 
