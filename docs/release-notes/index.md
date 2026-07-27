@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.17.0 -- The Sandbox States Its Protocol Version](RELEASE-NOTES-1.17.0.md)
+
+The WebSocket contract between the agent-client and the control host gets one version number, exchanged at connect. The client sends `X-Spekk-Protocol: 1.0` on every dial and reads the server's `welcome` frame in return: a different major produces a clear operator warning, and a 4004 close logs one line without a reconnect hot-loop. A pinned constant makes every version change a deliberate diff. Either side deploys first safely.
+
 ## [1.16.0 -- The Observer Lifecycle Lives in Git](RELEASE-NOTES-1.16.0.md)
 
 The observation lifecycle becomes declarative git state. An observation is a frontmatter file born on an `observer/<slug>` branch, and the branch set is the state machine: visible = pending, merged = resolved, PR closed with the branch kept = parked, deleted = forgotten. New `spekk observer announce` sends one message per run with at most three findings and flips `announced:` only after delivery; `spekk observer scan-check` gates every new observation against `.spekk/dont-flag.yaml` suppressions and cross-branch dedup; `spekk observer digest` replaces the committed DIGEST.md with a rendered view. The SQLite index gains observation tables across the branch union. Git fetch is the only remote read — no forge API calls.
