@@ -3,7 +3,7 @@ id: protocol-version-constant
 parent: sandbox-protocol-version
 created: 2026-07-27T19:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # The Client Declares One Protocol Version Constant

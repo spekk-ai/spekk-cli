@@ -3,7 +3,7 @@ id: client-handles-welcome-and-reject
 parent: sandbox-protocol-version
 created: 2026-07-27T19:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: protocol-version-constant
 ---
 
