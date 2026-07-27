@@ -50,61 +50,61 @@ func TestStripFrontmatter(t *testing.T) {
 	}
 }
 
-// TestInstall_ShimContent verifies the full shim contract on the claude-code
-// target, and that re-installing overwrites cleanly.
-func TestInstall_ShimContent(t *testing.T) {
+// TestInstall_Layout verifies the claude-code layout: the observer is an agent
+// shim, and the coach, the builder, and the dev-loop are skills. It also checks
+// that a re-install is idempotent.
+func TestInstall_Layout(t *testing.T) {
 	home := t.TempDir()
 	opts := Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()}
 
 	res, err := Install(opts)
-	written := res.Written
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 3 shims (coach, builder, observer) + 1 skill file
-	if len(written) != 4 {
-		t.Fatalf("got %d files, want 4 (coach, builder, observer shims + skill)", len(written))
+	// 1 observer shim + 3 skills (coach, builder, dev-loop).
+	if len(res.Written) != 4 {
+		t.Fatalf("got %d files, want 4 (observer shim + coach, builder, dev-loop skills): %v", len(res.Written), res.Written)
 	}
 
-	for _, agent := range []string{"coach", "builder", "observer"} {
-		path := filepath.Join(home, ".claude", "agents", "spekk-"+agent+".md")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("expected %s to exist: %v", path, err)
-		}
-		content := string(data)
-		if !strings.HasPrefix(content, "---\nname: spekk-"+agent+"\n") {
-			t.Errorf("%s: frontmatter should start with name field", agent)
-		}
-		if !strings.Contains(content, `description: "`) {
-			t.Errorf("%s: description must be a quoted YAML scalar", agent)
-		}
-		if !strings.Contains(content, "specs/ directory") {
-			t.Errorf("%s: description should scope delegation to specs/ projects", agent)
-		}
-		if !strings.Contains(content, "`spekk prompt "+agent+"`") {
-			t.Errorf("%s: body must instruct running spekk prompt", agent)
-		}
-		if !strings.Contains(content, "https://github.com/spekk-ai/spekk-cli") {
-			t.Errorf("%s: body must link install instructions for missing binary", agent)
+	// The observer stays an agent shim.
+	obs := string(mustRead(t, filepath.Join(home, ".claude", "agents", "spekk-observer.md")))
+	if !strings.HasPrefix(obs, "---\nname: spekk-observer\n") {
+		t.Errorf("observer shim frontmatter should start with the name field: %q", obs)
+	}
+	if !strings.Contains(obs, "`spekk prompt observer`") {
+		t.Errorf("observer shim body must run spekk prompt observer")
+	}
+
+	// The coach and builder are no longer agent shims.
+	for _, role := range []string{"coach", "builder"} {
+		if _, err := os.Stat(filepath.Join(home, ".claude", "agents", "spekk-"+role+".md")); !os.IsNotExist(err) {
+			t.Errorf("%s should not be an agent shim any more", role)
 		}
 	}
 
-	// Skill file must also be in the returned slice
-	skillPath := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
-	found := false
-	for _, p := range written {
-		if p == skillPath {
-			found = true
+	// The coach and builder are thin skills.
+	for _, role := range []string{"coach", "builder"} {
+		c := string(mustRead(t, filepath.Join(home, ".claude", "skills", "spekk-"+role, "SKILL.md")))
+		if !strings.Contains(c, "---\nname: spekk-"+role+"\n") {
+			t.Errorf("%s skill should have the name frontmatter: %q", role, c)
+		}
+		if !strings.Contains(c, "`spekk prompt "+role+"`") {
+			t.Errorf("%s skill body must run spekk prompt %s", role, role)
 		}
 	}
-	if !found {
-		t.Errorf("skill path %s not in written %v", skillPath, written)
+
+	// The dev-loop skill is present.
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")); err != nil {
+		t.Errorf("dev-loop skill not written: %v", err)
 	}
 
-	// Idempotent: re-install overwrites without error
-	if _, err := Install(opts); err != nil {
+	// Idempotent: a re-install changes nothing.
+	res2, err := Install(opts)
+	if err != nil {
 		t.Fatalf("re-install should succeed: %v", err)
+	}
+	if len(res2.Written) != 0 || len(res2.Removed) != 0 {
+		t.Errorf("re-install not idempotent: written=%v removed=%v", res2.Written, res2.Removed)
 	}
 }
 
@@ -120,15 +120,15 @@ func TestInstall_Targets(t *testing.T) {
 		excludes string
 		skillFS  fs.FS // non-nil for claude/claude-code targets (required by new logic)
 	}{
-		{"claude", false, []string{".claude", "agents"}, "spekk-coach.md", "name: spekk-coach", "", fakeSkillFS()},
-		{"claude-code", true, []string{".claude", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
-		{"copilot", false, []string{".copilot", "agents"}, "spekk-coach.agent.md", "name: spekk-coach", "", nil},
-		{"copilot", true, []string{".github", "agents"}, "spekk-coach.agent.md", "", "", fakeSkillFS()},
-		{"cursor", false, []string{".cursor", "agents"}, "spekk-coach.md", "name: spekk-coach", "", fakeSkillFS()},
-		{"cursor", true, []string{".cursor", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
-		{"opencode", false, []string{".config", "opencode", "agents"}, "spekk-coach.md", "mode: subagent", "name:", fakeSkillFS()},
-		{"opencode", true, []string{".opencode", "agents"}, "spekk-coach.md", "", "", fakeSkillFS()},
-		{"codex", false, []string{".codex", "prompts"}, "spekk-coach.md", "", "---", fakeSkillFS()},
+		{"claude", false, []string{".claude", "agents"}, "spekk-observer.md", "name: spekk-observer", "", fakeSkillFS()},
+		{"claude-code", true, []string{".claude", "agents"}, "spekk-observer.md", "", "", fakeSkillFS()},
+		{"copilot", false, []string{".copilot", "agents"}, "spekk-observer.agent.md", "name: spekk-observer", "", nil},
+		{"copilot", true, []string{".github", "agents"}, "spekk-observer.agent.md", "", "", fakeSkillFS()},
+		{"cursor", false, []string{".cursor", "agents"}, "spekk-observer.md", "name: spekk-observer", "", fakeSkillFS()},
+		{"cursor", true, []string{".cursor", "agents"}, "spekk-observer.md", "", "", fakeSkillFS()},
+		{"opencode", false, []string{".config", "opencode", "agents"}, "spekk-observer.md", "mode: subagent", "name:", fakeSkillFS()},
+		{"opencode", true, []string{".opencode", "agents"}, "spekk-observer.md", "", "", fakeSkillFS()},
+		{"codex", false, []string{".codex", "prompts"}, "spekk-observer.md", "", "---", fakeSkillFS()},
 	}
 
 	for _, tt := range tests {
@@ -267,16 +267,22 @@ func TestInstall_SkillFile(t *testing.T) {
 		}
 	})
 
-	t.Run("copilot global produces no dev-loop file at all (genuinely opted out)", func(t *testing.T) {
+	t.Run("copilot global writes coach and builder as agent shims (no skill path)", func(t *testing.T) {
 		home := t.TempDir()
 		res, err := Install(Options{Target: "copilot", HomeDir: home})
-		written := res.Written
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Only the 3 shim files; no dev-loop file, no SkillFS needed.
-		if len(written) != 3 {
-			t.Fatalf("copilot global: got %d written paths, want 3, got %v", len(written), written)
+		// copilot global has no skill path, so the coach and builder fall back to
+		// agent shims: 3 agent shims, no skill files.
+		agentsDir := filepath.Join(home, ".copilot", "agents")
+		for _, role := range []string{"observer", "coach", "builder"} {
+			if _, err := os.Stat(filepath.Join(agentsDir, "spekk-"+role+".agent.md")); err != nil {
+				t.Errorf("%s agent shim not written: %v", role, err)
+			}
+		}
+		if len(res.Written) != 3 {
+			t.Errorf("copilot global: got %d files, want 3 agent shims: %v", len(res.Written), res.Written)
 		}
 	})
 
@@ -361,4 +367,160 @@ func TestInstall_DevLoopCommand(t *testing.T) {
 		}
 		assertStrippedFile(t, filepath.Join(home, ".codex", "prompts", "spekk-dev-loop.md"))
 	})
+}
+
+// TestInstall_MigratesUnstampedLegacyShim: an old unstamped coach agent shim
+// (from a version before the reconciler) is backed up and removed, and the new
+// coach skill is written.
+func TestInstall_MigratesUnstampedLegacyShim(t *testing.T) {
+	home := t.TempDir()
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(agentsDir, "spekk-coach.md")
+	shim := []byte("---\nname: spekk-coach\n---\nYou are the spekk coach agent.\nRun `spekk prompt coach`.\n")
+	if err := os.WriteFile(legacy, shim, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Errorf("legacy coach shim should be removed")
+	}
+	if _, err := os.Stat(legacy + ".bak"); err != nil {
+		t.Errorf("legacy coach shim backup not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "spekk-coach", "SKILL.md")); err != nil {
+		t.Errorf("new coach skill not written: %v", err)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "legacy agent shim") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a legacy-migration warning, got %v", res.Warnings)
+	}
+}
+
+// TestInstall_PrunesStampedLegacyShim: a stamped coach or builder agent shim (a
+// reconciler wrote it) is pruned on install, because the desired set no longer
+// contains it.
+func TestInstall_PrunesStampedLegacyShim(t *testing.T) {
+	home := t.TempDir()
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(agentsDir, "spekk-builder.md")
+	if err := os.WriteFile(legacy, StampContent([]byte("old builder shim")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Errorf("stamped legacy builder shim should be pruned")
+	}
+	found := false
+	for _, p := range res.Removed {
+		if p == legacy {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("removed list should include the pruned shim: %v", res.Removed)
+	}
+}
+
+// TestInstall_LeavesUserFileAtLegacyPath: a file at a legacy path that is not a
+// spekk shim is left alone.
+func TestInstall_LeavesUserFileAtLegacyPath(t *testing.T) {
+	home := t.TempDir()
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	userFile := filepath.Join(agentsDir, "spekk-coach.md")
+	if err := os.WriteFile(userFile, []byte("my own coach agent, not the tool\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(userFile); err != nil {
+		t.Errorf("user file at legacy path should be left alone: %v", err)
+	}
+	if _, err := os.Stat(userFile + ".bak"); !os.IsNotExist(err) {
+		t.Errorf("user file should not be backed up")
+	}
+}
+
+// TestInstall_CommandHostStripsRoleSkill: a command host (codex) writes the
+// coach skill with the frontmatter stripped.
+func TestInstall_CommandHostStripsRoleSkill(t *testing.T) {
+	home := t.TempDir()
+	if _, err := Install(Options{Target: "codex", HomeDir: home, SkillFS: fakeSkillFS()}); err != nil {
+		t.Fatal(err)
+	}
+	coach := string(mustRead(t, filepath.Join(home, ".codex", "prompts", "spekk-coach.md")))
+	if strings.Contains(coach, "---") {
+		t.Errorf("codex coach skill should have the frontmatter stripped: %q", coach)
+	}
+	if !strings.Contains(coach, "spekk prompt coach") {
+		t.Errorf("codex coach skill body must run spekk prompt coach")
+	}
+}
+
+// TestInstall_MigratesCodexSharedPathShim: for codex the legacy coach shim path
+// equals the new coach skill path (the same prompts directory). The reconcile
+// updates the file in place: it backs up the old shim and writes the stamped
+// coach skill, and reports it in Written, not Removed.
+func TestInstall_MigratesCodexSharedPathShim(t *testing.T) {
+	home := t.TempDir()
+	promptsDir := filepath.Join(home, ".codex", "prompts")
+	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(promptsDir, "spekk-coach.md")
+	if err := os.WriteFile(shared, []byte("You are the spekk coach agent.\nRun `spekk prompt coach`.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Install(Options{Target: "codex", HomeDir: home, SkillFS: fakeSkillFS()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, managed := ParseStamp(mustRead(t, shared))
+	if !managed {
+		t.Errorf("codex coach file should be stamped after migration")
+	}
+	if !strings.Contains(string(body), "spekk prompt coach") {
+		t.Errorf("codex coach file should be the coach skill: %q", body)
+	}
+	inWritten := false
+	for _, p := range res.Written {
+		if p == shared {
+			inWritten = true
+		}
+	}
+	if !inWritten {
+		t.Errorf("codex shared-path coach should be in Written: %v", res.Written)
+	}
+	for _, p := range res.Removed {
+		if p == shared {
+			t.Errorf("codex shared-path coach should not be in Removed")
+		}
+	}
+	if _, err := os.Stat(shared + ".bak"); err != nil {
+		t.Errorf("backup not written: %v", err)
+	}
 }

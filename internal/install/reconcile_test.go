@@ -236,3 +236,28 @@ func mustRead(t *testing.T, path string) []byte {
 	}
 	return data
 }
+
+// TestReconcile_UpdatesUnstampedSpekkFile: an old unstamped spekk file at a
+// desired path is ours, not the user's. reconcile backs it up and updates it.
+func TestReconcile_UpdatesUnstampedSpekkFile(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "spekk-observer.md")
+	old := []byte("---\nname: spekk-observer\n---\nYou are the spekk observer agent.\nRun `spekk prompt observer`.\n")
+	if err := os.WriteFile(p, old, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := reconcile(map[string][]byte{p: []byte("new observer body")}, []string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Written) != 1 {
+		t.Errorf("the unstamped spekk file should be updated: written=%v", res.Written)
+	}
+	body, _, managed := ParseStamp(mustRead(t, p))
+	if !managed || string(body) != "new observer body" {
+		t.Errorf("file should be updated to the new stamped content: managed=%v body=%q", managed, body)
+	}
+	if _, err := os.Stat(p + ".bak"); err != nil {
+		t.Errorf(".bak backup not written: %v", err)
+	}
+}

@@ -128,13 +128,21 @@ type Result struct {
 	Warnings []string
 }
 
-// backupFile copies path to path + ".bak".
+// backupFile copies path to a ".bak" file that does not already exist, so it
+// never overwrites an earlier backup (which could be the user's own file).
 func backupFile(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path+".bak", data, 0o644)
+	bak := path + ".bak"
+	for i := 1; ; i++ {
+		if _, err := os.Stat(bak); os.IsNotExist(err) {
+			break
+		}
+		bak = fmt.Sprintf("%s.bak.%d", path, i)
+	}
+	return os.WriteFile(bak, data, 0o644)
 }
 
 // reconcile drives the managed files in dirs to the desired set. desired maps a
@@ -163,8 +171,19 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 				continue // already correct: no-op (idempotent)
 			}
 			managed, pristine := isPristine(existing)
-			if !managed || !pristine {
-				// User content or a hand-edited managed file: do not clobber.
+			switch {
+			case managed && pristine:
+				// A managed file from another version: overwrite with the new content.
+			case !managed && looksLikeSpekkShim(existing):
+				// An old, unstamped spekk file from before the reconciler. It is
+				// ours, not the user's. Back it up, then update it.
+				if err := backupFile(path); err != nil {
+					return res, fmt.Errorf("backing up %s: %w", path, err)
+				}
+				res.Warnings = append(res.Warnings,
+					fmt.Sprintf("%s was an unstamped spekk file; wrote %s.bak and updated it", path, path))
+			default:
+				// A hand-edited managed file, or genuine user content: do not clobber.
 				if err := backupFile(path); err != nil {
 					return res, fmt.Errorf("backing up %s: %w", path, err)
 				}
@@ -244,4 +263,53 @@ func CheckStale(home, cwd string) ([]string, error) {
 	}
 	sort.Strings(stale)
 	return stale, nil
+}
+
+// looksLikeSpekkShim reports whether content is one of spekk's agent shims. The
+// shim body always tells the session to run `spekk prompt <role>` and names the
+// spekk agent, so a plain user file does not match by accident.
+func looksLikeSpekkShim(content []byte) bool {
+	return bytes.Contains(content, []byte("spekk prompt ")) &&
+		bytes.Contains(content, []byte("You are the spekk"))
+}
+
+// migrateLegacy removes an old coach or builder agent shim that a role no longer
+// uses. It handles only an unstamped file from a version before the reconciler;
+// the reconciler prunes a stamped shim. It backs up the file first, because it
+// cannot prove the file is unchanged. A file at a legacy path that is not a spekk
+// shim (a file the user wrote) is left alone.
+//
+// It skips a legacy path that is also a desired path — a host such as codex that
+// keeps agents and skills in one directory, or a host with no skill path where
+// the role stays an agent shim. The reconcile updates that file in place.
+func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
+	var res Result
+	for _, p := range paths {
+		if _, ok := desired[p]; ok {
+			continue // a desired path: the reconcile updates it in place
+		}
+		content, err := os.ReadFile(p)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return res, fmt.Errorf("reading %s: %w", p, err)
+		}
+		if _, _, managed := ParseStamp(content); managed {
+			continue // the reconciler owns and prunes a stamped file
+		}
+		if !looksLikeSpekkShim(content) {
+			continue // not a spekk shim: leave the user's file
+		}
+		if err := backupFile(p); err != nil {
+			return res, fmt.Errorf("backing up %s: %w", p, err)
+		}
+		if err := os.Remove(p); err != nil {
+			return res, fmt.Errorf("removing %s: %w", p, err)
+		}
+		res.Removed = append(res.Removed, p)
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("%s was a legacy agent shim; wrote %s.bak and removed it", p, p))
+	}
+	return res, nil
 }

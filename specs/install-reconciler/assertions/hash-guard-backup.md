@@ -29,8 +29,12 @@ user changed the file.
   each warning to stderr.
 - A pristine file (the hash agrees) is written over or removed with no backup and
   no warning.
-- A file with no stamp at a desired path is treated as user content: `Install`
-  makes a backup and does not write over it, rather than assume ownership.
+- A file with no stamp at a desired path is checked by content. If the content
+  is a spekk file (it has the spekk shim signature), the reconciler owns it: it
+  makes a `.bak` backup and updates the file to the current stamped content. This
+  migrates a file that an older, pre-stamp version wrote. If the content is not a
+  spekk file, the reconciler treats it as user content: it makes a `.bak` backup
+  and does not write over it.
 - Tests cover: a changed managed file at a desired path (backup, no overwrite), a
   changed managed file to be pruned (backup, no removal), and a pristine file
   (normal write or removal, no backup).

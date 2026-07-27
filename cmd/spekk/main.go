@@ -1356,10 +1356,11 @@ Skills resolve through layers: .spekk/skills/<agent>/ (project), then
 	}
 }
 
-// runInstallTargets writes thin shim subagents into a host coding assistant.
+// runInstallTargets installs the observer agent and the spekk skills into a host
+// coding assistant.
 func runInstallTargets(args []string) {
 	usage := `
-spekk install - Install spekk agents into a coding assistant
+spekk install - Install spekk into a coding assistant
 
 USAGE:
   spekk install --target <tool> [--project]
@@ -1376,10 +1377,11 @@ OPTIONS:
   --project         Install into the current project instead of globally
   --help, -h        Show this help message
 
-Installs thin shims for the coach, builder, and observer agents. Shims
-fetch their full instructions from this binary at session start via
-"spekk prompt <agent>", so they never go stale — updating spekk updates
-every installed agent.
+This writes the observer as an agent, and the coach, the builder, and the
+dev-loop as skills. Each role file is thin: it fetches its full instructions
+from this binary with "spekk prompt <role>", so it does not go stale.
+Updating spekk updates every installed file. "spekk install" also removes an
+old coach or builder agent shim from a previous version.
 
 OTHER TOOLS:
   Any assistant that can run shell commands can use spekk without an
