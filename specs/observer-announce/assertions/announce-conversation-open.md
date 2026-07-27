@@ -17,16 +17,22 @@ body whose shape is fixed in code.
 
 ## Success Criteria
 
-- For the selected observation, announce performs the equivalent of
+- For the selected observations, announce performs the equivalent of
   `spekk conversation open` (same spool contract as
-  `specs/sandbox-conversation-open/`: one request into the directory named by
-  `SPEKK_CONVERSATION_SPOOL`) with:
-  - **title** = the finding's title
-  - **body** containing, in order: a 2–3 sentence summary of the evidence
-    (drawn from the observation body and `affected` paths); the pointer
-    `Proposed fix in PR: <url> — merge to accept, close to dismiss. Reply
-    here to discuss.`; and a severity warning reflecting the observation's
-    severity
+  `specs/sandbox-conversation-open/`: ONE request into the directory named by
+  `SPEKK_CONVERSATION_SPOOL`), one message per run:
+  - With a single finding: **title** = the finding's title; **body**
+    containing, in order: a 2–3 sentence summary of the evidence (drawn from
+    the observation body and `affected` paths); the pointer `Proposed fix in
+    PR: <url> — merge to accept, close to dismiss. Reply here to discuss.`;
+    and a severity warning reflecting the observation's severity
+  - With two or three findings: **title** = `Observer: N findings (X high,
+    Y medium)`; **body** = one compact numbered section per finding (title
+    with severity, the same 2–3 sentence summary, evidence paths, and the
+    pointer `Proposed fix in PR: <url> — merge to accept, close to
+    dismiss.`), then one shared footer: `Reply here to discuss.` plus the
+    warning line of the highest severity present. Sections keep the
+    selection order. Per-finding text stays at the single-finding size.
 - The message shape lives in Go (template/format in code), not in a prompt —
   the observer prompt contains no instructions for composing announcement
   text.
@@ -49,6 +55,9 @@ pointer line: `Proposed fix in PR: observer/<slug> — merge to accept, close
 to dismiss. Reply here to discuss.` The branch — not the PR — is the state
 carrier, so a missing PR never blocks an announcement.
 
+**Decision (recorded, 2026-07-27):** several same-run findings share one
+message (cap three), instead of one message per finding.
+
 **Tests:** internal/observer/announce_test.go
 (TestAnnounceSuccessDeliversAndMarks, TestComposeRequestWithPRURL,
-TestAnnounceFailsLoudlyWithoutSpool)
+TestComposeBatchMultiple, TestAnnounceFailsLoudlyWithoutSpool)

@@ -31,22 +31,27 @@ type AnnounceOptions struct {
 	Stderr   io.Writer           // nil = io.Discard
 }
 
+// batchCap is the most findings one announce message may carry. Findings
+// past the cap stay unannounced and wait for the next run, so a backlog
+// drains a few findings per run without a flood.
+const batchCap = 3
+
 // Announce runs one announce invocation and returns the process exit code.
 //
 // The invocation, in order: git fetch (the only remote read); refresh the
-// index; select the top unannounced open observation (high/medium only,
-// oldest first within severity, on a branch visible on origin); deliver it
-// as one conversation-open request; then — only after delivery succeeded —
-// commit the announced: flip to the observer branch and push (the only
-// remote write). At most ONE announcement happens per invocation, so a cron
-// schedule drains a backlog one conversation per run.
+// index; select the unannounced open observations (high/medium only, high
+// first, oldest first within severity, on branches visible on origin, at
+// most batchCap of them); deliver them as ONE conversation-open request;
+// then — only after delivery succeeded — commit the announced: flip to each
+// observer branch and push (the only remote writes). At most ONE message is
+// sent per invocation.
 //
 // Every failure appends a line to .spekk/observer-conversation.log and
 // returns non-zero, leaving the frontmatter without the flip so the next run
 // retries. The ordering is deliberate: deliver first, then mark. The worst
-// case is one duplicate conversation (flip failed after delivery), never a
-// finding silently marked announced that no human saw. No code path prompts
-// for input or blocks on a TTY.
+// case is a duplicate mention of a finding whose flip failed after delivery,
+// never a finding silently marked announced that no human saw. No code path
+// prompts for input or blocks on a TTY.
 func Announce(opts AnnounceOptions) int {
 	if opts.Getenv == nil {
 		opts.Getenv = os.Getenv
@@ -105,87 +110,102 @@ func Announce(opts AnnounceOptions) int {
 
 	// Only branches visible on origin are announce-eligible: skip candidates
 	// whose branch exists only locally (pushing the branch is the scan's
-	// job). The first origin-visible candidate in the deterministic order is
-	// the one announcement of this run.
-	var selected *Candidate
-	var originRef string
+	// job). Gather origin-visible candidates in the deterministic order, up
+	// to batchCap — they form the one message of this run.
+	type readyItem struct {
+		cand      Candidate
+		originRef string
+		content   string
+	}
+	var ready []readyItem
 	for i := range candidates {
+		if len(ready) == batchCap {
+			fmt.Fprintf(opts.Stdout, "%d more findings wait for the next run\n", len(candidates)-i)
+			break
+		}
 		branch := observation.BranchName(candidates[i].Slug)
 		ref, onOrigin, err := g.originRef(branch)
 		if err != nil {
 			return fail(candidates[i].Slug, fmt.Errorf("origin visibility check failed: %w", err))
 		}
-		if onOrigin {
-			selected = &candidates[i]
-			originRef = ref
-			break
+		if !onOrigin {
+			fmt.Fprintf(opts.Stderr, "skipping %s: branch %s is not on origin\n", candidates[i].Slug, branch)
+			continue
 		}
-		fmt.Fprintf(opts.Stderr, "skipping %s: branch %s is not on origin\n", candidates[i].Slug, branch)
+
+		// Load the observation body from the origin ref for the evidence
+		// summary, and re-run the evidence gate against the file itself.
+		content, err := g.fileAt(ref, candidates[i].File)
+		if err != nil {
+			return fail(candidates[i].Slug, fmt.Errorf("cannot read observation at %s: %w", ref, err))
+		}
+		obs, err := observation.Parse(candidates[i].File, content)
+		if err != nil {
+			return fail(candidates[i].Slug, fmt.Errorf("observation invalid at announce time: %w", err))
+		}
+		if obs.Announced != "" {
+			// The index lagged behind a concurrent flip; skip it.
+			continue
+		}
+		candidates[i].Body = obs.Body
+		ready = append(ready, readyItem{cand: candidates[i], originRef: ref, content: content})
 	}
-	if selected == nil {
+	if len(ready) == 0 {
 		// Silence is a valid, successful outcome — no announcement, no log.
 		fmt.Fprintln(opts.Stdout, "nothing to announce")
 		return 0
 	}
-
-	// Load the observation body from the origin ref for the evidence
-	// summary, and re-run the evidence gate against the file itself.
-	content, err := g.fileAt(originRef, selected.File)
-	if err != nil {
-		return fail(selected.Slug, fmt.Errorf("cannot read observation at %s: %w", originRef, err))
-	}
-	obs, err := observation.Parse(selected.File, content)
-	if err != nil {
-		return fail(selected.Slug, fmt.Errorf("observation invalid at announce time: %w", err))
-	}
-	if obs.Announced != "" {
-		// The index lagged behind a concurrent flip; treat as nothing to do.
-		fmt.Fprintln(opts.Stdout, "nothing to announce")
-		return 0
-	}
-	selected.Body = obs.Body
 
 	// 4. Sandbox constraint: the spool directory comes from the session
 	// environment. Outside a sandbox session announce cannot deliver and
 	// must fail loudly rather than pretend to announce.
 	spoolDir := opts.Getenv(conversation.SpoolEnvVar)
 	if spoolDir == "" {
-		return fail(selected.Slug, fmt.Errorf("%s is not set; \"spekk observer announce\" must run inside a sandbox session", conversation.SpoolEnvVar))
+		return fail(ready[0].cand.Slug, fmt.Errorf("%s is not set; \"spekk observer announce\" must run inside a sandbox session", conversation.SpoolEnvVar))
 	}
 
-	// 5. Deliver.
-	req := composeRequest(*selected)
-	if err := conversation.WriteRequest(spoolDir, req); err != nil {
-		return fail(selected.Slug, fmt.Errorf("conversation request failed: %w", err))
+	// 5. Deliver: the batch is ONE conversation-open request.
+	cands := make([]Candidate, len(ready))
+	for i, r := range ready {
+		cands[i] = r.cand
 	}
-	fmt.Fprintf(opts.Stdout, "announced %s (%s)\n", selected.Slug, selected.Severity)
+	req := composeBatch(cands)
+	if err := conversation.WriteRequest(spoolDir, req); err != nil {
+		return fail(ready[0].cand.Slug, fmt.Errorf("conversation request failed: %w", err))
+	}
+	for _, r := range ready {
+		fmt.Fprintf(opts.Stdout, "announced %s (%s)\n", r.cand.Slug, r.cand.Severity)
+	}
 
 	// 6. Delivery succeeded: record it as the announced: frontmatter flip on
-	// the observer branch, and push. A failure past this point still logs
+	// each observer branch, and push. A failure past this point still logs
 	// and exits non-zero, but the conversation is already open — the
-	// documented worst case is one duplicate announcement on the next run.
+	// documented worst case is a duplicate mention of the unflipped findings
+	// on the next run.
 	ts := opts.Now().UTC().Format("2006-01-02T15:04:05Z")
-	marked, err := observation.MarkAnnounced(content, ts)
-	if err != nil {
-		return fail(selected.Slug, fmt.Errorf("delivered, but cannot mark frontmatter: %w", err))
+	for _, r := range ready {
+		marked, err := observation.MarkAnnounced(r.content, ts)
+		if err != nil {
+			return fail(r.cand.Slug, fmt.Errorf("delivered, but cannot mark frontmatter: %w", err))
+		}
+		branch := observation.BranchName(r.cand.Slug)
+		message := fmt.Sprintf("observer: mark %s announced", r.cand.Slug)
+		// Capture the pre-flip tip before the push updates the
+		// remote-tracking ref, so the local fast-forward check compares
+		// against the right sha.
+		parent, parentErr := g.run(nil, "rev-parse", r.originRef)
+		commit, err := g.commitFileChange(r.originRef, r.cand.File, marked, message)
+		if err != nil {
+			return fail(r.cand.Slug, fmt.Errorf("delivered, but flip commit failed: %w", err))
+		}
+		if err := g.pushCommit(commit, branch); err != nil {
+			return fail(r.cand.Slug, fmt.Errorf("delivered, but flip push failed: %w", err))
+		}
+		if parentErr == nil {
+			g.fastForwardLocal(branch, commit, parent)
+		}
+		fmt.Fprintf(opts.Stdout, "marked %s announced (%s)\n", r.cand.Slug, ts)
 	}
-	branch := observation.BranchName(selected.Slug)
-	message := fmt.Sprintf("observer: mark %s announced", selected.Slug)
-	// Capture the pre-flip tip before the push updates the remote-tracking
-	// ref, so the local fast-forward check compares against the right sha.
-	parent, parentErr := g.run(nil, "rev-parse", originRef)
-	commit, err := g.commitFileChange(originRef, selected.File, marked, message)
-	if err != nil {
-		return fail(selected.Slug, fmt.Errorf("delivered, but flip commit failed: %w", err))
-	}
-	if err := g.pushCommit(commit, branch); err != nil {
-		return fail(selected.Slug, fmt.Errorf("delivered, but flip push failed: %w", err))
-	}
-	if parentErr == nil {
-		g.fastForwardLocal(branch, commit, parent)
-	}
-
-	fmt.Fprintf(opts.Stdout, "marked %s announced (%s)\n", selected.Slug, ts)
 	return 0
 }
 

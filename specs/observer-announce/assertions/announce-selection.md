@@ -7,13 +7,13 @@ status: done
 depends-on: cross-branch-observation-indexing
 ---
 
-# Announce Selects At Most One Observation: Top Unannounced Open, High/Medium Only, Oldest-First Within Severity
+# Announce Selects Up to Three Observations: Unannounced Open, High/Medium Only, Oldest-First Within Severity
 
 ## Description
 
-`spekk observer announce` deterministically computes the single observation to
-announce from the index, after a fetch. Selection rules and the one-per-run
-cap live in Go code, not in a prompt.
+`spekk observer announce` deterministically computes the observations to
+announce from the index, after a fetch. Selection rules and the caps live in
+Go code, not in a prompt.
 
 ## Success Criteria
 
@@ -32,15 +32,16 @@ cap live in Go code, not in a prompt.
     command refuses to announce it (skips it as ineligible)
 - Ordering: candidates sort by severity (`high` before `medium`), then
   oldest-first by `created` within the same severity. The selected
-  observation is the first in this order.
-- **Hard cap in code: at most ONE announcement per invocation.** With zero
-  candidates the command does nothing announce-related and exits 0 (silence
-  is a valid, successful outcome).
+  observations are the first in this order.
+- **Hard caps in code: at most ONE message per invocation, and the message
+  carries at most THREE findings.** Findings past the cap stay unannounced
+  and wait for the next run. With zero candidates the command does nothing
+  announce-related and exits 0 (silence is a valid, successful outcome).
 - Selection is deterministic: the same repo/branch state yields the same
   choice (ties on identical `created` broken by a stable key, e.g. slug).
-- Running on a schedule (cron) is safe by construction: each run announces at
-  most one finding, so a backlog drains one Slack conversation per run rather
-  than flooding the channel.
+- Running on a schedule (cron) is safe by construction: each run sends at
+  most one message with at most three findings, so a backlog drains a few
+  findings per run rather than flooding the channel.
 
 **Decision (recorded):** unpushed local observer branches are SKIPPED —
 only branches visible on origin are announce-eligible. Pushing the branch
@@ -48,6 +49,11 @@ is the scan's job, not announce's; a skipped local-only branch simply waits
 for its push. With every candidate skipped the run prints "nothing to
 announce" and exits 0.
 
+**Decision (recorded, 2026-07-27):** William changed the cap from one
+finding per run to one message per run with at most three findings. Both
+posts of the first production run were fine; separate messages for
+same-run findings were the problem.
+
 **Tests:** internal/observer/announce_test.go (TestSelectCandidatesRules,
-TestAnnounceSelectsHighestSeverityOldestFirst,
-TestAnnounceSkipsUnpushedLocalBranches)
+TestAnnounceBatchesEligibleFindingsIntoOneMessage,
+TestAnnounceCapsBatchAtThree, TestAnnounceSkipsUnpushedLocalBranches)
