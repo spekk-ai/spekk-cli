@@ -39,6 +39,14 @@ func repoRoot() string {
 	return root
 }
 
+// RepoRoot returns the absolute toplevel of the git repository containing the
+// current working directory, or "" when it cannot be determined (for example,
+// outside a repository). It is the exported view of the same memoized lookup
+// every git command in this package already uses.
+func RepoRoot() string {
+	return repoRoot()
+}
+
 // readOnlySubcommands is the allowlist of git subcommands this package may run.
 // Every command here either reports information or writes only to the object
 // store (merge-tree) — none of them can mutate the working tree, the index, the

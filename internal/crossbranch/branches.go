@@ -63,6 +63,22 @@ type Branch struct {
 //
 // The result is sorted by Name for stable, deterministic output.
 func DiscoverBranches(filter string) ([]Branch, error) {
+	return discover(filter, true)
+}
+
+// DiscoverAllBranches behaves exactly like DiscoverBranches but keeps the
+// current branch (HEAD) in the set. Consumers that need the full visible
+// branch union — such as the observation cross-branch union, where the
+// checked-out branch's committed observations still count — use this
+// variant. Merge-preview comparison keeps using DiscoverBranches, where
+// comparing "ours" against itself is meaningless.
+func DiscoverAllBranches(filter string) ([]Branch, error) {
+	return discover(filter, false)
+}
+
+// discover implements branch discovery for both entry points. excludeCurrent
+// controls whether the checked-out branch (HEAD) is dropped from the set.
+func discover(filter string, excludeCurrent bool) ([]Branch, error) {
 	// Validate the glob up front so a bad pattern fails fast rather than
 	// silently dropping everything. filepath.Match only reports ErrBadPattern
 	// when the pattern is actually exercised, so probe it once.
@@ -72,9 +88,13 @@ func DiscoverBranches(filter string) ([]Branch, error) {
 		}
 	}
 
-	current, err := currentBranch()
-	if err != nil {
-		return nil, err
+	current := ""
+	if excludeCurrent {
+		var err error
+		current, err = currentBranch()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	out, err := Run("for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")

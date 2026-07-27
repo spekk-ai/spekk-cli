@@ -73,6 +73,14 @@ func main() {
 		launchBuilderAgent(args[1:])
 
 	case "observer":
+		// Go-native observer subcommands (digest, scan-check, announce)
+		// route to deterministic code; anything else launches the agent.
+		if len(args) > 1 {
+			if run, ok := observerGoSubcommands[args[1]]; ok {
+				run(args[2:])
+				return
+			}
+		}
 		launchObserverAgent(args[1:])
 
 	case "loop":

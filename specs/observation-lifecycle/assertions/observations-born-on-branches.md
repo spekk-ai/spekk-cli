@@ -3,7 +3,7 @@ id: observations-born-on-branches
 parent: observation-lifecycle
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: observation-file-format
 ---
 

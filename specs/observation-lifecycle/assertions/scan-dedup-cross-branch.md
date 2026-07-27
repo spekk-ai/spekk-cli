@@ -3,7 +3,7 @@ id: scan-dedup-cross-branch
 parent: observation-lifecycle
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: branch-state-machine
 ---
 
@@ -44,3 +44,7 @@ toward the union input, but resolved drift that *recurs* is new drift: if the
 code regresses after a merge, the affected paths will show live drift again
 and no open observation covers it, so a new observation is correct. The dedup
 rule suppresses duplicates of *open/parked* findings, not history.
+
+**Tests:** internal/observation/union_test.go,
+cmd/spekk/observer_test.go (TestScanCheckCoveredAndClear,
+TestScanCheckSlugCollisionWithMain)
