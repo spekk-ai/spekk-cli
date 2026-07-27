@@ -21,6 +21,11 @@ import (
 // parks the finding; only branch deletion forgets it.
 const pointerLineFormat = "Proposed fix in PR: %s — merge to accept, close to dismiss. Reply here to discuss."
 
+// batchPointerLineFormat is the per-finding pointer inside a multi-finding
+// message. The "Reply here to discuss." sentence moves to the shared footer,
+// so it appears once per message.
+const batchPointerLineFormat = "Proposed fix in PR: %s — merge to accept, close to dismiss."
+
 // severityWarnings maps observation severity to the warning line appended to
 // every announcement body. Only high and medium exist here because low never
 // announces.
@@ -36,19 +41,74 @@ var conversationSeverities = map[string]conversation.Severity{
 	observation.SeverityMedium: conversation.SeverityWarning,
 }
 
-// composeRequest builds the conversation-open request for a candidate.
-func composeRequest(c Candidate) conversation.Request {
-	reference := c.PR
-	if reference == "" {
-		reference = observation.BranchName(c.Slug)
+// reference returns the pointer target for a candidate: its PR URL when the
+// frontmatter carries one, else the branch name.
+func reference(c Candidate) string {
+	if c.PR != "" {
+		return c.PR
+	}
+	return observation.BranchName(c.Slug)
+}
+
+// composeBatch builds the ONE conversation-open request of an announce run.
+// A single finding keeps the original message shape. Several findings share
+// one message: a numbered section per finding (summary, evidence, pointer),
+// then one footer with the reply invitation and the warning line of the
+// highest severity present. The candidates arrive already ordered (high
+// before medium, oldest first), and the sections keep that order.
+func composeBatch(cands []Candidate) conversation.Request {
+	if len(cands) == 1 {
+		return composeSingle(cands[0])
 	}
 
+	high, medium := 0, 0
+	for _, c := range cands {
+		if c.Severity == observation.SeverityHigh {
+			high++
+		} else {
+			medium++
+		}
+	}
+	var counts []string
+	if high > 0 {
+		counts = append(counts, fmt.Sprintf("%d high", high))
+	}
+	if medium > 0 {
+		counts = append(counts, fmt.Sprintf("%d medium", medium))
+	}
+	title := fmt.Sprintf("Observer: %d findings (%s)", len(cands), strings.Join(counts, ", "))
+
+	var b strings.Builder
+	for i, c := range cands {
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(fmt.Sprintf("%d. *%s* (%s)\n", i+1, c.Title, c.Severity))
+		b.WriteString(evidenceSummary(c.Body))
+		b.WriteString("\nEvidence: ")
+		b.WriteString(strings.Join(c.Affected, ", "))
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf(batchPointerLineFormat, reference(c)))
+	}
+	b.WriteString("\n\nReply here to discuss.\n")
+	top := cands[0].Severity // ordered input: the first carries the highest
+	b.WriteString(severityWarnings[top])
+
+	return conversation.Request{
+		Title:    title,
+		Body:     b.String(),
+		Severity: conversationSeverities[top],
+	}
+}
+
+// composeSingle builds the one-finding message shape.
+func composeSingle(c Candidate) conversation.Request {
 	var b strings.Builder
 	b.WriteString(evidenceSummary(c.Body))
 	b.WriteString("\n\nEvidence: ")
 	b.WriteString(strings.Join(c.Affected, ", "))
 	b.WriteString("\n\n")
-	b.WriteString(fmt.Sprintf(pointerLineFormat, reference))
+	b.WriteString(fmt.Sprintf(pointerLineFormat, reference(c)))
 	b.WriteString("\n\n")
 	b.WriteString(severityWarnings[c.Severity])
 

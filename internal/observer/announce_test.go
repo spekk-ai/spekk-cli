@@ -222,8 +222,8 @@ func TestAnnounceSuccessDeliversAndMarks(t *testing.T) {
 	_ = readSpoolRequest(t, spool) // still exactly one request file
 }
 
-func TestAnnounceSelectsHighestSeverityOldestFirst(t *testing.T) {
-	clone, _ := newAnnounceRepos(t)
+func TestAnnounceBatchesEligibleFindingsIntoOneMessage(t *testing.T) {
+	clone, origin := newAnnounceRepos(t)
 	addObserverBranch(t, clone, "medium-first", "medium", true)
 	addObserverBranch(t, clone, "high-later", "high", true)
 	// Low never announces, whatever the queue looks like.
@@ -233,9 +233,58 @@ func TestAnnounceSelectsHighestSeverityOldestFirst(t *testing.T) {
 	if code := Announce(announceOpts(t, clone, spool)); code != 0 {
 		t.Fatal("announce failed")
 	}
+
+	// ONE request carries both findings, high first, low absent.
 	req := readSpoolRequest(t, spool)
-	if req.Title != "Finding high-later" {
-		t.Fatalf("expected the high finding first, got %q", req.Title)
+	if req.Title != "Observer: 2 findings (1 high, 1 medium)" {
+		t.Fatalf("title: %q", req.Title)
+	}
+	if req.Severity != conversation.SeverityCritical {
+		t.Fatalf("batch severity must follow the highest, got %q", req.Severity)
+	}
+	highIdx := strings.Index(req.Body, "Finding high-later")
+	mediumIdx := strings.Index(req.Body, "Finding medium-first")
+	if highIdx < 0 || mediumIdx < 0 || highIdx > mediumIdx {
+		t.Fatalf("body must list high before medium:\n%s", req.Body)
+	}
+	if strings.Contains(req.Body, "low-noise") {
+		t.Fatalf("low must never appear:\n%s", req.Body)
+	}
+	if got := strings.Count(req.Body, "Reply here to discuss."); got != 1 {
+		t.Fatalf("footer must appear once, got %d:\n%s", got, req.Body)
+	}
+
+	// Both announced branches got the flip on origin.
+	for _, slug := range []string{"high-later", "medium-first"} {
+		content := gitT(t, origin, "show", "refs/heads/observer/"+slug+":observations/"+slug+".md")
+		if !strings.Contains(content, "announced: 2026-07-27T09:00:00Z") {
+			t.Fatalf("%s lacks the announced flip:\n%s", slug, content)
+		}
+	}
+}
+
+func TestAnnounceCapsBatchAtThree(t *testing.T) {
+	clone, _ := newAnnounceRepos(t)
+	for _, slug := range []string{"cap-a", "cap-b", "cap-c", "cap-d"} {
+		addObserverBranch(t, clone, slug, "medium", true)
+	}
+	spool := t.TempDir()
+
+	var out strings.Builder
+	opts := announceOpts(t, clone, spool)
+	opts.Stdout = &out
+	if code := Announce(opts); code != 0 {
+		t.Fatal("announce failed")
+	}
+	req := readSpoolRequest(t, spool)
+	if req.Title != "Observer: 3 findings (3 medium)" {
+		t.Fatalf("title: %q", req.Title)
+	}
+	if strings.Contains(req.Body, "cap-d") {
+		t.Fatalf("the fourth finding must wait:\n%s", req.Body)
+	}
+	if !strings.Contains(out.String(), "1 more findings wait for the next run") {
+		t.Fatalf("stdout must report the deferred count, got %q", out.String())
 	}
 }
 
@@ -332,12 +381,15 @@ func TestSelectCandidatesRules(t *testing.T) {
 }
 
 func TestComposeRequestWithPRURL(t *testing.T) {
-	req := composeRequest(Candidate{
+	req := composeBatch([]Candidate{{
 		Slug: "x", Severity: "medium", Title: "T",
 		PR:       "https://github.com/org/repo/pull/7",
 		Affected: []string{"a.go"},
 		Body:     "## Issue Description\n\nOne. Two. Three. Four.\n",
-	})
+	}})
+	if req.Title != "T" {
+		t.Fatalf("a single finding keeps its own title, got %q", req.Title)
+	}
 	if !strings.Contains(req.Body, "Proposed fix in PR: https://github.com/org/repo/pull/7 — merge to accept, close to dismiss. Reply here to discuss.") {
 		t.Fatalf("pointer line wrong:\n%s", req.Body)
 	}
@@ -349,5 +401,33 @@ func TestComposeRequestWithPRURL(t *testing.T) {
 	}
 	if !strings.Contains(req.Body, "Severity: medium") {
 		t.Fatalf("severity warning missing:\n%s", req.Body)
+	}
+}
+
+func TestComposeBatchMultiple(t *testing.T) {
+	req := composeBatch([]Candidate{
+		{Slug: "a", Severity: "high", Title: "A", Affected: []string{"a.go"},
+			Body: "## Issue Description\n\nDrift A.\n"},
+		{Slug: "b", Severity: "medium", Title: "B",
+			PR:       "https://github.com/org/repo/pull/9",
+			Affected: []string{"b.go"},
+			Body:     "## Issue Description\n\nDrift B.\n"},
+	})
+	if req.Title != "Observer: 2 findings (1 high, 1 medium)" {
+		t.Fatalf("title: %q", req.Title)
+	}
+	for _, want := range []string{
+		"1. *A* (high)",
+		"Proposed fix in PR: observer/a — merge to accept, close to dismiss.",
+		"2. *B* (medium)",
+		"Proposed fix in PR: https://github.com/org/repo/pull/9 — merge to accept, close to dismiss.",
+		"Severity: high",
+	} {
+		if !strings.Contains(req.Body, want) {
+			t.Fatalf("body missing %q:\n%s", want, req.Body)
+		}
+	}
+	if got := strings.Count(req.Body, "Reply here to discuss."); got != 1 {
+		t.Fatalf("footer must appear once, got %d", got)
 	}
 }

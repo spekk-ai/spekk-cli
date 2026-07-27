@@ -26,7 +26,7 @@ var observerGoSubcommands = map[string]func(args []string){
 
 // observerAnnounceUsage is the help text for `spekk observer announce --help`.
 const observerAnnounceUsage = `
-spekk observer announce - Announce the top unannounced observation
+spekk observer announce - Announce the top unannounced observations
 
 USAGE:
   spekk observer announce
@@ -35,13 +35,14 @@ OPTIONS:
   --help, -h  Show this help message
 
 One invocation, in order: run git fetch (the only remote read); refresh the
-index; pick the top unannounced open observation — severity high or medium
-only (low never announces), oldest first within a severity, and only from
-observer/* branches visible on origin; open one conversation for it via the
-sandbox conversation spool; then commit the announced: frontmatter flip to
-the observer branch and push.
+index; pick the top unannounced open observations — severity high or medium
+only (low never announces), high first, oldest first within a severity, and
+only from observer/* branches visible on origin; open ONE conversation that
+carries them via the sandbox conversation spool; then commit the announced:
+frontmatter flip to each observer branch and push.
 
-Hard caps enforced in code: at most ONE announcement per invocation, and an
+Hard caps enforced in code: at most ONE message per invocation, at most
+THREE findings inside it (the rest wait for the next run), and an
 observation without affected evidence paths never announces. With nothing
 eligible the command prints "nothing to announce" and exits 0.
 
