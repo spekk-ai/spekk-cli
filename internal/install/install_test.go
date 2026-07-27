@@ -524,3 +524,45 @@ func TestInstall_MigratesCodexSharedPathShim(t *testing.T) {
 		t.Errorf("backup not written: %v", err)
 	}
 }
+
+// TestInstall_MigratesOldDevLoopSkill: an old, unstamped dev-loop skill at the
+// desired path is recognized as a spekk file and updated, not left as a
+// hand-edited file. This is the main point of the rework for an existing user.
+func TestInstall_MigratesOldDevLoopSkill(t *testing.T) {
+	home := t.TempDir()
+	skillDir := filepath.Join(home, ".claude", "skills", "spekk-dev-loop")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(skillDir, "SKILL.md")
+	// The old dev-loop skill has no "You are the spekk" text, but it does have the
+	// "Spekk Dev Loop" heading.
+	old := []byte("---\nname: spekk-dev-loop\n---\n# Spekk Dev Loop\nFour subagent stages ...\n")
+	if err := os.WriteFile(p, old, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, managed := ParseStamp(mustRead(t, p))
+	if !managed {
+		t.Errorf("dev-loop skill should be stamped after migration")
+	}
+	if strings.Contains(string(body), "Four subagent stages") {
+		t.Errorf("dev-loop skill should be updated to the new content, not left old: %q", body)
+	}
+	if _, err := os.Stat(p + ".bak"); err != nil {
+		t.Errorf("backup not written: %v", err)
+	}
+	inWritten := false
+	for _, w := range res.Written {
+		if w == p {
+			inWritten = true
+		}
+	}
+	if !inWritten {
+		t.Errorf("dev-loop skill should be in Written: %v", res.Written)
+	}
+}

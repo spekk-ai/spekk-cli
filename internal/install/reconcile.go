@@ -174,7 +174,7 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 			switch {
 			case managed && pristine:
 				// A managed file from another version: overwrite with the new content.
-			case !managed && looksLikeSpekkShim(existing):
+			case !managed && looksLikeSpekkFile(existing):
 				// An old, unstamped spekk file from before the reconciler. It is
 				// ours, not the user's. Back it up, then update it.
 				if err := backupFile(path); err != nil {
@@ -265,12 +265,20 @@ func CheckStale(home, cwd string) ([]string, error) {
 	return stale, nil
 }
 
-// looksLikeSpekkShim reports whether content is one of spekk's agent shims. The
-// shim body always tells the session to run `spekk prompt <role>` and names the
-// spekk agent, so a plain user file does not match by accident.
-func looksLikeSpekkShim(content []byte) bool {
-	return bytes.Contains(content, []byte("spekk prompt ")) &&
-		bytes.Contains(content, []byte("You are the spekk"))
+// looksLikeSpekkFile reports whether content is one of spekk's managed files: a
+// role shim or the dev-loop skill. It is used only on a spekk-namespaced path,
+// so it needs only to tell an old spekk file from a file the user put there. A
+// plain user file does not match by accident.
+func looksLikeSpekkFile(content []byte) bool {
+	// A role shim (agent shim or thin role skill): it names the spekk agent and
+	// tells the session to run spekk prompt.
+	if bytes.Contains(content, []byte("spekk prompt ")) &&
+		bytes.Contains(content, []byte("You are the spekk")) {
+		return true
+	}
+	// The dev-loop skill: its heading is stable across versions and hosts (it
+	// survives the frontmatter strip for a command host).
+	return bytes.Contains(content, []byte("Spekk Dev Loop"))
 }
 
 // migrateLegacy removes an old coach or builder agent shim that a role no longer
@@ -298,7 +306,7 @@ func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 		if _, _, managed := ParseStamp(content); managed {
 			continue // the reconciler owns and prunes a stamped file
 		}
-		if !looksLikeSpekkShim(content) {
+		if !looksLikeSpekkFile(content) {
 			continue // not a spekk shim: leave the user's file
 		}
 		if err := backupFile(p); err != nil {
