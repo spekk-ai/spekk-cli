@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.15.0 -- One-Session Dev Loop and a Self-Migrating Install](RELEASE-NOTES-1.15.0.md)
+
+The dev loop now runs in one session. The `spekk-dev-loop` skill plays the coach, builder, and verifier roles in turn (it fetches each role with `spekk prompt <role>`) instead of dispatching a sub-agent per role — for a feature that fits in one session, that is about 5 times fewer tokens, about 3 times cheaper, and about 3 times faster, at the same quality (issue #154). To match, `spekk install` writes the observer as an agent and the coach, builder, and dev-loop as skills, and it becomes an idempotent reconciler that migrates an old layout: it writes the desired files, removes a file a new layout no longer needs, backs up and never writes over a file you changed by hand, and `spekk update` warns when an old layout is present.
+
 ## [1.14.0 -- Query Your Specs with SQL](RELEASE-NOTES-1.14.0.md)
 
 New `spekk index` builds a pure-Go SQLite index of the spec tree (`specs`, `assertions`, `depends_on`), and `spekk query` runs read-only `SELECT`s against it with `--json`/`--tsv`/`--csv` output — filtering, counting, grouping, and dependency joins in SQL. The index is a gitignored derived artifact, refreshed automatically when specs change, schema-versioned so upgrades rebuild it transparently, and opened read-only so a query can never mutate it.
