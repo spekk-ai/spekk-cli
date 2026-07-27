@@ -3,7 +3,7 @@ id: digest-rendered-view
 parent: observation-lifecycle
 created: 2026-07-26T12:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: observation-file-format
 ---
 
@@ -38,3 +38,16 @@ Candidates: a `spekk query` invocation documented in the observer prompt, a
 `spekk observer digest` subcommand, or a panel in `spekk show`. See the
 parent spec's open questions — the builder should pick the cheapest surface
 that satisfies the semantics above and record the choice here.
+
+**Decision (recorded):** the surface is the `spekk observer digest`
+subcommand (with `--json` for tooling). It renders directly from the
+cross-branch union (`internal/observation`, `Union.Digest`), so it needs no
+index freshness dance and encodes the exact semantics — open only, main
+presence excluded as a backstop, severity-ranked, oldest first within a
+severity, capped at 5 — in one tested code path. A documented `spekk query`
+invocation was rejected because the semantics (per-slug dedup, the on-main
+backstop) would live in copy-pasted SQL; a `spekk show` panel was rejected
+as strictly more expensive.
+
+**Tests:** internal/observation/observation_test.go (TestDigestSemantics),
+cmd/spekk/observer_test.go (TestObserverDigestOutput)

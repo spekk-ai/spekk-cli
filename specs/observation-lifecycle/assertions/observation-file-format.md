@@ -3,7 +3,7 @@ id: observation-file-format
 parent: observation-lifecycle
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # Observations Are Markdown Files With a Defined Frontmatter Schema
@@ -42,3 +42,6 @@ parent spec and in the observer prompt, and anything that parses observations
 the conversation opened, and its absence (not `announced: false`) encodes
 "unannounced". Parsers must treat a present-but-empty value as invalid rather
 than as either state.
+
+**Tests:** internal/observation/observation_test.go (TestParseValid,
+TestParseValidation, TestParseIgnoresUnknownFields)

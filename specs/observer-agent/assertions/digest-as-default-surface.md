@@ -8,31 +8,28 @@ status: done
 depends-on: consolidation-skill-exists
 ---
 
-# The Digest Is the Observer's Default Surface
+# The Digest Is the Observer's Default Surface (Superseded: Rendered View, Not a File)
 
 ## Description
 
-The observer's default loop closes each scan cycle with a quiet consolidation
-pass and reports only from `observations/DIGEST.md` — never the raw
-observation stream. This is stage 2 of the curator-not-firehose vision in the
-parent spec: raw observations remain the observer's private working memory,
-and the curated digest becomes the single surface users see. This is a
-prompt-level change to `specs/observer-agent/observer.prompt.md`; no Go
-changes are required.
+**Superseded where it concerned `observations/DIGEST.md`** by
+`specs/observation-lifecycle/assertions/digest-rendered-view.md`: the digest
+is now a rendered view — a query over open observations across the visible
+branch union, severity-ranked, capped at 5 — surfaced by
+`spekk observer digest`, never a committed file. The part of this assertion
+that survives is the surface discipline: the observer's console output stays
+a brief digest summary, never the raw observation stream.
 
 ## Success Criteria
 
-- `specs/observer-agent/observer.prompt.md` instructs the default loop to
-  keep writing raw observations to `observations/default/` per the existing
-  output contract — the raw stream is unchanged by this stage
-- The prompt mandates that each scan cycle ends with a consolidation pass
-  using the same logic as the `consolidate` skill (merge duplicates, archive
-  resolved/stale items, rewrite `observations/DIGEST.md`)
-- Console output to the user is limited to a brief summary drawn from
-  `DIGEST.md` — the number of open items and their severities — and never
-  prints raw observation text
-- Silent suppression: if `DIGEST.md` is empty or does not exist yet, the
-  agent says nothing to the user for that cycle
+- `specs/observer-agent/observer.prompt.md` contains no instruction to write
+  or maintain `observations/DIGEST.md` (or any committed digest artifact)
+- The prompt directs reporting through the rendered view: run
+  `spekk observer digest` and print at most a one-line summary of its output
+- Silent suppression: when the rendered digest is empty, the agent says
+  nothing to the user for that cycle
+- Console output never prints raw observation text
 - The `consolidate` skill remains separately invocable via
-  `spekk observer consolidate`; this change only makes consolidation happen
-  automatically at the end of each default loop cycle
+  `spekk observer consolidate`; its curation is expressed as observation
+  frontmatter edits on observer branches (see
+  `specs/observer-skills/consolidate-skill.md`)
