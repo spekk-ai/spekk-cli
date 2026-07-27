@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.16.0 -- The Observer Lifecycle Lives in Git](RELEASE-NOTES-1.16.0.md)
+
+The observation lifecycle becomes declarative git state. An observation is a frontmatter file born on an `observer/<slug>` branch, and the branch set is the state machine: visible = pending, merged = resolved, PR closed with the branch kept = parked, deleted = forgotten. New `spekk observer announce` sends one message per run with at most three findings and flips `announced:` only after delivery; `spekk observer scan-check` gates every new observation against `.spekk/dont-flag.yaml` suppressions and cross-branch dedup; `spekk observer digest` replaces the committed DIGEST.md with a rendered view. The SQLite index gains observation tables across the branch union. Git fetch is the only remote read — no forge API calls.
+
 ## [1.15.1 -- Migrate the Old Dev-Loop Skill](RELEASE-NOTES-1.15.1.md)
 
 A patch for the 1.15.0 install migration. 1.15.0 recognized only the role shims as old spekk files, so an unstamped dev-loop skill from an earlier version was left in place — an existing user did not get the new single-session skill. `spekk install` now recognizes the dev-loop skill by its heading and updates it in place, with a `.bak` backup.
