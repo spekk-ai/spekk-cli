@@ -1,7 +1,9 @@
-// Package install writes thin shim subagent files into host coding
-// assistants (Claude Code, OpenCode, Codex, ...). Shims contain only host
-// frontmatter and an instruction to fetch the real prompt via
-// `spekk prompt <agent>`, so installed agents always match the binary.
+// Package install writes spekk into a host coding assistant (Claude Code,
+// OpenCode, Codex, and others). It writes the observer as an agent, and the
+// coach, the builder, and the dev-loop as skills. Each file is thin: it fetches
+// its instructions from the binary with `spekk prompt <role>`, so a file always
+// matches the binary. Install is a reconciler: it stamps each file, and it
+// removes a managed file that a new layout no longer needs.
 package install
 
 import (
@@ -236,18 +238,30 @@ func (t target) managedDirs(project bool, home, cwd string) []string {
 // that needs only paths (CheckStale) avoids the embedded skill.
 func (t target) desiredPaths(project bool, home, cwd string) []string {
 	paths := []string{t.observerShimPath(project, home, cwd)}
-	for _, name := range skillNames {
-		if sp := t.skillPath(project, home, cwd, name); sp != "" {
+	// The coach and builder are skills where the host has a skill path, and agent
+	// shims where it does not (the same rule as desiredFiles).
+	for _, role := range []string{"coach", "builder"} {
+		if sp := t.skillPath(project, home, cwd, "spekk-"+role); sp != "" {
 			paths = append(paths, sp)
+		} else {
+			paths = append(paths, t.agentShimPath(project, home, cwd, role))
 		}
 	}
+	if sp := t.skillPath(project, home, cwd, "spekk-dev-loop"); sp != "" {
+		paths = append(paths, sp)
+	}
 	return paths
+}
+
+// agentShimPath returns the path of an agent shim for the given role and scope.
+func (t target) agentShimPath(project bool, home, cwd, role string) string {
+	return filepath.Join(t.agentDir(project, home, cwd), "spekk-"+role+t.ext())
 }
 
 // observerShimPath returns the path of the observer agent shim for the given
 // scope.
 func (t target) observerShimPath(project bool, home, cwd string) string {
-	return filepath.Join(t.agentDir(project, home, cwd), "spekk-observer"+t.ext())
+	return t.agentShimPath(project, home, cwd, "observer")
 }
 
 // skillFrontmatter returns the YAML frontmatter for a thin role skill. A
@@ -275,10 +289,14 @@ func (t target) desiredFiles(project bool, home, cwd string, skillFS fs.FS) (map
 	// The observer stays an agent shim.
 	desired[t.observerShimPath(project, home, cwd)] = []byte(t.frontmatter("observer") + shimBody("observer"))
 
-	// The coach and the builder are thin skills.
+	// The coach and the builder are thin skills where the host has a skill path,
+	// and agent shims where it does not (for example, copilot global has no skill
+	// path). So every host keeps these roles.
 	for _, role := range []string{"coach", "builder"} {
 		if sp := t.skillPath(project, home, cwd, "spekk-"+role); sp != "" {
 			desired[sp] = t.skillContent(role)
+		} else {
+			desired[t.agentShimPath(project, home, cwd, role)] = []byte(t.frontmatter(role) + shimBody(role))
 		}
 	}
 

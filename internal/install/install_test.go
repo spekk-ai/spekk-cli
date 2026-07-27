@@ -267,17 +267,22 @@ func TestInstall_SkillFile(t *testing.T) {
 		}
 	})
 
-	t.Run("copilot global writes only the observer shim (no skill files)", func(t *testing.T) {
+	t.Run("copilot global writes coach and builder as agent shims (no skill path)", func(t *testing.T) {
 		home := t.TempDir()
 		res, err := Install(Options{Target: "copilot", HomeDir: home})
-		written := res.Written
 		if err != nil {
 			t.Fatal(err)
 		}
-		// copilot has no global skill path, so only the observer shim is written.
-		want := filepath.Join(home, ".copilot", "agents", "spekk-observer.agent.md")
-		if len(written) != 1 || written[0] != want {
-			t.Fatalf("copilot global: got %v, want only %s", written, want)
+		// copilot global has no skill path, so the coach and builder fall back to
+		// agent shims: 3 agent shims, no skill files.
+		agentsDir := filepath.Join(home, ".copilot", "agents")
+		for _, role := range []string{"observer", "coach", "builder"} {
+			if _, err := os.Stat(filepath.Join(agentsDir, "spekk-"+role+".agent.md")); err != nil {
+				t.Errorf("%s agent shim not written: %v", role, err)
+			}
+		}
+		if len(res.Written) != 3 {
+			t.Errorf("copilot global: got %d files, want 3 agent shims: %v", len(res.Written), res.Written)
 		}
 	})
 
@@ -472,5 +477,50 @@ func TestInstall_CommandHostStripsRoleSkill(t *testing.T) {
 	}
 	if !strings.Contains(coach, "spekk prompt coach") {
 		t.Errorf("codex coach skill body must run spekk prompt coach")
+	}
+}
+
+// TestInstall_MigratesCodexSharedPathShim: for codex the legacy coach shim path
+// equals the new coach skill path (the same prompts directory). The reconcile
+// updates the file in place: it backs up the old shim and writes the stamped
+// coach skill, and reports it in Written, not Removed.
+func TestInstall_MigratesCodexSharedPathShim(t *testing.T) {
+	home := t.TempDir()
+	promptsDir := filepath.Join(home, ".codex", "prompts")
+	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(promptsDir, "spekk-coach.md")
+	if err := os.WriteFile(shared, []byte("You are the spekk coach agent.\nRun `spekk prompt coach`.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Install(Options{Target: "codex", HomeDir: home, SkillFS: fakeSkillFS()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, managed := ParseStamp(mustRead(t, shared))
+	if !managed {
+		t.Errorf("codex coach file should be stamped after migration")
+	}
+	if !strings.Contains(string(body), "spekk prompt coach") {
+		t.Errorf("codex coach file should be the coach skill: %q", body)
+	}
+	inWritten := false
+	for _, p := range res.Written {
+		if p == shared {
+			inWritten = true
+		}
+	}
+	if !inWritten {
+		t.Errorf("codex shared-path coach should be in Written: %v", res.Written)
+	}
+	for _, p := range res.Removed {
+		if p == shared {
+			t.Errorf("codex shared-path coach should not be in Removed")
+		}
+	}
+	if _, err := os.Stat(shared + ".bak"); err != nil {
+		t.Errorf("backup not written: %v", err)
 	}
 }

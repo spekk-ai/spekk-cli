@@ -24,9 +24,12 @@ skill path for any skill name, not only for the dev-loop.
   host or scope that has no such location returns "".
 - `desiredFiles` writes exactly one agent shim: the observer, in the agent
   directory, with the host's existing agent frontmatter.
-- `desiredFiles` writes the coach, the builder, and the dev-loop as skills, at the
-  skill paths for `spekk-coach`, `spekk-builder`, and `spekk-dev-loop`. A host or
-  scope that returns "" for a skill path writes no file for that skill.
+- `desiredFiles` writes the coach and the builder as skills, at the skill paths
+  for `spekk-coach` and `spekk-builder`. For a host or scope with no skill path
+  (for example, copilot global), it writes the coach and the builder as agent
+  shims instead, so every host keeps these roles.
+- `desiredFiles` writes the dev-loop as a skill where the host has a skill path,
+  and writes no dev-loop file where it does not.
 - `managedDirs` includes the agent directory and the directory of every skill
   path, so the scan finds both the observer shim and the skills.
 - `go build ./...` passes. The `internal/install` tests are updated to this

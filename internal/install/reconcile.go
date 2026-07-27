@@ -128,13 +128,21 @@ type Result struct {
 	Warnings []string
 }
 
-// backupFile copies path to path + ".bak".
+// backupFile copies path to a ".bak" file that does not already exist, so it
+// never overwrites an earlier backup (which could be the user's own file).
 func backupFile(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path+".bak", data, 0o644)
+	bak := path + ".bak"
+	for i := 1; ; i++ {
+		if _, err := os.Stat(bak); os.IsNotExist(err) {
+			break
+		}
+		bak = fmt.Sprintf("%s.bak.%d", path, i)
+	}
+	return os.WriteFile(bak, data, 0o644)
 }
 
 // reconcile drives the managed files in dirs to the desired set. desired maps a
@@ -265,19 +273,21 @@ func looksLikeSpekkShim(content []byte) bool {
 		bytes.Contains(content, []byte("You are the spekk"))
 }
 
-// migrateLegacy removes an old, unstamped coach or builder agent shim from a
-// version before the reconciler. The reconciler owns and prunes a stamped shim,
-// so this handles only an unstamped file. It backs up the file first, because it
-// cannot prove the file is unchanged. A file at a legacy path that is not a
-// spekk shim (a file the user wrote) is left alone.
+// migrateLegacy removes an old coach or builder agent shim that a role no longer
+// uses. It handles only an unstamped file from a version before the reconciler;
+// the reconciler prunes a stamped shim. It backs up the file first, because it
+// cannot prove the file is unchanged. A file at a legacy path that is not a spekk
+// shim (a file the user wrote) is left alone.
 //
-// When the legacy path is also a desired path (a host such as codex that keeps
-// agents and skills in one directory), migrateLegacy removes the old file so the
-// reconcile writes the new skill onto a clean path. It does not count that as a
-// removal, because the reconcile replaces it.
+// It skips a legacy path that is also a desired path — a host such as codex that
+// keeps agents and skills in one directory, or a host with no skill path where
+// the role stays an agent shim. The reconcile updates that file in place.
 func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 	var res Result
 	for _, p := range paths {
+		if _, ok := desired[p]; ok {
+			continue // a desired path: the reconcile updates it in place
+		}
 		content, err := os.ReadFile(p)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -286,7 +296,7 @@ func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 			return res, fmt.Errorf("reading %s: %w", p, err)
 		}
 		if _, _, managed := ParseStamp(content); managed {
-			continue // the reconciler owns and handles a stamped file
+			continue // the reconciler owns and prunes a stamped file
 		}
 		if !looksLikeSpekkShim(content) {
 			continue // not a spekk shim: leave the user's file
@@ -297,14 +307,9 @@ func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 		if err := os.Remove(p); err != nil {
 			return res, fmt.Errorf("removing %s: %w", p, err)
 		}
-		if _, replaced := desired[p]; replaced {
-			res.Warnings = append(res.Warnings,
-				fmt.Sprintf("%s was a legacy agent shim; wrote %s.bak and replaced it with a skill", p, p))
-		} else {
-			res.Removed = append(res.Removed, p)
-			res.Warnings = append(res.Warnings,
-				fmt.Sprintf("%s was a legacy agent shim; wrote %s.bak and removed it", p, p))
-		}
+		res.Removed = append(res.Removed, p)
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("%s was a legacy agent shim; wrote %s.bak and removed it", p, p))
 	}
 	return res, nil
 }

@@ -19,8 +19,10 @@ version has an unstamped shim that the reconciler does not own.
 
 ## Success Criteria
 
-- After `spekk install`, no `spekk-coach` or `spekk-builder` file is in the agent
-  directory. The observer agent shim stays.
+- After `spekk install` on a host that writes the coach and builder as skills, no
+  `spekk-coach` or `spekk-builder` file is in the agent directory. The observer
+  agent shim stays. (On a host with no skill path, the coach and builder stay as
+  agent shims, and the install updates them in place.)
 - A stamped coach or builder agent shim (one that a reconciler wrote) is pruned
   by the reconciler, because the desired set no longer contains it.
 - An unstamped legacy coach or builder agent shim is also removed. The install
