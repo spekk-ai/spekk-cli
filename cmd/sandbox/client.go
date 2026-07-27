@@ -52,7 +52,8 @@ func (c *AgentClient) dialOptions() *websocket.DialOptions {
 	return &websocket.DialOptions{
 		CompressionMode: websocket.CompressionDisabled,
 		HTTPHeader: http.Header{
-			"Authorization": []string{"Bearer " + c.cfg.Token},
+			"Authorization":    []string{"Bearer " + c.cfg.Token},
+			protocolHeaderName: []string{ProtocolVersion},
 		},
 	}
 }
@@ -63,6 +64,9 @@ func (c *AgentClient) Run(ctx context.Context) {
 		err := c.connect(ctx)
 		if ctx.Err() != nil {
 			return // clean shutdown
+		}
+		if isProtocolReject(err) {
+			log.Printf("Control host rejected protocol version %s (close 4004). Update this sandbox's agent-client.", ProtocolVersion)
 		}
 		log.Printf("Connection lost: %v. Reconnecting in %s...", err, delay)
 		select {
@@ -132,6 +136,8 @@ func (c *AgentClient) handleInbound(ctx context.Context, conn *websocket.Conn, m
 		// ignore
 	case MessageTypeError:
 		handleErrorFrame(msg)
+	case MessageTypeWelcome:
+		c.handleWelcome(msg)
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
 	}
@@ -206,4 +212,18 @@ func loadConfig() Config {
 		Host:      host,
 		Workspace: workspace,
 	}
+}
+
+// handleWelcome checks the control host's advertised protocol version. The
+// server owns enforcement; the client only informs the operator, so a
+// mismatch warns and the connection continues.
+func (c *AgentClient) handleWelcome(msg Message) {
+	if protocolMajor(msg.Protocol) == protocolMajor(ProtocolVersion) {
+		log.Printf("Control host protocol %s (client %s)", msg.Protocol, ProtocolVersion)
+		return
+	}
+	log.Printf(
+		"WARNING: control host speaks protocol %s, this client speaks %s. Update this sandbox's agent-client.",
+		msg.Protocol, ProtocolVersion,
+	)
 }

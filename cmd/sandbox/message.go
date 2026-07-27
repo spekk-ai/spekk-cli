@@ -9,6 +9,7 @@ type Message struct {
 	Attachments    []Attachment `json:"attachments"`
 	Error          string       `json:"error"`
 	Detail         string       `json:"detail"`
+	Protocol       string       `json:"protocol"`
 }
 
 const (
@@ -20,6 +21,7 @@ const (
 	MessageTypeResult           = "result"
 	MessageTypeError            = "error"
 	MessageTypeConversationOpen = "conversation_open"
+	MessageTypeWelcome          = "welcome"
 )
 
 type Attachment struct {
