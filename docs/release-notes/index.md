@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.15.1 -- Migrate the Old Dev-Loop Skill](RELEASE-NOTES-1.15.1.md)
+
+A patch for the 1.15.0 install migration. 1.15.0 recognized only the role shims as old spekk files, so an unstamped dev-loop skill from an earlier version was left in place — an existing user did not get the new single-session skill. `spekk install` now recognizes the dev-loop skill by its heading and updates it in place, with a `.bak` backup.
+
 ## [1.15.0 -- One-Session Dev Loop and a Self-Migrating Install](RELEASE-NOTES-1.15.0.md)
 
 The dev loop now runs in one session. The `spekk-dev-loop` skill plays the coach, builder, and verifier roles in turn (it fetches each role with `spekk prompt <role>`) instead of dispatching a sub-agent per role — for a feature that fits in one session, that is about 5 times fewer tokens, about 3 times cheaper, and about 3 times faster, at the same quality (issue #154). To match, `spekk install` writes the observer as an agent and the coach, builder, and dev-loop as skills, and it becomes an idempotent reconciler that migrates an old layout: it writes the desired files, removes a file a new layout no longer needs, backs up and never writes over a file you changed by hand, and `spekk update` warns when an old layout is present.
