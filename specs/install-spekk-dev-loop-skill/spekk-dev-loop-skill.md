@@ -1,80 +1,74 @@
 ---
 name: spekk-dev-loop
-description: William's outer dev loop for building real features on a spekk-enabled project via a coach → coordinate → builders → review pipeline of subagents. Use when asked to scope-and-build a feature, "spec this out and build it", run the coach-then-builders flow, or work through a spekk project's assertion queue end to end.
+description: Build a real feature on a spekk project in ONE session that plays the coach, builder, and verifier roles in turn — scope into specs, implement the assertions, verify — instead of dispatching a separate subagent per role. Use when asked to scope-and-build a feature, "spec this out and build it", or work a spekk project's assertion queue end to end.
 ---
 
 # Spekk Dev Loop
 
-Four subagent stages, each a fresh dispatch (not one continued conversation),
-for turning an idea into shipped, verified code on a spekk project (`specs/`,
-`spekk status`/`next`). Run `spekk init` first if the project has no
-`specs/` yet, or `spekk install --target <harness>` if the coach/builder
-roles aren't registered for the current assistant.
+Build the feature in **one continuous session** that plays the roles in turn.
+Do not dispatch a fresh subagent per role. A pilot showed that, for a feature
+that fits in one session, one session uses about 5× fewer tokens, costs about
+3× less, and finishes about 3× faster than the coach → builders → review
+subagent pipeline, at equal quality (issue #154). The reason is simple: the
+build and verify phases reuse the context you built while scoping, instead of a
+new agent re-deriving the code each time.
 
-## 1. Coach (opus) — scope into specs
+Fetch each role's instructions with `spekk prompt <role>` at the start of its
+phase, and follow them in this session. `spekk prompt` already applies the
+per-role overrides, so you keep the role's full instructions without a handoff.
 
-Turn the idea into real `specs/<name>/assertions/*.md`. Always opus — bad
-scoping decisions are cheapest to catch here. Give it:
-- The problem in your own words, not pre-decided implementation details.
-- **The lean-and-simple mandate, every time**: simplest thing that solves the
-  real problem, not general/configurable machinery. Name concrete
-  temptations to reject.
-- Pointers to the real current source, never a paraphrase.
-- What's genuinely worth asking you vs. what it should just decide and defend.
+Run `spekk init` first if the project has no `specs/` yet.
 
-Mark assertions `ready`/`not_started` when concretely buildable; `draft` only
-for a real, named design gap — not as a cautious default.
+## Phase 1 — Scope (coach)
 
-## 2. Coordinate (coach skill, also opus) — review, revise, sequence
+Run `spekk prompt coach` and adopt it. Turn the idea into real
+`specs/<name>/assertions/*.md`.
+- State the problem in your own words, not pre-decided implementation details.
+- **Lean and simple, every time**: the simplest thing that solves the real
+  problem, not general or configurable machinery. Name the concrete temptations
+  you reject.
+- Ground in the real current source, never a paraphrase.
+- Mark an assertion `not_started` when it is concretely buildable; mark it
+  `draft` only for a real, named design gap — not as a cautious default.
+- Confirm the specs parse: `spekk validate` (or `spekk status`/`next`).
 
-A second, independent opus pass over stage 1's specs — not a rubber stamp.
-Check dependency order, catch correctness issues (races, wrong assumptions,
-assertions blocked on requirements that don't exist), fix underspecified
-assertions directly. Finish with `spekk status`/`next` to confirm it parses
-and get the ordered queue. Commit, don't push yet.
+## Phase 2 — Build
 
-## 3. Builders (sonnet) — implement one assertion at a time
+Run `spekk prompt builder` and adopt it. Implement the assertions in dependency
+order (`spekk next`), in this same session.
+- You already understand the code from Phase 1. Reuse that context; do not
+  re-derive it.
+- Implement one assertion at a time. Read each assertion file as the
+  authoritative spec.
+- Keep the lean-and-simple mandate.
+- Verify each assertion against its real success criteria — a live check against
+  a running service when the assertion calls for one, not just "it compiles".
+- Mark each assertion `done` when it is implemented and tested.
 
-One builder per assertion, sequential — never start the next until the
-current one is implemented, tested, and committed, even if `spekk next`
-shows several ready. Each builder grounds itself in the *current* code, not
-a summary of prior builders' work. Give it:
-- The assertion file path as the authoritative spec — read it directly.
-- Real current source pointers, and the lean-and-simple mandate.
-- Instruction to verify against the assertion's actual success criteria,
-  including a live check against a running service if that's what it calls
-  for — not just "it compiles."
-- Commit when done, **don't push** — the push gate is yours.
+## Phase 3 — Verify
 
-Work touching something outside the repo (sibling repo, live service, DB):
-say so explicitly, and require the same "verify for real, clean up after
-yourself" bar — disposable test resources over production credentials, with
-cleanup confirmed.
-
-## 4. Review (opus)
-
-After the queue empties (or per spec group on a large batch), one opus pass
-over what actually got built, running result where possible. Apply the
-standing test bar every time, unprompted:
+Re-read the built code with an adversarial eye. Build, vet, and test it
+yourself — do not trust a self-report. Apply the standing test bar, every time:
 
 > **Tests must be LEAN and HIGH VALUE only.** Delete low-value or redundant
-> tests rather than preserving them — see `code-quality-principles`'s "Lean,
-> high-value tests only" for the full rule.
+> tests rather than keep them — see `code-quality-principles`, "Lean,
+> high-value tests only".
 
-Flag/fix: tests restating the implementation instead of pinning down real
-behavior, duplicate coverage, and tests that don't exercise the real code
-path.
+Flag or fix: tests that restate the implementation instead of pinning real
+behavior, duplicate coverage, and tests that do not exercise the real code path.
 
-## Verification discipline (every stage, not just review)
+Loop Phases 2–3 until the queue is empty. Commit as you go. Push only after your
+own verification — that is also where you catch a judgment call you disagree
+with, before it is live.
 
-Never push a subagent's work on its self-report alone.
-- After coach/coordinate: confirm specs actually parse (`spekk status`/`next`).
-- After each builder: independently rebuild, vet, and test yourself. If the
-  assertion calls for a live check, reproduce the key confirmation yourself
-  before trusting it.
-- Push only after your own verification — this is also where you catch a
-  subagent's judgment calls you disagree with, before they're live.
+## Escalation — when one session is not enough
 
-Run stages sequentially by default. Reach for true parallel multi-agent
-orchestration only when the user has explicitly opted into a workflow for
-this task.
+The single session is the default for a feature that fits in one session. It is
+not the only path. Escalate to sub-agents when:
+- the feature is too large for one coherent session (context strain or loss of
+  coherence), or
+- the user asks for a parallel workflow.
+
+In that case, dispatch builders in separate worktrees on genuinely independent
+paths, and integrate and verify their work yourself. Treat this as the
+exception, not the default — for most features, one session wins.
