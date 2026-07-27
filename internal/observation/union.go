@@ -2,6 +2,7 @@ package observation
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
@@ -197,4 +198,51 @@ func (u *Union) Digest() []*Observation {
 		open = open[:DigestCap]
 	}
 	return open
+}
+
+// RefsFingerprint returns a stable fingerprint of the observation-relevant
+// refs — every visible observer/* branch (local and remote-tracking) plus
+// main/master — and their tip object names. The index's freshness gate
+// compares fingerprints across runs: a fetch that changes, adds, or deletes
+// an observer branch changes the fingerprint and triggers a rebuild. Outside
+// a git repository the fingerprint is "" (and stays "", so nothing churns).
+func RefsFingerprint() (string, error) {
+	if crossbranch.RepoRoot() == "" {
+		return "", nil
+	}
+	out, err := crossbranch.Run("for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/remotes")
+	if err != nil {
+		return "", err
+	}
+	var lines []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		ref := strings.SplitN(line, " ", 2)[0]
+		if refIsObservationRelevant(ref) {
+			lines = append(lines, line)
+		}
+	}
+	sort.Strings(lines)
+	return strings.Join(lines, "\n"), nil
+}
+
+// refIsObservationRelevant reports whether a fully-qualified ref belongs to
+// the observation union: an observer/* branch or main/master, local or
+// remote-tracking.
+func refIsObservationRelevant(ref string) bool {
+	name := ""
+	if rest, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
+		name = rest
+	} else if rest, ok := strings.CutPrefix(ref, "refs/remotes/"); ok {
+		if i := strings.IndexByte(rest, '/'); i >= 0 {
+			name = rest[i+1:]
+		}
+	}
+	if name == "" {
+		return false
+	}
+	return name == "main" || name == "master" || strings.HasPrefix(name, BranchPrefix)
 }

@@ -3,7 +3,7 @@ id: observation-tables-schema
 parent: observation-index
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: observation-file-format
 ---
 
@@ -38,3 +38,7 @@ row was read from.
 **Note:** `announced` must be distinguishable as *absent* (SQL NULL), not
 empty string — the announce subcommand's eligibility test is `announced IS
 NULL`, and conflating the two re-creates the ambiguity this design removes.
+
+**Tests:** internal/index/observation_test.go (TestObservationTablesPopulated,
+TestObservationInvalidFileSkippedWithWarning,
+TestObservationSameSlugMultipleRefs)
