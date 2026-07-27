@@ -3,7 +3,7 @@ id: suppression-requires-review
 parent: observer-dont-flag
 created: 2026-07-26T12:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: dont-flag-file-schema
 ---
 

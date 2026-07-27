@@ -10,6 +10,7 @@ import (
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
+	"github.com/spekk-ai/spekk-cli/internal/dontflag"
 	"github.com/spekk-ai/spekk-cli/internal/observation"
 	"github.com/spekk-ai/spekk-cli/internal/observer"
 )
@@ -165,8 +166,8 @@ func printDigestJSON(w io.Writer, digest []*observation.Observation) {
 
 // observerScanCheckUsage is the help text for `spekk observer scan-check --help`.
 const observerScanCheckUsage = `
-spekk observer scan-check - Check drift against the cross-branch
-observation union before creating an observation
+spekk observer scan-check - Check drift against suppressions and the
+cross-branch observation union before creating an observation
 
 USAGE:
   spekk observer scan-check --type <type> --slug <slug> --affected <paths>
@@ -179,6 +180,9 @@ OPTIONS:
 
 The observer runs this before creating any observation. The result is JSON:
 
+  {"result":"suppressed", ...}  an active .spekk/dont-flag.yaml entry (as
+                                committed on main) matches an evidence path
+                                or the slug; create nothing
   {"result":"covered", ...}     an observation on a visible branch already
                                 covers the drift (same type, overlapping
                                 affected paths); create nothing
@@ -186,6 +190,9 @@ The observer runs this before creating any observation. The result is JSON:
                                 returned slug (a -YYYYMMDD suffix is added
                                 when the plain slug is taken by an
                                 observation already on main)
+
+A malformed .spekk/dont-flag.yaml fails the check with a message naming the
+offending entry — a broken suppression file is never treated as empty.
 
 The check reads committed git state only. Run "git fetch" first so
 remote-tracking observer/* branches are current.
@@ -240,6 +247,21 @@ func execObserverScanCheck(args []string, stdout, stderr io.Writer, now time.Tim
 	if len(missing) > 0 {
 		fmt.Fprintf(stderr, "Error: missing required flag(s): %s\n", strings.Join(missing, ", "))
 		return 1
+	}
+
+	// Suppression first: suppressed drift is invisible to the entire
+	// downstream lifecycle — no observation, no branch, no index row, no
+	// announcement — so it wins over dedup.
+	entries, err := dontflag.LoadFromMain()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", err)
+		return 1
+	}
+	if e := dontflag.Suppressed(entries, slug, affected, now); e != nil {
+		printJSON(stdout, scanCheckResult{
+			Result: "suppressed", Match: e.Match, Reason: e.Reason, By: e.By,
+		})
+		return 0
 	}
 
 	u, err := observation.LoadUnion()

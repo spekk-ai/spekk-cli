@@ -192,3 +192,102 @@ func TestObserverDigestOutput(t *testing.T) {
 		t.Fatalf("table output incomplete:\n%s", text)
 	}
 }
+
+// writeDontFlagOnMain commits a dont-flag file on main.
+func writeDontFlagOnMain(t *testing.T, dir, content string) {
+	t.Helper()
+	path := filepath.Join(dir, ".spekk", "dont-flag.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitT(t, dir, "add", ".spekk/dont-flag.yaml")
+	gitT(t, dir, "commit", "-q", "-m", "add dont-flag entries")
+}
+
+func TestScanCheckSuppression(t *testing.T) {
+	dir := newObserverRepo(t)
+	writeDontFlagOnMain(t, dir, `- match: "internal/legacy/**"
+  reason: "Legacy package; drift is expected."
+  by: "william"
+  until: 2026-12-31
+- match: "noisy-*"
+  reason: "Accepted; see ADR-014."
+  by: "william"
+`)
+	now := time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
+	var out, errOut bytes.Buffer
+	run := func(slug, affected string) scanCheckResult {
+		t.Helper()
+		out.Reset()
+		code := execObserverScanCheck([]string{
+			"--type", "code_spec_misalignment", "--slug", slug, "--affected", affected,
+		}, &out, &errOut, now)
+		if code != 0 {
+			t.Fatalf("exit %d: %s", code, errOut.String())
+		}
+		var res scanCheckResult
+		if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+			t.Fatalf("bad JSON: %v", err)
+		}
+		return res
+	}
+
+	// Path-glob suppression.
+	res := run("legacy-drift", "internal/legacy/old.go")
+	if res.Result != "suppressed" || res.By != "william" || res.Reason == "" {
+		t.Fatalf("want suppressed with reason and author, got %+v", res)
+	}
+	// Slug-pattern suppression.
+	if res := run("noisy-finding", "internal/other.go"); res.Result != "suppressed" {
+		t.Fatalf("want slug suppression, got %+v", res)
+	}
+	// Unmatched drift proceeds.
+	if res := run("real-drift", "internal/other.go"); res.Result != "clear" {
+		t.Fatalf("want clear, got %+v", res)
+	}
+
+	// After expiry the dated entry stops suppressing.
+	expired := time.Date(2027, 6, 1, 0, 0, 0, 0, time.UTC)
+	out.Reset()
+	if code := execObserverScanCheck([]string{
+		"--type", "code_spec_misalignment", "--slug", "legacy-drift", "--affected", "internal/legacy/old.go",
+	}, &out, &errOut, expired); code != 0 {
+		t.Fatalf("exit: %s", errOut.String())
+	}
+	if !strings.Contains(out.String(), `"clear"`) {
+		t.Fatalf("expired entry must not suppress, got %s", out.String())
+	}
+
+	// The committed-on-main copy governs: a working-tree edit alone changes
+	// nothing.
+	must := func(err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(os.WriteFile(filepath.Join(dir, ".spekk", "dont-flag.yaml"),
+		[]byte("- match: \"**\"\n  reason: \"r\"\n  by: \"w\"\n"), 0o644))
+	if res := run("real-drift", "internal/other.go"); res.Result != "clear" {
+		t.Fatalf("uncommitted suppression must not apply, got %+v", res)
+	}
+	gitT(t, dir, "checkout", "-q", "--", ".spekk/dont-flag.yaml")
+}
+
+func TestScanCheckMalformedDontFlagFailsLoudly(t *testing.T) {
+	dir := newObserverRepo(t)
+	writeDontFlagOnMain(t, dir, "- match: \"x/**\"\n  by: \"w\"\n")
+
+	var out, errOut bytes.Buffer
+	code := execObserverScanCheck([]string{
+		"--type", "code_spec_misalignment", "--slug", "s", "--affected", "a.go",
+	}, &out, &errOut, time.Now())
+	if code == 0 {
+		t.Fatal("malformed dont-flag file must fail the check")
+	}
+	if !strings.Contains(errOut.String(), "reason") || !strings.Contains(errOut.String(), "entry 1") {
+		t.Fatalf("error must name the offending entry: %q", errOut.String())
+	}
+}
