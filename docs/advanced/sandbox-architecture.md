@@ -42,6 +42,29 @@ The token is read from the `SPEKK_AGENT_TOKEN` environment variable on the sandb
 
 ---
 
+## Protocol version
+
+The agent and the control host share one WebSocket contract — message types, frame fields, and close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. The version starts at `1.0`.
+
+1. **Client declares** — every dial sends an `X-Spekk-Protocol: 1.0` header next to the `Authorization` header.
+2. **Control host replies** — the control host sends a `welcome` frame that carries its own version in the `protocol` field:
+
+```json
+{
+  "type":     "welcome",
+  "protocol": "1.0"
+}
+```
+
+3. **Each side compares the major version.** The control host enforces; the agent only informs. On the same major, the agent logs one line. On a different major, it logs a warning that names both versions and tells the operator to update the sandbox.
+4. **Refusal** — if the control host refuses the agent's major version, it closes the connection with code `4004`. The agent logs one operator-facing line and keeps its normal reconnect backoff. It never hot-loops.
+
+Either side can update first. An old agent sends no header, and the control host accepts it as a legacy client. A new agent against an old control host receives no `welcome` frame and continues.
+
+**Bump rules:** a breaking change to message types, frame fields, or close codes bumps the major. An additive change bumps the minor.
+
+---
+
 ## Message protocol
 
 All frames are JSON objects with a `type` field. The `Message` struct defines the inbound shape:
@@ -55,7 +78,8 @@ All frames are JSON objects with a `type` field. The `Message` struct defines th
   "agent_session_id": "routing-key",
   "attachments":      [{"id": "uuid", "filename": "spec.md", "mimetype": "text/markdown"}],
   "error":            "",
-  "detail":           ""
+  "detail":           "",
+  "protocol":         ""
 }
 ```
 
@@ -65,6 +89,7 @@ All frames are JSON objects with a `type` field. The `Message` struct defines th
 
 | Type | Purpose | Key fields |
 |------|---------|------------|
+| `welcome` | Announce the control host's protocol version on connect | `protocol` |
 | `message` | Start or continue a Claude session | `text`, `system_prompt`, `session_id`, `agent_session_id`, `attachments` |
 | `cancel` | Terminate the running Claude process for a session | `agent_session_id` |
 | `heartbeat_ack` | Response to the agent's heartbeat | *(none)* |
@@ -180,8 +205,9 @@ To work with the sandbox agent, a control host must implement:
 |-------------|---------|
 | **WebSocket endpoint** | Serve `wss://<host>/ws/agent/<token>/` accepting the upgrade with the agent's token |
 | **Auth validation** | Validate the `Authorization: Bearer <token>` header (and/or the path token during transition) |
+| **Protocol handshake** | Read the `X-Spekk-Protocol` header, send a `welcome` frame with its own version, and close with code `4004` on a major-version mismatch. A dial with no header is a legacy client. |
 | **Inbound frame handling** | Process `stream`, `result`, `error`, `heartbeat`, and `conversation_open` frames from the agent |
-| **Outbound frame sending** | Send `message`, `cancel`, `heartbeat_ack`, and `error` frames to the agent |
+| **Outbound frame sending** | Send `welcome`, `message`, `cancel`, `heartbeat_ack`, and `error` frames to the agent |
 | **Attachment serving** | Serve `GET /api/agents/attachments/<id>/download/` with Bearer auth (only if attachments are used) |
 | **Agent session routing** | Assign unique `agent_session_id` values and track which sessions are active |
 
