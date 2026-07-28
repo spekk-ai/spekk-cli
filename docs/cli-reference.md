@@ -412,7 +412,11 @@ Enables real-time communication between the CLI and the Spekk web UI.
 
 ## `spekk sandbox`
 
-Manage cloud sandbox environments on DigitalOcean.
+Manage cloud sandbox environments on DigitalOcean. The sandbox agent is a **generic Claude Code runner** — it is not spec-aware. It accepts prompts over a WebSocket connection from a control host and pipes them into `claude -p -`. For the full connection model, message protocol, and worker architecture, see the [Sandbox Architecture](./advanced/sandbox-architecture.md) doc.
+
+!!! note "Post-creation registration"
+
+    After `spekk sandbox create` provisions the VM, you must register the agent's token in the control host before the agent can connect. The `create` command prints the token and a reminder.
 
 ### `spekk sandbox create`
 
@@ -546,7 +550,9 @@ Every install also writes the `spekk-dev-loop` skill — the outer coach → coo
 | `codex` | `/spekk-dev-loop` prompt | `~/.codex/prompts/spekk-dev-loop.md` (global only) |
 | `copilot` | `/spekk-dev-loop` prompt | `.github/prompts/spekk-dev-loop.prompt.md` (`--project` only) |
 
-On the native-skill harnesses (claude-code, opencode) the model can invoke it automatically; on cursor, codex, and copilot it's a manually-invoked `/spekk-dev-loop` command. `--project` writes to the project's equivalent directory instead of the global one. Copilot's dev-loop prompt is project-only (personal prompts are IDE-managed); codex is global-only.
+**Automatic vs manual invocation:** Claude Code and OpenCode treat it as a native skill, so the model can invoke it on its own. Cursor, Codex, and Copilot expose it as a `/spekk-dev-loop` command the user triggers manually.
+
+**Scope:** By default, the skill is installed globally. Pass `--project` to write it into the current repo instead. Two targets are exceptions: Copilot is always project-scoped (its personal prompts are IDE-managed), and Codex is always global.
 
 ---
 

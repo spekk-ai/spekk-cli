@@ -115,7 +115,9 @@ The spec directory structure is detected automatically -- no configuration neede
 
 ## Environment variables
 
-Sandbox commands require the following environment variables:
+### Sandbox provisioning
+
+These variables are used by `spekk sandbox create` and other provisioning commands, run on your local machine:
 
 | Variable | Description |
 |----------|-------------|
@@ -124,4 +126,16 @@ Sandbox commands require the following environment variables:
 | `AWS_ACCESS_KEY_ID` | AWS credentials for sandbox services |
 | `AWS_SECRET_ACCESS_KEY` | AWS credentials for sandbox services |
 | `AWS_DEFAULT_REGION` | AWS region (e.g. `us-east-1`) |
-| `SPEKK_HOST` | Spekk API host for sandbox registration |
+| `SPEKK_HOST` | Control host hostname for sandbox registration |
+
+### Agent runtime
+
+These variables are read by the agent binary on the sandbox VM (typically from `/etc/spekk/agent.env`). They are injected during provisioning — you don't set them manually.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SPEKK_AGENT_TOKEN` | Yes | Bearer token for authenticating the WebSocket connection to the control host |
+| `SPEKK_HOST` | Yes | Control host hostname the agent connects to |
+| `WORKSPACE` | No | Working directory for Claude sessions (default: `/opt/spekk/workspace`) |
+
+For the full agent architecture, see [Sandbox Architecture](./advanced/sandbox-architecture.md).
