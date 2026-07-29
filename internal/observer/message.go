@@ -12,6 +12,13 @@ import (
 // contains no instructions for composing announcement text. The body is, in
 // order: a short evidence summary, the fixed pointer line, and a severity
 // warning.
+//
+// The message does not show the observation's `affected` paths. Evidence
+// stays a validity condition. Selection removes a candidate that has no
+// affected path. The observation file and the PR body keep the paths. A
+// reader who wants the paths finds them there, with their context. A path
+// list in a chat message is too long. It repeats the PR content. It also
+// moves the pointer line out of view.
 
 // pointerLineFormat is the fixed pointer sentence. The reference slot takes
 // the observation's PR URL when the frontmatter carries one; when pr: is
@@ -85,8 +92,6 @@ func composeBatch(cands []Candidate) conversation.Request {
 		}
 		b.WriteString(fmt.Sprintf("%d. *%s* (%s)\n", i+1, c.Title, c.Severity))
 		b.WriteString(evidenceSummary(c.Body))
-		b.WriteString("\nEvidence: ")
-		b.WriteString(strings.Join(c.Affected, ", "))
 		b.WriteString("\n")
 		b.WriteString(fmt.Sprintf(batchPointerLineFormat, reference(c)))
 	}
@@ -105,8 +110,6 @@ func composeBatch(cands []Candidate) conversation.Request {
 func composeSingle(c Candidate) conversation.Request {
 	var b strings.Builder
 	b.WriteString(evidenceSummary(c.Body))
-	b.WriteString("\n\nEvidence: ")
-	b.WriteString(strings.Join(c.Affected, ", "))
 	b.WriteString("\n\n")
 	b.WriteString(fmt.Sprintf(pointerLineFormat, reference(c)))
 	b.WriteString("\n\n")
