@@ -177,12 +177,17 @@ func TestAnnounceSuccessDeliversAndMarks(t *testing.T) {
 	}
 	for _, want := range []string{
 		"The parser drops draft assertions.",
-		"Evidence: internal/parser/parser.go",
 		"Proposed fix in PR: observer/finding-a — merge to accept, close to dismiss. Reply here to discuss.",
 		"Severity: high",
 	} {
 		if !strings.Contains(req.Body, want) {
 			t.Fatalf("body missing %q:\n%s", want, req.Body)
+		}
+	}
+	// The affected paths gate validity; they never reach the message.
+	for _, unwanted := range []string{"Evidence:", "internal/parser/parser.go"} {
+		if strings.Contains(req.Body, unwanted) {
+			t.Fatalf("body must omit %q:\n%s", unwanted, req.Body)
 		}
 	}
 
@@ -429,5 +434,10 @@ func TestComposeBatchMultiple(t *testing.T) {
 	}
 	if got := strings.Count(req.Body, "Reply here to discuss."); got != 1 {
 		t.Fatalf("footer must appear once, got %d", got)
+	}
+	for _, unwanted := range []string{"Evidence:", "a.go", "b.go"} {
+		if strings.Contains(req.Body, unwanted) {
+			t.Fatalf("body must omit %q:\n%s", unwanted, req.Body)
+		}
 	}
 }
