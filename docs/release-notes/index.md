@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.17.1 -- Announcements Drop the Evidence Path List](RELEASE-NOTES-1.17.1.md)
+
+Observer announcements no longer carry an `Evidence:` line of `affected` paths. On a finding that touches ten files the line was longer than the finding itself, it repeated what the PR already shows, and it pushed the pointer line out of view. Evidence keeps its other two roles: an observation with no `affected` path stays invalid and never announces, and the observation file and the PR body still carry the paths in context.
+
 ## [1.17.0 -- The Sandbox States Its Protocol Version](RELEASE-NOTES-1.17.0.md)
 
 The WebSocket contract between the agent-client and the control host gets one version number, exchanged at connect. The client sends `X-Spekk-Protocol: 1.0` on every dial and reads the server's `welcome` frame in return: a different major produces a clear operator warning, and a 4004 close logs one line without a reconnect hot-loop. A pinned constant makes every version change a deliberate diff. Either side deploys first safely.
