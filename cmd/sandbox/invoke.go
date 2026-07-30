@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"syscall"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/spekk-ai/spekk-cli/internal/conversation"
 )
 
 func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, msg Message) {
@@ -26,8 +28,18 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 		args = append(args, "--resume", msg.SessionID)
 	}
 
+	spoolDir, cleanupSpool, err := provisionSpool()
+	if err != nil {
+		sendError(ctx, conn, fmt.Sprintf("create conversation spool: %v", err))
+		return
+	}
+	defer cleanupSpool()
+
 	cmd := exec.Command("claude", args...)
 	cmd.Dir = cfg.Workspace
+	// Per-process env, not os.Setenv: os.Setenv is process-global and would
+	// make concurrent sessions share (and clobber) one spool directory.
+	cmd.Env = append(os.Environ(), conversation.SpoolEnvVar+"="+spoolDir)
 
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
@@ -81,6 +93,17 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 	fmt.Fprint(stdin, text)
 	stdin.Close()
 
+	// sessionID tracks the initiating Claude session id as the worker learns
+	// it: known up front for a resumed session (msg.SessionID), otherwise
+	// captured from the earliest stream event that carries one (the initial
+	// system/init event, well before the final result event). It is what
+	// stamps any conversation_open frame drained from the spool — never a
+	// session id supplied by the request file itself.
+	sessionID := msg.SessionID
+	send := func(ctx context.Context, frame map[string]any) error {
+		return wsjson.Write(ctx, conn, frame)
+	}
+
 	// Stream stdout line by line
 	var lastSessionID, lastResultText string
 	scanner := bufio.NewScanner(stdout)
@@ -93,23 +116,40 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 		wsjson.Write(ctx, conn, map[string]any{"type": "stream", "data": line})
 
 		var event map[string]any
-		if json.Unmarshal([]byte(line), &event) == nil && event["type"] == "result" {
-			lastSessionID, _ = event["session_id"].(string)
-			lastResultText, _ = event["result"].(string)
+		if json.Unmarshal([]byte(line), &event) == nil {
+			if sessionID == "" {
+				if sid, ok := event["session_id"].(string); ok && sid != "" {
+					sessionID = sid
+				}
+			}
+			if event["type"] == "result" {
+				lastSessionID, _ = event["session_id"].(string)
+				lastResultText, _ = event["result"].(string)
+			}
 		}
+
+		// Drain after every line so a request written mid-session is
+		// emitted before the invocation returns, stamped with whatever
+		// session id is known so far.
+		drainSpool(ctx, spoolDir, sessionID, send)
 	}
 
-	if err := cmd.Wait(); err != nil {
+	waitErr := cmd.Wait()
+	// Final drain after process exit, regardless of exit status, so a
+	// request written just before the process exited is still emitted.
+	drainSpool(ctx, spoolDir, sessionID, send)
+
+	if waitErr != nil {
 		detail := stderrBuf.String()
 		if len(detail) > 2000 {
 			detail = detail[:2000]
 		}
 		wsjson.Write(ctx, conn, map[string]any{
 			"type":   "error",
-			"error":  fmt.Sprintf("claude exited: %v", err),
+			"error":  fmt.Sprintf("claude exited: %v", waitErr),
 			"detail": detail,
 		})
-		log.Printf("Claude failed: %v", err)
+		log.Printf("Claude failed: %v", waitErr)
 		return
 	}
 

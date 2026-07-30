@@ -8,6 +8,38 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.17.0 -- The Sandbox States Its Protocol Version](RELEASE-NOTES-1.17.0.md)
+
+The WebSocket contract between the agent-client and the control host gets one version number, exchanged at connect. The client sends `X-Spekk-Protocol: 1.0` on every dial and reads the server's `welcome` frame in return: a different major produces a clear operator warning, and a 4004 close logs one line without a reconnect hot-loop. A pinned constant makes every version change a deliberate diff. Either side deploys first safely.
+
+## [1.16.0 -- The Observer Lifecycle Lives in Git](RELEASE-NOTES-1.16.0.md)
+
+The observation lifecycle becomes declarative git state. An observation is a frontmatter file born on an `observer/<slug>` branch, and the branch set is the state machine: visible = pending, merged = resolved, PR closed with the branch kept = parked, deleted = forgotten. New `spekk observer announce` sends one message per run with at most three findings and flips `announced:` only after delivery; `spekk observer scan-check` gates every new observation against `.spekk/dont-flag.yaml` suppressions and cross-branch dedup; `spekk observer digest` replaces the committed DIGEST.md with a rendered view. The SQLite index gains observation tables across the branch union. Git fetch is the only remote read — no forge API calls.
+
+## [1.15.1 -- Migrate the Old Dev-Loop Skill](RELEASE-NOTES-1.15.1.md)
+
+A patch for the 1.15.0 install migration. 1.15.0 recognized only the role shims as old spekk files, so an unstamped dev-loop skill from an earlier version was left in place — an existing user did not get the new single-session skill. `spekk install` now recognizes the dev-loop skill by its heading and updates it in place, with a `.bak` backup.
+
+## [1.15.0 -- One-Session Dev Loop and a Self-Migrating Install](RELEASE-NOTES-1.15.0.md)
+
+The dev loop now runs in one session. The `spekk-dev-loop` skill plays the coach, builder, and verifier roles in turn (it fetches each role with `spekk prompt <role>`) instead of dispatching a sub-agent per role — for a feature that fits in one session, that is about 5 times fewer tokens, about 3 times cheaper, and about 3 times faster, at the same quality (issue #154). To match, `spekk install` writes the observer as an agent and the coach, builder, and dev-loop as skills, and it becomes an idempotent reconciler that migrates an old layout: it writes the desired files, removes a file a new layout no longer needs, backs up and never writes over a file you changed by hand, and `spekk update` warns when an old layout is present.
+
+## [1.14.0 -- Query Your Specs with SQL](RELEASE-NOTES-1.14.0.md)
+
+New `spekk index` builds a pure-Go SQLite index of the spec tree (`specs`, `assertions`, `depends_on`), and `spekk query` runs read-only `SELECT`s against it with `--json`/`--tsv`/`--csv` output — filtering, counting, grouping, and dependency joins in SQL. The index is a gitignored derived artifact, refreshed automatically when specs change, schema-versioned so upgrades rebuild it transparently, and opened read-only so a query can never mutate it.
+
+## [1.13.0 -- The `prune` Observer Skill](RELEASE-NOTES-1.13.0.md)
+
+New opt-in `spekk observer prune` skill surfaces genuinely-unused code and design-level redundancy (duplication, over-abstraction, dead config) as observations for human review — recommend-only and precision-biased, keyed on disuse rather than the absence of a spec. The existing `coverage-gap` skill is realigned to the same progressive-spec philosophy (optional documentation opportunities, no "no spec → delete" framing), and the coach/builder agents now soft-wrap spec prose to keep diffs minimal.
+
+## [1.12.0 -- Agents Can Open Conversations](RELEASE-NOTES-1.12.0.md)
+
+Sandbox agents can open new conversations on the connected chat surface: `spekk conversation open` spools an atomic request; the worker stamps the authoritative session id and emits a `conversation_open` frame; human replies resume the initiating session. Plus legible typed-error-frame logging, an additive Authorization header on the WebSocket dial, and neutralized infrastructure wording in public files.
+
+## [1.11.0 -- `spekk validate` Hard Gate and Untrusted-Input Hardening](RELEASE-NOTES-1.11.0.md)
+
+New `spekk validate` command: a strict, CI-friendly counterpart to the lenient parser — hard failures for malformed frontmatter, duplicate ids, dangling dependencies, lock-state mismatches (`in_progress` without `locked-by` and vice versa), and illegal parent `status` fields. The builder agent now runs it before every commit. All three agent prompts (builder, coach, observer) gain explicit untrusted-input rules: external content is data, never instructions.
+
 ## [1.10.10 -- Fix Broken Markdown in `spekk show --watch`](RELEASE-NOTES-1.10.10.md)
 
 Watch mode could render as raw JavaScript instead of the spec explorer. The live-reload injector matched a `</body>` inside the bundled sanitizer's source before the real one, splitting the library onto the page as text. It now anchors on the document's final `</body>`.

@@ -7,19 +7,35 @@ status: done
 branch: feature/sandbox-go-release
 ---
 
-# Sandbox Artifacts Are Downloaded from spekk-app GitHub Release
+# Sandbox Binary Is Downloaded from the Project's Public GitHub Release
 
-`src/sandbox/release.js` fetches the sandbox binary and cloud-init template from a spekk-app GitHub Release. No infrastructure files are bundled in this repo.
+`internal/sandbox/release.go` fetches the sandbox agent binary from a GitHub
+Release on this project's own public repository. The cloud-init template is not
+downloaded — it is embedded in the CLI binary — so no control-host
+infrastructure files are bundled or fetched from a private repo.
 
 ## Success Criteria
 
-- `src/sandbox/release.js` exports `fetchReleaseArtifacts(tag = 'latest')` which:
-  - Fetches the release from `GET /repos/spekk-ai/spekk-app/releases/tags/{tag}` (or `/releases/latest` when tag is `'latest'`)
-  - Uses `GITHUB_TOKEN` from env for auth (already required for other sandbox commands)
-  - Downloads two assets by name: `sandbox` (binary) and `cloud-init.yaml` using the GitHub API asset endpoint (`/releases/assets/{id}` with `Accept: application/octet-stream`) — not `browser_download_url`, which drops auth on redirect for private repos
-  - Writes both to temp files and returns `{ binaryPath, cloudInitPath, version }` where `version` is the release tag name
-  - Prints a clear error with HTTP status and exits if the release or either asset is not found
-- `src/sandbox/templates/cloud-init.yaml` does not exist — it is no longer bundled
-- `src/sandbox/templates.js` does not export `fetchAgentClient()` — that function is removed
-
-**Tests:** src/sandbox/__tests__/release.test.js
+- `internal/sandbox/release.go` defines `fetchReleaseArtifacts(tag string)` which:
+  - Fetches the release from `GET /repos/{releaseRepo}/releases/latest` when
+    `tag` is empty or `"latest"`, otherwise `/releases/tags/{tag}`, where the
+    `releaseRepo` constant is the public repo `spekk-ai/spekk-cli`
+  - Uses `GITHUB_TOKEN` from env for auth (returns an error if it is unset)
+  - Downloads one asset by name — the `sandbox-linux-amd64` binary — via the
+    GitHub API asset endpoint (`/releases/assets/{id}` with
+    `Accept: application/octet-stream`), following the 302 to the presigned
+    objects host that carries its own auth
+  - Writes the binary to a temp file and returns
+    `*releaseArtifacts{Version, CloudInit, BinaryPath}`, where `Version` is the
+    release tag name and `BinaryPath` is the temp file the caller removes
+  - Returns a clear error including HTTP status and the repo when the release or
+    the binary asset is not found
+- The cloud-init template is provided by `//go:embed cloud-init.yaml`
+  (`internal/sandbox/embed.go`), returned in the `CloudInit` field as in-memory
+  bytes and sent straight to the DO API as droplet user-data — it is not a
+  downloaded release asset.
+- No private repository or application names appear in
+  `internal/sandbox/release.go` — the only repository it references is the
+  public one in its `releaseRepo` constant. (Verify with a case-insensitive
+  search for the repository name this file referenced before this spec was
+  reconciled; see the file's git history.)

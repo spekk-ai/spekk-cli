@@ -61,9 +61,9 @@ write_files:
 
   - path: /etc/spekk/agent.env.example
     content: |
-      # Required: Agent auth token for WebSocket connection to Django
+      # Required: Agent auth token for WebSocket connection to the control host
       SPEKK_AGENT_TOKEN=
-      # Required: Spekk app host (e.g., app.spekk.ai)
+      # Required: Control host (e.g., your-control-host.example)
       SPEKK_HOST=
       # Required: Anthropic API key for Claude Code
       ANTHROPIC_API_KEY=

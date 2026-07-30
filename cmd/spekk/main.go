@@ -14,6 +14,7 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/agent"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
 	"github.com/spekk-ai/spekk-cli/internal/formatter"
+	"github.com/spekk-ai/spekk-cli/internal/index"
 	"github.com/spekk-ai/spekk-cli/internal/install"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 	"github.com/spekk-ai/spekk-cli/internal/sandbox"
@@ -21,6 +22,7 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/show"
 	"github.com/spekk-ai/spekk-cli/internal/status"
 	"github.com/spekk-ai/spekk-cli/internal/update"
+	"github.com/spekk-ai/spekk-cli/internal/validate"
 	pkgversion "github.com/spekk-ai/spekk-cli/internal/version"
 )
 
@@ -55,6 +57,12 @@ func main() {
 	case "list":
 		runList(args[1:])
 
+	case "index":
+		runIndex(args[1:])
+
+	case "query":
+		runQuery(args[1:])
+
 	case "next":
 		runParser(args[1:])
 
@@ -65,6 +73,14 @@ func main() {
 		launchBuilderAgent(args[1:])
 
 	case "observer":
+		// Go-native observer subcommands (digest, scan-check, announce)
+		// route to deterministic code; anything else launches the agent.
+		if len(args) > 1 {
+			if run, ok := observerGoSubcommands[args[1]]; ok {
+				run(args[2:])
+				return
+			}
+		}
 		launchObserverAgent(args[1:])
 
 	case "loop":
@@ -72,6 +88,9 @@ func main() {
 
 	case "status":
 		showStatus()
+
+	case "validate":
+		runValidate(args[1:])
 
 	case "show":
 		showSpekk(args[1:])
@@ -81,6 +100,9 @@ func main() {
 
 	case "sandbox":
 		launchSandbox(args[1:])
+
+	case "conversation":
+		runConversation(args[1:])
 
 	case "prompt":
 		runPrompt(args[1:])
@@ -128,6 +150,17 @@ func runParser(args []string) {
 	specsDir := flags.String("specsDir")
 	if specsDir == "" {
 		specsDir = findSpecsDir()
+	}
+
+	// Auto-rebuild the SQLite index silently if it is stale, absent, or built
+	// against an older schema. EnsureFresh is the single freshness gate shared
+	// with `spekk query`.
+	repoRoot := filepath.Dir(specsDir)
+	if rebuilt, err := index.EnsureFresh(specsDir, index.DBPath(repoRoot)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: auto-rebuild of index failed: %s\n", err)
+		os.Exit(1)
+	} else if rebuilt {
+		_ = index.EnsureGitignored(repoRoot)
 	}
 
 	result, err := parser.ParseAllSpecs(specsDir)
@@ -380,6 +413,227 @@ func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
 		return rows[i].ID < rows[j].ID
 	})
 	return rows
+}
+
+// runValidate implements the `spekk validate` subcommand.
+func runValidate(args []string) {
+	code := execValidate(args, os.Stdout, "")
+	if code != 0 {
+		os.Exit(code)
+	}
+}
+
+// validateUsage is the help text for `spekk validate`.
+const validateUsage = `
+spekk validate - Check every spec and assertion under specs/ against a fixed
+set of invariants and exit non-zero if any is violated.
+
+USAGE:
+  spekk validate [OPTIONS]
+
+OPTIONS:
+  --specs-dir <path>   Read specs from a specific directory (default: git root specs/)
+  --help, -h           Show this help message
+
+Checks (all in one pass): frontmatter well-formedness (no silent skips — a
+malformed spec or assertion file is a failure here, unlike "spekk next"),
+parent resolution, depends-on validity (kebab-case, exists, no self-reference,
+no cycles), no duplicate spec or assertion ids, lock-state pairing
+(in_progress requires locked-by; every other status forbids it), and parent
+specs carrying no rolled-up status field (absent, or the literal value
+"draft").
+
+Exit 0 and a one-line summary on stdout when everything is valid. Exit 1 and
+one plain-text failure line per violation (file + problem), sorted by file
+then message, when anything is invalid.
+`
+
+// execValidate is the testable core of runValidate. It writes the report to
+// stdout and returns an exit code (0 = pass, 1 = at least one failure).
+// specsDir: if non-empty, skip findSpecsDir() and use this directly.
+func execValidate(args []string, stdout io.Writer, specsDir string) int {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Fprint(stdout, validateUsage)
+		return 0
+	}
+
+	if specsDir == "" {
+		specsDir = flags.String("specsDir")
+	}
+	if specsDir == "" {
+		specsDir = findSpecsDir()
+	}
+
+	result, err := validate.Run(specsDir)
+	if err != nil {
+		fmt.Fprintf(stdout, "validate: %s\n", err.Error())
+		return 1
+	}
+
+	if result.Passed() {
+		fmt.Fprintf(stdout, "validate: %d specs, %d assertions OK\n", result.SpecCount, result.AssertionCount)
+		return 0
+	}
+
+	for _, f := range result.Failures {
+		fmt.Fprintln(stdout, f.String())
+	}
+	return 1
+}
+
+// indexUsage is the help text for `spekk index`.
+const indexUsage = `
+spekk index - Build .spekk/index.db, a SQLite index of the spec tree, for use
+by "spekk query". The Markdown files remain the source of truth; the database
+is a derived artifact and is added to .gitignore automatically.
+
+USAGE:
+  spekk index [OPTIONS]
+
+OPTIONS:
+  --force              Drop and recreate all tables from scratch
+  --specs-dir <path>   Read specs from a specific directory (default: git root specs/)
+  --help, -h           Show this help message
+
+The index is rebuilt automatically when it is stale, absent, or built against an
+older schema, so running this by hand is rarely necessary.
+`
+
+// queryUsage is the help text for `spekk query`.
+const queryUsage = `
+spekk query "<sql>" - Run a read-only SELECT against .spekk/index.db and print
+the result. The index is refreshed automatically first, so results always
+reflect the current specs.
+
+USAGE:
+  spekk query "<sql>" [OPTIONS]
+
+OPTIONS:
+  --json               JSON array of objects
+  --tsv                Tab-separated values with a lowercase header
+  --csv                RFC 4180 CSV with a header row
+  --help, -h           Show this help message
+
+Only SELECT (and WITH ... SELECT) statements are permitted; the database is
+opened read-only. Tables: specs(id, title, status, priority, branch, file),
+assertions(id, parent_id, title, status, priority, branch, file),
+depends_on(assertion_id, depends_on_id).
+`
+
+// runIndex implements the `spekk index` subcommand.
+// It builds (or rebuilds) .spekk/index.db from the specs directory.
+// Flags: --specs-dir <path>, --force
+func runIndex(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
+		"force":    {Names: []string{"--force"}, Type: cli.BoolFlag},
+		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(indexUsage)
+		return
+	}
+
+	specsDir := flags.String("specsDir")
+	if specsDir == "" {
+		specsDir = findSpecsDir()
+	}
+
+	// Derive repo root from the specs directory.
+	repoRoot := filepath.Dir(specsDir)
+	dbPath := index.DBPath(repoRoot)
+
+	stats, err := index.BuildIndex(specsDir, dbPath, flags.Bool("force"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		os.Exit(1)
+	}
+	warn(os.Stderr, stats.Warnings)
+
+	// Ensure .spekk/index.db is in .gitignore.
+	if err := index.EnsureGitignored(repoRoot); err != nil {
+		// Non-fatal: warn but continue.
+		fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %s\n", err)
+	}
+
+	fmt.Printf("Indexed %d specs, %d assertions, %d observations.\n", stats.Specs, stats.Assertions, stats.Observations)
+}
+
+// runQuery implements the `spekk query "<sql>"` subcommand.
+// Executes a SELECT-only SQL query against .spekk/index.db and prints results.
+// Flags: --json, --tsv, --csv
+func runQuery(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"json": {Names: []string{"--json"}, Type: cli.BoolFlag},
+		"tsv":  {Names: []string{"--tsv"}, Type: cli.BoolFlag},
+		"csv":  {Names: []string{"--csv"}, Type: cli.BoolFlag},
+		"help": {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(queryUsage)
+		return
+	}
+
+	// Extract the SQL positional argument (first non-flag arg).
+	knownFlags := map[string]bool{
+		"--json": true, "--tsv": true, "--csv": true, "--help": true, "-h": true,
+	}
+	var sqlStr string
+	for _, arg := range args {
+		if !knownFlags[arg] {
+			sqlStr = arg
+			break
+		}
+	}
+
+	if sqlStr == "" {
+		fmt.Fprintln(os.Stderr, `error: missing SQL argument`)
+		fmt.Fprintln(os.Stderr, `usage: spekk query "<sql>"`)
+		os.Exit(1)
+	}
+
+	// Locate the repo root and the index DB.
+	specsDir := findSpecsDir()
+	repoRoot := filepath.Dir(specsDir)
+	dbPath := index.DBPath(repoRoot)
+
+	// Refresh the index before querying so results reflect the current specs
+	// (and rebuild if it was built against an older schema). Same freshness gate
+	// as `spekk next`.
+	if rebuilt, err := index.EnsureFresh(specsDir, dbPath); err != nil {
+		fmt.Fprintf(os.Stderr, "error: could not refresh index: %s\n", err)
+		os.Exit(1)
+	} else if rebuilt {
+		_ = index.EnsureGitignored(repoRoot)
+	}
+
+	result, err := index.RunQuery(dbPath, sqlStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Format and print output.
+	var out string
+	switch {
+	case flags.Bool("json"):
+		out = index.FormatQueryJSON(result)
+	case flags.Bool("tsv"):
+		out = index.FormatQueryTSV(result)
+	case flags.Bool("csv"):
+		out = index.FormatQueryCSV(result)
+	default:
+		out = index.FormatQueryTable(result)
+	}
+
+	fmt.Println(out)
 }
 
 // findSpecsDir locates the specs/ directory using git root.
@@ -945,6 +1199,26 @@ OPTIONS:
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
+	if !checkOnly {
+		warnStaleInstall()
+	}
+}
+
+// warnStaleInstall checks every install location for managed files that the
+// current binary no longer writes (an old layout), and warns. It changes no
+// file — the migration is the shown "spekk install" command.
+func warnStaleInstall() {
+	home, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
+	stale, err := install.CheckStale(home, cwd)
+	if err != nil || len(stale) == 0 {
+		return
+	}
+	fmt.Fprintln(os.Stderr, "\nwarning: some installed spekk files are from an old layout:")
+	for _, s := range stale {
+		fmt.Fprintln(os.Stderr, "  "+s)
+	}
+	fmt.Fprintln(os.Stderr, "Re-run the shown install command to migrate.")
 }
 
 // runInit creates the specs/ directory so a project can start using spekk.
@@ -1103,10 +1377,11 @@ Skills resolve through layers: .spekk/skills/<agent>/ (project), then
 	}
 }
 
-// runInstallTargets writes thin shim subagents into a host coding assistant.
+// runInstallTargets installs the observer agent and the spekk skills into a host
+// coding assistant.
 func runInstallTargets(args []string) {
 	usage := `
-spekk install - Install spekk agents into a coding assistant
+spekk install - Install spekk into a coding assistant
 
 USAGE:
   spekk install --target <tool> [--project]
@@ -1123,10 +1398,11 @@ OPTIONS:
   --project         Install into the current project instead of globally
   --help, -h        Show this help message
 
-Installs thin shims for the coach, builder, and observer agents. Shims
-fetch their full instructions from this binary at session start via
-"spekk prompt <agent>", so they never go stale — updating spekk updates
-every installed agent.
+This writes the observer as an agent, and the coach, the builder, and the
+dev-loop as skills. Each role file is thin: it fetches its full instructions
+from this binary with "spekk prompt <role>", so it does not go stale.
+Updating spekk updates every installed file. "spekk install" also removes an
+old coach or builder agent shim from a previous version.
 
 OTHER TOOLS:
   Any assistant that can run shell commands can use spekk without an
@@ -1156,7 +1432,7 @@ OTHER TOOLS:
 		os.Exit(1)
 	}
 
-	written, err := install.Install(install.Options{
+	res, err := install.Install(install.Options{
 		Target:  flags.String("target"),
 		Project: flags.Bool("project"),
 	})
@@ -1164,8 +1440,14 @@ OTHER TOOLS:
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-	for _, path := range written {
+	for _, w := range res.Warnings {
+		fmt.Fprintln(os.Stderr, "warning:", w)
+	}
+	for _, path := range res.Written {
 		fmt.Println("installed:", path)
+	}
+	for _, path := range res.Removed {
+		fmt.Println("removed:", path)
 	}
 }
 
@@ -1196,13 +1478,17 @@ USAGE:
 COMMANDS:
   init      Set up a project for spec-driven development (creates specs/)
   list      List specs and assertions with optional --status filter and --assertions-only flat output
+  index     Build .spekk/index.db SQLite index from specs/ (use --force to rebuild from scratch)
+  query     Execute a SELECT query against .spekk/index.db (supports --json, --tsv, --csv)
   show      Generate and display spec explorer web interface (-w to watch)
   status    Show comprehensive overview of all specs and assertions
+  validate  Check specs/ against a fixed set of invariants; exit non-zero on any violation
   serve     Start WebSocket server for browser extension (--port, --host)
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to monitor spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
+  conversation  Request a conversation on the connected chat surface (open)
   install   Install a skill for an agent (coach/builder/observer)
   uninstall Remove an installed skill from local or global scope
   skills    Inspect skills available to an agent (list)

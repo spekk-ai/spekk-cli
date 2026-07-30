@@ -3,6 +3,7 @@ package crossbranch
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
@@ -78,4 +79,30 @@ func AssertionAtRef(ref, path string) (*parser.Assertion, error) {
 		return nil, fmt.Errorf("crossbranch: parsing assertion %s:%s: %w", ref, path, err)
 	}
 	return a, nil
+}
+
+// FilesAtRef lists the blob paths that exist under dir at the given git ref,
+// without touching the working tree. Paths are returned repo-root-relative
+// (as `git ls-tree -r --name-only <ref> -- <dir>` prints them), in git's
+// stable sort order. A dir that does not exist at the ref yields an empty
+// slice and a nil error — like ErrFileAbsent, an absent directory is a
+// normal outcome, but for a listing the natural encoding is emptiness. An
+// invalid ref or other git failure is returned as a wrapped error.
+func FilesAtRef(ref, dir string) ([]string, error) {
+	out, err := Run("ls-tree", "-r", "--name-only", ref, "--", dir)
+	if err != nil {
+		return nil, fmt.Errorf("crossbranch: listing %s:%s: %w", ref, dir, err)
+	}
+	if out == "" {
+		return nil, nil
+	}
+	lines := strings.Split(out, "\n")
+	paths := make([]string, 0, len(lines))
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if l != "" {
+			paths = append(paths, l)
+		}
+	}
+	return paths, nil
 }

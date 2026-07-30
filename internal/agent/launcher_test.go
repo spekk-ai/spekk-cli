@@ -338,6 +338,7 @@ func TestBuildHelpText_ObserverWithSkills(t *testing.T) {
 	skillDir := filepath.Join(install, "specs", "observer-skills")
 	os.MkdirAll(skillDir, 0o755)
 	os.WriteFile(filepath.Join(skillDir, "coverage-gap-skill.md"), []byte("---\nid: coverage-gap\n---\n# Coverage Gap"), 0o644)
+	os.WriteFile(filepath.Join(skillDir, "prune-skill.md"), []byte("---\nid: prune\n---\n# Prune"), 0o644)
 
 	// Isolate cwd/home so local/global layers don't shadow.
 	isolated := t.TempDir()
@@ -357,6 +358,12 @@ func TestBuildHelpText_ObserverWithSkills(t *testing.T) {
 	}
 	if strings.Contains(out, "coverage-gap-skill") {
 		t.Error("help should not expose the raw filename stem coverage-gap-skill")
+	}
+	if !strings.Contains(out, "  prune\n") {
+		t.Errorf("help should list the skill under its invocation name %q, got:\n%s", "prune", out)
+	}
+	if strings.Contains(out, "prune-skill") {
+		t.Error("help should not expose the raw filename stem prune-skill")
 	}
 	if !strings.Contains(out, "--interval") {
 		t.Error("help should document observer's --interval option")

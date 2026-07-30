@@ -34,7 +34,7 @@ if [ -z "${SPEKK_AGENT_TOKEN:-}" ]; then
     read -rp "Agent auth token (SPEKK_AGENT_TOKEN): " SPEKK_AGENT_TOKEN
 fi
 if [ -z "${SPEKK_HOST:-}" ]; then
-    read -rp "Spekk app host (e.g. app.spekk.ai): " SPEKK_HOST
+    read -rp "Control host (e.g. your-control-host.example): " SPEKK_HOST
 fi
 if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
     read -rp "Anthropic API key: " ANTHROPIC_API_KEY

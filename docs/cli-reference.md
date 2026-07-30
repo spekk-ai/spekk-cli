@@ -178,6 +178,45 @@ Shows total specs/assertions, status breakdown, completion percentage, and specs
 
 ---
 
+## `spekk index`
+
+Build `.spekk/index.db`, a SQLite index of the spec tree, for use by `spekk query`.
+
+```bash
+spekk index [--force] [--specs-dir <path>]
+```
+
+The Markdown files remain the source of truth; the database is a derived artifact and is added to `.gitignore` automatically. `--force` drops and recreates all tables.
+
+You rarely need to run this by hand: the index is rebuilt automatically whenever it is stale, absent, or built against an older schema (see `spekk query` and `spekk next`). Because it is derived, an index from an older spekk version is detected via its stamped schema version and transparently rebuilt — there is no manual migration.
+
+---
+
+## `spekk query`
+
+Run a read-only `SELECT` against the SQLite index and print the result.
+
+```bash
+spekk query "SELECT status, COUNT(*) FROM assertions GROUP BY status"
+spekk query "SELECT id, title FROM specs WHERE status = 'draft'" --json
+```
+
+The index is refreshed automatically first, so results always reflect the current specs. Only `SELECT` (and `WITH … SELECT`) statements are permitted, and the database is opened read-only, so a query can never mutate it.
+
+Output flags: `--json` (array of objects), `--tsv`, `--csv`. Default is a padded table.
+
+Schema:
+
+| Table | Columns |
+|---|---|
+| `specs` | `id`, `title`, `status`, `priority`, `branch`, `file` |
+| `assertions` | `id`, `parent_id` (→ `specs.id`), `title`, `status`, `priority`, `branch`, `file` |
+| `depends_on` | `assertion_id`, `depends_on_id` (both → `assertions.id`) |
+
+`depends_on` holds **assertion-level** edges only; spec-level relationships are not modeled as data (see the spec bodies).
+
+---
+
 ## `spekk show`
 
 Launch the interactive web-based spec explorer.
@@ -279,6 +318,7 @@ spekk observer                    # Default monitoring loop
 spekk observer --interval 30      # Check every 30 seconds
 spekk observer --quiet            # Minimal output
 spekk observer coverage-gap       # Run with a specific skill
+spekk observer prune              # Surface unused-code / consolidation candidates (recommend-only)
 spekk observer consolidate        # Curate observations into a digest
 spekk observer install-cron       # Schedule observer via crontab
 spekk observer uninstall-cron     # Remove scheduled cron entries
@@ -302,7 +342,8 @@ The default loop closes each scan cycle with a quiet consolidation pass and repo
 
 | Skill | Description |
 |-------|-------------|
-| `coverage-gap` | Scans `internal/` for code with no spec backing (inverse lens) |
+| `coverage-gap` | Surfaces code a spec could optionally document — a progressive-adoption aid, not a defect report (un-spec'd code is normal) |
+| `prune` | Surfaces genuinely-unused code and design-level redundancy (duplication, over-abstraction, dead config) as candidates for human review — recommend-only, never deletes; a missing spec is never a signal |
 | `consolidate` | Reviews all raw observations, archives stale/duplicates, rewrites `observations/DIGEST.md` with at most 5 severity-ranked items |
 
 ### `spekk observer install-cron`
@@ -371,7 +412,11 @@ Enables real-time communication between the CLI and the Spekk web UI.
 
 ## `spekk sandbox`
 
-Manage cloud sandbox environments on DigitalOcean.
+Manage cloud sandbox environments on DigitalOcean. The sandbox agent is a **generic Claude Code runner** — it is not spec-aware. It accepts prompts over a WebSocket connection from a control host and pipes them into `claude -p -`. For the full connection model, message protocol, and worker architecture, see the [Sandbox Architecture](./advanced/sandbox-architecture.md) doc.
+
+!!! note "Post-creation registration"
+
+    After `spekk sandbox create` provisions the VM, you must register the agent's token in the control host before the agent can connect. The `create` command prints the token and a reminder.
 
 ### `spekk sandbox create`
 
@@ -505,7 +550,9 @@ Every install also writes the `spekk-dev-loop` skill — the outer coach → coo
 | `codex` | `/spekk-dev-loop` prompt | `~/.codex/prompts/spekk-dev-loop.md` (global only) |
 | `copilot` | `/spekk-dev-loop` prompt | `.github/prompts/spekk-dev-loop.prompt.md` (`--project` only) |
 
-On the native-skill harnesses (claude-code, opencode) the model can invoke it automatically; on cursor, codex, and copilot it's a manually-invoked `/spekk-dev-loop` command. `--project` writes to the project's equivalent directory instead of the global one. Copilot's dev-loop prompt is project-only (personal prompts are IDE-managed); codex is global-only.
+**Automatic vs manual invocation:** Claude Code and OpenCode treat it as a native skill, so the model can invoke it on its own. Cursor, Codex, and Copilot expose it as a `/spekk-dev-loop` command the user triggers manually.
+
+**Scope:** By default, the skill is installed globally. Pass `--project` to write it into the current repo instead. Two targets are exceptions: Copilot is always project-scoped (its personal prompts are IDE-managed), and Codex is always global.
 
 ---
 

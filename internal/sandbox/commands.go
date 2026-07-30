@@ -216,7 +216,7 @@ Sandbox created successfully:
   IP:             %s
   AGENT_TOKEN:    %s
 
-Next: Add this agent in Django admin at https://%s/staff/agent/agent/add/
+Next: Register this agent on the control host admin at https://%s/
   - Name: %s
   - Sandbox ID: spekk-%s
   - Auth token: %s
