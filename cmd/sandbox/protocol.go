@@ -12,7 +12,7 @@ import (
 //
 // Bump rules: a breaking change to message types, frame fields, or close
 // codes bumps the major. An additive change bumps the minor. A PR that
-// bumps the major names the companion spekk-app PR (server spec:
+// bumps the major names the companion control-host PR (server spec:
 // protocol-handshake).
 const ProtocolVersion = "1.0"
 

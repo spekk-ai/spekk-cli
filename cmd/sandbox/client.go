@@ -36,11 +36,8 @@ func (c *AgentClient) wsURL() string {
 	if contains(c.cfg.Host, "localhost") {
 		scheme = "ws"
 	}
-	// The path token is the current (soon-to-be-deprecated) auth carrier:
-	// the control host authenticates the agent from this path segment today.
-	// Removing it is deferred until the control host reads the Authorization
-	// header sent alongside it in dialOptions below (a coordinated
-	// cross-repo follow-up).
+	// Send the token in both the URL path and the Authorization header
+	// (see dialOptions) for compatibility.
 	return fmt.Sprintf("%s://%s/ws/agent/%s/", scheme, c.cfg.Host, c.cfg.Token)
 }
 

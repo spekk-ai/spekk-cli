@@ -2,7 +2,7 @@
 
 New `spekk sandbox` command for provisioning and managing DigitalOcean droplet-based agent sandboxes.
 
-⚠️ Right now this is for my admin use only, but conceivably if you get the right credentials together, you can use this to create sandboxes for yourself. It only creates the VM and deploys the agent. Connecting to Slack is a separate process partially automated through Django. I'm working towards full end-user-trigger-able automation, but need to think through a few things before then.
+⚠️ Right now this is for my admin use only, but conceivably if you get the right credentials together, you can use this to create sandboxes for yourself. It only creates the VM and deploys the agent. Connecting the agent to a chat surface (such as Slack) is a separate process, partially automated on the control host. I'm working towards full end-user-trigger-able automation, but need to think through a few things before then.
 
 ## New Commands
 
@@ -18,5 +18,9 @@ New `spekk sandbox` command for provisioning and managing DigitalOcean droplet-b
 - **`internal/sandbox/doapi.go`** — DigitalOcean API client
 - **`internal/sandbox/store.go`** — Local metadata store persisting sandbox records to `~/.spekk/sandboxes.json`
 - **`internal/sandbox/templates.go`** — Bundled template loader for `cloud-init.yaml`
-- **`internal/sandbox/create.go`** — Full create workflow: droplet creation, polling, SSH setup, credential injection, agent deployment
-- **`internal/cli/sandbox.go`** — Command router with subcommand dispatch and help output
+- **Create workflow** — Droplet creation, polling, SSH setup, credential injection, agent deployment
+- **Command router** — Subcommand dispatch and help output
+
+---
+
+*Editor's note (2026-07-31): We edited this file after publication. The edit makes control-host details generic and removes file paths that no longer exist. The facts about what shipped are unchanged.*

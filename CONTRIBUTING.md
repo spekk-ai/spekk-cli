@@ -108,3 +108,7 @@ internal/
   status/           # Status overview display
 specs/              # Specification files
 ```
+
+## Public Boundary
+
+This repository is public. The orchestration server it connects to (the "control host") is private. Do not name, in any committed file: the control host's implementation stack, its private repository name, a specific private hostname presented as *the* host, or its internal admin URL structure. Say "the control host" or use a neutral placeholder instead. Naming a chat surface (e.g. Slack) as one example of an integration is fine; presenting it as the implementation is not. See `specs/sandbox-public-boundary/`.

@@ -12,7 +12,7 @@ The agent-client and the control host share a WebSocket contract: message types,
 
 ## Decision
 
-The contract gets one version number, declared on both sides and exchanged at connect time. The client sends its version in an `X-Spekk-Protocol` header on dial. The server replies with its own version in a `welcome` frame. Each side checks the other's **major** version; the server enforces (companion spec: spekk-app `protocol-handshake`), the client warns. The version starts at `1.0`.
+The contract gets one version number, declared on both sides and exchanged at connect time. The client sends its version in an `X-Spekk-Protocol` header on dial. The server replies with its own version in a `welcome` frame. Each side checks the other's **major** version; the server enforces (companion spec: the private control-host repo, `protocol-handshake`), the client warns. The version starts at `1.0`.
 
 Bump rules: a breaking change to message types, frame fields, or close codes bumps the major. An additive change bumps the minor. A PR that bumps the major names the companion PR in the other repository — this pairing is the one rule that stays human.
 
