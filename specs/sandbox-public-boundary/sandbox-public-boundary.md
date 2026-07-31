@@ -1,23 +1,23 @@
 ---
-id: sandbox-boundary-scrub
+id: sandbox-public-boundary
 created: 2026-07-23T00:00:00Z
 priority: 1
 ---
 
-# Sandbox Boundary Scrub
+# Sandbox Public Boundary
 
 ## Overview
 
 This repository is public. The orchestration server it talks to (the "control
-host") is a separate, private application. Several shipped files in this repo
-leak details of that private side — its implementation stack, a private repo
-name, and a specific admin URL shape — and one file puts the agent's auth token
-in a place it should not be. This spec scrubs the shipped code and config so a
-public reader learns nothing about the control host's internals, and hardens
-how the agent presents its auth token.
+host") is a separate, private application. This spec states the boundary that
+holds between the two: a public reader of this repo learns nothing about the
+control host's internals, and the agent presents its auth token in a way that
+does not leak into logs.
 
-These files are being touched by the conversation-open work anyway, so the
-cleanup rides along in the same cycle.
+When this spec was created, several shipped files broke that boundary — they
+named the implementation stack, a private repo name, and a specific admin URL
+shape — and one file put the agent's auth token in the WebSocket URL path.
+The assertions below record each violation and the condition that now holds.
 
 ## What the boundary allows
 
@@ -81,13 +81,15 @@ Intentionally left alone (not leaks):
 
 ## Assertions
 
-1. `cloud-init-neutral-comments` — scrub cloud-init.yaml comments
-2. `release-comment-generic` — scrub the release.go comment
-3. `cli-output-no-stack` — scrub the sandbox CLI's "add this agent" output
-4. `ws-auth-header` — move the auth token to an Authorization header (done)
-5. `ws-drop-path-token` — remove the token from the WebSocket URL path (P2,
-   draft; blocked on the control host reading the header)
-6. `release-notes-history-generalize` — generalize control-host internals in
-   published release notes (done)
-7. `gitignore-neutral-reference-path` — rename the private-named ignored path
+1. `cloud-init-neutral-comments` — cloud-init.yaml comments are neutral (done)
+2. `release-comment-generic` — the release.go comment names no private repo
    (done)
+3. `cli-output-no-stack` — the sandbox CLI's "add this agent" output names no
+   stack or admin path (done)
+4. `ws-auth-header` — the auth token rides in an Authorization header (done)
+5. `ws-drop-path-token` — the token is absent from the WebSocket URL path (P2,
+   draft; blocked on the control host reading the header)
+6. `release-notes-history-generalize` — published release notes contain no
+   control-host internals (done)
+7. `gitignore-neutral-reference-path` — the ignored reference path embeds no
+   private repo name (done)

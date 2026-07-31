@@ -1,6 +1,6 @@
 ---
 id: ws-drop-path-token
-parent: sandbox-boundary-scrub
+parent: sandbox-public-boundary
 created: 2026-07-23T00:00:00Z
 priority: 2
 status: not_started
