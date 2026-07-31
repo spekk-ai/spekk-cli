@@ -38,14 +38,14 @@ cleanup rides along in the same cycle.
 
 Concrete leak sites found by sweeping `*.go` / `*.yaml` in shipped code:
 
-- `internal/sandbox/cloud-init.yaml` — a comment naming the stack ("WebSocket
-  connection to Django") and a specific host example (`app.spekk.ai`).
-- `internal/sandbox/release.go` — a comment sourcing artifacts from a named
-  private repo ("from a spekk-app GitHub release"); the code constant already
-  points at the public repo, so the comment is both a leak and stale.
-- `internal/sandbox/commands.go` — user-facing CLI output that names the stack
-  and the control host's admin URL ("Add this agent in Django admin at
-  `https://%s/staff/agent/agent/add/`").
+- `internal/sandbox/cloud-init.yaml` — a comment that named the control host's
+  stack, and a host example that used the real private hostname.
+- `internal/sandbox/release.go` — a comment sourcing artifacts from a release
+  of the private server repo, named directly; the code constant already
+  points at the public repo, so the comment was both a leak and stale.
+- `internal/sandbox/commands.go` — user-facing CLI output that named the stack
+  and pointed the operator at the control-host admin page via its internal
+  URL path.
 - `cmd/sandbox/client.go` — the agent auth token is embedded in the WebSocket
   URL path; move it to an `Authorization` header (hardening, coordinated with
   the control host). The additive header landed in `ws-auth-header`; the
@@ -61,8 +61,8 @@ assertions rather than left unaddressed:
   chat surface as *the* integration. Release notes are published history, so
   the edit is a meaning-preserving generalization — tracked in
   `release-notes-history-generalize` (P3).
-- `.gitignore` ignores a `spekk-app-reference/` path, which names the private
-  repo. Renaming it forces a local-workflow change — tracked in
+- `.gitignore` ignores a reference path whose name embeds the private server
+  repo's name. Renaming it forces a local-workflow change — tracked in
   `gitignore-neutral-reference-path` (P3).
 
 Already reconciled (no queued assertion needed):
@@ -75,9 +75,9 @@ Already reconciled (no queued assertion needed):
 Intentionally left alone (not leaks):
 
 - Example prompt snippets in `README.md`, `docs/configuration.md`, and the
-  `layered-prompt-system` spec say things like "a Django/HTMX project" — these
-  describe a hypothetical *user's* project, not the control host, so they are
-  not leaks.
+  `layered-prompt-system` spec name popular web frameworks in phrases like
+  "a `<framework>` project" — these describe a hypothetical *user's* project,
+  not the control host, so they are not leaks.
 
 ## Assertions
 
@@ -88,6 +88,6 @@ Intentionally left alone (not leaks):
 5. `ws-drop-path-token` — remove the token from the WebSocket URL path (P2,
    draft; blocked on the control host reading the header)
 6. `release-notes-history-generalize` — generalize control-host internals in
-   published release notes (P3, queued)
+   published release notes (done)
 7. `gitignore-neutral-reference-path` — rename the private-named ignored path
-   (P3, queued)
+   (done)

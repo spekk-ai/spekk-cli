@@ -15,13 +15,13 @@ specific private host.
 ## Success Criteria
 
 - The comment on the `SPEKK_AGENT_TOKEN` line no longer names the stack. The
-  phrase "WebSocket connection to Django" is replaced with a neutral
-  description (e.g. "WebSocket connection to the control host").
+  phrase that named the stack ("WebSocket connection to ...") is replaced with
+  a neutral description (e.g. "WebSocket connection to the control host").
 - The `SPEKK_HOST` comment no longer uses a real private host as its example.
-  `app.spekk.ai` is replaced with a neutral placeholder (e.g.
+  The real hostname is replaced with a neutral placeholder (e.g.
   `your-control-host.example`). The comment still conveys that the value is the
   host the agent connects to.
-- A case-insensitive search for `django` in
+- A case-insensitive search for the control host's stack name in
   `internal/sandbox/cloud-init.yaml` returns nothing.
 - The file remains valid cloud-config YAML and the meaning of each comment
   (what the operator must fill in) is preserved.

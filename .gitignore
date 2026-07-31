@@ -81,7 +81,7 @@ ehthumbs.db
 Thumbs.db
 
 # Reference projects
-spekk-app-reference/
+*-reference/
 
 # Temporary directory for all development artifacts
 .tmp/

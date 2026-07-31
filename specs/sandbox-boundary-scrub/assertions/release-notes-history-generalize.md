@@ -3,7 +3,7 @@ id: release-notes-history-generalize
 parent: sandbox-boundary-scrub
 created: 2026-07-23T00:00:00Z
 priority: 3
-status: not_started
+status: done
 ---
 
 # Published Release Notes Generalize Control-Host Internals
@@ -12,8 +12,8 @@ status: not_started
 rewrite substance, and do not leave the leak in place.
 
 `docs/release-notes/RELEASE-NOTES-1.3.0.md` is published history in a public
-repo. Its "admin use only" note names the control host's implementation stack
-("partially automated through Django") and presents one chat surface as *the*
+repo. Its "admin use only" note named the control host's implementation stack
+("partially automated through ...") and presented one chat surface as *the*
 integration ("Connecting to Slack is a separate process"). Per this spec's
 boundary, the server is referred to only generically, and a chat surface is
 named only as one example — never as the implementation.
@@ -31,7 +31,8 @@ post-publication to generalize control-host internals.
 ## Success Criteria
 
 - `RELEASE-NOTES-1.3.0.md` no longer names the control host's implementation
-  stack: a case-insensitive search for `django` in the file returns nothing.
+  stack: a case-insensitive search for the stack name in the file returns
+  nothing.
 - It no longer presents a single chat surface as *the* integration. If a chat
   surface is mentioned at all, it appears as one example (e.g. "a chat surface
   such as Slack"), not as the implementation.
@@ -41,7 +42,7 @@ post-publication to generalize control-host internals.
 - A short dated editor's note in the file records that it was edited
   post-publication to generalize control-host details, so the change to
   published history is transparent, not a silent revision.
-- The sweep is re-run across all of `docs/release-notes/`
-  (`grep -rli 'django\|slack' docs/release-notes/`). At authoring time only
-  `RELEASE-NOTES-1.3.0.md` matches; any sibling that surfaces later gets the
+- The sweep is re-run across all of `docs/release-notes/` for the stack name
+  and for chat surfaces framed as the sole integration. At authoring time only
+  `RELEASE-NOTES-1.3.0.md` matched; any sibling that surfaces later gets the
   same treatment.

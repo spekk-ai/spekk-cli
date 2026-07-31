@@ -36,10 +36,10 @@ logs, proxies, and error messages. The token should be presented in an
   this change is **additive only**: send the header now **and keep `wsURL()`
   emitting the path token** as the still-authoritative carrier — do not drop the
   path token in this cycle, as that would break auth.
-- `wsURL()` keeps the `wss://<host>/ws/agent/<token>/` path form, with a comment
-  noting the path token is the current (soon-to-be-deprecated) auth carrier and
-  that removing it is deferred until the control host reads the header. The
-  header is sent in addition, in preparation for that follow-up.
+- `wsURL()` keeps the `wss://<host>/ws/agent/<token>/` path form, with a
+  neutral comment noting the token travels in both the URL path and the
+  `Authorization` header for compatibility. The header is sent in addition, in
+  preparation for the `ws-drop-path-token` follow-up.
 - The `ws` vs `wss` scheme selection (localhost → `ws`) is preserved.
 - A test asserts the dial is invoked with an `Authorization` header whose value
   contains the token.

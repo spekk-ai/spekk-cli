@@ -29,8 +29,8 @@ assertion removes it.
   scheme selection (localhost → `ws`) is preserved.
 - The `Authorization: Bearer <token>` header built in `dialOptions()` is the
   **sole** carrier of the token; no code path puts the token in the URL.
-- The now-stale comment in `wsURL()` describing the path token as the
-  "current (soon-to-be-deprecated) auth carrier" is removed or updated.
+- The now-stale compatibility comment in `wsURL()` (token sent in both the
+  path and the header) is removed or updated.
 - `TestDialOptionsSendsAuthorizationHeader` still passes, and a test asserts the
   URL returned by `wsURL()` does **not** contain the token.
 - **Dial-failure log no longer leaks the token.** With the token out of the
