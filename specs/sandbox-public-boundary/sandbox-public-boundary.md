@@ -9,87 +9,38 @@ priority: 1
 ## Overview
 
 This repository is public. The orchestration server it talks to (the "control
-host") is a separate, private application. This spec states the boundary that
-holds between the two: a public reader of this repo learns nothing about the
-control host's internals, and the agent presents its auth token in a way that
-does not leak into logs.
+host") is a separate, private application. A boundary holds between the two:
+a public reader of this repo learns nothing about the control host's
+internals.
 
-When this spec was created, several shipped files broke that boundary — they
-named the implementation stack, a private repo name, and a specific admin URL
-shape — and one file put the agent's auth token in the WebSocket URL path.
-The assertions below record each violation and the condition that now holds.
+This is a standing condition, not a one-time cleanup. Violations have
+recurred: an initial sweep cleaned the shipped code, and new leaks appeared
+in later commits within days. The history of the individual cleanups lives in
+git history and in the PRs that closed them.
 
-## What the boundary allows
+## The boundary
 
-- Referring to the server only generically: "control host", "orchestration
-  server", or a neutral host placeholder.
-- Naming a chat surface (e.g. Slack) only as **one example** of what a control
-  host might bridge to — never as the implementation.
-
-## What must not appear in shipped public files
+Shipped public files (code, config, docs, specs, release notes) must not
+name:
 
 - The control host's implementation stack.
 - The control host's private repository name.
-- A specific private hostname presented as *the* host (neutral placeholders are
-  fine).
+- A specific private hostname presented as *the* host (neutral placeholders
+  are fine).
 - Internal admin URL structure of the control host.
 
-## In scope (each an assertion below)
+Allowed:
 
-Concrete leak sites found by sweeping `*.go` / `*.yaml` in shipped code:
+- Referring to the server generically: "control host", "orchestration
+  server", or a neutral host placeholder.
+- Naming a chat surface (e.g. Slack) as **one example** of what a control
+  host might bridge to — never as the implementation.
+- Example prompts that name popular frameworks to describe a hypothetical
+  *user's* project.
 
-- `internal/sandbox/cloud-init.yaml` — a comment that named the control host's
-  stack, and a host example that used the real private hostname.
-- `internal/sandbox/release.go` — a comment sourcing artifacts from a release
-  of the private server repo, named directly; the code constant already
-  points at the public repo, so the comment was both a leak and stale.
-- `internal/sandbox/commands.go` — user-facing CLI output that named the stack
-  and pointed the operator at the control-host admin page via its internal
-  URL path.
-- `cmd/sandbox/client.go` — the agent auth token is embedded in the WebSocket
-  URL path; move it to an `Authorization` header (hardening, coordinated with
-  the control host). The additive header landed in `ws-auth-header`; the
-  follow-up removal of the path token is tracked in `ws-drop-path-token`.
-
-## Deferred to later cycles (now tracked as queued assertions below)
-
-The sweep also found these mentions. They were left out of the original code
-cycle so it stayed lean, and are now queued as their own lower-priority
-assertions rather than left unaddressed:
-
-- `docs/release-notes/RELEASE-NOTES-1.3.0.md` names the stack and presents one
-  chat surface as *the* integration. Release notes are published history, so
-  the edit is a meaning-preserving generalization — tracked in
-  `release-notes-history-generalize` (P3).
-- `.gitignore` ignores a reference path whose name embeds the private server
-  repo's name. Renaming it forces a local-workflow change — tracked in
-  `gitignore-neutral-reference-path` (P3).
-
-Already reconciled (no queued assertion needed):
-
-- `specs/sandbox-go-release/` (spec text and its assertions) named the private
-  repo and still described the pre-Go `*.js` layout. That spec drift has been
-  corrected in place to describe the current Go reality (Go binary downloaded
-  from the public `spekk-ai/spekk-cli` release, cloud-init embedded).
-
-Intentionally left alone (not leaks):
-
-- Example prompt snippets in `README.md`, `docs/configuration.md`, and the
-  `layered-prompt-system` spec name popular web frameworks in phrases like
-  "a `<framework>` project" — these describe a hypothetical *user's* project,
-  not the control host, so they are not leaks.
+The same rule is stated for contributors in `CONTRIBUTING.md`.
 
 ## Assertions
 
-1. `cloud-init-neutral-comments` — cloud-init.yaml comments are neutral (done)
-2. `release-comment-generic` — the release.go comment names no private repo
-   (done)
-3. `cli-output-no-stack` — the sandbox CLI's "add this agent" output names no
-   stack or admin path (done)
-4. `ws-auth-header` — the auth token rides in an Authorization header (done)
-5. `ws-drop-path-token` — the token is absent from the WebSocket URL path (P2,
-   draft; blocked on the control host reading the header)
-6. `release-notes-history-generalize` — published release notes contain no
-   control-host internals (done)
-7. `gitignore-neutral-reference-path` — the ignored reference path embeds no
-   private repo name (done)
+1. `public-files-neutral` — shipped public files stay inside the boundary
+   (done; re-verify on review whenever a file mentions the control host)
