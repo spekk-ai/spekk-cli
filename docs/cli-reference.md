@@ -212,8 +212,21 @@ Schema:
 | `specs` | `id`, `title`, `status`, `priority`, `branch`, `file` |
 | `assertions` | `id`, `parent_id` (→ `specs.id`), `title`, `status`, `priority`, `branch`, `file` |
 | `depends_on` | `assertion_id`, `depends_on_id` (both → `assertions.id`) |
+| `frontmatter_fields` | `owner_type` (`spec` \| `assertion`), `owner_id`, `key`, `value` |
 
 `depends_on` holds **assertion-level** edges only; spec-level relationships are not modeled as data (see the spec bodies).
+
+### Custom frontmatter fields
+
+Any frontmatter key outside the known set (`id`, `parent`, `created`, `priority`, `status`, `branch`, `depends-on`, `locked-by`) is a **custom field**. `spekk validate` accepts it without warnings, and the index stores it in `frontmatter_fields` — one row per value. Three multi-value spellings index identically: a flow sequence (`tags: [infrastructure, hipaa]`), a bare comma-separated scalar (`workflows: w1-note-and-claim, w2-claim-reimbursement`), and a YAML block list (`- item` lines). This makes per-tag reporting one query:
+
+```bash
+spekk query "SELECT f.value AS workflow, COUNT(*) AS total, SUM(a.status = 'done') AS done
+  FROM assertions a
+  JOIN frontmatter_fields f
+    ON f.owner_type = 'assertion' AND f.owner_id = a.id AND f.key = 'workflows'
+  GROUP BY f.value"
+```
 
 ---
 

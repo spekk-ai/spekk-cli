@@ -26,6 +26,9 @@ type Assertion struct {
 	File      string
 	Title     string
 	Content   string
+	// Fields holds custom frontmatter keys (everything outside the known
+	// set) with their raw values. nil when the file has none.
+	Fields map[string]string
 }
 
 // Spec represents a parsed spec group with its frontmatter and content.
@@ -38,6 +41,9 @@ type Spec struct {
 	File     string
 	Title    string
 	Content  string
+	// Fields holds custom frontmatter keys (everything outside the known
+	// set) with their raw values. nil when the file has none.
+	Fields map[string]string
 }
 
 // ParseResult holds the full result of parsing a specs directory.
@@ -46,9 +52,25 @@ type ParseResult struct {
 	Assertions []Assertion
 }
 
-// frontmatter holds raw parsed YAML frontmatter fields.
+// frontmatter holds raw parsed YAML frontmatter fields. Scalar values live
+// in fields; block-list items (`- foo` lines under a bare `key:`) live in
+// lists, so known-key scalar handling stays byte-for-byte unchanged.
 type frontmatter struct {
 	fields map[string]string
+	lists  map[string][]string
+}
+
+// knownFrontmatterKeys are the keys the parser maps onto Spec/Assertion
+// struct fields. Every other key is a custom field, preserved on Fields.
+var knownFrontmatterKeys = map[string]bool{
+	"id":         true,
+	"parent":     true,
+	"created":    true,
+	"priority":   true,
+	"status":     true,
+	"branch":     true,
+	"depends-on": true,
+	"locked-by":  true,
 }
 
 func (f *frontmatter) get(key string) string {
@@ -91,24 +113,44 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	yamlLines := lines[1:frontmatterEnd]
 	markdownContent := strings.Join(lines[frontmatterEnd+1:], "\n")
 
-	fm := &frontmatter{fields: make(map[string]string)}
+	fm := &frontmatter{
+		fields: make(map[string]string),
+		lists:  make(map[string][]string),
+	}
+
+	// The key a following block-list item belongs to: the most recent
+	// `key:` line with an empty value.
+	pendingListKey := ""
 
 	for _, line := range yamlLines {
-		if strings.TrimSpace(line) == "" {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
 			continue
 		}
-		// Skip YAML array items (we only handle scalar values).
-		if strings.HasPrefix(strings.TrimSpace(line), "- ") {
+		// A YAML block-list item. Collect it under the key that opened the
+		// list; scalar handling below stays unchanged.
+		if strings.HasPrefix(trimmed, "- ") {
+			if pendingListKey != "" {
+				item := stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+				fm.lists[pendingListKey] = append(fm.lists[pendingListKey], item)
+			}
 			continue
 		}
 
 		colonIdx := strings.Index(line, ":")
 		if colonIdx == -1 {
+			pendingListKey = ""
 			continue
 		}
 
 		key := strings.TrimSpace(line[:colonIdx])
 		value := strings.TrimSpace(line[colonIdx+1:])
+
+		if value == "" {
+			pendingListKey = key
+		} else {
+			pendingListKey = ""
+		}
 
 		// Strip surrounding quotes if present.
 		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
@@ -119,6 +161,58 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	}
 
 	return fm, markdownContent, nil
+}
+
+// stripQuotes removes one matching pair of surrounding double or single
+// quotes.
+func stripQuotes(s string) string {
+	if len(s) >= 2 &&
+		((s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'')) {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
+// customFields returns every frontmatter key outside the known set, with its
+// raw value. A block list is joined into one comma-separated scalar, so every
+// list spelling reaches consumers in the same shape. Returns nil when the
+// file has no custom fields.
+func customFields(fm *frontmatter) map[string]string {
+	out := make(map[string]string)
+	for k, v := range fm.fields {
+		if knownFrontmatterKeys[k] {
+			continue
+		}
+		if items, ok := fm.lists[k]; ok && v == "" {
+			out[k] = strings.Join(items, ", ")
+		} else {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// SplitFieldValues splits a custom frontmatter value into its items. Three
+// spellings produce the same items: a flow sequence (`[a, b]`), a bare
+// comma-separated scalar (`a, b`), and a single scalar (`a`). Items are
+// trimmed and one pair of surrounding quotes is removed per item. An empty
+// value yields nil.
+func SplitFieldValues(value string) []string {
+	v := strings.TrimSpace(value)
+	if strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]") && len(v) >= 2 {
+		v = v[1 : len(v)-1]
+	}
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		p := stripQuotes(strings.TrimSpace(part))
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // extractTitle finds the first H1 heading in markdown content.
@@ -230,6 +324,7 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 		File:     relFilePath,
 		Title:    extractTitle(body),
 		Content:  strings.TrimSpace(body),
+		Fields:   customFields(fm),
 	}, nil
 }
 
@@ -297,6 +392,7 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		File:      relFilePath,
 		Title:     extractTitle(body),
 		Content:   strings.TrimSpace(body),
+		Fields:    customFields(fm),
 	}, nil
 }
 

@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -49,6 +50,15 @@ CREATE TABLE IF NOT EXISTS assertions (
 CREATE TABLE IF NOT EXISTS depends_on (
   assertion_id  TEXT REFERENCES assertions(id),
   depends_on_id TEXT REFERENCES assertions(id)
+);
+-- Custom frontmatter fields (keys outside the known set) on specs and
+-- assertions. Multi-value spellings ([a, b] / a, b) are split into one row
+-- per value, so a query can filter and aggregate on any custom tag.
+CREATE TABLE IF NOT EXISTS frontmatter_fields (
+  owner_type TEXT,   -- 'spec' | 'assertion'
+  owner_id   TEXT,
+  key        TEXT,
+  value      TEXT
 );
 -- Observation tables mirror the observation frontmatter schema
 -- (specs/observation-lifecycle/): one row per (slug, ref) pair read from the
@@ -85,6 +95,7 @@ CREATE TABLE IF NOT EXISTS index_meta (
 
 const dropTables = `
 DROP TABLE IF EXISTS depends_on;
+DROP TABLE IF EXISTS frontmatter_fields;
 DROP TABLE IF EXISTS assertions;
 DROP TABLE IF EXISTS specs;
 DROP TABLE IF EXISTS observation_files;
@@ -99,8 +110,9 @@ DROP TABLE IF EXISTS index_meta;
 // first use.
 //
 // Version history: 1 = specs/assertions/depends_on; 2 adds the observation
-// tables (observations, observation_files, index_meta).
-const schemaVersion = 2
+// tables (observations, observation_files, index_meta); 3 adds
+// frontmatter_fields.
+const schemaVersion = 3
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
@@ -160,7 +172,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	defer tx.Rollback() //nolint:errcheck
 
 	// Clear existing rows for idempotency (delete-all + re-insert).
-	for _, table := range []string{"depends_on", "assertions", "specs", "observation_files", "observations", "index_meta"} {
+	for _, table := range []string{"depends_on", "frontmatter_fields", "assertions", "specs", "observation_files", "observations", "index_meta"} {
 		if _, err = tx.Exec("DELETE FROM " + table); err != nil {
 			return stats, fmt.Errorf("cannot clear %s: %w", table, err)
 		}
@@ -173,6 +185,9 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 			s.ID, s.Title, s.Status, s.Priority, s.Branch, s.File,
 		); err != nil {
 			return stats, fmt.Errorf("cannot insert spec %q: %w", s.ID, err)
+		}
+		if err = insertFrontmatterFields(tx, "spec", s.ID, s.Fields); err != nil {
+			return stats, err
 		}
 	}
 
@@ -192,6 +207,10 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 			); err != nil {
 				return stats, fmt.Errorf("cannot insert depends_on edge for %q: %w", a.ID, err)
 			}
+		}
+
+		if err = insertFrontmatterFields(tx, "assertion", a.ID, a.Fields); err != nil {
+			return stats, err
 		}
 	}
 
@@ -217,6 +236,29 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	stats.Observations = obsCount
 	stats.Warnings = warnings
 	return stats, nil
+}
+
+// insertFrontmatterFields writes one row per (key, value) for an owner's
+// custom frontmatter fields. Multi-value spellings are split by
+// parser.SplitFieldValues, so `[a, b]`, `a, b`, and a block list index as
+// identical rows.
+func insertFrontmatterFields(tx *sql.Tx, ownerType, ownerID string, fields map[string]string) error {
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		for _, value := range parser.SplitFieldValues(fields[key]) {
+			if _, err := tx.Exec(
+				`INSERT INTO frontmatter_fields (owner_type, owner_id, key, value) VALUES (?, ?, ?, ?)`,
+				ownerType, ownerID, key, value,
+			); err != nil {
+				return fmt.Errorf("cannot insert frontmatter field %q for %s %q: %w", key, ownerType, ownerID, err)
+			}
+		}
+	}
+	return nil
 }
 
 // indexObservations populates the observation tables inside the build

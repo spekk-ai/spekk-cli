@@ -358,3 +358,109 @@ func TestEnsureFreshRebuildsOnSchemaMismatch(t *testing.T) {
 		t.Errorf("assertions after rebuild: expected 2, got %d", n)
 	}
 }
+
+// makeSpecsWithCustomFields creates a specs directory whose spec and
+// assertion carry custom frontmatter fields in the three multi-value
+// spellings (comma scalar, flow sequence, block list).
+func makeSpecsWithCustomFields(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+
+	specDir := filepath.Join(specsDir, "spec-a")
+	assertDir := filepath.Join(specDir, "assertions")
+	must(t, os.MkdirAll(assertDir, 0o755))
+	must(t, os.WriteFile(filepath.Join(specDir, "spec-a.md"), []byte(`---
+id: spec-a
+created: 2026-01-01T00:00:00Z
+priority: 1
+workflows: w1-note-and-claim, w2-claim-reimbursement
+---
+# Spec A
+`), 0o644))
+	must(t, os.WriteFile(filepath.Join(assertDir, "assert-one.md"), []byte(`---
+id: assert-one
+parent: spec-a
+created: 2026-01-01T00:00:00Z
+priority: 1
+status: done
+workflows: w1-note-and-claim
+tags: [infrastructure, hipaa]
+reviewers:
+- alice
+- bob
+---
+# Assert One
+`), 0o644))
+	return specsDir
+}
+
+func TestBuildIndexFrontmatterFields(t *testing.T) {
+	specsDir := makeSpecsWithCustomFields(t)
+	dbPath := filepath.Join(filepath.Dir(specsDir), ".spekk", "index.db")
+
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+		t.Fatalf("BuildIndex failed: %v", err)
+	}
+
+	db := openDB(t, dbPath)
+
+	type row struct{ ownerType, ownerID, key, value string }
+	want := []row{
+		{"assertion", "assert-one", "reviewers", "alice"},
+		{"assertion", "assert-one", "reviewers", "bob"},
+		{"assertion", "assert-one", "tags", "hipaa"},
+		{"assertion", "assert-one", "tags", "infrastructure"},
+		{"assertion", "assert-one", "workflows", "w1-note-and-claim"},
+		{"spec", "spec-a", "workflows", "w1-note-and-claim"},
+		{"spec", "spec-a", "workflows", "w2-claim-reimbursement"},
+	}
+
+	rows, err := db.Query(`SELECT owner_type, owner_id, key, value FROM frontmatter_fields ORDER BY owner_type, owner_id, key, value`)
+	if err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	defer rows.Close()
+
+	var got []row
+	for rows.Next() {
+		var r row
+		must(t, rows.Scan(&r.ownerType, &r.ownerID, &r.key, &r.value))
+		got = append(got, r)
+	}
+	must(t, rows.Err())
+
+	if len(got) != len(want) {
+		t.Fatalf("expected %d rows, got %d: %v", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row %d: expected %v, got %v", i, want[i], got[i])
+		}
+	}
+}
+
+func TestBuildIndexFrontmatterFieldsJoin(t *testing.T) {
+	// The report from issue #165: percent-complete per workflow via one
+	// SQL join.
+	specsDir := makeSpecsWithCustomFields(t)
+	dbPath := filepath.Join(filepath.Dir(specsDir), ".spekk", "index.db")
+
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+		t.Fatalf("BuildIndex failed: %v", err)
+	}
+
+	db := openDB(t, dbPath)
+	var total, done int
+	err := db.QueryRow(`SELECT COUNT(*), SUM(a.status = 'done')
+		FROM assertions a
+		JOIN frontmatter_fields f
+		  ON f.owner_type = 'assertion' AND f.owner_id = a.id AND f.key = 'workflows'
+		WHERE f.value = 'w1-note-and-claim'`).Scan(&total, &done)
+	if err != nil {
+		t.Fatalf("join query failed: %v", err)
+	}
+	if total != 1 || done != 1 {
+		t.Errorf("expected total=1 done=1, got total=%d done=%d", total, done)
+	}
+}

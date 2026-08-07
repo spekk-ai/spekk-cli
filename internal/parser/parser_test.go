@@ -1378,3 +1378,101 @@ func TestParseAllSpecs_ProjectSpecs(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Custom frontmatter fields
+// ---------------------------------------------------------------------------
+
+func TestParseAssertion_CustomFieldsPreserved(t *testing.T) {
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nstatus: done\nworkflows: w5-patient-insurance-case\ntags: [infrastructure, hipaa]\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Fields["workflows"] != "w5-patient-insurance-case" {
+		t.Errorf("expected workflows field preserved, got %q", a.Fields["workflows"])
+	}
+	if a.Fields["tags"] != "[infrastructure, hipaa]" {
+		t.Errorf("expected raw tags value preserved, got %q", a.Fields["tags"])
+	}
+	for _, known := range []string{"id", "parent", "created", "priority", "status"} {
+		if _, ok := a.Fields[known]; ok {
+			t.Errorf("known key %q must not appear in Fields", known)
+		}
+	}
+}
+
+func TestParseSpec_CustomFieldsPreserved(t *testing.T) {
+	content := "---\nid: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nworkflows: w1-note-and-claim, w2-claim-reimbursement\n---\n# S1\n"
+	s, err := parseSpec("specs/s1/s1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.Fields["workflows"] != "w1-note-and-claim, w2-claim-reimbursement" {
+		t.Errorf("expected workflows field preserved, got %q", s.Fields["workflows"])
+	}
+}
+
+func TestParseSpec_NoCustomFieldsIsNil(t *testing.T) {
+	content := "---\nid: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\n---\n# S1\n"
+	s, err := parseSpec("specs/s1/s1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.Fields != nil {
+		t.Errorf("expected nil Fields, got %v", s.Fields)
+	}
+}
+
+func TestParseFrontmatter_BlockListCollected(t *testing.T) {
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\ntags:\n- infrastructure\n- \"hipaa\"\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Fields["tags"] != "infrastructure, hipaa" {
+		t.Errorf("expected block list joined to comma scalar, got %q", a.Fields["tags"])
+	}
+}
+
+func TestParseFrontmatter_BlockListDoesNotChangeKnownKeys(t *testing.T) {
+	// A block list under a known key stays invisible to the struct field,
+	// exactly as before.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\ndepends-on:\n- other\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.DependsOn != "" {
+		t.Errorf("expected empty DependsOn for block-list spelling, got %q", a.DependsOn)
+	}
+}
+
+func TestSplitFieldValues(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{"single scalar", "w1-note-and-claim", []string{"w1-note-and-claim"}},
+		{"comma scalar", "w1-note-and-claim, w2-claim-reimbursement", []string{"w1-note-and-claim", "w2-claim-reimbursement"}},
+		{"flow sequence", "[infrastructure, hipaa]", []string{"infrastructure", "hipaa"}},
+		{"flow sequence quoted", `["infrastructure", 'hipaa']`, []string{"infrastructure", "hipaa"}},
+		{"empty", "", nil},
+		{"empty flow", "[]", nil},
+		{"stray commas", "a,, b, ", []string{"a", "b"}},
+	}
+	for _, c := range cases {
+		got := SplitFieldValues(c.in)
+		if len(got) != len(c.want) {
+			t.Errorf("%s: expected %v, got %v", c.name, c.want, got)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: expected %v, got %v", c.name, c.want, got)
+				break
+			}
+		}
+	}
+}
