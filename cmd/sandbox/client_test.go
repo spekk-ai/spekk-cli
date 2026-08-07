@@ -6,15 +6,15 @@ import (
 	"log"
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- ws auth ---
 
-// TestDialOptionsSendsAuthorizationHeader verifies the dial options carry
-// the agent token as a Bearer Authorization header, in addition to (not
-// instead of) the token wsURL() still embeds in the path. This is additive:
-// the control host authenticates on the path token today and does not yet
-// read the header, so both carriers must be present this cycle.
+// TestDialOptionsSendsAuthorizationHeader verifies the dial options carry the
+// agent token as a Bearer Authorization header. Since the path token was
+// dropped, this header is the sole carrier: if it stops being sent, the agent
+// cannot authenticate at all.
 func TestDialOptionsSendsAuthorizationHeader(t *testing.T) {
 	c := &AgentClient{cfg: Config{Token: "secret-token", Host: "example.com"}}
 
@@ -25,9 +25,60 @@ func TestDialOptionsSendsAuthorizationHeader(t *testing.T) {
 	if got != want {
 		t.Errorf("Authorization header = %q, want %q", got, want)
 	}
+}
 
-	if url := c.wsURL(); !strings.Contains(url, "/ws/agent/secret-token/") {
-		t.Errorf("wsURL() = %q, still expected to carry the path token", url)
+// TestWSURLOmitsToken pins the token out of the dial URL. A token in the path
+// reaches access logs, proxy logs, and any error string that echoes the target.
+func TestWSURLOmitsToken(t *testing.T) {
+	c := &AgentClient{cfg: Config{Token: "secret-token", Host: "example.com"}}
+
+	url := c.wsURL()
+
+	if strings.Contains(url, "secret-token") {
+		t.Errorf("wsURL() = %q, must not contain the token", url)
+	}
+	if want := "wss://example.com/ws/agent/"; url != want {
+		t.Errorf("wsURL() = %q, want %q", url, want)
+	}
+}
+
+// TestWSURLKeepsLocalhostScheme guards the ws/wss selection, which is easy to
+// lose when editing the format string.
+func TestWSURLKeepsLocalhostScheme(t *testing.T) {
+	for host, want := range map[string]string{
+		"localhost:8000": "ws://localhost:8000/ws/agent/",
+		"example.com":    "wss://example.com/ws/agent/",
+	} {
+		c := &AgentClient{cfg: Config{Token: "t", Host: host}}
+		if got := c.wsURL(); got != want {
+			t.Errorf("wsURL() for %q = %q, want %q", host, got, want)
+		}
+	}
+}
+
+// TestDialFailureLogOmitsToken covers the assertion's log-leak criterion.
+// Run() logs the wrapped dial error on every reconnect. websocket.Dial embeds
+// the target URL in that error, so the log could only ever have carried the
+// token while wsURL() held it. Dialling an unroutable host exercises the real
+// error path rather than reasoning about it.
+func TestDialFailureLogOmitsToken(t *testing.T) {
+	buf := captureLog(t)
+	c := &AgentClient{cfg: Config{Token: "secret-token", Host: "127.0.0.1:1"}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := c.connect(ctx)
+	if err == nil {
+		t.Fatal("expected the dial to fail against an unroutable port")
+	}
+	if strings.Contains(err.Error(), "secret-token") {
+		t.Errorf("dial error leaks the token: %q", err)
+	}
+
+	log.Printf("Connection lost: %v. Reconnecting...", err)
+	if strings.Contains(buf.String(), "secret-token") {
+		t.Errorf("reconnect log leaks the token: %q", buf.String())
 	}
 }
 
