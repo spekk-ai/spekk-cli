@@ -13,6 +13,7 @@ import (
 	spekk "github.com/spekk-ai/spekk-cli"
 	"github.com/spekk-ai/spekk-cli/internal/agent"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/formatter"
 	"github.com/spekk-ai/spekk-cli/internal/index"
 	"github.com/spekk-ai/spekk-cli/internal/install"
@@ -232,6 +233,8 @@ func execList(args []string, stdout, stderr io.Writer, specsDir string) int {
 		"tsv":            {Names: []string{"--tsv"}, Type: cli.BoolFlag},
 		"csv":            {Names: []string{"--csv"}, Type: cli.BoolFlag},
 		"long":           {Names: []string{"--long", "-l"}, Type: cli.BoolFlag},
+		"crossBranch":    {Names: []string{"--cross-branch"}, Type: cli.BoolFlag},
+		"branchFilter":   {Names: []string{"--branch-filter"}, Type: cli.StringFlag},
 		"help":           {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -255,6 +258,15 @@ FILTER OPTIONS:
   --specs-dir <path>    Read specs from a specific directory (default: git root specs/)
   --help, -h            Show this help message
 
+CROSS-BRANCH MODE:
+  --cross-branch           List spec/assertion state across all branches
+                           instead of assertions: one row per changed
+                           (file, branch) pair with columns path, branch,
+                           state (incoming_add, incoming_mod, conflict,
+                           incoming_del), degraded, old_status, new_status.
+                           Read-only; never touches the working tree.
+  --branch-filter <glob>   Only include branches matching the glob (e.g. 'feat/*')
+
 NOTES:
   The default output shows all assertions. Hierarchy output is available via spekk next --all.
 
@@ -268,6 +280,8 @@ EXAMPLES:
   spekk list --status draft --tsv
   spekk list --assertions-only --csv
   spekk list --specs-dir /path/to/specs
+  spekk list --cross-branch --json
+  spekk list --cross-branch --branch-filter 'feat/*' --json
 `)
 		return 0
 	}
@@ -291,6 +305,18 @@ EXAMPLES:
 	}
 	if formatCount > 1 {
 		fmt.Fprintln(stderr, "Error: --json, --tsv, and --csv are mutually exclusive; use at most one")
+		return 1
+	}
+
+	if flags.Bool("crossBranch") {
+		if statusVal != "" {
+			fmt.Fprintln(stderr, "Error: --status does not apply to --cross-branch output")
+			return 1
+		}
+		return execListCrossBranch(flags.String("branchFilter"), stdout, stderr, useJSON, useTSV, useCSV)
+	}
+	if flags.String("branchFilter") != "" {
+		fmt.Fprintln(stderr, "Error: --branch-filter requires --cross-branch")
 		return 1
 	}
 
@@ -371,6 +397,44 @@ EXAMPLES:
 	default:
 		// Default: human-readable table.
 		fmt.Fprintln(stdout, formatter.FormatTable(rows, opts))
+	}
+	return 0
+}
+
+// execListCrossBranch renders the cross-branch classification — the same
+// read-only engine behind `spekk show --cross-branch` — as machine-readable
+// rows, one per changed (file, branch) pair. This is the surface an observer
+// agent consumes; the HTML explorer stays the human surface.
+func execListCrossBranch(branchFilter string, stdout, stderr io.Writer, useJSON, useTSV, useCSV bool) int {
+	states, _, err := crossbranch.Classify(branchFilter)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", err)
+		return 1
+	}
+
+	switch {
+	case useJSON:
+		out, jerr := crossbranch.FormatJSON(states)
+		if jerr != nil {
+			fmt.Fprintf(stderr, "Error: %s\n", jerr)
+			return 1
+		}
+		fmt.Fprintln(stdout, out)
+	case useTSV:
+		fmt.Fprint(stdout, formatter.RenderTSV(crossbranch.OutputColumns, crossbranch.OutputRows(states)))
+	case useCSV:
+		fmt.Fprint(stdout, formatter.RenderCSV(crossbranch.OutputColumns, crossbranch.OutputRows(states)))
+	default:
+		if len(states) == 0 {
+			fmt.Fprintln(stdout, "No cross-branch spec changes.")
+			return 0
+		}
+		hdr := make([]string, len(crossbranch.OutputColumns))
+		for i, c := range crossbranch.OutputColumns {
+			hdr[i] = strings.ToUpper(c)
+		}
+		matrix := append([][]string{hdr}, crossbranch.OutputRows(states)...)
+		fmt.Fprintln(stdout, formatter.RenderTable(matrix))
 	}
 	return 0
 }
