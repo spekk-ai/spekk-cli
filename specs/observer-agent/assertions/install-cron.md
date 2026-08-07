@@ -83,13 +83,18 @@ non-functional. Each installed line must satisfy all of:
   an `O_CREATE | O_RDWR` file descriptor before launching Claude.
   `syscall.Flock` is available on both macOS and Linux and needs no external
   binary; the kernel releases the lock automatically when the process exits. A
-  new invocation that cannot acquire the lock exits 0 silently (this is the
-  normal "already running" case, not an error). The lock files are
-  project-scoped, living under `<project-dir>/.spekk/` (e.g.
-  `.spekk/observer-loop.lock` and `.spekk/observer-consolidate.lock`), never
-  under a global path like `/tmp` — otherwise two projects on the same machine
-  would share one lock and silently starve each other. The loop entry and the
-  consolidate entry use distinct lock files so they do not block each other.
+  new invocation that cannot acquire the lock exits 0 (this is the normal
+  "already running" case, not an error), but first prints one line naming the
+  held lock file — a cron log that shows nothing cannot be told apart from a
+  run that never happened. The lock files are project-scoped, living under
+  `<project-dir>/.spekk/`, never under a global path like `/tmp` — otherwise
+  two projects on the same machine would share one lock and silently starve
+  each other. Each headless run locks a file derived from what it runs: the
+  default loop locks `.spekk/observer-loop.lock`, and a skill run locks
+  `.spekk/observer-<skill>.lock` (so `consolidate` locks
+  `.spekk/observer-consolidate.lock`). Distinct lock files mean the loop, the
+  consolidate entry, and any scheduled custom skill never block each other —
+  only two invocations of the same thing overlap on a lock.
 
 ### Interval validation rejects non-cron-expressible values
 

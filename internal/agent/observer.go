@@ -4,11 +4,30 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
+
+// lockNameSafe collapses every character that is not safe in a single file
+// name segment, so a skill name can never place the lock outside .spekk/.
+var lockNameSafe = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+// ObserverLockFile returns the flock path for a headless observer run.
+// Each skill locks its own file (`.spekk/observer-<skill>.lock`), so a
+// scheduled skill run does not exit only because the default loop is
+// active. The default loop (empty skillName) keeps
+// `.spekk/observer-loop.lock`, and `consolidate` keeps
+// `.spekk/observer-consolidate.lock` under the same rule.
+func ObserverLockFile(wd, skillName string) string {
+	name := "observer-loop.lock"
+	if skillName != "" {
+		name = "observer-" + lockNameSafe.ReplaceAllString(skillName, "-") + ".lock"
+	}
+	return filepath.Join(wd, ".spekk", name)
+}
 
 // ObserverFlags defines the flag set for the observer CLI.
 var ObserverFlags = cli.FlagSet{
@@ -97,7 +116,7 @@ func RunObserver(args []string, installDir string) {
 			Cwd:        cwd(),
 			InstallDir: installDir,
 		}
-		if sr.ResolveSkill("observer", skillName) != nil {
+		if skill := sr.ResolveSkill("observer", skillName); skill != nil {
 			fmt.Println("Launching Observer Agent with skill:", skillName)
 			wd, _ := os.Getwd()
 			fmt.Println("Working directory:", wd)
@@ -129,10 +148,7 @@ func RunObserver(args []string, installDir string) {
 			}
 			if cfg.Headless {
 				wd, _ := os.Getwd()
-				lockFile := filepath.Join(wd, ".spekk", "observer-loop.lock")
-				if skillName == "consolidate" {
-					lockFile = filepath.Join(wd, ".spekk", "observer-consolidate.lock")
-				}
+				lockFile := ObserverLockFile(wd, skill.Name)
 				if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 					os.Exit(1)
@@ -176,7 +192,7 @@ func RunObserver(args []string, installDir string) {
 
 	if cfg.Headless {
 		wd, _ := os.Getwd()
-		lockFile := filepath.Join(wd, ".spekk", "observer-loop.lock")
+		lockFile := ObserverLockFile(wd, "")
 		if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
