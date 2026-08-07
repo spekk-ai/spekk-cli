@@ -26,6 +26,11 @@ type Assertion struct {
 	File      string
 	Title     string
 	Content   string
+	// Fields holds custom frontmatter keys (everything outside the known
+	// set) with their parsed values, one entry per item — every list
+	// spelling (flow sequence, comma scalar, block list) arrives in the
+	// same shape. nil when the file has none.
+	Fields map[string][]string
 }
 
 // Spec represents a parsed spec group with its frontmatter and content.
@@ -38,6 +43,11 @@ type Spec struct {
 	File     string
 	Title    string
 	Content  string
+	// Fields holds custom frontmatter keys (everything outside the known
+	// set) with their parsed values, one entry per item — every list
+	// spelling (flow sequence, comma scalar, block list) arrives in the
+	// same shape. nil when the file has none.
+	Fields map[string][]string
 }
 
 // ParseResult holds the full result of parsing a specs directory.
@@ -46,9 +56,29 @@ type ParseResult struct {
 	Assertions []Assertion
 }
 
-// frontmatter holds raw parsed YAML frontmatter fields.
+// frontmatter holds raw parsed YAML frontmatter fields. Scalar values live
+// in fields (double quotes stripped), so known-key handling stays
+// byte-for-byte unchanged. The custom-field layer reads from raw and lists
+// instead: raw keeps the unstripped scalar of every top-level key (so a
+// quoted scalar is still recognizable as one value), and lists holds
+// block-list items (`- foo` lines under a bare `key:`).
 type frontmatter struct {
 	fields map[string]string
+	raw    map[string]string
+	lists  map[string][]string
+}
+
+// knownFrontmatterKeys are the keys the parser maps onto Spec/Assertion
+// struct fields. Every other key is a custom field, preserved on Fields.
+var knownFrontmatterKeys = map[string]bool{
+	"id":         true,
+	"parent":     true,
+	"created":    true,
+	"priority":   true,
+	"status":     true,
+	"branch":     true,
+	"depends-on": true,
+	"locked-by":  true,
 }
 
 func (f *frontmatter) get(key string) string {
@@ -91,24 +121,64 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	yamlLines := lines[1:frontmatterEnd]
 	markdownContent := strings.Join(lines[frontmatterEnd+1:], "\n")
 
-	fm := &frontmatter{fields: make(map[string]string)}
+	fm := &frontmatter{
+		fields: make(map[string]string),
+		raw:    make(map[string]string),
+		lists:  make(map[string][]string),
+	}
+
+	// The key a following block-list item belongs to: the most recent
+	// top-level `key:` line with an empty value.
+	pendingListKey := ""
 
 	for _, line := range yamlLines {
-		if strings.TrimSpace(line) == "" {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
 			continue
 		}
-		// Skip YAML array items (we only handle scalar values).
-		if strings.HasPrefix(strings.TrimSpace(line), "- ") {
+		// A YAML block-list item. Collect it under the key that opened the
+		// list. The item is kept whole — commas inside an item never split.
+		if strings.HasPrefix(trimmed, "- ") {
+			if pendingListKey != "" {
+				item := stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+				if item != "" {
+					fm.lists[pendingListKey] = append(fm.lists[pendingListKey], item)
+				}
+			}
 			continue
 		}
+		// A YAML comment. Invisible, and it does not interrupt a block list.
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		// An indented line is a nested child (nested map, block-scalar
+		// body). It must not become a top-level custom field or close an
+		// open block list. The fields map still records it for byte-for-byte
+		// compatibility with the known-key scanner.
+		indented := line[0] == ' ' || line[0] == '\t'
 
 		colonIdx := strings.Index(line, ":")
 		if colonIdx == -1 {
+			if !indented {
+				pendingListKey = ""
+			}
 			continue
 		}
 
 		key := strings.TrimSpace(line[:colonIdx])
 		value := strings.TrimSpace(line[colonIdx+1:])
+
+		if !indented {
+			if value == "" {
+				pendingListKey = key
+			} else {
+				pendingListKey = ""
+			}
+			if key != "" {
+				fm.raw[key] = value
+			}
+		}
 
 		// Strip surrounding quotes if present.
 		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
@@ -119,6 +189,121 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	}
 
 	return fm, markdownContent, nil
+}
+
+// stripQuotes removes one matching pair of surrounding double or single
+// quotes.
+func stripQuotes(s string) string {
+	if len(s) >= 2 &&
+		((s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'')) {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
+// customFields returns every top-level frontmatter key outside the known
+// set, with its values already split into items. Three list spellings
+// produce identical items: a flow sequence (`[a, b]`), a bare
+// comma-separated scalar (`a, b`), and a block list (whose items are never
+// re-split, so an item may contain commas). Nested-map children, comments,
+// empty keys, and block-scalar bodies never appear. Returns nil when the
+// file has no custom fields.
+func customFields(fm *frontmatter) map[string][]string {
+	out := make(map[string][]string)
+	for k, raw := range fm.raw {
+		if knownFrontmatterKeys[k] {
+			continue
+		}
+		var values []string
+		if items, ok := fm.lists[k]; ok && raw == "" {
+			values = items
+		} else {
+			values = splitFieldValues(raw)
+		}
+		if len(values) > 0 {
+			out[k] = values
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// blockScalarIndicators are scalar values that announce a YAML block scalar
+// (`key: |`). The line scanner cannot read the indented body, so the value
+// carries no data — customFields drops the key instead of indexing "|".
+var blockScalarIndicators = map[string]bool{
+	"|": true, "|-": true, "|+": true,
+	">": true, ">-": true, ">+": true,
+}
+
+// splitFieldValues splits a custom frontmatter scalar into its items. A
+// fully quoted scalar is one item. A flow sequence loses its brackets and
+// splits on commas outside quotes; a bare scalar splits on commas outside
+// quotes. Items are trimmed and one pair of surrounding quotes is removed
+// per item. An empty value or a block-scalar indicator yields nil.
+func splitFieldValues(value string) []string {
+	v := strings.TrimSpace(value)
+	if v == "" || blockScalarIndicators[v] {
+		return nil
+	}
+	if isOneQuotedScalar(v) {
+		return []string{v[1 : len(v)-1]}
+	}
+	if strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]") && len(v) >= 2 {
+		v = v[1 : len(v)-1]
+	}
+	var out []string
+	for _, part := range splitOutsideQuotes(v, ',') {
+		p := stripQuotes(strings.TrimSpace(part))
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// isOneQuotedScalar reports whether s is a single quoted string — quoted at
+// both ends with no inner occurrence of the same quote, so `"Hello, world"`
+// is one value while `"a", "b"` is not.
+func isOneQuotedScalar(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	q := s[0]
+	if (q != '"' && q != '\'') || s[len(s)-1] != q {
+		return false
+	}
+	return !strings.ContainsRune(s[1:len(s)-1], rune(q))
+}
+
+// splitOutsideQuotes splits s on sep, ignoring separators inside single- or
+// double-quoted regions, so a quoted item keeps its commas.
+func splitOutsideQuotes(s string, sep byte) []string {
+	var parts []string
+	var cur strings.Builder
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			cur.WriteByte(c)
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+			cur.WriteByte(c)
+		case c == sep:
+			parts = append(parts, cur.String())
+			cur.Reset()
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	parts = append(parts, cur.String())
+	return parts
 }
 
 // extractTitle finds the first H1 heading in markdown content.
@@ -230,6 +415,7 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 		File:     relFilePath,
 		Title:    extractTitle(body),
 		Content:  strings.TrimSpace(body),
+		Fields:   customFields(fm),
 	}, nil
 }
 
@@ -297,6 +483,7 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		File:      relFilePath,
 		Title:     extractTitle(body),
 		Content:   strings.TrimSpace(body),
+		Fields:    customFields(fm),
 	}, nil
 }
 

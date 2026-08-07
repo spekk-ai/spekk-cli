@@ -4,10 +4,7 @@ parent: layered-prompt-system
 created: 2026-02-21T12:15:00Z
 priority: 1
 status: done
-depends_on:
-  - base-prompt-required
-  - global-prompt-optional
-  - local-prompt-optional
+depends-on: base-prompt-required
 ---
 
 # Prompts Concatenated With Separator

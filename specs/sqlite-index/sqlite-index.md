@@ -26,7 +26,9 @@ or exhaustive JSON scans.
 Builds or updates `.spekk/index.db` at the repo root (adjacent to `specs/`).
 
 - Walks `specs/` (or `--specs-dir` if provided), parses all spec and assertion
-  Markdown frontmatter, and inserts records into three tables.
+  Markdown frontmatter, and inserts records into the spec tables
+  (`specs`, `assertions`, `depends_on`, `frontmatter_fields`; later waves
+  added the observation tables).
 - Prints a summary: `Indexed 100 specs, 503 assertions.`
 - Is idempotent: running twice produces the same result.
 - `--force` drops and recreates all tables before inserting.
@@ -97,7 +99,7 @@ See `assertions/` for what must be true.
 
 ## Success Criteria
 
-- `spekk index` creates `.spekk/index.db` with all three tables populated.
+- `spekk index` creates `.spekk/index.db` with the spec tables populated.
 - All assertions with a `depends-on` frontmatter field have edges in the
   `depends_on` table.
 - `.spekk/index.db` is gitignored.

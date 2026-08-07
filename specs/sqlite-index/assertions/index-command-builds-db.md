@@ -7,7 +7,7 @@ status: done
 branch: feat/list-filter-by-status
 ---
 
-# `spekk index` Builds `.spekk/index.db` with All Three Tables Populated
+# `spekk index` Builds `.spekk/index.db` with the Spec Tables Populated
 
 ## Description
 

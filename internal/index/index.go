@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -49,6 +50,15 @@ CREATE TABLE IF NOT EXISTS assertions (
 CREATE TABLE IF NOT EXISTS depends_on (
   assertion_id  TEXT REFERENCES assertions(id),
   depends_on_id TEXT REFERENCES assertions(id)
+);
+-- Custom frontmatter fields (keys outside the known set) on specs and
+-- assertions. Multi-value spellings ([a, b] / a, b) are split into one row
+-- per value, so a query can filter and aggregate on any custom tag.
+CREATE TABLE IF NOT EXISTS frontmatter_fields (
+  owner_type TEXT,   -- 'spec' | 'assertion'
+  owner_id   TEXT,
+  key        TEXT,
+  value      TEXT
 );
 -- Observation tables mirror the observation frontmatter schema
 -- (specs/observation-lifecycle/): one row per (slug, ref) pair read from the
@@ -83,14 +93,40 @@ CREATE TABLE IF NOT EXISTS index_meta (
 );
 `
 
-const dropTables = `
-DROP TABLE IF EXISTS depends_on;
-DROP TABLE IF EXISTS assertions;
-DROP TABLE IF EXISTS specs;
-DROP TABLE IF EXISTS observation_files;
-DROP TABLE IF EXISTS observations;
-DROP TABLE IF EXISTS index_meta;
-`
+// dropAllTables drops every table in the database, enumerated from
+// sqlite_master rather than a hardcoded list. A binary can only name the
+// tables of its own generation, and a hardcoded list is exactly how a
+// version-skewed force rebuild leaves a future table's stale rows in place
+// (an old binary rebuilding a newer database refreshed every table it knew
+// and silently kept the rest). Dropping whatever exists makes every future
+// schema bump safe against this binary going stale.
+func dropAllTables(db *sql.DB) error {
+	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return fmt.Errorf("cannot list tables: %w", err)
+	}
+	defer rows.Close()
+
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return fmt.Errorf("cannot read table name: %w", err)
+		}
+		names = append(names, n)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("cannot list tables: %w", err)
+	}
+
+	for _, n := range names {
+		quoted := `"` + strings.ReplaceAll(n, `"`, `""`) + `"`
+		if _, err := db.Exec(`DROP TABLE IF EXISTS ` + quoted); err != nil {
+			return fmt.Errorf("cannot drop table %q: %w", n, err)
+		}
+	}
+	return nil
+}
 
 // schemaVersion is the current on-disk index schema. Bump it whenever the table
 // shape changes. Because the index is a derived artifact, migration is never an
@@ -99,8 +135,9 @@ DROP TABLE IF EXISTS index_meta;
 // first use.
 //
 // Version history: 1 = specs/assertions/depends_on; 2 adds the observation
-// tables (observations, observation_files, index_meta).
-const schemaVersion = 2
+// tables (observations, observation_files, index_meta); 3 adds
+// frontmatter_fields.
+const schemaVersion = 3
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
@@ -139,7 +176,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	defer db.Close()
 
 	if force {
-		if _, err = db.Exec(dropTables); err != nil {
+		if err = dropAllTables(db); err != nil {
 			return stats, fmt.Errorf("cannot drop tables: %w", err)
 		}
 	}
@@ -160,7 +197,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	defer tx.Rollback() //nolint:errcheck
 
 	// Clear existing rows for idempotency (delete-all + re-insert).
-	for _, table := range []string{"depends_on", "assertions", "specs", "observation_files", "observations", "index_meta"} {
+	for _, table := range []string{"depends_on", "frontmatter_fields", "assertions", "specs", "observation_files", "observations", "index_meta"} {
 		if _, err = tx.Exec("DELETE FROM " + table); err != nil {
 			return stats, fmt.Errorf("cannot clear %s: %w", table, err)
 		}
@@ -173,6 +210,9 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 			s.ID, s.Title, s.Status, s.Priority, s.Branch, s.File,
 		); err != nil {
 			return stats, fmt.Errorf("cannot insert spec %q: %w", s.ID, err)
+		}
+		if err = insertFrontmatterFields(tx, "spec", s.ID, s.Fields); err != nil {
+			return stats, err
 		}
 	}
 
@@ -192,6 +232,10 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 			); err != nil {
 				return stats, fmt.Errorf("cannot insert depends_on edge for %q: %w", a.ID, err)
 			}
+		}
+
+		if err = insertFrontmatterFields(tx, "assertion", a.ID, a.Fields); err != nil {
+			return stats, err
 		}
 	}
 
@@ -217,6 +261,34 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	stats.Observations = obsCount
 	stats.Warnings = warnings
 	return stats, nil
+}
+
+// insertFrontmatterFields writes one row per distinct (key, value) for an
+// owner's custom frontmatter fields. The parser already split every
+// multi-value spelling into items; a repeated value (`workflows: w1, w1`)
+// inserts once, so COUNT-style report queries stay accurate.
+func insertFrontmatterFields(tx *sql.Tx, ownerType, ownerID string, fields map[string][]string) error {
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		seen := make(map[string]bool)
+		for _, value := range fields[key] {
+			if seen[value] {
+				continue
+			}
+			seen[value] = true
+			if _, err := tx.Exec(
+				`INSERT INTO frontmatter_fields (owner_type, owner_id, key, value) VALUES (?, ?, ?, ?)`,
+				ownerType, ownerID, key, value,
+			); err != nil {
+				return fmt.Errorf("cannot insert frontmatter field %q for %s %q: %w", key, ownerType, ownerID, err)
+			}
+		}
+	}
+	return nil
 }
 
 // indexObservations populates the observation tables inside the build
