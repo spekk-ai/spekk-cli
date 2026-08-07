@@ -93,15 +93,40 @@ CREATE TABLE IF NOT EXISTS index_meta (
 );
 `
 
-const dropTables = `
-DROP TABLE IF EXISTS depends_on;
-DROP TABLE IF EXISTS frontmatter_fields;
-DROP TABLE IF EXISTS assertions;
-DROP TABLE IF EXISTS specs;
-DROP TABLE IF EXISTS observation_files;
-DROP TABLE IF EXISTS observations;
-DROP TABLE IF EXISTS index_meta;
-`
+// dropAllTables drops every table in the database, enumerated from
+// sqlite_master rather than a hardcoded list. A binary can only name the
+// tables of its own generation, and a hardcoded list is exactly how a
+// version-skewed force rebuild leaves a future table's stale rows in place
+// (an old binary rebuilding a newer database refreshed every table it knew
+// and silently kept the rest). Dropping whatever exists makes every future
+// schema bump safe against this binary going stale.
+func dropAllTables(db *sql.DB) error {
+	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return fmt.Errorf("cannot list tables: %w", err)
+	}
+	defer rows.Close()
+
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return fmt.Errorf("cannot read table name: %w", err)
+		}
+		names = append(names, n)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("cannot list tables: %w", err)
+	}
+
+	for _, n := range names {
+		quoted := `"` + strings.ReplaceAll(n, `"`, `""`) + `"`
+		if _, err := db.Exec(`DROP TABLE IF EXISTS ` + quoted); err != nil {
+			return fmt.Errorf("cannot drop table %q: %w", n, err)
+		}
+	}
+	return nil
+}
 
 // schemaVersion is the current on-disk index schema. Bump it whenever the table
 // shape changes. Because the index is a derived artifact, migration is never an
@@ -151,7 +176,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	defer db.Close()
 
 	if force {
-		if _, err = db.Exec(dropTables); err != nil {
+		if err = dropAllTables(db); err != nil {
 			return stats, fmt.Errorf("cannot drop tables: %w", err)
 		}
 	}
@@ -238,18 +263,23 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	return stats, nil
 }
 
-// insertFrontmatterFields writes one row per (key, value) for an owner's
-// custom frontmatter fields. Multi-value spellings are split by
-// parser.SplitFieldValues, so `[a, b]`, `a, b`, and a block list index as
-// identical rows.
-func insertFrontmatterFields(tx *sql.Tx, ownerType, ownerID string, fields map[string]string) error {
+// insertFrontmatterFields writes one row per distinct (key, value) for an
+// owner's custom frontmatter fields. The parser already split every
+// multi-value spelling into items; a repeated value (`workflows: w1, w1`)
+// inserts once, so COUNT-style report queries stay accurate.
+func insertFrontmatterFields(tx *sql.Tx, ownerType, ownerID string, fields map[string][]string) error {
 	keys := make([]string, 0, len(fields))
 	for key := range fields {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		for _, value := range parser.SplitFieldValues(fields[key]) {
+		seen := make(map[string]bool)
+		for _, value := range fields[key] {
+			if seen[value] {
+				continue
+			}
+			seen[value] = true
 			if _, err := tx.Exec(
 				`INSERT INTO frontmatter_fields (owner_type, owner_id, key, value) VALUES (?, ?, ?, ?)`,
 				ownerType, ownerID, key, value,

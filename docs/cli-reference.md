@@ -218,7 +218,15 @@ Schema:
 
 ### Custom frontmatter fields
 
-Any frontmatter key outside the known set (`id`, `parent`, `created`, `priority`, `status`, `branch`, `depends-on`, `locked-by`) is a **custom field**. `spekk validate` accepts it without warnings, and the index stores it in `frontmatter_fields` — one row per value. Three multi-value spellings index identically: a flow sequence (`tags: [infrastructure, hipaa]`), a bare comma-separated scalar (`workflows: w1-note-and-claim, w2-claim-reimbursement`), and a YAML block list (`- item` lines). This makes per-tag reporting one query:
+Any **top-level** frontmatter key outside the known set (`id`, `parent`, `created`, `priority`, `status`, `branch`, `depends-on`, `locked-by`) is a **custom field**. `spekk validate` accepts it without warnings, and the index stores it in `frontmatter_fields` — one row per distinct value (a repeated value inserts once). Three multi-value spellings index identically: a flow sequence (`tags: [infrastructure, hipaa]`), a bare comma-separated scalar (`workflows: w1-note-and-claim, w2-claim-reimbursement`), and a YAML block list (`- item` lines).
+
+Value rules:
+
+- In a bare scalar or flow sequence, an **unquoted comma always splits**. A quoted region protects its commas: `note: "Hello, world"` is one value, and `[a, "b, c"]` is two.
+- Block-list items are never re-split — an item keeps its commas as written.
+- Comment lines, nested-map children, empty keys, and block scalars (`key: |` / `key: >`) never become custom fields. The frontmatter parser reads top-level scalars, flow sequences, and flat block lists only.
+
+This makes per-tag reporting one query:
 
 ```bash
 spekk query "SELECT f.value AS workflow, COUNT(*) AS total, SUM(a.status = 'done') AS done

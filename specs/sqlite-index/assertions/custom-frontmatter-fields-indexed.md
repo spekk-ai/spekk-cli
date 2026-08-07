@@ -32,16 +32,27 @@ CREATE TABLE frontmatter_fields (
 ## Success Criteria
 
 - After `spekk index`, a spec or assertion with a custom frontmatter key has
-  one `frontmatter_fields` row per value; known keys produce no rows.
+  one `frontmatter_fields` row per **distinct** value (a repeated value
+  inserts once); known keys produce no rows.
 - Multi-value spellings index identically — one row per item, brackets and
   per-item quotes stripped, whitespace trimmed:
   - flow sequence: `tags: [infrastructure, hipaa]`
   - bare comma-separated scalar: `workflows: w1-a, w2-b`
   - YAML block list (`- item` lines under a bare `key:`)
+- Quoting protects commas: a fully quoted scalar (`note: "Hello, world"`)
+  is one value, a quoted flow item (`[a, "b, c"]`) keeps its comma, and a
+  block-list item is never re-split. Only unquoted commas split.
+- Line-scanner artifacts never become rows: comment lines (`# note: x`),
+  nested-map children (indented `child: value` lines), empty keys, and
+  block scalars (`key: |` / `key: >`) are excluded. Only top-level scalar,
+  flow-sequence, and flat block-list keys index.
 - Block lists under known keys keep their previous behavior (invisible to
   the struct field); the block-list support feeds custom fields only.
 - Unknown keys still pass `spekk validate` without warnings — that behavior
   is what makes the pattern possible.
+- A force rebuild (`spekk index --force`) drops every table found in
+  `sqlite_master`, not a hardcoded list, so a binary that predates a table
+  can never leave its stale rows behind after a forced rebuild.
 - A status-by-tag report is one query:
   `SELECT f.value, COUNT(*), SUM(a.status = 'done') FROM assertions a JOIN
   frontmatter_fields f ON f.owner_type = 'assertion' AND f.owner_id = a.id

@@ -1383,18 +1383,33 @@ func TestParseAllSpecs_ProjectSpecs(t *testing.T) {
 // Custom frontmatter fields
 // ---------------------------------------------------------------------------
 
+func fieldsEq(t *testing.T, got map[string][]string, key string, want []string) {
+	t.Helper()
+	vals, ok := got[key]
+	if !ok {
+		t.Errorf("expected key %q in Fields, got %v", key, got)
+		return
+	}
+	if len(vals) != len(want) {
+		t.Errorf("key %q: expected %v, got %v", key, want, vals)
+		return
+	}
+	for i := range vals {
+		if vals[i] != want[i] {
+			t.Errorf("key %q: expected %v, got %v", key, want, vals)
+			return
+		}
+	}
+}
+
 func TestParseAssertion_CustomFieldsPreserved(t *testing.T) {
 	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nstatus: done\nworkflows: w5-patient-insurance-case\ntags: [infrastructure, hipaa]\n---\n# A1\n"
 	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if a.Fields["workflows"] != "w5-patient-insurance-case" {
-		t.Errorf("expected workflows field preserved, got %q", a.Fields["workflows"])
-	}
-	if a.Fields["tags"] != "[infrastructure, hipaa]" {
-		t.Errorf("expected raw tags value preserved, got %q", a.Fields["tags"])
-	}
+	fieldsEq(t, a.Fields, "workflows", []string{"w5-patient-insurance-case"})
+	fieldsEq(t, a.Fields, "tags", []string{"infrastructure", "hipaa"})
 	for _, known := range []string{"id", "parent", "created", "priority", "status"} {
 		if _, ok := a.Fields[known]; ok {
 			t.Errorf("known key %q must not appear in Fields", known)
@@ -1408,9 +1423,7 @@ func TestParseSpec_CustomFieldsPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if s.Fields["workflows"] != "w1-note-and-claim, w2-claim-reimbursement" {
-		t.Errorf("expected workflows field preserved, got %q", s.Fields["workflows"])
-	}
+	fieldsEq(t, s.Fields, "workflows", []string{"w1-note-and-claim", "w2-claim-reimbursement"})
 }
 
 func TestParseSpec_NoCustomFieldsIsNil(t *testing.T) {
@@ -1424,14 +1437,82 @@ func TestParseSpec_NoCustomFieldsIsNil(t *testing.T) {
 	}
 }
 
-func TestParseFrontmatter_BlockListCollected(t *testing.T) {
-	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\ntags:\n- infrastructure\n- \"hipaa\"\n---\n# A1\n"
+func TestCustomFields_QuotedScalarIsOneValue(t *testing.T) {
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nnote: \"Hello, world\"\nalso: 'Salve, munde'\n---\n# A1\n"
 	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if a.Fields["tags"] != "infrastructure, hipaa" {
-		t.Errorf("expected block list joined to comma scalar, got %q", a.Fields["tags"])
+	fieldsEq(t, a.Fields, "note", []string{"Hello, world"})
+	fieldsEq(t, a.Fields, "also", []string{"Salve, munde"})
+}
+
+func TestCustomFields_QuotedFlowItemKeepsComma(t *testing.T) {
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nquoted: [a, \"b, c\"]\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fieldsEq(t, a.Fields, "quoted", []string{"a", "b, c"})
+}
+
+func TestCustomFields_BlockListItemsNeverResplit(t *testing.T) {
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\ntags:\n- \"one, two\"\n- three\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fieldsEq(t, a.Fields, "tags", []string{"one, two", "three"})
+}
+
+func TestCustomFields_CommentsInvisible(t *testing.T) {
+	// A comment with a colon is not a field, and a comment between a key
+	// and its items does not interrupt the list.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\n# note: temporary hack\ntags:\n# keep sorted\n- alpha\n- beta\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := a.Fields["# note"]; ok {
+		t.Errorf("comment line leaked into Fields: %v", a.Fields)
+	}
+	fieldsEq(t, a.Fields, "tags", []string{"alpha", "beta"})
+}
+
+func TestCustomFields_NestedChildrenExcluded(t *testing.T) {
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nmeta:\n  owner: bob\n  link: https://example.com/x\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, k := range []string{"owner", "link", "meta"} {
+		if _, ok := a.Fields[k]; ok {
+			t.Errorf("nested map leaked key %q into Fields: %v", k, a.Fields)
+		}
+	}
+}
+
+func TestCustomFields_BlockScalarDropped(t *testing.T) {
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nnotes: |\n  see: this for details\nsummary: >\n  folded text\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, k := range []string{"notes", "summary", "see"} {
+		if _, ok := a.Fields[k]; ok {
+			t.Errorf("block scalar leaked key %q into Fields: %v", k, a.Fields)
+		}
+	}
+}
+
+func TestCustomFields_EmptyKeyExcluded(t *testing.T) {
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\n: oops\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := a.Fields[""]; ok {
+		t.Errorf("empty key leaked into Fields: %v", a.Fields)
 	}
 }
 
@@ -1458,12 +1539,18 @@ func TestSplitFieldValues(t *testing.T) {
 		{"comma scalar", "w1-note-and-claim, w2-claim-reimbursement", []string{"w1-note-and-claim", "w2-claim-reimbursement"}},
 		{"flow sequence", "[infrastructure, hipaa]", []string{"infrastructure", "hipaa"}},
 		{"flow sequence quoted", `["infrastructure", 'hipaa']`, []string{"infrastructure", "hipaa"}},
+		{"quoted scalar with comma", `"Hello, world"`, []string{"Hello, world"}},
+		{"single-quoted scalar with comma", `'Hello, world'`, []string{"Hello, world"}},
+		{"quoted flow item with comma", `[a, "b, c"]`, []string{"a", "b, c"}},
+		{"two quoted scalars", `"a", "b"`, []string{"a", "b"}},
 		{"empty", "", nil},
 		{"empty flow", "[]", nil},
 		{"stray commas", "a,, b, ", []string{"a", "b"}},
+		{"literal block indicator", "|", nil},
+		{"folded block indicator", ">", nil},
 	}
 	for _, c := range cases {
-		got := SplitFieldValues(c.in)
+		got := splitFieldValues(c.in)
 		if len(got) != len(c.want) {
 			t.Errorf("%s: expected %v, got %v", c.name, c.want, got)
 			continue

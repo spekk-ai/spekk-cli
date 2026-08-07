@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -462,5 +463,134 @@ func TestBuildIndexFrontmatterFieldsJoin(t *testing.T) {
 	}
 	if total != 1 || done != 1 {
 		t.Errorf("expected total=1 done=1, got total=%d done=%d", total, done)
+	}
+}
+
+func TestBuildIndexFrontmatterFieldsDedupAndGarbage(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+	specDir := filepath.Join(specsDir, "spec-a")
+	assertDir := filepath.Join(specDir, "assertions")
+	must(t, os.MkdirAll(assertDir, 0o755))
+	must(t, os.WriteFile(filepath.Join(specDir, "spec-a.md"), []byte(`---
+id: spec-a
+created: 2026-01-01T00:00:00Z
+priority: 1
+---
+# Spec A
+`), 0o644))
+	// Duplicate values, a comment with a colon, a nested map, and a quoted
+	// scalar with a comma — only clean, deduplicated rows may land.
+	must(t, os.WriteFile(filepath.Join(assertDir, "assert-one.md"), []byte(`---
+id: assert-one
+parent: spec-a
+created: 2026-01-01T00:00:00Z
+priority: 1
+status: done
+workflows: w1, w1
+# note: temporary hack
+meta:
+  owner: bob
+quoted: "Hello, world"
+---
+# Assert One
+`), 0o644))
+
+	dbPath := filepath.Join(dir, ".spekk", "index.db")
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+		t.Fatalf("BuildIndex failed: %v", err)
+	}
+
+	db := openDB(t, dbPath)
+	rows, err := db.Query(`SELECT key, value FROM frontmatter_fields ORDER BY key, value`)
+	if err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	defer rows.Close()
+	var got [][2]string
+	for rows.Next() {
+		var k, v string
+		must(t, rows.Scan(&k, &v))
+		got = append(got, [2]string{k, v})
+	}
+	must(t, rows.Err())
+
+	want := [][2]string{
+		{"quoted", "Hello, world"},
+		{"workflows", "w1"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected rows %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row %d: expected %v, got %v", i, want[i], got[i])
+		}
+	}
+}
+
+func TestEnsureFreshRefreshesFrontmatterFields(t *testing.T) {
+	specsDir := makeSpecsWithCustomFields(t)
+	dir := filepath.Dir(specsDir)
+	dbPath := filepath.Join(dir, ".spekk", "index.db")
+
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+		t.Fatalf("BuildIndex failed: %v", err)
+	}
+
+	// Edit the custom field and backdate the db so the mtime check sees
+	// stale, then let the standard freshness gate rebuild.
+	assertPath := filepath.Join(specsDir, "spec-a", "assertions", "assert-one.md")
+	raw, err := os.ReadFile(assertPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := []byte(strings.Replace(string(raw), "workflows: w1-note-and-claim", "workflows: w9-new-value", 1))
+	must(t, os.WriteFile(assertPath, edited, 0o644))
+	past := time.Now().Add(-1 * time.Hour)
+	must(t, os.Chtimes(dbPath, past, past))
+
+	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
+	if err != nil {
+		t.Fatalf("EnsureFresh failed: %v", err)
+	}
+	if !rebuilt {
+		t.Fatal("expected a rebuild after the spec edit")
+	}
+
+	db := openDB(t, dbPath)
+	var n int
+	must(t, db.QueryRow(`SELECT COUNT(*) FROM frontmatter_fields WHERE owner_id = 'assert-one' AND key = 'workflows' AND value = 'w9-new-value'`).Scan(&n))
+	if n != 1 {
+		t.Errorf("expected the new value indexed once, got %d", n)
+	}
+	must(t, db.QueryRow(`SELECT COUNT(*) FROM frontmatter_fields WHERE value = 'w1-note-and-claim' AND owner_type = 'assertion'`).Scan(&n))
+	if n != 0 {
+		t.Errorf("expected the old assertion value gone, got %d rows", n)
+	}
+}
+
+func TestForceRebuildDropsUnknownTables(t *testing.T) {
+	// A stale table left by a different binary generation must not survive
+	// a force rebuild — dropAllTables enumerates sqlite_master.
+	specsDir := makeSpecs(t)
+	dir := filepath.Dir(specsDir)
+	dbPath := filepath.Join(dir, ".spekk", "index.db")
+
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+		t.Fatalf("BuildIndex failed: %v", err)
+	}
+	db := openDB(t, dbPath)
+	if _, err := db.Exec(`CREATE TABLE future_table (x TEXT); INSERT INTO future_table VALUES ('stale')`); err != nil {
+		t.Fatalf("cannot plant future table: %v", err)
+	}
+
+	if _, err := index.BuildIndex(specsDir, dbPath, true); err != nil {
+		t.Fatalf("force BuildIndex failed: %v", err)
+	}
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM future_table`).Scan(&n)
+	if err == nil {
+		t.Errorf("expected future_table dropped, still readable with %d rows", n)
 	}
 }
