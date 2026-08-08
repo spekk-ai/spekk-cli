@@ -26,13 +26,13 @@ var InstallCronFlags = cli.FlagSet{
 // Default schedule: one scan a day, and one consolidation a day after it.
 //
 // A scan used to run every 30 minutes because a session did not end on its
-// own — the schedule was what bounded it. A run now files at most three
-// observations and stops, so it is a batch job, and a batch job wants a plain
-// daily schedule. Every 30 minutes would also file up to 48 batches a day,
-// which is not a rate anyone reviews.
+// own — the schedule was what bounded the run. A run now ends by itself, so
+// the schedule does one job only: it sets how often the observer looks, and
+// therefore how many observations arrive. Once a day is a rate a person can
+// keep up with; every 30 minutes is not.
 //
-// Consolidation follows the scan. Curating four times a day over a set that
-// changes once a day spends an agent session on nothing.
+// Consolidation follows the scan. Curating several times a day over a set
+// that changes once a day spends an agent session on nothing.
 const (
 	defaultLoopInterval        = 1440 // 24 h
 	defaultConsolidateInterval = 1440 // 24 h
@@ -270,9 +270,8 @@ Installs two crontab entries:
   1. spekk observer              (a scan, every --loop-interval minutes)
   2. spekk observer consolidate  (consolidation, every --consolidate-interval minutes)
 
-A scan files at most three observations and then stops, so the default is one
-scan a day. Set --loop-interval for a different cadence — a shorter one files
-up to three observations each time it runs.
+A run files one observation and then stops, so the schedule sets how many
+arrive: one a day by default. Set --loop-interval for a different rate.
 
 Intervals must be ≤ 60, or an exact multiple of 60 up to 1440 (one day).
 

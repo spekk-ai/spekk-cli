@@ -124,20 +124,22 @@ one without the other.
 
 ## Workflow
 
-### 0. The run budget: at most three observations
+### 0. One run, one observation
 
-**File at most THREE observations per run. When the third is pushed, stop scanning and go to step 6.**
+**File ONE observation per run. The moment its branch is pushed, stop scanning and go to step 6.**
 
 This is a hard stop, not a target. It is the first rule of the cycle because it governs every step after it.
 
-A scan is not a sweep. Drift found on one run is still there on the next, so a run that files three findings and stops loses nothing — the fourth finding is the next run's first. What an uncapped run costs is real: one production run scanned for hours, fanned out across many subagents, and filed nine observations in a single burst. The findings were good. The price was not, and none of it bought anything the following morning's run would not have found.
+A run is one unit of work: search until you find drift, file it, stop. Nothing is lost by stopping, because drift found today is still there tomorrow — the second finding is the next run's first. And nothing is gained by continuing: one production run scanned for hours, fanned out across many subagents, and filed nine observations at once. The findings were good. None of them bought anything a later run would not have found, and the price was real.
 
-Two rules make the three count:
+One at a time is also what makes a run reviewable. A single observation is a single branch, a single PR, and a single thing to decide about. How often that happens is the schedule's business, not yours — if more throughput is wanted, the observer is run more often.
 
-- **Highest severity first.** Investigate what looks most load-bearing before what looks cosmetic, so a run that stops at three stops on the three that matter. A `high` finding always displaces a `low` one you have not filed yet.
-- **Say what you did not reach.** When you stop at the cap, name in your summary the areas you had not yet scanned. A capped run that reads like a complete one is worse than no run, because it turns "we stopped early" into "there was nothing else".
+Two rules go with it:
 
-`spekk observer announce` carries at most three findings in one message, so a run that files three keeps the announce path exactly one run behind — never a backlog.
+- **Search cheaply before you search deeply.** You are looking for the first real finding, not the best one, so start where drift is most likely rather than surveying everything to rank it. Ranking across a whole repository costs more than the finding is worth, and the ordering it buys is undone by the next run anyway.
+- **Say what you did not reach.** When you stop, name in your summary the areas you had not yet looked at. A run that stops after one finding and reads like a complete audit is worse than no run, because it turns "we stopped early" into "there was nothing else".
+
+Skip what is already known: `scan-check` tells you when drift is already covered by an observation on a branch, or suppressed by `.spekk/dont-flag.yaml`. Neither counts as your finding — keep looking.
 
 ### 1. Fetch, then scan
 
@@ -188,9 +190,9 @@ The check compares against committed observations on branches and main — never
 
 ### 4. Create the observation branch
 
-For each finding that `scan-check` reports clear: create `observer/<slug>` from main, make the two commits (observation, then remedy), push the branch, and open its PR with the template above.
+For the finding that `scan-check` reports clear: create `observer/<slug>` from main, make the two commits (observation, then remedy), push the branch, and open its PR with the template above.
 
-Count each branch you push against the run budget in step 0. At three, stop — do not investigate a fourth candidate, and do not open a fourth PR.
+That branch is the run's one observation. Stop here — do not investigate a second candidate, and do not open a second PR. Go to step 6.
 
 ### 5. Curation (consolidate)
 

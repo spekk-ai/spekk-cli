@@ -365,11 +365,11 @@ spekk observer uninstall-cron     # Remove scheduled cron entries
 
 Detects when code changes but specs don't update (or vice versa). Helps keep specs and implementation synchronized.
 
-**A scan is one batch, not a sweep.** A run files at most three observations and then stops, preferring what looks most load-bearing. Drift found today is still there tomorrow, so the fourth finding is the next run's first — run it again to continue. A run that stops at the cap says which areas it had not reached, so a short run is never mistaken for a clean bill of health.
+**A run files one observation.** It searches until it finds drift, files it, and stops. Drift found today is still there tomorrow, so the second finding is the next run's first — run it again to continue. A run says which areas it had not reached, so a short run is never mistaken for a clean bill of health.
 
 Each scan closes with a quiet consolidation pass and reports only a brief summary from `observations/DIGEST.md`. When the digest is empty, the observer stays silent.
 
-How often it runs is the schedule's business, not the run's — see `install-cron` below, or use whatever scheduler you prefer.
+How many observations you receive is therefore set by how often you run it, not by how long a run goes on. That is the schedule's business — see `install-cron` below, or use whatever scheduler you prefer.
 
 **Skills:** Observer supports skills with the same layered resolution as coach and builder (`.spekk/skills/observer/` > `~/.config/spekk/skills/observer/` > package > embedded). Run `spekk observer --help` to see available skills.
 
@@ -399,7 +399,7 @@ spekk observer uninstall-cron                                      # Remove spek
 | `--loop-interval <minutes>` | `1440` (once a day) | How often to scan (≤ 60, or an exact multiple of 60 up to 1440) |
 | `--consolidate-interval <minutes>` | `1440` (once a day) | How often to run consolidation (same rule) |
 
-The default is one scan a day because a scan files at most three observations and then ends. A shorter interval does not make one run find more — it files up to three again each time it runs, so choose it based on how many observations you want to review, not on how thorough you want a run to be.
+A run files one observation whatever the interval, so this flag sets how many observations arrive, not how thorough a run is. The default of once a day is simply a rate most people can keep up with; shorten it when you want to work through drift faster.
 
 The installed entries run in the project directory, use `claude`'s absolute path (resolved at install time — fails clearly if `claude` isn't found), run headless (no TTY), guard against overlapping sessions via a project-scoped lock file, and append output to `.spekk/observer.log` / `.spekk/observer-consolidate.log`. `uninstall-cron` removes only the entries it added, identified by a `# spekk-observer` marker.
 

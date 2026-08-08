@@ -88,7 +88,7 @@ func TestBuildObserverOptionsMessage_Quiet(t *testing.T) {
 }
 
 // The activation message must not describe a cadence to the agent. A run
-// files at most three observations and ends, so an interval read as a
+// files one observation and ends, so an interval read as a
 // standing instruction would contradict the prompt it is appended to.
 func TestBuildObserverOptionsMessage_NamesNoCadence(t *testing.T) {
 	msg := BuildObserverOptionsMessage(ObserverConfig{Quiet: true})

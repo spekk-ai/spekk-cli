@@ -136,7 +136,7 @@ var agentHelpExtras = map[string]struct {
 	"observer": {
 		Options: `  --quiet                Preference for minimal output (Claude agent decides)
 `,
-		Examples: `  spekk observer                          # Scan once, filing at most three observations
+		Examples: `  spekk observer                          # Search until drift is found, file one observation
   spekk observer coverage-gap             # Launch observer with coverage-gap skill
   spekk observer --quiet                  # Observer with quiet preference
 `,

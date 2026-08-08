@@ -31,7 +31,7 @@ func ObserverLockFile(wd, skillName string) string {
 // ObserverFlags defines the flag set for the observer CLI.
 // There is no scan-interval flag. It named a cadence inside a session that
 // ran until it was stopped, and the observer no longer works that way: a run
-// files at most three observations and ends. Cadence is now the schedule's
+// files one observation and ends. Cadence is now the schedule's
 // business, which is `install-cron` or whatever the operator dispatches with.
 var ObserverFlags = cli.FlagSet{
 	"quiet":      {Names: []string{"--quiet"}, Type: cli.BoolFlag},
@@ -58,7 +58,7 @@ type ObserverConfig struct {
 // removed flag has to fail loudly and say what replaced it.
 var removedObserverFlags = map[string]string{
 	"--interval": "cadence is now set by the schedule that runs the observer, not by the run itself.\n" +
-		"A run files at most three observations and ends. Use 'spekk observer install-cron --loop-interval <minutes>',\n" +
+		"A run files one observation and ends. Use 'spekk observer install-cron --loop-interval <minutes>',\n" +
 		"or set the cadence in whatever dispatches the observer.",
 }
 

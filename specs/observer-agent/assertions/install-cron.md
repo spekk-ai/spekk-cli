@@ -27,12 +27,11 @@ requires Go changes to add the subcommand.
   `spekk observer consolidate`
 - Intervals are configurable via `--loop-interval` and
   `--consolidate-interval` flags. Both default to once a day (1440 minutes).
-  A scan files at most three observations and then ends, so the schedule sets
-  the rate at which observations arrive, and a shorter interval files up to
-  three again each time rather than making one run more thorough. Every 30
-  minutes — the earlier default, from when a session ran until it was
-  stopped — would file up to 48 batches a day. Consolidation follows the scan
-  rather than running several times over a set that changes once.
+  A run files one observation and then ends, so the interval sets how many
+  observations arrive rather than how thorough a run is. Every 30 minutes —
+  the earlier default, from when a session ran until the next one stopped
+  it — is not a rate anyone reviews. Consolidation follows the scan rather
+  than running several times over a set that changes once.
 - One day is the longest interval that can be expressed. `0 */24 * * *` steps
   by 24 across an hour field that only reaches 23, which strict crons reject
   and lax crons quietly reduce to midnight, so a day renders as `0 0 * * *`

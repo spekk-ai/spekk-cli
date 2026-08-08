@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// A scan files at most three observations and then ends, so the schedule is
-// what sets the rate. The old 30-minute default came from a session that ran
-// until it was stopped; kept alongside the cap it would file up to 48 batches
-// a day, which is not a rate anyone reviews. The default is one a day, and
-// consolidation follows it rather than running four times over a set that
-// changes once.
+// A run files one observation and then ends, so the schedule sets how many
+// arrive rather than how thorough a run is. The old 30-minute default came
+// from a session that ran until the next one stopped it; kept now it would
+// file up to 48 observations a day, which is not a rate anyone reviews. The
+// default is one a day, and consolidation follows it rather than running
+// several times over a set that changes once.
 func TestParseInstallCronFlags_DefaultsToOnceADay(t *testing.T) {
 	cfg, err := ParseInstallCronFlags([]string{})
 	if err != nil {
