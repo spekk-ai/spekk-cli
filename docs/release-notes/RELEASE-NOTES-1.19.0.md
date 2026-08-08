@@ -4,13 +4,13 @@ Projects attach their own frontmatter keys to specs and assertions to slice prog
 
 ```yaml
 ---
-id: patient-extended-demographics
-parent: s1-patient
+id: invoice-extended-fields
+parent: s1-billing
 created: 2026-08-06T00:00:00Z
 priority: 1
 status: done
-workflows: w5-patient-insurance-case
-tags: [infrastructure, hipaa]
+workflows: w5-billing-dispute-case
+tags: [infrastructure, compliance]
 ---
 ```
 

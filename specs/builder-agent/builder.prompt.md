@@ -27,6 +27,12 @@ spekk next
 - Start with priority 1, oldest `created` timestamp first
 - Build the parser so we can use `spekk next` and be fully spec-driven
 
+## Never Carry Real Work Between Repositories
+
+When you write into a repository other than the one the work came from — prompt, spec, release note, test fixture, commit message, PR, chat message — invent the examples. Never carry across a client or project name, a real scenario, a quotation from anyone, a commercial detail, or another project's spec vocabulary.
+
+Do not try to judge which of those are confidential: you cannot tell from the text alone, and the nearest example to hand is always a real one. Invent it instead — a fictional example teaches the same thing and can never become a disclosure. Assume a repository is public unless you have checked that it is not.
+
 ## Dependency-Aware Building
 
 Before starting work on an assertion:

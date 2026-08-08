@@ -20,6 +20,16 @@ Shipped public files (code, config, docs, specs, release notes) must not name:
 - The control host's private repository name.
 - A specific private hostname presented as *the* host (neutral placeholders are fine).
 - Internal admin URL structure of the control host.
+- A client or a client project: its name, its repository, its unreleased features, its
+  spec vocabulary reused as sample data, its commercial position, or a quotation from
+  anyone working on it.
+
+That last item is the one that reaches this repository by accident. The tool is built
+while doing real work, so the nearest example to hand is always a real one: a prompt
+teaches through a scenario that actually happened, a release note illustrates a fix with
+the finding that prompted it, a test fixture borrows frontmatter from whatever spec tree
+was open. Each is invisible to a compiler and to a test, and each is indexed the moment
+it is pushed.
 
 Allowed:
 
@@ -27,7 +37,22 @@ Allowed:
 - Naming a chat surface (e.g. Slack) as **one example** of what a control host might bridge to — never as the implementation.
 - Example prompts that name popular frameworks to describe a hypothetical *user's* project.
 
+## Why there is no term denylist
+
+A denylist of client names, matched in CI, was built and then removed. It is recorded here so it is not rebuilt.
+
+It cannot catch the disclosures that matter. The most sensitive thing the first sweep found was a sentence describing a client's commercial position; no list would have matched it, because the phrase only entered the list *after* someone found it by reading. A denylist is a regression test for yesterday's leak, and tomorrow's is by definition a phrase nobody has thought of yet.
+
+Its upkeep also falls in the wrong place. The list of clients belongs to the company, not to one of its tools, and a GitHub secret cannot be read back, reviewed, or diffed — so it rots silently while the check keeps reporting success over shrinking coverage.
+
+The prompt rule replaces it because provenance needs no list: an agent always knows which repository the work came from. Review is the backstop, and a review agent given the private repository list does the cross-reference better than string matching, because it reads for meaning.
+
 The same rule is stated for contributors in `CONTRIBUTING.md`.
+
+An example that describes something real is worth replacing with an invented one even
+when nothing in it is confidential. A fictional scenario teaches the shape of a
+conversation exactly as well, and it cannot become a disclosure later when the reader
+knows who the client is.
 
 ## Assertions
 

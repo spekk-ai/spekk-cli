@@ -17,7 +17,7 @@ Architectural decisions and patterns discussed in meetings are extracted by the 
 - Architectural decisions identified from meeting transcript
 - Examples of decisions:
   - "Use deep-link searches instead of scraping"
-  - "Partner with platforms rather than replacing them"
+  - "Integrate with suppliers rather than working around them"
   - "Keep todos separate from specs in workflow"
 - Appends to `CONTEXT.md` (creates file if it doesn't exist)
 - Shows diff of proposed CONTEXT.md changes for user approval before updating

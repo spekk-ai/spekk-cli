@@ -14,7 +14,7 @@ Scheduled sandbox runs no longer die silently: the headless launcher prepends th
 
 ## [1.19.0 -- Custom Frontmatter Fields, Indexed](RELEASE-NOTES-1.19.0.md)
 
-Projects attach their own frontmatter keys (`workflows:`, `tags: [infrastructure, hipaa]`) to specs and assertions. The parser now preserves every key outside the known set, and `spekk index` stores them in a new `frontmatter_fields` table — one row per distinct value, with flow sequences, comma scalars, and block lists indexing identically and quotes protecting commas. Per-tag progress reporting becomes one `spekk query`. The schema version goes to 3 (existing databases rebuild transparently), and `--force` now drops every table in `sqlite_master`, so a stale binary can never leave a future table's rows behind.
+Projects attach their own frontmatter keys (`workflows:`, `tags: [infrastructure, compliance]`) to specs and assertions. The parser now preserves every key outside the known set, and `spekk index` stores them in a new `frontmatter_fields` table — one row per distinct value, with flow sequences, comma scalars, and block lists indexing identically and quotes protecting commas. Per-tag progress reporting becomes one `spekk query`. The schema version goes to 3 (existing databases rebuild transparently), and `--force` now drops every table in `sqlite_master`, so a stale binary can never leave a future table's rows behind.
 
 ## [1.18.0 -- The Agent Token Leaves the WebSocket URL](RELEASE-NOTES-1.18.0.md)
 

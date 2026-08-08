@@ -112,3 +112,5 @@ specs/              # Specification files
 ## Public Boundary
 
 This repository is public. The orchestration server it connects to (the "control host") is private. Do not name, in any committed file: the control host's implementation stack, its private repository name, a specific private hostname presented as *the* host, or its internal admin URL structure. Say "the control host" or use a neutral placeholder instead. Naming a chat surface (e.g. Slack) as one example of an integration is fine; presenting it as the implementation is not. See `specs/sandbox-public-boundary/`.
+
+The boundary also covers client work. Do not name a client or a client project, reuse its spec vocabulary as sample data, quote anyone working on it, or describe its commercial position. Write examples from an invented domain instead — a fictional scenario teaches the same thing and cannot become a disclosure later.

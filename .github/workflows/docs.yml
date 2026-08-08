@@ -1,12 +1,47 @@
 name: Documentation
+
 on:
-  workflow_dispatch: # manual trigger only
+  push:
+    branches: ['**']
+    paths:
+      - 'docs/**'
+      - 'zensical.toml'
+      - 'scripts/check-docs-nav.sh'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
 permissions:
   contents: read
-  pages: write
-  id-token: write
+
 jobs:
+  # Runs on every branch. The deploy below needs it, so a navigation that has
+  # fallen behind blocks publication instead of shipping a site with
+  # unreachable pages.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check docs navigation
+        run: ./scripts/check-docs-nav.sh
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.x
+      - run: pip install zensical
+      - name: Build the site
+        run: zensical build --clean
+
+  # Publishing was workflow_dispatch only, so the site went out when someone
+  # remembered to trigger it -- and it fell sixteen releases behind main
+  # without anything failing. It now follows main.
   deploy:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: check
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

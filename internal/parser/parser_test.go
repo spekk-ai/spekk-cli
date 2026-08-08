@@ -1403,13 +1403,13 @@ func fieldsEq(t *testing.T, got map[string][]string, key string, want []string) 
 }
 
 func TestParseAssertion_CustomFieldsPreserved(t *testing.T) {
-	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nstatus: done\nworkflows: w5-patient-insurance-case\ntags: [infrastructure, hipaa]\n---\n# A1\n"
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nstatus: done\nworkflows: w5-billing-dispute-case\ntags: [infrastructure, compliance]\n---\n# A1\n"
 	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	fieldsEq(t, a.Fields, "workflows", []string{"w5-patient-insurance-case"})
-	fieldsEq(t, a.Fields, "tags", []string{"infrastructure", "hipaa"})
+	fieldsEq(t, a.Fields, "workflows", []string{"w5-billing-dispute-case"})
+	fieldsEq(t, a.Fields, "tags", []string{"infrastructure", "compliance"})
 	for _, known := range []string{"id", "parent", "created", "priority", "status"} {
 		if _, ok := a.Fields[known]; ok {
 			t.Errorf("known key %q must not appear in Fields", known)
@@ -1537,8 +1537,8 @@ func TestSplitFieldValues(t *testing.T) {
 	}{
 		{"single scalar", "w1-note-and-claim", []string{"w1-note-and-claim"}},
 		{"comma scalar", "w1-note-and-claim, w2-claim-reimbursement", []string{"w1-note-and-claim", "w2-claim-reimbursement"}},
-		{"flow sequence", "[infrastructure, hipaa]", []string{"infrastructure", "hipaa"}},
-		{"flow sequence quoted", `["infrastructure", 'hipaa']`, []string{"infrastructure", "hipaa"}},
+		{"flow sequence", "[infrastructure, compliance]", []string{"infrastructure", "compliance"}},
+		{"flow sequence quoted", `["infrastructure", 'compliance']`, []string{"infrastructure", "compliance"}},
 		{"quoted scalar with comma", `"Hello, world"`, []string{"Hello, world"}},
 		{"single-quoted scalar with comma", `'Hello, world'`, []string{"Hello, world"}},
 		{"quoted flow item with comma", `[a, "b, c"]`, []string{"a", "b, c"}},
