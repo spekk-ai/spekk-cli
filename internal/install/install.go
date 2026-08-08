@@ -55,9 +55,9 @@ type Options struct {
 // tool.
 type target struct {
 	globalDir   func(home string) string
-	projectDir  string                     // empty means --project is unsupported
-	fileExt     string                     // defaults to ".md"
-	frontmatter func(agent string) string  // frontmatter for the observer agent shim
+	projectDir  string                    // empty means --project is unsupported
+	fileExt     string                    // defaults to ".md"
+	frontmatter func(agent string) string // frontmatter for the observer agent shim
 
 	// Skill destinations. Each function returns the path for a named skill
 	// (spekk-coach, spekk-builder, or spekk-dev-loop) in one scope. A nil

@@ -17,4 +17,6 @@ No shipped public file — code, config, docs, specs, or release notes — names
 
 ## Verification
 
-There is no automated check: a grep list in a public repo would re-leak the exact banned strings. Verification is a manual sweep at review time — run it whenever a change touches text that mentions the control host, and after any release-notes or spec addition about the sandbox subsystem.
+Review, informed by the agent prompts. There is no automated check, and a term denylist was tried and rejected — see the parent spec for why, so it is not rebuilt.
+
+Run a sweep when a change adds prose about the control host, and when a release note or spec describes work done elsewhere. A review agent does this well: give it the list of private repositories and ask it to cross-reference them against the diff. It also catches material no denylist could, because it reads for meaning rather than matching strings.

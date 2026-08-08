@@ -15,6 +15,17 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Check formatting
+        run: |
+          # template.html is a minified third-party bundle, not ours to format.
+          unformatted=$(gofmt -l . | grep -v '^internal/show/template.html$' || true)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would change these files:" >&2
+            echo "$unformatted" | sed 's/^/  /' >&2
+            exit 1
+          fi
+          echo "gofmt: clean."
+
       - name: Build
         run: go build ./cmd/spekk
 

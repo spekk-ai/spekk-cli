@@ -14,7 +14,7 @@ depends-on: index-command-builds-db
 
 Projects attach their own frontmatter keys to specs and assertions (for
 example `workflows: w5-billing-dispute-case` or
-`tags: [infrastructure, hipaa]`) to slice progress by business dimension.
+`tags: [infrastructure, compliance]`) to slice progress by business dimension.
 The parser preserves every key outside the known set (`id`, `parent`,
 `created`, `priority`, `status`, `branch`, `depends-on`, `locked-by`) on the
 parsed `Spec`/`Assertion` (`Fields`), and `spekk index` stores them in a
@@ -36,7 +36,7 @@ CREATE TABLE frontmatter_fields (
   inserts once); known keys produce no rows.
 - Multi-value spellings index identically — one row per item, brackets and
   per-item quotes stripped, whitespace trimmed:
-  - flow sequence: `tags: [infrastructure, hipaa]`
+  - flow sequence: `tags: [infrastructure, compliance]`
   - bare comma-separated scalar: `workflows: w1-a, w2-b`
   - YAML block list (`- item` lines under a bare `key:`)
 - Quoting protects commas: a fully quoted scalar (`note: "Hello, world"`)

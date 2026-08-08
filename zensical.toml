@@ -58,6 +58,9 @@ nav = [
   ] },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.20.0 — Reliable Headless Runs, Cross-Branch Data" = "release-notes/RELEASE-NOTES-1.20.0.md" },
+    { "1.19.0 — Custom Frontmatter Fields, Indexed" = "release-notes/RELEASE-NOTES-1.19.0.md" },
+    { "1.18.0 — The Agent Token Leaves the WebSocket URL" = "release-notes/RELEASE-NOTES-1.18.0.md" },
     { "1.17.1 — Announcements Drop the Evidence Path List" = "release-notes/RELEASE-NOTES-1.17.1.md" },
     { "1.17.0 — The Sandbox States Its Protocol Version" = "release-notes/RELEASE-NOTES-1.17.0.md" },
     { "1.16.0 — The Observer Lifecycle Lives in Git" = "release-notes/RELEASE-NOTES-1.16.0.md" },
