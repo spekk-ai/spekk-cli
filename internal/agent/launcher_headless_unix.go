@@ -49,6 +49,7 @@ func LaunchHeadless(claudePath, lockFile, message string) error {
 	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Env = headlessChildEnv()
 
 	if err := cmd.Start(); err != nil {
 		if isNotFound(err) {

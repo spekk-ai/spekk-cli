@@ -95,6 +95,12 @@ non-functional. Each installed line must satisfy all of:
   `.spekk/observer-consolidate.lock`). Distinct lock files mean the loop, the
   consolidate entry, and any scheduled custom skill never block each other —
   only two invocations of the same thing overlap on a lock.
+- **The child session finds `spekk` on PATH.** The headless launch prepends
+  the spekk binary's own directory to the spawned session's PATH. Cron and
+  systemd environments often lack the install directory (`~/.local/bin`),
+  and agent prompts run bare `spekk` commands inside the session — without
+  the prepend, those calls fail with "command not found" while the outer
+  absolute-path invocation works, and the scheduled run dies silently.
 
 ### Interval validation rejects non-cron-expressible values
 
