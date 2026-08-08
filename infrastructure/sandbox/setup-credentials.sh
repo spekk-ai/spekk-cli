@@ -57,6 +57,24 @@ echo "    Done."
 # Configure git credentials for agent user
 echo "==> Configuring git credentials for agent user"
 su - agent -c "git config --global credential.helper store"
+
+# A git identity, so anything that commits on this box has an author.
+#
+# Without this, git falls back to <user>@<hostname>, which it will not accept
+# for a commit -- and every sandbox checked on 2026-08-08 had no identity at
+# all. The agent papers over it by passing one inline per command, so its own
+# commits succeed and nothing looks wrong, while any other process that
+# commits fails. `spekk observer announce` did exactly that: it delivered a
+# finding to chat, could not write the commit marking it announced, and so
+# announced the same finding again on every run after it.
+#
+# SPEKK_AGENT_NAME names the author. It falls back to the hostname, which is
+# already the sandbox name, so an operator who does not set it still gets an
+# attributable identity rather than none.
+AGENT_GIT_NAME="${SPEKK_AGENT_NAME:-$(hostname)}"
+echo "==> Setting git identity for agent user (${AGENT_GIT_NAME})"
+su - agent -c "git config --global user.name '${AGENT_GIT_NAME}'"
+su - agent -c "git config --global user.email '${AGENT_GIT_NAME}@spekk.local'"
 su - agent -c "echo 'https://agent:${GITHUB_TOKEN}@github.com' > ~/.git-credentials"
 su - agent -c "chmod 600 ~/.git-credentials"
 
