@@ -264,3 +264,38 @@ func TestObserverHelp_UsesSharedHelper(t *testing.T) {
 		})
 	}
 }
+
+func TestObserverLockFile_DefaultLoop(t *testing.T) {
+	got := ObserverLockFile("/proj", "")
+	want := filepath.Join("/proj", ".spekk", "observer-loop.lock")
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestObserverLockFile_PerSkill(t *testing.T) {
+	got := ObserverLockFile("/proj", "workflow-progress")
+	want := filepath.Join("/proj", ".spekk", "observer-workflow-progress.lock")
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestObserverLockFile_ConsolidateKeepsItsPath(t *testing.T) {
+	got := ObserverLockFile("/proj", "consolidate")
+	want := filepath.Join("/proj", ".spekk", "observer-consolidate.lock")
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestObserverLockFile_SanitizesUnsafeNames(t *testing.T) {
+	got := ObserverLockFile("/proj", "../evil/skill name")
+	want := filepath.Join("/proj", ".spekk", "observer-..-evil-skill-name.lock")
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+	if filepath.Dir(got) != filepath.Join("/proj", ".spekk") {
+		t.Errorf("lock file escaped .spekk/: %q", got)
+	}
+}
