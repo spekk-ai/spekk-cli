@@ -297,6 +297,33 @@ func TestExecList_CrossBranchRejectsStatus(t *testing.T) {
 	}
 }
 
+func TestExecList_CrossBranchRejectsSpecsDir(t *testing.T) {
+	// Silently ignoring --specs-dir would report success for a scope the
+	// command never used: the engine reads the git object store, not a
+	// directory.
+	var stdout, stderr bytes.Buffer
+	code := execList([]string{"--cross-branch", "--specs-dir", "/nonexistent"}, &stdout, &stderr, "")
+	if code != 1 {
+		t.Errorf("expected exit 1, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "--specs-dir does not apply") {
+		t.Errorf("expected a --specs-dir error, got %q", stderr.String())
+	}
+}
+
+func TestExecList_CrossBranchRejectsCallerSpecsDir(t *testing.T) {
+	// The same guard for the plumbed-in directory, so a future caller cannot
+	// reintroduce the silent substitution.
+	var stdout, stderr bytes.Buffer
+	code := execList([]string{"--cross-branch"}, &stdout, &stderr, t.TempDir())
+	if code != 1 {
+		t.Errorf("expected exit 1, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "--specs-dir does not apply") {
+		t.Errorf("expected a --specs-dir error, got %q", stderr.String())
+	}
+}
+
 func TestExecList_BranchFilterRequiresCrossBranch(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := execList([]string{"--branch-filter", "feat/*"}, &stdout, &stderr, makeTmpSpecs(t))

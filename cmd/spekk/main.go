@@ -313,6 +313,15 @@ EXAMPLES:
 			fmt.Fprintln(stderr, "Error: --status does not apply to --cross-branch output")
 			return 1
 		}
+		if specsDir != "" || flags.String("specsDir") != "" {
+			// The cross-branch engine reads the git object store across
+			// branches, not one specs directory, so it cannot honour a
+			// different one. Refuse rather than return git-root results
+			// under a path the caller chose: a silent substitution reports
+			// success for something the command did not do.
+			fmt.Fprintln(stderr, "Error: --specs-dir does not apply to --cross-branch output")
+			return 1
+		}
 		return execListCrossBranch(flags.String("branchFilter"), stdout, stderr, useJSON, useTSV, useCSV)
 	}
 	if flags.String("branchFilter") != "" {
