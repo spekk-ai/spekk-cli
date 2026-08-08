@@ -8,6 +8,14 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.19.0 -- Custom Frontmatter Fields, Indexed](RELEASE-NOTES-1.19.0.md)
+
+Projects attach their own frontmatter keys (`workflows:`, `tags: [infrastructure, hipaa]`) to specs and assertions. The parser now preserves every key outside the known set, and `spekk index` stores them in a new `frontmatter_fields` table — one row per distinct value, with flow sequences, comma scalars, and block lists indexing identically and quotes protecting commas. Per-tag progress reporting becomes one `spekk query`. The schema version goes to 3 (existing databases rebuild transparently), and `--force` now drops every table in `sqlite_master`, so a stale binary can never leave a future table's rows behind.
+
+## [1.18.0 -- The Agent Token Leaves the WebSocket URL](RELEASE-NOTES-1.18.0.md)
+
+The sandbox agent-client dials the path-less WebSocket route; the `Authorization: Bearer` header is the sole carrier of the token. The control host authenticates on the header alone, so the path token was pure leak surface — proxy logs, access logs, dial-error strings. Gone.
+
 ## [1.17.1 -- Announcements Drop the Evidence Path List](RELEASE-NOTES-1.17.1.md)
 
 Observer announcements no longer carry an `Evidence:` line of `affected` paths. On a finding that touches ten files the line was longer than the finding itself, it repeated what the PR already shows, and it pushed the pointer line out of view. Evidence keeps its other two roles: an observation with no `affected` path stays invalid and never announces, and the observation file and the PR body still carry the paths in context.
