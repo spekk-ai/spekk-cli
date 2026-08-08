@@ -7,11 +7,11 @@ The line is gone, from both message shapes: the single-finding body, and each nu
 ## Before
 
 ```
-The foreverfit-library spec header (line 10) states: "None has been confirmed
-with her or her team." In reality, all 10 assertions carry a Confirmed section.
+The reporting-exports spec header (line 10) states that no assertion has been
+confirmed with the team. In reality, all 10 assertions carry a Confirmed section.
 
-Evidence: specs/foreverfit-library/assertions/a-template-can-be-saved-from-within-a-note.md,
-specs/foreverfit-library/assertions/diagnosis-surfaces-indicated-exercises.md, ... (11 paths)
+Evidence: specs/reporting-exports/assertions/a-report-can-be-saved-as-a-preset.md,
+specs/reporting-exports/assertions/exports-honour-the-active-filters.md, ... (11 paths)
 
 Proposed fix in PR: https://github.com/... — merge to accept, close to dismiss. Reply here to discuss.
 
@@ -21,8 +21,8 @@ Proposed fix in PR: https://github.com/... — merge to accept, close to dismiss
 ## After
 
 ```
-The foreverfit-library spec header (line 10) states: "None has been confirmed
-with her or her team." In reality, all 10 assertions carry a Confirmed section.
+The reporting-exports spec header (line 10) states that no assertion has been
+confirmed with the team. In reality, all 10 assertions carry a Confirmed section.
 
 Proposed fix in PR: https://github.com/... — merge to accept, close to dismiss. Reply here to discuss.
 

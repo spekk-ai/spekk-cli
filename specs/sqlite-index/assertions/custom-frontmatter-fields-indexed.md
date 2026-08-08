@@ -13,7 +13,7 @@ depends-on: index-command-builds-db
 ## Description
 
 Projects attach their own frontmatter keys to specs and assertions (for
-example `workflows: w5-patient-insurance-case` or
+example `workflows: w5-billing-dispute-case` or
 `tags: [infrastructure, hipaa]`) to slice progress by business dimension.
 The parser preserves every key outside the known set (`id`, `parent`,
 `created`, `priority`, `status`, `branch`, `depends-on`, `locked-by`) on the

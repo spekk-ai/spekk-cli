@@ -1403,13 +1403,13 @@ func fieldsEq(t *testing.T, got map[string][]string, key string, want []string) 
 }
 
 func TestParseAssertion_CustomFieldsPreserved(t *testing.T) {
-	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nstatus: done\nworkflows: w5-patient-insurance-case\ntags: [infrastructure, hipaa]\n---\n# A1\n"
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nstatus: done\nworkflows: w5-billing-dispute-case\ntags: [infrastructure, compliance]\n---\n# A1\n"
 	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	fieldsEq(t, a.Fields, "workflows", []string{"w5-patient-insurance-case"})
-	fieldsEq(t, a.Fields, "tags", []string{"infrastructure", "hipaa"})
+	fieldsEq(t, a.Fields, "workflows", []string{"w5-billing-dispute-case"})
+	fieldsEq(t, a.Fields, "tags", []string{"infrastructure", "compliance"})
 	for _, known := range []string{"id", "parent", "created", "priority", "status"} {
 		if _, ok := a.Fields[known]; ok {
 			t.Errorf("known key %q must not appear in Fields", known)
