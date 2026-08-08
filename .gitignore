@@ -106,7 +106,3 @@ dist/
 # Generated spec-explorer artifact
 .spekk/index.html
 .spekk/index.db
-
-# Local private-term list for scripts/check-private-terms.sh.
-# Never commit this: the terms are the thing being protected.
-.private-terms

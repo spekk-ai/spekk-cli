@@ -6,19 +6,17 @@ priority: 1
 status: done
 ---
 
-# No Client Detail Reaches the Public Tree, and CI Says So
+# Every Agent Prompt Forbids Carrying Real Work Between Repositories
 
 ## Description
 
-The control-host half of this boundary was already stated. The client half was not, and it leaked: a coach prompt taught through a real advisory conversation including the client's commercial position, a release note quoted an internal remark about whether a named person had signed off, and one client's spec vocabulary had spread into five example files across docs, specs and tests.
+The control-host half of this boundary was already stated. The client half was not, and it leaked: a coach prompt taught through a real advisory conversation including the client's commercial position, a release note quoted an internal remark about whether a named person had signed off, and one project's spec vocabulary had spread into five example files across docs, specs and tests.
 
-None of it failed a build. Example content is exactly the material no compiler reads, so the boundary needs a check of its own or it holds only as long as everyone remembers it.
+The cause was proximity, not carelessness. An agent writing a prompt, a release note or a test fixture reaches for the nearest example, and the nearest example is the real work it just finished somewhere else. So the control belongs in the prompt, at the moment the example is chosen.
 
 ## Success Criteria
 
-- `scripts/check-private-terms.sh` fails when any supplied term appears in a tracked file, and prints every file and line so the author can fix it without guessing.
-- The terms are read from `SPEKK_PRIVATE_TERMS`, or from a gitignored `.private-terms` for local runs. **No term list is committed**: a denylist in a public repository publishes the names it exists to keep out.
-- With no terms supplied the script exits 2. It never reports success for a tree it did not scan — a check that silently passes when unconfigured is worse than no check, because it is believed.
-- Matching is literal and case-insensitive, and deliberately over-matches. A false positive costs one exclusion; a false negative costs a disclosure.
-- The check runs in CI on every push (`.github/workflows/hygiene.yml`). It runs on `push` rather than `pull_request` because a fork's pull request receives no secrets, and the check would then fail every outside contribution for a reason the contributor cannot fix.
-- Generated and vendored files are excluded by path, not by pattern, so an exclusion cannot silently widen.
+- The coach, builder and observer prompts each carry the rule, before their first working section.
+- The rule is about **provenance, not classification**. It says: when writing into a repository other than the one the work came from, invent the example. It does not ask the agent to identify confidential material — an agent cannot tell from the text alone which project name is a client and which is a sample, so a rule resting on that judgement fails exactly when it is needed.
+- The rule names the surfaces that carry prose across repositories: prompt, spec, release note, test fixture, commit message, PR, chat message.
+- The rule states that a repository is assumed public until checked.

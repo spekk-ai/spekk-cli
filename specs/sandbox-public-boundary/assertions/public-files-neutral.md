@@ -17,8 +17,6 @@ No shipped public file — code, config, docs, specs, or release notes — names
 
 ## Verification
 
-`scripts/check-private-terms.sh`, in CI on every push.
+Review, informed by the agent prompts. There is no automated check, and a term denylist was tried and rejected — see the parent spec for why, so it is not rebuilt.
 
-This assertion previously recorded that no automated check was possible, because a grep list committed to a public repo would re-leak the exact strings it banned. That reasoning is right and the conclusion does not follow: the list does not have to be committed. The terms come from the `SPEKK_PRIVATE_TERMS` secret, so CI can match against them while the public tree never holds them.
-
-A manual sweep is still worth doing when a change adds prose about the control host, because the script only catches terms someone has already thought to add. It is no longer the only defence.
+Run a sweep when a change adds prose about the control host, and when a release note or spec describes work done elsewhere. A review agent does this well: give it the list of private repositories and ask it to cross-reference them against the diff. It also catches material no denylist could, because it reads for meaning rather than matching strings.
