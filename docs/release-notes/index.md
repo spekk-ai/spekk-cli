@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.20.0 -- Reliable Headless Runs, Cross-Branch Data](RELEASE-NOTES-1.20.0.md)
+
+Scheduled sandbox runs no longer die silently: the headless launcher prepends the spekk binary's directory to the child PATH, so bare `spekk` calls inside spawned sessions resolve under cron and systemd. Each observer skill gets its own lock file (a held lock prints one line instead of a silent exit 0). And `spekk list --cross-branch --json` exposes the merge-preview classification as machine-readable rows for observer agents.
+
 ## [1.19.0 -- Custom Frontmatter Fields, Indexed](RELEASE-NOTES-1.19.0.md)
 
 Projects attach their own frontmatter keys (`workflows:`, `tags: [infrastructure, hipaa]`) to specs and assertions. The parser now preserves every key outside the known set, and `spekk index` stores them in a new `frontmatter_fields` table — one row per distinct value, with flow sequences, comma scalars, and block lists indexing identically and quotes protecting commas. Per-tag progress reporting becomes one `spekk query`. The schema version goes to 3 (existing databases rebuild transparently), and `--force` now drops every table in `sqlite_master`, so a stale binary can never leave a future table's rows behind.
