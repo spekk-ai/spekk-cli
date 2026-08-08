@@ -61,6 +61,9 @@ Suggested next steps for human review.
 Rules:
 
 - **No evidence, no observation.** An observation without at least one `affected` path is invalid; tooling rejects it.
+- **Each `affected` entry is one file, relative to the repository root.** Write `internal/parser/parser.go` — never a directory, never a glob, never a path outside the repository. Cite a line in the prose if it helps; the path itself carries no `:42` suffix.
+
+  This is what makes runs accumulate rather than repeat. Dedup asks whether an earlier observation names a file this one also names, so a file spelled two ways is two findings, and the drift you filed yesterday is filed again today under a new slug. `./x.go`, `x.go:42` and `x.go` are reduced to the same path for you — a directory is not, because one directory-level finding would hide every real finding beneath it.
 - `announced` is a timestamp written by `spekk observer announce` after a conversation opens. Its **absence** is the "not yet announced" marker. Never set, remove, or edit it, and never maintain any announce ledger file (`observations/announced.log` or equivalent) — no such file exists in this workflow.
 - Unknown extra fields are ignored by parsers, but emit only the fields above.
 
