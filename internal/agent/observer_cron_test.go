@@ -5,17 +5,22 @@ import (
 	"testing"
 )
 
-// TestParseInstallCronFlags_Defaults checks that defaults are 30 and 360 minutes.
-func TestParseInstallCronFlags_Defaults(t *testing.T) {
+// A scan files at most three observations and then ends, so the schedule is
+// what sets the rate. The old 30-minute default came from a session that ran
+// until it was stopped; kept alongside the cap it would file up to 48 batches
+// a day, which is not a rate anyone reviews. The default is one a day, and
+// consolidation follows it rather than running four times over a set that
+// changes once.
+func TestParseInstallCronFlags_DefaultsToOnceADay(t *testing.T) {
 	cfg, err := ParseInstallCronFlags([]string{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.LoopInterval != 30 {
-		t.Errorf("expected LoopInterval=30, got %d", cfg.LoopInterval)
+	if cfg.LoopInterval != 1440 {
+		t.Errorf("expected LoopInterval=1440 (once a day), got %d", cfg.LoopInterval)
 	}
-	if cfg.ConsolidateInterval != 360 {
-		t.Errorf("expected ConsolidateInterval=360, got %d", cfg.ConsolidateInterval)
+	if cfg.ConsolidateInterval != 1440 {
+		t.Errorf("expected ConsolidateInterval=1440 (once a day), got %d", cfg.ConsolidateInterval)
 	}
 }
 
@@ -98,12 +103,32 @@ func TestMinutesToCron(t *testing.T) {
 		{60, "*/60 * * * *"},
 		{360, "0 */6 * * *"},
 		{120, "0 */2 * * *"},
+		// A day is written out. The hourly form would be `0 */24 * * *`,
+		// which steps by 24 across an hour field that only reaches 23:
+		// strict crons reject it, and lax crons quietly reduce it to
+		// midnight -- the right time, from an expression that does not
+		// mean it. This is the default schedule, so it has to be exact.
+		{1440, "0 0 * * *"},
 	}
 	for _, tc := range cases {
 		got := minutesToCron(tc.minutes)
 		if got != tc.want {
 			t.Errorf("minutesToCron(%d) = %q, want %q", tc.minutes, got, tc.want)
 		}
+	}
+}
+
+// Longer than a day cannot be expressed at all: the hourly form runs off the
+// end of the hour field. It is refused at parse time rather than emitted as a
+// schedule that does not mean what it says.
+func TestParseInstallCronFlags_RejectsLongerThanADay(t *testing.T) {
+	for _, flag := range []string{"--loop-interval", "--consolidate-interval"} {
+		if _, err := ParseInstallCronFlags([]string{flag, "2880"}); err == nil {
+			t.Errorf("%s 2880 (two days) was accepted; it cannot be expressed in cron", flag)
+		}
+	}
+	if _, err := ParseInstallCronFlags([]string{"--loop-interval", "1440"}); err != nil {
+		t.Errorf("a day must remain valid: %v", err)
 	}
 }
 

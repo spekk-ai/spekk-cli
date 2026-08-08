@@ -26,8 +26,17 @@ requires Go changes to add the subcommand.
   `spekk observer` (default loop) and one running
   `spekk observer consolidate`
 - Intervals are configurable via `--loop-interval` and
-  `--consolidate-interval` flags, with sensible defaults (default loop every
-  30 minutes, consolidation every 6 hours)
+  `--consolidate-interval` flags. Both default to once a day (1440 minutes).
+  A scan files at most three observations and then ends, so the schedule sets
+  the rate at which observations arrive, and a shorter interval files up to
+  three again each time rather than making one run more thorough. Every 30
+  minutes — the earlier default, from when a session ran until it was
+  stopped — would file up to 48 batches a day. Consolidation follows the scan
+  rather than running several times over a set that changes once.
+- One day is the longest interval that can be expressed. `0 */24 * * *` steps
+  by 24 across an hour field that only reaches 23, which strict crons reject
+  and lax crons quietly reduce to midnight, so a day renders as `0 0 * * *`
+  and anything longer is refused at parse time.
 - The command prints what it installed, including the exact crontab lines,
   so the user can verify the schedule
 - A companion `spekk observer uninstall-cron` subcommand removes exactly the
@@ -71,9 +80,12 @@ non-functional. Each installed line must satisfy all of:
   `<project-dir>/.spekk/` (if absent) before writing the crontab entry;
   otherwise the shell redirect fails and the cron command crashes before
   spekk runs.
-- **Guards against overlap (in Go, not shell `flock`).** The observer prompt
-  defines an infinite monitoring loop, so launching a fresh session every
-  interval would pile up unbounded concurrent sessions. The overlap guard is
+- **Guards against overlap (in Go, not shell `flock`).** A scan ends on its
+  own now, but it has no deadline: a run has taken over an hour, so a
+  schedule shorter than the slowest run would still pile up concurrent
+  sessions. (The guard was first written when the prompt defined an infinite
+  monitoring loop and every run had to be interrupted by the next; the
+  overlap it prevents is narrower now, and just as real.) The overlap guard is
   implemented in Go, not via a shell `flock` wrapper on the cron line —
   `flock(1)` is a util-linux CLI that macOS does not ship, so a `flock -n ...`
   cron line would fail with `flock: command not found` on every macOS run. The

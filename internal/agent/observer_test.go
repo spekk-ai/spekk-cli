@@ -10,65 +10,63 @@ import (
 )
 
 func TestParseObserverFlags_Defaults(t *testing.T) {
-	cfg, err := ParseObserverFlags([]string{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Interval != 0 {
-		t.Errorf("expected Interval=0, got %d", cfg.Interval)
-	}
+	cfg := ParseObserverFlags([]string{})
 	if cfg.Quiet {
 		t.Error("expected Quiet=false")
 	}
 }
 
-func TestParseObserverFlags_Interval(t *testing.T) {
-	cfg, err := ParseObserverFlags([]string{"--interval", "60"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Interval != 60 {
-		t.Errorf("expected Interval=60, got %d", cfg.Interval)
-	}
-}
-
 func TestParseObserverFlags_Quiet(t *testing.T) {
-	cfg, err := ParseObserverFlags([]string{"--quiet"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	cfg := ParseObserverFlags([]string{"--quiet"})
 	if !cfg.Quiet {
 		t.Error("expected Quiet=true")
 	}
 }
 
-func TestParseObserverFlags_InvalidInterval(t *testing.T) {
-	_, err := ParseObserverFlags([]string{"--interval", "abc"})
-	if err == nil {
-		t.Fatal("expected error for non-numeric interval")
-	}
-	if !strings.Contains(err.Error(), "positive number") {
-		t.Errorf("unexpected error: %s", err)
+// The scan-interval flag is gone: it set a cadence inside a session that ran
+// until it was stopped, and a run now ends on its own.
+func TestParseObserverFlags_IntervalIsNoLongerAFlag(t *testing.T) {
+	if _, defined := ObserverFlags["interval"]; defined {
+		t.Error("--interval is still defined; cadence belongs to the schedule")
 	}
 }
 
-func TestParseObserverFlags_NegativeInterval(t *testing.T) {
-	_, err := ParseObserverFlags([]string{"--interval", "-5"})
-	if err == nil {
-		t.Fatal("expected error for negative interval")
+// Removing it from the flag set is not enough on its own. The first bare
+// positional argument is read as a skill name, so `--interval 60` would parse
+// and then launch a skill called "60" -- the wrong thing, quietly, for anyone
+// whose script still carries the flag. It has to be recognised and refused.
+func TestRemovedObserverFlag_CatchesTheOldIntervalFlag(t *testing.T) {
+	// The misfire this guards against is real, so assert it is reachable.
+	if skill := ExtractSkillArgFromFlagSet([]string{"--interval", "60"}, ObserverFlags); skill != "60" {
+		t.Fatalf("expected the stale value to look like a skill name, got %q", skill)
+	}
+
+	for _, args := range [][]string{
+		{"--interval", "60"},
+		{"--interval=60"},
+		{"--quiet", "--interval", "60"},
+	} {
+		flag, message := RemovedObserverFlag(args)
+		if flag != "--interval" {
+			t.Errorf("args %v: expected --interval to be refused, got %q", args, flag)
+		}
+		if !strings.Contains(message, "install-cron") {
+			t.Errorf("args %v: the message must say where cadence lives now: %q", args, message)
+		}
+	}
+
+	if flag, _ := RemovedObserverFlag([]string{"--quiet", "coverage-gap"}); flag != "" {
+		t.Errorf("a supported invocation was refused: %q", flag)
 	}
 }
 
-func TestParseObserverFlags_Both(t *testing.T) {
-	cfg, err := ParseObserverFlags([]string{"--quiet", "--interval", "30"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Interval != 30 {
-		t.Errorf("expected Interval=30, got %d", cfg.Interval)
-	}
+func TestParseObserverFlags_QuietWithHeadless(t *testing.T) {
+	cfg := ParseObserverFlags([]string{"--quiet", "--headless"})
 	if !cfg.Quiet {
 		t.Error("expected Quiet=true")
+	}
+	if !cfg.Headless {
+		t.Error("expected Headless=true")
 	}
 }
 
@@ -79,36 +77,25 @@ func TestBuildObserverOptionsMessage_NoOptions(t *testing.T) {
 	}
 }
 
-func TestBuildObserverOptionsMessage_IntervalOnly(t *testing.T) {
-	msg := BuildObserverOptionsMessage(ObserverConfig{Interval: 60})
-	if !strings.Contains(msg, "Scan interval: 60 seconds") {
-		t.Error("should contain interval")
-	}
-	if strings.Contains(msg, "Quiet mode") {
-		t.Error("should not contain quiet mode")
-	}
-}
-
-func TestBuildObserverOptionsMessage_QuietOnly(t *testing.T) {
+func TestBuildObserverOptionsMessage_Quiet(t *testing.T) {
 	msg := BuildObserverOptionsMessage(ObserverConfig{Quiet: true})
-	if !strings.Contains(msg, "Quiet mode: enabled") {
-		t.Error("should contain quiet mode")
-	}
-	if strings.Contains(msg, "Scan interval") {
-		t.Error("should not contain interval")
-	}
-}
-
-func TestBuildObserverOptionsMessage_Both(t *testing.T) {
-	msg := BuildObserverOptionsMessage(ObserverConfig{Interval: 30, Quiet: true})
-	if !strings.Contains(msg, "Scan interval: 30 seconds") {
-		t.Error("should contain interval")
-	}
 	if !strings.Contains(msg, "Quiet mode: enabled") {
 		t.Error("should contain quiet mode")
 	}
 	if !strings.Contains(msg, "CLI Options provided:") {
 		t.Error("should contain header")
+	}
+}
+
+// The activation message must not describe a cadence to the agent. A run
+// files at most three observations and ends, so an interval read as a
+// standing instruction would contradict the prompt it is appended to.
+func TestBuildObserverOptionsMessage_NamesNoCadence(t *testing.T) {
+	msg := BuildObserverOptionsMessage(ObserverConfig{Quiet: true})
+	for _, banned := range []string{"interval", "Scan interval", "seconds"} {
+		if strings.Contains(msg, banned) {
+			t.Errorf("activation message still names a cadence (%q):\n%s", banned, msg)
+		}
 	}
 }
 
@@ -141,16 +128,17 @@ func setupObserverSkill(t *testing.T, skillName, content string) string {
 }
 
 func TestExtractSkillArgFromFlagSet_ObserverFlags_SkillFirst(t *testing.T) {
-	skill := ExtractSkillArgFromFlagSet([]string{"coverage-gap", "--interval", "60"}, ObserverFlags)
+	skill := ExtractSkillArgFromFlagSet([]string{"coverage-gap", "--quiet"}, ObserverFlags)
 	if skill != "coverage-gap" {
 		t.Errorf("expected coverage-gap, got %q", skill)
 	}
 }
 
-func TestExtractSkillArgFromFlagSet_ObserverFlags_SkipsIntervalValue(t *testing.T) {
-	skill := ExtractSkillArgFromFlagSet([]string{"--interval", "60"}, ObserverFlags)
+// A value belonging to a flag is skipped, so it is never read as a skill.
+func TestExtractSkillArgFromFlagSet_ObserverFlags_SkipsFlagValue(t *testing.T) {
+	skill := ExtractSkillArgFromFlagSet([]string{"--claude-path", "/usr/bin/claude"}, ObserverFlags)
 	if skill != "" {
-		t.Errorf("expected empty (interval value skipped), got %q", skill)
+		t.Errorf("expected empty (flag value skipped), got %q", skill)
 	}
 }
 
@@ -209,7 +197,7 @@ func TestObserverSkillResolution_NotFound(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"flag only", []string{"--interval", "60"}},
+		{"flag only", []string{"--claude-path", "/usr/bin/claude"}},
 		{"unknown skill name", []string{"does-not-exist"}},
 		{"empty args", []string{}},
 	}
@@ -227,9 +215,7 @@ func TestObserverSkillResolution_NotFound(t *testing.T) {
 				t.Fatalf("expected no skill match for args %v", tc.args)
 			}
 
-			if _, err := ParseObserverFlags(tc.args); err != nil {
-				t.Errorf("flag parsing should succeed for fallback path: %v", err)
-			}
+			ParseObserverFlags(tc.args)
 		})
 	}
 }
@@ -255,7 +241,7 @@ func TestObserverHelp_UsesSharedHelper(t *testing.T) {
 			if !strings.Contains(out, "coverage-gap") {
 				t.Errorf("%s: help missing dynamically discovered skill", flag)
 			}
-			if !strings.Contains(out, "--interval") || !strings.Contains(out, "--quiet") {
+			if !strings.Contains(out, "--quiet") {
 				t.Errorf("%s: help missing observer-specific options", flag)
 			}
 			if !hasHelp([]string{flag}) {

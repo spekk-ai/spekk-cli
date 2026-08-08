@@ -347,8 +347,7 @@ When combined with `--watch`, cross-branch classification is cached on a git ref
 Monitor spec-code drift.
 
 ```bash
-spekk observer                    # Default monitoring loop
-spekk observer --interval 30      # Check every 30 seconds
+spekk observer                    # Run one scan
 spekk observer --quiet            # Minimal output
 spekk observer coverage-gap       # Run with a specific skill
 spekk observer prune              # Surface unused-code / consolidation candidates (recommend-only)
@@ -361,13 +360,16 @@ spekk observer uninstall-cron     # Remove scheduled cron entries
 
 | Flag | Description |
 |------|-------------|
-| `--interval <seconds>` | Preferred scan interval in seconds (positive integer) |
 | `--quiet` | Minimal output mode |
 | `--headless` | Run Claude in non-interactive mode (no TTY); set automatically by `install-cron` |
 
 Detects when code changes but specs don't update (or vice versa). Helps keep specs and implementation synchronized.
 
-The default loop closes each scan cycle with a quiet consolidation pass and reports only a brief summary from `observations/DIGEST.md`. When the digest is empty, the observer stays silent.
+**A scan is one batch, not a sweep.** A run files at most three observations and then stops, preferring what looks most load-bearing. Drift found today is still there tomorrow, so the fourth finding is the next run's first — run it again to continue. A run that stops at the cap says which areas it had not reached, so a short run is never mistaken for a clean bill of health.
+
+Each scan closes with a quiet consolidation pass and reports only a brief summary from `observations/DIGEST.md`. When the digest is empty, the observer stays silent.
+
+How often it runs is the schedule's business, not the run's — see `install-cron` below, or use whatever scheduler you prefer.
 
 **Skills:** Observer supports skills with the same layered resolution as coach and builder (`.spekk/skills/observer/` > `~/.config/spekk/skills/observer/` > package > embedded). Run `spekk observer --help` to see available skills.
 
@@ -384,8 +386,8 @@ The default loop closes each scan cycle with a quiet consolidation pass and repo
 Install crontab entries that run the observer on a schedule.
 
 ```bash
-spekk observer install-cron                                        # Defaults
-spekk observer install-cron --loop-interval 60                     # Loop every hour
+spekk observer install-cron                                        # Defaults: once a day
+spekk observer install-cron --loop-interval 60                     # Scan every hour
 spekk observer install-cron --consolidate-interval 720             # Consolidate every 12 h
 spekk observer uninstall-cron                                      # Remove spekk-managed entries
 ```
@@ -394,8 +396,10 @@ spekk observer uninstall-cron                                      # Remove spek
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--loop-interval <minutes>` | `30` | How often to run the observer loop (must be ≤ 60 or a multiple of 60) |
-| `--consolidate-interval <minutes>` | `360` | How often to run consolidation (must be ≤ 60 or a multiple of 60) |
+| `--loop-interval <minutes>` | `1440` (once a day) | How often to scan (≤ 60, or an exact multiple of 60 up to 1440) |
+| `--consolidate-interval <minutes>` | `1440` (once a day) | How often to run consolidation (same rule) |
+
+The default is one scan a day because a scan files at most three observations and then ends. A shorter interval does not make one run find more — it files up to three again each time it runs, so choose it based on how many observations you want to review, not on how thorough you want a run to be.
 
 The installed entries run in the project directory, use `claude`'s absolute path (resolved at install time — fails clearly if `claude` isn't found), run headless (no TTY), guard against overlapping sessions via a project-scoped lock file, and append output to `.spekk/observer.log` / `.spekk/observer-consolidate.log`. `uninstall-cron` removes only the entries it added, identified by a `# spekk-observer` marker.
 

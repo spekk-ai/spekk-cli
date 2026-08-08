@@ -134,12 +134,10 @@ var agentHelpExtras = map[string]struct {
 	Examples string
 }{
 	"observer": {
-		Options: `  --interval <seconds>   Preferred scan interval (Claude agent can adjust)
-  --quiet                Preference for minimal output (Claude agent decides)
+		Options: `  --quiet                Preference for minimal output (Claude agent decides)
 `,
-		Examples: `  spekk observer                          # Launch interactive observer
+		Examples: `  spekk observer                          # Scan once, filing at most three observations
   spekk observer coverage-gap             # Launch observer with coverage-gap skill
-  spekk observer --interval 60            # Observer with 60s interval preference
   spekk observer --quiet                  # Observer with quiet preference
 `,
 	},

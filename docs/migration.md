@@ -72,7 +72,7 @@ The observer agent previously had no skill support. It now uses the same layered
 
 ```bash
 spekk observer coverage-gap     # run observer with a specific skill
-spekk observer --interval 60    # default monitoring mode (unchanged)
+spekk observer                  # run one scan
 ```
 
 A seed skill (`coverage-gap`) ships embedded in the binary. It scans for exported code that has no backing spec.
