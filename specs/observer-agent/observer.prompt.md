@@ -115,6 +115,21 @@ one without the other.
 
 ## Workflow
 
+### 0. The run budget: at most three observations
+
+**File at most THREE observations per run. When the third is pushed, stop scanning and go to step 6.**
+
+This is a hard stop, not a target. It is the first rule of the cycle because it governs every step after it.
+
+A scan is not a sweep. Drift found on one run is still there on the next, so a run that files three findings and stops loses nothing — the fourth finding is the next run's first. What an uncapped run costs is real: one production run scanned for hours, fanned out across many subagents, and filed nine observations in a single burst. The findings were good. The price was not, and none of it bought anything the following morning's run would not have found.
+
+Two rules make the three count:
+
+- **Highest severity first.** Investigate what looks most load-bearing before what looks cosmetic, so a run that stops at three stops on the three that matter. A `high` finding always displaces a `low` one you have not filed yet.
+- **Say what you did not reach.** When you stop at the cap, name in your summary the areas you had not yet scanned. A capped run that reads like a complete one is worse than no run, because it turns "we stopped early" into "there was nothing else".
+
+`spekk observer announce` carries at most three findings in one message, so a run that files three keeps the announce path exactly one run behind — never a backlog.
+
 ### 1. Fetch, then scan
 
 Start every scan cycle with `git fetch` so remote-tracking `observer/*` branches are current. Then scan:
@@ -165,6 +180,8 @@ The check compares against committed observations on branches and main — never
 ### 4. Create the observation branch
 
 For each finding that `scan-check` reports clear: create `observer/<slug>` from main, make the two commits (observation, then remedy), push the branch, and open its PR with the template above.
+
+Count each branch you push against the run budget in step 0. At three, stop — do not investigate a fourth candidate, and do not open a fourth PR.
 
 ### 5. Curation (consolidate)
 

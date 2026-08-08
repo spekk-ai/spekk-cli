@@ -103,11 +103,50 @@ func (g gitRunner) commitFileChange(parentRev, path, content, message string) (s
 		return "", err
 	}
 
-	commit, err := g.run(nil, "commit-tree", tree, "-p", parent, "-m", message)
+	commit, err := g.run(commitIdentityEnv(os.Getenv), "commit-tree", tree, "-p", parent, "-m", message)
 	if err != nil {
 		return "", err
 	}
 	return commit, nil
+}
+
+// Identity for the announce flip commit, used when the environment names none.
+//
+// `commit-tree` needs an author and a committer, and unlike `git commit` it
+// takes them only from the environment or from config. Announce runs
+// unattended on a sandbox where neither is set: measured on 2026-08-08, no
+// spekk sandbox carries a git identity, global or per-repo. The agent that
+// shares those repos sets one inline per command, which leaves nothing behind
+// for a later process to find, so announce failed with "Author identity
+// unknown" and could not mark its finding announced -- and an unmarked
+// finding is announced again on the next run, for ever.
+//
+// Setting it here rather than provisioning the machines is deliberate. A
+// commit this code writes should not depend on how the host it happens to run
+// on was set up.
+const (
+	defaultCommitName  = "spekk-observer"
+	defaultCommitEmail = "observer@spekk.local"
+)
+
+// commitIdentityEnv returns the GIT_AUTHOR_* and GIT_COMMITTER_* variables
+// commit-tree needs. A value already present in the environment is kept: an
+// operator who sets an identity has said what they want, and this is a
+// fallback rather than an override. Each of the four is considered on its
+// own, so a half-configured environment is completed rather than ignored.
+func commitIdentityEnv(getenv func(string) string) []string {
+	var env []string
+	for _, v := range []struct{ key, fallback string }{
+		{"GIT_AUTHOR_NAME", defaultCommitName},
+		{"GIT_AUTHOR_EMAIL", defaultCommitEmail},
+		{"GIT_COMMITTER_NAME", defaultCommitName},
+		{"GIT_COMMITTER_EMAIL", defaultCommitEmail},
+	} {
+		if getenv(v.key) == "" {
+			env = append(env, v.key+"="+v.fallback)
+		}
+	}
+	return env
 }
 
 // pushCommit pushes a commit sha to branch on origin. The push is a plain
