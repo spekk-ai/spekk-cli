@@ -25,8 +25,9 @@ example, an assertion `done` on `main` that a feature branch moves back to
   with columns `path`, `branch`, `state` (`incoming_add` | `incoming_mod` |
   `conflict` | `incoming_del`), `degraded`, `old_status`, `new_status`.
 - `--json` emits an array of objects with those keys; `degraded` is a JSON
-  boolean, empty statuses are omitted, and an empty result set renders `[]`
-  (never `null`). `--tsv` and `--csv` emit the same columns through the
+  boolean, every row carries every key (empty statuses are empty strings,
+  never absent, so JSON and TSV/CSV describe the same shape), and an empty
+  result set renders `[]` (never `null`). `--tsv` and `--csv` emit the same columns through the
   shared formatter renderers.
 - `--branch-filter <glob>` restricts the comparison branches, same as in
   `spekk show --cross-branch`.

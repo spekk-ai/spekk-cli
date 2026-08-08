@@ -14,12 +14,17 @@ type fileStateJSON struct {
 	Branch    string `json:"branch"`
 	State     string `json:"state"`
 	Degraded  bool   `json:"degraded"`
-	OldStatus string `json:"old_status,omitempty"`
-	NewStatus string `json:"new_status,omitempty"`
+	OldStatus string `json:"old_status"`
+	NewStatus string `json:"new_status"`
 }
 
 // FormatJSON renders Classify results as a JSON array of objects. An empty
 // or nil slice renders as [], never null, so jq pipelines see an array.
+//
+// Every row carries every key, empty statuses included. Omitting them would
+// give the same surface two shapes -- TSV and CSV always emit the columns --
+// so a consumer switching format would have to handle a missing key in one
+// and an empty cell in the other.
 func FormatJSON(states []FileState) (string, error) {
 	rows := make([]fileStateJSON, 0, len(states))
 	for _, s := range states {

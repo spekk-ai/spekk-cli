@@ -55,8 +55,14 @@ func TestFormatJSON_Rows(t *testing.T) {
 	if rows[1]["degraded"] != true {
 		t.Errorf("expected degraded=true as a JSON bool, got %v", rows[1]["degraded"])
 	}
-	if _, ok := rows[1]["old_status"]; ok {
-		t.Errorf("empty old_status must be omitted, got %v", rows[1])
+	// Every row carries every key, so a consumer never has to tell a missing
+	// key apart from an empty value -- and TSV/CSV, which always emit the
+	// column, agree with JSON.
+	if v, ok := rows[1]["old_status"]; !ok || v != "" {
+		t.Errorf("expected an empty old_status key, got %v (present=%v)", v, ok)
+	}
+	if v, ok := rows[1]["new_status"]; !ok || v != "" {
+		t.Errorf("expected an empty new_status key, got %v (present=%v)", v, ok)
 	}
 	if strings.Contains(out, "full file body") || strings.Contains(out, "Meta") {
 		t.Errorf("Meta content leaked into JSON output:\n%s", out)
