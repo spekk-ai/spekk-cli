@@ -319,6 +319,18 @@ On older git, the feature **degrades gracefully** rather than failing:
 
 All git operations are funnelled through a single allowlist chokepoint that permits only a small set of read-only subcommands (`rev-parse`, `for-each-ref`, `merge-tree`, and a few others). No checkout, merge, index mutation, or ref mutation can occur.
 
+#### Machine-readable output — `spekk list --cross-branch`
+
+The same classification is available as data for agents and scripts (the HTML explorer stays the human surface):
+
+```bash
+spekk list --cross-branch --json
+spekk list --cross-branch --branch-filter 'feat/*' --json
+spekk list --cross-branch --tsv
+```
+
+One row per changed (file, branch) pair, with columns `path`, `branch`, `state` (`incoming_add` | `incoming_mod` | `conflict` | `incoming_del`), `degraded` (a conflict that could not be confirmed on git < 2.38), and `old_status`/`new_status` (assertion status drift on a clean incoming modification, e.g. `not_started` → `done`; empty otherwise). Default output is a table; `--json` emits an array of objects (every row carries every key, and an empty set renders `[]`), and `--tsv`/`--csv` emit the same columns. This lets an observer flag, for example, an assertion `done` on `main` that a feature branch moves back to `in_progress` — before the branch merges. The same read-only guarantee applies.
+
 #### Watch mode with cross-branch
 
 When combined with `--watch`, cross-branch classification is cached on a git ref-state fingerprint:
