@@ -1537,8 +1537,8 @@ func TestSplitFieldValues(t *testing.T) {
 	}{
 		{"single scalar", "w1-note-and-claim", []string{"w1-note-and-claim"}},
 		{"comma scalar", "w1-note-and-claim, w2-claim-reimbursement", []string{"w1-note-and-claim", "w2-claim-reimbursement"}},
-		{"flow sequence", "[infrastructure, hipaa]", []string{"infrastructure", "hipaa"}},
-		{"flow sequence quoted", `["infrastructure", 'hipaa']`, []string{"infrastructure", "hipaa"}},
+		{"flow sequence", "[infrastructure, compliance]", []string{"infrastructure", "compliance"}},
+		{"flow sequence quoted", `["infrastructure", 'compliance']`, []string{"infrastructure", "compliance"}},
 		{"quoted scalar with comma", `"Hello, world"`, []string{"Hello, world"}},
 		{"single-quoted scalar with comma", `'Hello, world'`, []string{"Hello, world"}},
 		{"quoted flow item with comma", `[a, "b, c"]`, []string{"a", "b, c"}},

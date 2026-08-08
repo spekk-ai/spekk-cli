@@ -10,7 +10,7 @@ created: 2026-08-06T00:00:00Z
 priority: 1
 status: done
 workflows: w5-billing-dispute-case
-tags: [infrastructure, hipaa]
+tags: [infrastructure, compliance]
 ---
 ```
 

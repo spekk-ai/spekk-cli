@@ -1,0 +1,36 @@
+name: Hygiene
+
+# Runs on push rather than pull_request on purpose. A pull_request event from
+# a fork gets no secrets, so the private-terms check would find no terms and
+# fail every outside contribution for a reason the contributor cannot fix.
+on:
+  push:
+    branches: ['**']
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check docs navigation
+        run: ./scripts/check-docs-nav.sh
+
+      # This repository is public and its examples come from real work, so a
+      # client name can reach it through a prompt, a release note, or a test
+      # fixture. The terms live in a secret: a denylist committed here would
+      # publish the very names it exists to keep out.
+      - name: Check private terms
+        env:
+          SPEKK_PRIVATE_TERMS: ${{ secrets.SPEKK_PRIVATE_TERMS }}
+        run: ./scripts/check-private-terms.sh
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l . | grep -v '^internal/show/template.html$' || true)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would change these files:" >&2
+            echo "$unformatted" | sed 's/^/  /' >&2
+            exit 1
+          fi
+          echo "gofmt: clean."
