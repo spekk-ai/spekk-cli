@@ -17,4 +17,8 @@ No shipped public file — code, config, docs, specs, or release notes — names
 
 ## Verification
 
-There is no automated check: a grep list in a public repo would re-leak the exact banned strings. Verification is a manual sweep at review time — run it whenever a change touches text that mentions the control host, and after any release-notes or spec addition about the sandbox subsystem.
+`scripts/check-private-terms.sh`, in CI on every push.
+
+This assertion previously recorded that no automated check was possible, because a grep list committed to a public repo would re-leak the exact strings it banned. That reasoning is right and the conclusion does not follow: the list does not have to be committed. The terms come from the `SPEKK_PRIVATE_TERMS` secret, so CI can match against them while the public tree never holds them.
+
+A manual sweep is still worth doing when a change adds prose about the control host, because the script only catches terms someone has already thought to add. It is no longer the only defence.
