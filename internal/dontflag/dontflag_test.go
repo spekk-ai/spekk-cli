@@ -161,3 +161,41 @@ func TestSuppressionGlobStillMatchesAfterNormalization(t *testing.T) {
 		t.Error("glob suppression must survive a location suffix and a ./ prefix")
 	}
 }
+
+// The pattern is normalized too. Normalizing only the candidate is worse
+// than normalizing neither: the glob is segment-exact, so a pattern written
+// `./internal/foo.go` would match nothing at all -- not even a path spelled
+// identically to it. A person wrote and reviewed that entry, and it would go
+// dead with no error and no signal.
+func TestSuppressionPatternIsNormalizedToo(t *testing.T) {
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+
+	for _, pattern := range []string{
+		"internal/foo.go",
+		"./internal/foo.go",
+		"internal//foo.go",
+	} {
+		entries := []Entry{{Match: pattern, Reason: "accepted", By: "someone"}}
+		for _, spelling := range []string{
+			"internal/foo.go",
+			"./internal/foo.go",
+			"internal/foo.go:42",
+		} {
+			if Suppressed(entries, "s", []string{spelling}, now) == nil {
+				t.Errorf("pattern %q did not suppress %q", pattern, spelling)
+			}
+		}
+	}
+
+	// A trailing slash on the pattern must not make it dead either.
+	dir := []Entry{{Match: "internal/foo/**", Reason: "legacy", By: "someone"}}
+	if Suppressed(dir, "s", []string{"internal/foo/bar.go:9"}, now) == nil {
+		t.Error("a glob pattern must still match a normalized path")
+	}
+
+	// Normalization must not widen a pattern onto an unrelated file.
+	entries := []Entry{{Match: "internal/foo.go", Reason: "r", By: "b"}}
+	if Suppressed(entries, "s", []string{"internal/foobar.go"}, now) != nil {
+		t.Error("an unrelated file was suppressed")
+	}
+}

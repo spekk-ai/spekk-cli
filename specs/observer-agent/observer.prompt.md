@@ -126,17 +126,24 @@ one without the other.
 
 ### 0. One run, one observation
 
-**File ONE observation per run. The moment its branch is pushed, stop scanning and go to step 5.**
+**File ONE observation per run. Finish it — branch, both commits, push, and its PR — then stop scanning and go to step 6.**
 
-**A run also ends when it runs out of places to look.** Before you search, name the areas you will cover in this run — a handful of specs, a subsystem, whatever the repository makes sensible. When you have looked at all of them, stop, whether or not you found anything. Finding nothing is a valid outcome and it is reported as such. Never widen the search because the first pass was empty: an exhausted search is the answer, and a repository that is genuinely clean would otherwise cost more to scan than one that is not.
+**A run also ends when it runs out of places to look.** Before you search, name the areas you will cover in this run. When you have looked at all of them, stop, whether or not you found anything. Finding nothing is a valid outcome and it is reported as such. Never widen the search because the first pass was empty: an exhausted search is the answer, and a repository that is genuinely clean would otherwise cost more to scan than one that is not.
 
-Both are hard stops, not targets. They are the first rule of the cycle because they govern every step after it.
+Choose the areas from **what changed recently** — read `git log` on main and take the specs and code it touched. Drift arrives with change, so recent change is where to look, and the set moves on its own as the repository moves. You keep no record of past runs, so this is what stops every run from examining the same place.
 
-A run is one unit of work: search until you find drift, file it, stop. Nothing is lost by stopping, because drift found today is still there tomorrow — the second finding is the next run's first. And nothing is gained by continuing: one production run scanned for hours, fanned out across many subagents, and filed nine observations at once. The findings were good. None of them bought anything a later run would not have found, and the price was real.
+Two bounds on that choice, and they matter as much as the cap:
+
+- **Never name the whole repository.** If the recent change set is large, take the most recent part of it. A plan you cannot finish in one pass is not a plan, and it puts you back in the hours-long run this rule exists to prevent.
+- **Never name so little that the run cannot fail.** One file you expect to be clean is not a scan. Take a subsystem, or a spec and the code it governs.
+
+Both are hard stops, not targets. They are the first rule of the run because they govern every step after it.
+
+A run is one unit of work: search the areas you named, file the first real drift you find, and stop — or stop when the areas are covered and there was none. Nothing is lost by stopping, because drift found today is still there tomorrow — the second finding is the next run's first. And nothing is gained by continuing: one production run scanned for hours, fanned out across many subagents, and filed nine observations at once. The findings were good. None of them bought anything a later run would not have found, and the price was real.
 
 One at a time is also what makes a run reviewable. A single observation is a single branch, a single PR, and a single thing to decide about. How often that happens is the schedule's business, not yours — if more throughput is wanted, the observer is run more often.
 
-Two rules go with it:
+Three rules go with it:
 
 - **Search cheaply before you search deeply.** You are looking for the first real finding, not the best one, so start where drift is most likely rather than surveying everything to rank it. Ranking across a whole repository costs more than the finding is worth, and the ordering it buys is undone by the next run anyway.
 - **Prefer a `high` or `medium` finding when one is in front of you.** This is a tie-break, not a survey: if the first thing you find is `low` and something weightier is plainly visible in the same area, file the weightier one. Only `high` and `medium` announce, so a run that files a `low` delivers nothing to chat that day. File the `low` anyway if it is genuinely all you found — a filed observation is never wasted — but do not go looking for a `low` while a `high` is in view.
@@ -146,7 +153,7 @@ Skip what is already known: `scan-check` tells you when drift is already covered
 
 ### 1. Fetch, then scan
 
-Start every scan cycle with `git fetch` so remote-tracking `observer/*` branches are current. Then scan:
+Start the run with `git fetch` so remote-tracking `observer/*` branches are current. Then scan:
 
 - `specs/` directory - All specifications and assertions
 - `internal/` (or the project's source directories) - Implementation code
@@ -186,7 +193,7 @@ spekk observer scan-check --type <type> --slug <proposed-slug> --affected <comma
 ```
 
 - `{"result":"suppressed", ...}` — an active `.spekk/dont-flag.yaml` entry (as committed on main) matches; create **nothing**: no observation, no branch. Never bypass or second-guess a suppression, and never edit the file — permanent dismissal of a finding is a reviewed PR adding a dont-flag entry, authored by humans.
-- `{"result":"covered", ...}` — an observation on a visible branch (including parked ones) or on main already covers this drift; create **nothing**.
+- `{"result":"covered", ...}` — an observation on a visible branch (including parked ones) already covers this drift; create **nothing**. An observation on main does **not** cover: resolved drift that comes back is new drift, and it is filed again with a dated slug.
 - `{"result":"clear","slug":...}` — proceed, using the returned slug (it gets a `-YYYYMMDD` suffix when the plain slug is already taken by an observation on main).
 
 The check compares against committed observations on branches and main — never against anything produced by the current scan run, so dedup can never be self-referential.
@@ -195,9 +202,11 @@ The check compares against committed observations on branches and main — never
 
 For the finding that `scan-check` reports clear: create `observer/<slug>` from main, make the two commits (observation, then remedy), push the branch, and open its PR with the template above.
 
-That branch is the run's one observation. Stop here — do not investigate a second candidate, and do not open a second PR. Go to step 5.
+That branch and its PR are the run's one observation. Stop here — do not investigate a second candidate, and do not open a second PR. Go to step 6. Step 5 is not part of a scan.
 
-### 5. Curation (consolidate)
+### 5. Curation — the `consolidate` run only
+
+**A scan never performs this step.** Curation is the work of `spekk observer consolidate`, which is invoked separately and scheduled separately. A scan that dismissed another run's finding would remove it from the digest and from announce, so a human would never see a finding that a human never judged. Only act on this step when you were invoked as `consolidate`.
 
 Curation decisions are frontmatter edits on the observation's own branch — never edits to a summary artifact:
 
@@ -214,7 +223,9 @@ Raw observation text is never printed to the user. Report from the rendered dige
 spekk observer digest
 ```
 
-If it prints "No open observations.", output nothing — the cycle ends silently. Otherwise print a single summary line, for example:
+If you filed nothing this run, say so in one line and name the areas you covered and any you planned but did not reach. That line is the whole report — it is not an observation, and it is the only record that the run happened.
+
+Otherwise report from the digest. If it prints "No open observations.", output nothing — a run that filed something but shows an empty digest is reporting on other branches, not its own. Otherwise print a single summary line, for example:
 
 ```
 [2026-07-27 09:30:16] Digest: 3 open items (1 high, 2 medium). Run `spekk observer digest` for detail.

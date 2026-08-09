@@ -32,9 +32,15 @@ tomorrow.
 
 - The observer prompt states the cap as its first workflow rule, before any
   step that could file something.
-- A run ends when it files its observation, **or** when it has covered the
-  areas it set out to cover — whichever comes first. Finding nothing is a
-  valid outcome and ends the run.
+- A run ends when it files its observation — branch, commits, push, and PR
+  complete — **or** when it has covered the areas it set out to cover,
+  whichever comes first. Finding nothing is a valid outcome and ends the run,
+  and the run still reports.
+- The areas are chosen from recent change on main, so the set moves as the
+  repository moves. Nothing persists between runs, so this is what stops
+  every run from examining the same place. The choice is bounded at both
+  ends: never the whole repository, and never so little that the run cannot
+  fail.
 - A run names, in its report, the areas it planned to cover but did not, so a
   short run is not mistaken for a clean audit.
 - Nothing in the prompt, the CLI, or the docs offers a per-run cadence, and
