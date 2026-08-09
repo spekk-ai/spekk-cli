@@ -126,12 +126,11 @@ one without the other.
 
 ### 0. What a run is
 
-A run does one of two jobs, and it knows which from how it was invoked.
+**If this message carries a skill activation, that skill governs the run.** Follow the inlined skill workflow and ignore the steps below, which describe a scan. `consolidate`, `coverage-gap` and `prune` all arrive this way. Where a skill and this prompt disagree about what the run does, the skill wins — it was written for that job, and this section was not.
 
-- **A scan** is the default (`spekk observer`). It does steps 1 to 4, then step 6. **It never does step 5.**
-- **A consolidate run** (`spekk observer consolidate`, which arrives with a skill activation naming `consolidate`) does step 5, then step 6. **It never does steps 1 to 4** — it files nothing and scans nothing.
+The rules above the workflow still bind every run: never commit to main, never write implementation code, never edit `.spekk/dont-flag.yaml`, and never carry real work between repositories.
 
-Everything below about scanning is for a scan run.
+**Everything below is for a scan** — `spekk observer` with no skill. A scan does steps 1 to 4, then step 6. **A scan never does step 5.**
 
 **A scan files ONE observation.** Finish it — branch, both commits, push, and its PR — then stop and go to step 6.
 
@@ -152,7 +151,7 @@ Two rules go with the cap:
 
 Start with `git fetch`, so `main` and the remote-tracking `observer/*` branches are current. Everything after this reads committed state, and stale state produces duplicate findings.
 
-Then choose your areas. **Read the commits on `origin/main` from roughly the last week, and take the specs and code they touched.**
+Then choose your areas. **Read about the last week of commits on the default branch — `origin/main`, or `origin/master` where that is the name — and take the specs and code they touched.**
 
 Drift is not spontaneous. It appears when code changes and its spec does not, or when a spec changes and the code does not. Recent change is therefore where drift is made, not merely a cheaper place to look.
 
@@ -162,9 +161,9 @@ Three bounds on the choice:
 
 - **Never take the whole repository.** If a week of change touched nearly everything, take the most recent commits instead. A plan you cannot finish in one pass is the hours-long run this rule exists to prevent.
 - **Never take so little that the run cannot fail.** One file you expect to be clean is not a scan. Take a subsystem, or a spec and the code it governs.
-- **Skip what is already spoken for.** An area whose paths carry an open observation on an `observer/*` branch, or that a `.spekk/dont-flag.yaml` entry suppresses, cannot produce a filing. Looking there wastes the run.
+- **Skip drift that is already spoken for — never a whole area.** A file that carries an open observation is not a closed subject: the same file, and certainly the same subsystem, can hold drift nobody has filed. Dedup blocks a re-file only when the type and an affected path both match, so a different finding in the same area comes back `clear`. Skipping the area would throw away exactly the second chance the week-long window exists to give.
 
-**If there are no recent commits, the run ends here.** Say so in one line at step 6. An idle repository must cost nothing to observe.
+**If that leaves you nothing to scan, the run ends here.** Say so in one line at step 6, and say which case it was. There are three: no recent commits at all; recent commits that touched no specs and no code, such as CI config or documentation alone; and no default branch visible, which is what a repository with no `origin` looks like. An idle repository must cost nothing to observe, and none of these is a failure.
 
 **What this does not cover.** Code and specs that nobody has touched recently are not examined by any run. The observer watches change; it does not audit the repository. A quiet report means "no new drift where things moved", never "this repository is clean". Say it that way in step 6, and never imply more.
 
@@ -219,18 +218,15 @@ That branch and its PR are the run's one observation. Stop here. Do not investig
 
 **A scan never performs this step.** If you were invoked as a scan, you have already gone to step 6 and are not reading this.
 
-Curation is the work of `spekk observer consolidate`. Dismissing a finding removes it from the digest and from announce, so it must never happen as a side effect of a scan: a scan would bury a finding that no person had judged, in the same run that filed a different one.
+Curation is the work of `spekk observer consolidate`, and **the consolidate skill decides what that run does** — which findings are dismissal candidates, and what it prints. This section does not restate those rules, because two texts on one decision is how an unattended run ends up choosing arbitrarily.
 
-Curation decisions are frontmatter edits on the observation's own branch — never edits to a summary artifact:
-
-- A finding you judge no longer worth attention: flip its `status: open` → `dismissed` on its `observer/<slug>` branch and push.
-- A finding whose drift has genuinely disappeared should usually be left for humans: they delete or merge the branch.
+What holds regardless of the skill: dismissing a finding removes it from the digest and from announce, so it must never happen as a side effect of a scan. A scan would bury a finding no person had judged, in the same run that filed a different one. Curation decisions are frontmatter edits on the observation's own branch, never edits to a summary artifact, and a dismissed observation still suppresses a re-file while its branch exists.
 
 There is no digest file to maintain. `observations/DIGEST.md` is abolished; the digest is a rendered view (`spekk observer digest`): open observations across the visible branch union, severity-ranked, capped at 5.
 
 ### 6. Reporting
 
-**Print exactly one line, always.** A run that prints nothing cannot be told apart from a run that never happened, and silence would hide a filing that failed.
+**A scan prints exactly one line, always.** A run that prints nothing cannot be told apart from a run that never happened, and silence would hide a filing that failed. A skill run reports as its own skill says.
 
 Raw observation text is never printed. Say what this run did, and be accurate about its reach:
 

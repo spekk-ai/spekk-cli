@@ -221,16 +221,40 @@ func TestSuppressionNeverWidensThePattern(t *testing.T) {
 	}
 }
 
-// Normalization runs on the path only, so it does not have to be idempotent.
-// Comparing a normalized pattern against a normalized path would have needed
-// that, and the bounded location strip does not provide it.
-func TestSuppressionDoesNotDependOnIdempotentNormalization(t *testing.T) {
+// A pattern names a file. One that carries a location suffix matches only its
+// own spelling, and this pins that limit so nobody mistakes it for a bug.
+//
+// The pattern is never rewritten, so the two spellings tried are the path as
+// written and the path fully normalized. A pattern sitting between those two
+// points -- `x.go:42`, which is decorated but not fully -- is reached by
+// neither when the path is decorated differently. Covering every intermediate
+// spelling would mean rewriting the pattern, and that is what let
+// `docs/../**` suppress the whole repository.
+//
+// This costs nothing in practice because `affected` paths name files: the
+// prompt forbids a location suffix there, so a pattern copied from an
+// observation has none either. An ordinary pattern matches every spelling,
+// which is the case that matters.
+func TestSuppressionPatternNamesAFileNotALocation(t *testing.T) {
 	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
-	entries := []Entry{{Match: "a:1", Reason: "r", By: "b"}}
 
-	for _, spelling := range []string{"a:1", "a:1:2:3"} {
-		if Suppressed(entries, "s", []string{spelling}, now) == nil {
-			t.Errorf("pattern %q did not suppress %q", "a:1", spelling)
+	located := []Entry{{Match: "x.go:42", Reason: "r", By: "b"}}
+	if Suppressed(located, "s", []string{"x.go:42"}, now) == nil {
+		t.Error("a located pattern must still match its own spelling")
+	}
+	for _, differently := range []string{"x.go:42:7", "./x.go:42", "x.go"} {
+		if Suppressed(located, "s", []string{differently}, now) != nil {
+			t.Errorf("a located pattern unexpectedly matched %q; if this now "+
+				"passes, the pattern is being rewritten somewhere", differently)
+		}
+	}
+
+	// The ordinary pattern -- the one the prompt produces -- covers every
+	// spelling, including the located ones above.
+	ordinary := []Entry{{Match: "x.go", Reason: "r", By: "b"}}
+	for _, spelling := range []string{"x.go", "./x.go", "x.go:42", "x.go:42:7"} {
+		if Suppressed(ordinary, "s", []string{spelling}, now) == nil {
+			t.Errorf("an ordinary pattern did not suppress %q", spelling)
 		}
 	}
 }

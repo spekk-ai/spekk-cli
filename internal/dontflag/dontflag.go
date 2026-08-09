@@ -61,8 +61,14 @@ func (e Entry) ActiveAt(now time.Time) bool {
 // evidence (what would become `affected`), not every file the scan read.
 // A path matches if the pattern matches it as written OR after
 // observation.NormalizePath. Candidate paths come from an agent, so the same
-// file arrives spelled several ways, and a `:42` suffix or a `./` prefix must
-// not defeat a suppression. Suppression is the only gate here that dedup
+// file arrives spelled several ways, and a `:42` suffix or a `./` prefix on
+// the reported PATH must not defeat a suppression.
+//
+// A pattern names a file, not a location. Only two spellings of the path are
+// tried, so a pattern that itself carries a `:42` matches just that spelling
+// — reaching the ones in between would mean rewriting the pattern. This costs
+// nothing in practice: `affected` paths name files, so a pattern copied from
+// an observation carries no suffix either. Suppression is the only gate here that dedup
 // cannot back up: suppressed drift never becomes an observation, so nothing
 // lands on a branch to cover it next time.
 //
