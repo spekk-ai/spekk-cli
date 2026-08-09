@@ -213,7 +213,7 @@ spekk observer scan-check --type <type> --slug <proposed-slug> --affected <comma
 ```
 
 - `{"result":"suppressed", ...}` — an active `.spekk/dont-flag.yaml` entry (as committed on main) matches; create **nothing**: no observation, no branch. Never bypass or second-guess a suppression, and never edit the file — permanent dismissal of a finding is a reviewed PR adding a dont-flag entry, authored by humans.
-- `{"result":"covered", ...}` — an observation on a visible branch (including parked ones) already covers this drift; create **nothing**. An observation on main does **not** cover: resolved drift that comes back is new drift, and it is filed again with a dated slug.
+- `{"result":"covered", ...}` — an observation visible on an `observer/*` branch already covers this drift; create **nothing**. Take the result as given. It is computed from committed state and it is the only authority on whether to file; never reason about whether it should have said something else.
 - `{"result":"clear","slug":...}` — proceed, using the returned slug (it gets a `-YYYYMMDD` suffix when the plain slug is already taken by an observation on main).
 
 `suppressed` and `covered` are not your finding. Keep looking within your areas.
