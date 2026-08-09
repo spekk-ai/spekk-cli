@@ -33,6 +33,9 @@ func TestNormalizePathKeepsWhatIsMeaningful(t *testing.T) {
 		"weird:name.go":          "weird:name.go",
 		"path/to/file.go:notnum": "path/to/file.go:notnum",
 		"":                       "",
+		// At most two suffixes are removed, because that is all a location
+		// can be. A name is not eaten segment by segment.
+		"a:1:2:3": "a:1",
 	}
 	for in, want := range cases {
 		if got := NormalizePath(in); got != want {

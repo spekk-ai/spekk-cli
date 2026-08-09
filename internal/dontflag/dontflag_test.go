@@ -126,3 +126,38 @@ func TestSuppressed(t *testing.T) {
 		t.Fatal("permanent entry must outlive the dated one")
 	}
 }
+
+// A suppression is an explicit human decision, so it must not be defeated by
+// the spelling of the path a scan happens to report. This is stricter than
+// dedup: suppressed drift never becomes an observation, so nothing lands on a
+// branch to cover it next time -- a missed suppression files the observation
+// its author asked never to see again, on every run.
+func TestSuppressionMatchesHoweverThePathIsSpelled(t *testing.T) {
+	entries := []Entry{{Match: "internal/foo.go", Reason: "accepted", By: "someone"}}
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+
+	for _, spelling := range []string{
+		"internal/foo.go",
+		"internal/foo.go:42",
+		"internal/foo.go:42:7",
+		"./internal/foo.go",
+		"internal//foo.go",
+	} {
+		if Suppressed(entries, "some-slug", []string{spelling}, now) == nil {
+			t.Errorf("%q was not suppressed; the observation would be filed anyway", spelling)
+		}
+	}
+
+	if Suppressed(entries, "some-slug", []string{"internal/bar.go"}, now) != nil {
+		t.Error("an unrelated file must not be suppressed")
+	}
+}
+
+// Glob suppressions keep working over normalized paths.
+func TestSuppressionGlobStillMatchesAfterNormalization(t *testing.T) {
+	entries := []Entry{{Match: "internal/**", Reason: "legacy", By: "someone"}}
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+	if Suppressed(entries, "s", []string{"./internal/deep/x.go:9"}, now) == nil {
+		t.Error("glob suppression must survive a location suffix and a ./ prefix")
+	}
+}

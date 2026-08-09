@@ -63,7 +63,7 @@ Rules:
 - **No evidence, no observation.** An observation without at least one `affected` path is invalid; tooling rejects it.
 - **Each `affected` entry is one file, relative to the repository root.** Write `internal/parser/parser.go` — never a directory, never a glob, never a path outside the repository. Cite a line in the prose if it helps; the path itself carries no `:42` suffix.
 
-  This is what makes runs accumulate rather than repeat. Dedup asks whether an earlier observation names a file this one also names, so a file spelled two ways is two findings, and the drift you filed yesterday is filed again today under a new slug. `./x.go`, `x.go:42` and `x.go` are reduced to the same path for you — a directory is not, because one directory-level finding would hide every real finding beneath it.
+  This is what makes runs accumulate rather than repeat. Dedup asks whether an earlier observation names a file this one also names, so anything it cannot match as the same file becomes a second finding for drift already filed. Spelling is handled for you — `./x.go`, `x.go:42` and `x.go` all reduce to the same path. A directory does not, because one directory-level finding would hide every real finding beneath it, so name the file.
 - `announced` is a timestamp written by `spekk observer announce` after a conversation opens. Its **absence** is the "not yet announced" marker. Never set, remove, or edit it, and never maintain any announce ledger file (`observations/announced.log` or equivalent) — no such file exists in this workflow.
 - Unknown extra fields are ignored by parsers, but emit only the fields above.
 
@@ -126,9 +126,11 @@ one without the other.
 
 ### 0. One run, one observation
 
-**File ONE observation per run. The moment its branch is pushed, stop scanning and go to step 6.**
+**File ONE observation per run. The moment its branch is pushed, stop scanning and go to step 5.**
 
-This is a hard stop, not a target. It is the first rule of the cycle because it governs every step after it.
+**A run also ends when it runs out of places to look.** Before you search, name the areas you will cover in this run — a handful of specs, a subsystem, whatever the repository makes sensible. When you have looked at all of them, stop, whether or not you found anything. Finding nothing is a valid outcome and it is reported as such. Never widen the search because the first pass was empty: an exhausted search is the answer, and a repository that is genuinely clean would otherwise cost more to scan than one that is not.
+
+Both are hard stops, not targets. They are the first rule of the cycle because they govern every step after it.
 
 A run is one unit of work: search until you find drift, file it, stop. Nothing is lost by stopping, because drift found today is still there tomorrow — the second finding is the next run's first. And nothing is gained by continuing: one production run scanned for hours, fanned out across many subagents, and filed nine observations at once. The findings were good. None of them bought anything a later run would not have found, and the price was real.
 
@@ -137,9 +139,10 @@ One at a time is also what makes a run reviewable. A single observation is a sin
 Two rules go with it:
 
 - **Search cheaply before you search deeply.** You are looking for the first real finding, not the best one, so start where drift is most likely rather than surveying everything to rank it. Ranking across a whole repository costs more than the finding is worth, and the ordering it buys is undone by the next run anyway.
-- **Say what you did not reach.** When you stop, name in your summary the areas you had not yet looked at. A run that stops after one finding and reads like a complete audit is worse than no run, because it turns "we stopped early" into "there was nothing else".
+- **Prefer a `high` or `medium` finding when one is in front of you.** This is a tie-break, not a survey: if the first thing you find is `low` and something weightier is plainly visible in the same area, file the weightier one. Only `high` and `medium` announce, so a run that files a `low` delivers nothing to chat that day. File the `low` anyway if it is genuinely all you found — a filed observation is never wasted — but do not go looking for a `low` while a `high` is in view.
+- **Say what you did not reach.** When you stop, name in your summary the areas you had planned to cover but did not. A run that stops after one finding and reads like a complete audit is worse than no run, because it turns "we stopped early" into "there was nothing else".
 
-Skip what is already known: `scan-check` tells you when drift is already covered by an observation on a branch, or suppressed by `.spekk/dont-flag.yaml`. Neither counts as your finding — keep looking.
+Skip what is already known: `scan-check` tells you when drift is already covered by an observation on a branch, or suppressed by `.spekk/dont-flag.yaml`. Neither counts as your finding — carry on through the areas you planned to cover.
 
 ### 1. Fetch, then scan
 
@@ -192,7 +195,7 @@ The check compares against committed observations on branches and main — never
 
 For the finding that `scan-check` reports clear: create `observer/<slug>` from main, make the two commits (observation, then remedy), push the branch, and open its PR with the template above.
 
-That branch is the run's one observation. Stop here — do not investigate a second candidate, and do not open a second PR. Go to step 6.
+That branch is the run's one observation. Stop here — do not investigate a second candidate, and do not open a second PR. Go to step 5.
 
 ### 5. Curation (consolidate)
 
@@ -217,7 +220,7 @@ If it prints "No open observations.", output nothing — the cycle ends silently
 [2026-07-27 09:30:16] Digest: 3 open items (1 high, 2 medium). Run `spekk observer digest` for detail.
 ```
 
-Announcing findings to chat is NOT your job: `spekk observer announce` (a deterministic Go subcommand, typically cron-driven) selects and announces at most one unannounced open observation per run. Do not compose announcement text yourself.
+Announcing findings to chat is NOT your job: `spekk observer announce` (a deterministic Go subcommand, typically cron-driven) selects the top unannounced open observations and carries at most three in one message per run (a backlog drains a few at a time). Do not compose announcement text yourself.
 
 ## Key Principles
 
@@ -230,14 +233,14 @@ Announcing findings to chat is NOT your job: `spekk observer announce` (a determ
 **Focus on actionable drift:**
 - Not every imperfection is worth reporting
 - Prioritize issues that genuinely impact development
-- Look for patterns, not just individual cases
+- Where several symptoms share one cause, that cause is the finding
 - Consider the cost of addressing vs. ignoring
 
 **Quality over quantity:**
-- Better to find 3 real issues than 10 false positives
+- Better to file one real issue than to raise a false positive
 - Provide specific evidence, not vague concerns
 - Make observations easy for humans to understand and act on
-- Group related issues into one observation when they share a cause
+- Group related issues into one observation when they share a cause — that is one finding, not several
 
 ## Your Spec
 

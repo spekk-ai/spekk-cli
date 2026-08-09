@@ -344,7 +344,7 @@ When combined with `--watch`, cross-branch classification is cached on a git ref
 
 ## `spekk observer`
 
-Monitor spec-code drift.
+Find spec-code drift, one observation at a time.
 
 ```bash
 spekk observer                    # Run one scan
@@ -367,7 +367,7 @@ Detects when code changes but specs don't update (or vice versa). Helps keep spe
 
 **A run files one observation.** It searches until it finds drift, files it, and stops. Drift found today is still there tomorrow, so the second finding is the next run's first — run it again to continue. A run says which areas it had not reached, so a short run is never mistaken for a clean bill of health.
 
-Each scan closes with a quiet consolidation pass and reports only a brief summary from `observations/DIGEST.md`. When the digest is empty, the observer stays silent.
+A run reports only a brief summary from the rendered digest (`spekk observer digest`) — there is no committed digest file. When the digest is empty, the observer stays silent.
 
 How many observations you receive is therefore set by how often you run it, not by how long a run goes on. That is the schedule's business — see `install-cron` below, or use whatever scheduler you prefer.
 
@@ -379,7 +379,7 @@ How many observations you receive is therefore set by how often you run it, not 
 |-------|-------------|
 | `coverage-gap` | Surfaces code a spec could optionally document — a progressive-adoption aid, not a defect report (un-spec'd code is normal) |
 | `prune` | Surfaces genuinely-unused code and design-level redundancy (duplication, over-abstraction, dead config) as candidates for human review — recommend-only, never deletes; a missing spec is never a signal |
-| `consolidate` | Reviews all raw observations, archives stale/duplicates, rewrites `observations/DIGEST.md` with at most 5 severity-ranked items |
+| `consolidate` | Curates observations by editing frontmatter on their own branches (for example `open` → `dismissed`); writes no digest file |
 
 ### `spekk observer install-cron`
 

@@ -98,16 +98,23 @@ func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 
 // minutesToCron converts a positive interval in minutes to a cron schedule expression.
 //
-//   - Intervals ≤ 60 m:                          */N * * * *
+//   - Intervals < 60 m:                          */N * * * *
+//   - One hour:                                  0 * * * *
 //   - One day:                                   0 0 * * *
 //   - Other exact multiples of 60:               0 */H * * *
 //
-// A day is written out rather than left to the hourly form. `0 */24 * * *`
-// steps by 24 across an hour field that only reaches 23, which strict crons
-// reject and lax crons quietly reduce to midnight — the right time by
-// accident, from an expression that does not mean it.
+// An hour and a day are written out rather than left to the stepped forms.
+// `*/60 * * * *` steps by 60 across a minute field that only reaches 59, and
+// `0 */24 * * *` steps by 24 across an hour field that only reaches 23:
+// strict crons reject both, and lax crons quietly reduce them to the first
+// value — the right time by accident, from an expression that does not mean
+// it. An hour matters as much as a day here, because the error message for a
+// rejected interval offers 60 as an example.
 func minutesToCron(minutes int) string {
-	if minutes <= 60 {
+	if minutes == 60 {
+		return "0 * * * *"
+	}
+	if minutes < 60 {
 		return fmt.Sprintf("*/%d * * * *", minutes)
 	}
 	if minutes == maxCronInterval {

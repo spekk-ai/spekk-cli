@@ -156,9 +156,12 @@ func NormalizePath(p string) string {
 	if p == "" {
 		return ""
 	}
-	// A trailing :line or :line:column. Only digits qualify, so a path that
-	// genuinely contains a colon is left alone.
-	for {
+	// A trailing :line or :line:column. Only digits qualify, and at most two
+	// are removed, because that is all a location can be. A file whose name
+	// genuinely ends in a colon and digits still loses that much -- rare, and
+	// preferred to leaving every real location suffix in place -- but a name
+	// like `a:1:2:3` is not eaten whole.
+	for strips := 0; strips < 2; strips++ {
 		i := strings.LastIndex(p, ":")
 		if i <= 0 || i == len(p)-1 || !allDigits(p[i+1:]) {
 			break

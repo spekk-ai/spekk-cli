@@ -100,7 +100,12 @@ func TestMinutesToCron(t *testing.T) {
 	}{
 		{30, "*/30 * * * *"},
 		{15, "*/15 * * * *"},
-		{60, "*/60 * * * *"},
+		// An hour is written out for the same reason a day is. `*/60 * * * *`
+		// steps by 60 across a minute field that only reaches 59, so strict
+		// crons reject it and lax crons quietly reduce it to :00. The error
+		// message for a rejected interval offers 60 as an example, so it must
+		// render an expression that means what it says.
+		{60, "0 * * * *"},
 		{360, "0 */6 * * *"},
 		{120, "0 */2 * * *"},
 		// A day is written out. The hourly form would be `0 */24 * * *`,

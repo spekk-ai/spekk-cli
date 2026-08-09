@@ -25,6 +25,16 @@ covering a piece of drift, the scan does not create a new observation for it.
   union has the same `type` and an overlapping `affected` path set for the
   same underlying finding; covered drift produces no new observation and no
   new branch.
+- Paths overlap when they name the same file, not when they are the same
+  string. `affected` entries are written by an agent, so the same file
+  arrives spelled several ways; both sides are compared after normalization,
+  which removes a `:line` or `:line:column` suffix, a leading `./`, repeated
+  slashes, a trailing slash, and any `.` or `..` segment. A directory is
+  deliberately not reduced to the files under it — prefix containment would
+  let one directory-level finding hide every file-level finding beneath it.
+- The same normalization applies to `.spekk/dont-flag.yaml` matching, which
+  needs it more: suppressed drift never becomes an observation, so no branch
+  exists to cover it on the next run.
 - Parked branches (branch exists, PR closed) participate in the union exactly
   like pending ones — closing a PR without deleting the branch keeps the
   finding suppressed.

@@ -59,12 +59,19 @@ func (e Entry) ActiveAt(now time.Time) bool {
 // pattern against the slug the observation would be given, or against any
 // of its evidence paths. The match target for path globs is the drift's
 // evidence (what would become `affected`), not every file the scan read.
+// Paths are matched after observation.NormalizePath, for the same reason
+// dedup normalizes them: the candidate paths are written by an agent, so the
+// same file arrives spelled several ways. A suppression is an explicit human
+// decision, and it must not be defeated by a `:42` suffix or a `./` prefix on
+// the path a scan happens to report. Suppression is also the only gate here
+// that dedup cannot back up — suppressed drift never becomes an observation,
+// so there is nothing on a branch to cover it next time.
 func (e Entry) Matches(slug string, affected []string) bool {
 	if globMatch(e.Match, slug) {
 		return true
 	}
 	for _, p := range affected {
-		if globMatch(e.Match, p) {
+		if globMatch(e.Match, observation.NormalizePath(p)) {
 			return true
 		}
 	}
