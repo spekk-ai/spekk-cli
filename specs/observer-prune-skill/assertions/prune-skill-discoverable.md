@@ -22,4 +22,4 @@ Once the file exists and is embedded, discovery is handled by the existing resol
 - `SkillResolver.ResolveSkill("observer", "prune")` returns the prune skill (resolved from the embedded FS in a clean checkout, and from `specs/observer-skills/` in a source tree).
 - `SkillResolver.ListSkills("observer")` includes the prune skill, and `spekk observer --help` (via `agent.ShowHelp(installDir, "observer")`) lists it under its invocation name `prune` in the `AVAILABLE SKILLS:` section — the raw stem `prune-skill` is NOT shown.
 - `spekk observer prune` activates the skill (its content is inlined into the observer activation message), consistent with how `spekk observer coverage-gap` behaves.
-- Existing observer skills (`coverage-gap`, `consolidate`) and observer flag behavior (`--interval`, `--quiet`) are unaffected — `prune` is additive.
+- Existing observer skills (`coverage-gap`, `consolidate`) and observer flag behavior (`--quiet`) are unaffected — `prune` is additive.

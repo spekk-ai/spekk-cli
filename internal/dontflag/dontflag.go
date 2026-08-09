@@ -59,12 +59,38 @@ func (e Entry) ActiveAt(now time.Time) bool {
 // pattern against the slug the observation would be given, or against any
 // of its evidence paths. The match target for path globs is the drift's
 // evidence (what would become `affected`), not every file the scan read.
+// A path matches if the pattern matches it as written OR after
+// observation.NormalizePath. Candidate paths come from an agent, so the same
+// file arrives spelled several ways, and a `:42` suffix or a `./` prefix on
+// the reported PATH must not defeat a suppression.
+//
+// A pattern names a file, not a location. Only two spellings of the path are
+// tried, so a pattern that itself carries a `:42` matches just that spelling
+// — reaching the ones in between would mean rewriting the pattern. This costs
+// nothing in practice: `affected` paths name files, so a pattern copied from
+// an observation carries no suffix either. Suppression is the only gate here that dedup
+// cannot back up: suppressed drift never becomes an observation, so nothing
+// lands on a branch to cover it next time.
+//
+// The pattern itself is NEVER rewritten, and that is the whole design. It is
+// a glob, not a path, so a path function has no business cleaning it:
+// path.Clean resolves `..`, which turns the scoped-looking `docs/../**` into
+// `**` and suppresses the entire repository; the location-suffix strip turns
+// `**:1` into `**` for the same result. Both read as narrow to a reviewer,
+// and this file is trusted precisely because a person read it.
+//
+// Trying the pattern against both spellings gets what normalizing was meant
+// to get, and cannot do either of those things. It also removes any need for
+// the normalizer to be idempotent — comparing a normalized pattern with a
+// normalized path was only ever sound if it were.
+//
+// The slug is not a path, so it is compared as written.
 func (e Entry) Matches(slug string, affected []string) bool {
 	if globMatch(e.Match, slug) {
 		return true
 	}
 	for _, p := range affected {
-		if globMatch(e.Match, p) {
+		if globMatch(e.Match, p) || globMatch(e.Match, observation.NormalizePath(p)) {
 			return true
 		}
 	}
@@ -201,6 +227,17 @@ func validate(e Entry, pos int) error {
 	if e.Until != "" {
 		if _, err := time.ParseInLocation(untilLayout, e.Until, time.UTC); err != nil {
 			return fmt.Errorf("%s: %s: field 'until' must be a YYYY-MM-DD date, got %q", FilePath, name, e.Until)
+		}
+	}
+	// globMatch treats a malformed pattern as matching nothing, so an entry
+	// with one would validate and then silently suppress nothing -- the same
+	// defect an unknown key is rejected for. Refuse it here instead.
+	for _, seg := range strings.Split(e.Match, "/") {
+		if seg == "**" {
+			continue
+		}
+		if _, err := path.Match(seg, "x"); err != nil {
+			return fmt.Errorf("%s: %s: field 'match' is not a valid glob: %v", FilePath, name, err)
 		}
 	}
 	return nil

@@ -36,7 +36,7 @@ First match wins. `SkillResolver` already implements this layering — observer 
 
 ### Invocation
 
-`spekk observer [skill] [flags]` — if the first positional arg resolves to an observer skill, the skill content is inlined into the activation message via `BuildSkillMessage`. Otherwise the observer runs in its default mode (timer-based polling loop, configurable via `--interval`).
+`spekk observer [skill] [flags]` — if the first positional arg resolves to an observer skill, the skill content is inlined into the activation message via `BuildSkillMessage`. Otherwise the observer runs a scan, which files one observation and ends. How often a scan happens is set by the schedule that invokes it, never by the run.
 
 ### Help
 

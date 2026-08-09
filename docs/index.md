@@ -87,7 +87,7 @@ spekk builder     # Build it
 
 === "Observer"
 
-    Monitors drift between your specs and code. Detects when implementation changes but specs don't update (or vice versa).
+    Finds drift between your specs and code. Detects when implementation changes but specs don't update (or vice versa).
 
     ```bash
     spekk observer

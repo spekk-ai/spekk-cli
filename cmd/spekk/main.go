@@ -1547,7 +1547,7 @@ COMMANDS:
   serve     Start WebSocket server for browser extension (--port, --host)
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
-  observer  Launch the Observer Agent to monitor spec-code drift
+  observer  Launch the Observer Agent to find spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
   conversation  Request a conversation on the connected chat surface (open)
   install   Install a skill for an agent (coach/builder/observer)

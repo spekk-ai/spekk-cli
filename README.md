@@ -385,7 +385,7 @@ spekk coach meeting notes.txt
 
 #### Observer Agent
 
-Monitors spec-code drift and detects when code changes but specs don't (or vice versa):
+Finds spec-code drift and detects when code changes but specs don't (or vice versa):
 
 ```bash
 spekk observer
@@ -404,7 +404,7 @@ spekk show -w      # Watch mode with live reload
 spekk status       # Comprehensive overview of all specs/assertions
 spekk coach        # Launch Coach Agent
 spekk builder      # Launch Builder Agent
-spekk observer     # Launch Observer Agent (monitors drift)
+spekk observer     # Launch Observer Agent (finds drift)
 spekk install      # Install agents into a coding assistant (--target)
 spekk prompt       # Print an agent's resolved prompt
 spekk skill        # List and print agent skills (list, show)

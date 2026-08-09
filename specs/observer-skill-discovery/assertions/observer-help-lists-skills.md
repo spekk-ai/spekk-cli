@@ -20,7 +20,7 @@ branch: feature/extend-observer
 
 - `spekk observer --help` (and `-h`, `help`) routes to `agent.ShowHelp(installDir, "observer")` instead of the hardcoded `showObserverHelp()` function
 - Help output includes an `AVAILABLE SKILLS:` section listing observer skills found across all layers
-- Help output continues to document observer-specific options (`--interval`, `--quiet`)
+- Help output continues to document observer-specific options (`--quiet`)
 - Skills shadowed by a higher-priority layer appear only once in the listing
 - When no skills are available, the help shows `(none found)` under the skills section (current `ShowHelp` behavior)
 - The hardcoded `showObserverHelp()` function is removed or replaced — observer help comes from one source
