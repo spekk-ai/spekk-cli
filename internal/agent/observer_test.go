@@ -292,12 +292,20 @@ func TestObserverLockFile_SanitizesUnsafeNames(t *testing.T) {
 // child copy of the test binary and inspects the exit status and message.
 func TestRunObserver_RefusesRemovedIntervalFlag(t *testing.T) {
 	if os.Getenv("SPEKK_TEST_RUN_OBSERVER_REMOVED_FLAG") == "1" {
-		RunObserver([]string{"--interval", "60"}, t.TempDir())
+		// os.Exit inside RunObserver skips t.TempDir cleanup, so the system
+		// temp dir is passed instead of leaking a directory on every run.
+		RunObserver([]string{"--interval", "60"}, os.TempDir())
 		return
 	}
 
 	cmd := exec.Command(os.Args[0], "-test.run", "^TestRunObserver_RefusesRemovedIntervalFlag$")
-	cmd.Env = append(os.Environ(), "SPEKK_TEST_RUN_OBSERVER_REMOVED_FLAG=1")
+	// PATH points at an empty directory so that, if a regression ever lets
+	// RunObserver fall through to a launch, the child fails fast on binary
+	// lookup instead of starting a real permission-skipping Claude session
+	// in this repository, or hanging on one.
+	cmd.Env = append(os.Environ(),
+		"SPEKK_TEST_RUN_OBSERVER_REMOVED_FLAG=1",
+		"PATH="+t.TempDir())
 	out, err := cmd.CombinedOutput()
 
 	if err == nil {

@@ -68,22 +68,29 @@ func isValidCronInterval(minutes int) bool {
 // form, would otherwise install the default schedule in place of the one
 // the operator asked for, silently.
 func checkInstallCronArgs(args []string) error {
-	expectValue := false
+	valueFlag := ""
 	for _, a := range args {
-		if expectValue {
-			expectValue = false
+		if valueFlag != "" {
+			// The shared parser does not consume a flag-shaped token as a
+			// value, so accepting one here would install the defaults
+			// silently — refuse it. A negative number ("-5") is let through
+			// so the parser's clearer positive-number error can fire.
+			if strings.HasPrefix(a, "--") || (len(a) >= 2 && a[0] == '-' && (a[1] < '0' || a[1] > '9')) {
+				return fmt.Errorf("%s needs a value in minutes, got %q", valueFlag, a)
+			}
+			valueFlag = ""
 			continue
 		}
 		switch a {
 		case "--loop-interval", "--consolidate-interval":
-			expectValue = true
+			valueFlag = a
 		case "--help", "-h":
 		default:
 			return fmt.Errorf("unknown argument %q; install-cron accepts --loop-interval <minutes>, --consolidate-interval <minutes>, and --help (values are space-separated, not --flag=value)", a)
 		}
 	}
-	if expectValue {
-		return fmt.Errorf("%s needs a value in minutes", args[len(args)-1])
+	if valueFlag != "" {
+		return fmt.Errorf("%s needs a value in minutes", valueFlag)
 	}
 	return nil
 }
@@ -209,14 +216,16 @@ func writeCrontab(content string) error {
 // runs take different lock files by design, so nothing would serialize them:
 // two headless Claude sessions would start together in one working tree, both
 // running git, and consolidation would never see the day's scan until the
-// next day. An hour is enough — the cap is one observation, so a scan does
-// not run for hours any more.
+// next day. Half an hour is enough — the cap is one observation, so a scan
+// does not run for hours any more — and half past misses every scan schedule
+// of an hour or longer, because those all fire at minute 0. An hour later at
+// minute 0 would not: an hourly scan (`0 * * * *`) fires at 01:00 too.
 //
 // Below a day the schedules are intervals rather than times, so there is no
 // hour to move; the pre-existing overlap there is unchanged.
 func consolidateCron(minutes int) string {
 	if minutes == maxCronInterval {
-		return "0 1 * * *"
+		return "30 0 * * *"
 	}
 	if minutes%60 == 0 {
 		// Every hourly-form scan fires at minute 0, and so does the daily

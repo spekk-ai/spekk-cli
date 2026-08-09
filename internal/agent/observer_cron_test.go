@@ -297,7 +297,7 @@ func TestConsolidateDoesNotRunAgainstTheScan(t *testing.T) {
 	if !strings.Contains(loop, "0 0 * * *") {
 		t.Errorf("daily scan should run at midnight: %q", loop)
 	}
-	if !strings.Contains(consolidate, "0 1 * * *") {
+	if !strings.Contains(consolidate, "30 0 * * *") {
 		t.Errorf("daily consolidation must follow the scan, not start with it: %q", consolidate)
 	}
 
@@ -338,5 +338,34 @@ func TestParseInstallCronFlags_RefusesUnknownArguments(t *testing.T) {
 	}
 	if cfg.LoopInterval != 60 || cfg.ConsolidateInterval != 360 {
 		t.Errorf("supported form mis-parsed: %+v", cfg)
+	}
+}
+
+// The daily consolidation must not fire at minute 0 of any hour: every scan
+// schedule of an hour or longer fires at minute 0, so a minute-0 daily
+// consolidation would co-start with an hourly scan (--loop-interval 60).
+func TestDailyConsolidationAvoidsEveryHourlyScan(t *testing.T) {
+	fields := strings.Fields(consolidateCron(1440))
+	if fields[0] == "0" {
+		t.Errorf("consolidateCron(1440) = %q fires at minute 0 and co-starts with an hourly scan", consolidateCron(1440))
+	}
+}
+
+// A flag-shaped token in value position is refused: the shared parser would
+// not consume it as a value, so the defaults would be installed silently.
+func TestCheckInstallCronArgs_RefusesFlagInValuePosition(t *testing.T) {
+	for _, args := range [][]string{
+		{"--loop-interval", "--consolidate-interval"},
+		{"--loop-interval", "--quiet"},
+		{"--consolidate-interval", "--loop-interval"},
+	} {
+		if _, err := ParseInstallCronFlags(args); err == nil {
+			t.Errorf("args %v were accepted; the parser would not consume the flag as a value and the defaults would be installed silently", args)
+		}
+	}
+	// A negative number still reaches the positive-number error.
+	if _, err := ParseInstallCronFlags([]string{"--loop-interval", "-5"}); err == nil ||
+		!strings.Contains(err.Error(), "positive") {
+		t.Errorf("expected the positive-number error for -5, got %v", err)
 	}
 }

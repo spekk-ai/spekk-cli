@@ -171,9 +171,6 @@ func NormalizePath(p string) string {
 		}
 		p = p[:i]
 	}
-	if p == "" {
-		return ""
-	}
 	// path.Clean settles the rest: ./ prefixes however many, duplicate
 	// slashes, a trailing slash, and any . or .. segment.
 	return path.Clean(p)
