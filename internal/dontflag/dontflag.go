@@ -229,6 +229,17 @@ func validate(e Entry, pos int) error {
 			return fmt.Errorf("%s: %s: field 'until' must be a YYYY-MM-DD date, got %q", FilePath, name, e.Until)
 		}
 	}
+	// globMatch treats a malformed pattern as matching nothing, so an entry
+	// with one would validate and then silently suppress nothing -- the same
+	// defect an unknown key is rejected for. Refuse it here instead.
+	for _, seg := range strings.Split(e.Match, "/") {
+		if seg == "**" {
+			continue
+		}
+		if _, err := path.Match(seg, "x"); err != nil {
+			return fmt.Errorf("%s: %s: field 'match' is not a valid glob: %v", FilePath, name, err)
+		}
+	}
 	return nil
 }
 

@@ -301,9 +301,42 @@ func TestConsolidateDoesNotRunAgainstTheScan(t *testing.T) {
 		t.Errorf("daily consolidation must follow the scan, not start with it: %q", consolidate)
 	}
 
-	// Below a day the schedules are intervals, not times, so they are left as
-	// they were.
-	if got := consolidateCron(360); got != "0 */6 * * *" {
-		t.Errorf("consolidateCron(360) = %q, want the plain interval", got)
+	// Hourly forms keep their interval but move to half past, because every
+	// scan schedule (daily, and 0 */H) fires at minute 0.
+	if got := consolidateCron(360); got != "30 */6 * * *" {
+		t.Errorf("consolidateCron(360) = %q, want the half-past interval", got)
+	}
+	if got := consolidateCron(60); got != "30 * * * *" {
+		t.Errorf("consolidateCron(60) = %q, want the half-past interval", got)
+	}
+	// Sub-hourly consolidation is an interval with no minute to move.
+	if got := consolidateCron(30); got != "*/30 * * * *" {
+		t.Errorf("consolidateCron(30) = %q, want the plain interval", got)
+	}
+}
+
+// install-cron installs a schedule, so an argument it does not understand
+// must fail loudly. The shared parser ignores unknown flags; left alone,
+// a typo or the --flag=value form would install the daily default in place
+// of the schedule the operator asked for.
+func TestParseInstallCronFlags_RefusesUnknownArguments(t *testing.T) {
+	for _, args := range [][]string{
+		{"--loop-interval=60"},   // = form is not supported
+		{"--lop-interval", "60"}, // typo
+		{"--interval", "60"},     // the removed observer flag
+		{"--loop-interval"},      // missing value
+		{"stray"},                // bare positional
+	} {
+		if _, err := ParseInstallCronFlags(args); err == nil {
+			t.Errorf("args %v were accepted; the default schedule would be installed silently", args)
+		}
+	}
+
+	cfg, err := ParseInstallCronFlags([]string{"--loop-interval", "60", "--consolidate-interval", "360"})
+	if err != nil {
+		t.Fatalf("supported form rejected: %v", err)
+	}
+	if cfg.LoopInterval != 60 || cfg.ConsolidateInterval != 360 {
+		t.Errorf("supported form mis-parsed: %+v", cfg)
 	}
 }

@@ -258,3 +258,24 @@ func TestSuppressionPatternNamesAFileNotALocation(t *testing.T) {
 		}
 	}
 }
+
+// A malformed glob would validate and then match nothing: a suppression a
+// person wrote and reviewed, silently dead, so the observation it names is
+// filed on every run. In a safety file that must be a parse error, for the
+// same reason an unknown key is.
+func TestParseRejectsMalformedGlob(t *testing.T) {
+	_, err := Parse("- match: \"internal/[a-z.go\"\n  reason: r\n  by: b\n")
+	if err == nil {
+		t.Fatal("a malformed glob parsed cleanly; the entry would silently suppress nothing")
+	}
+	if !strings.Contains(err.Error(), "glob") {
+		t.Errorf("error does not name the glob problem: %v", err)
+	}
+
+	// The patterns the file is meant to hold still parse.
+	for _, ok := range []string{"internal/**", "*.md", "specs/[a-z]*/**", "a?c.go", "slug-pattern-*"} {
+		if _, err := Parse("- match: \"" + ok + "\"\n  reason: r\n  by: b\n"); err != nil {
+			t.Errorf("valid pattern %q rejected: %v", ok, err)
+		}
+	}
+}

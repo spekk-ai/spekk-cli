@@ -133,7 +133,10 @@ func (u *Union) OnMain(slug string) bool {
 }
 
 // NormalizePath reduces an affected path to the form paths are compared in:
-// repository-root-relative, no location suffix.
+// as written, but with no location suffix, no ./ prefix, no redundant
+// slashes, and no surrounding whitespace. It does not make an absolute path
+// repository-root-relative — writing root-relative paths is the prompt's
+// job, like naming files rather than directories.
 //
 // Dedup compares these strings exactly, and the strings are written by an
 // agent rather than produced by the code — so the same file arrives spelled

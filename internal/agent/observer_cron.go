@@ -62,11 +62,41 @@ func isValidCronInterval(minutes int) bool {
 	return minutes <= 60 || minutes%60 == 0
 }
 
+// checkInstallCronArgs refuses any argument install-cron does not
+// understand. The shared parser ignores unknown flags, but install-cron
+// installs a schedule: a mistyped flag, or the unsupported --flag=value
+// form, would otherwise install the default schedule in place of the one
+// the operator asked for, silently.
+func checkInstallCronArgs(args []string) error {
+	expectValue := false
+	for _, a := range args {
+		if expectValue {
+			expectValue = false
+			continue
+		}
+		switch a {
+		case "--loop-interval", "--consolidate-interval":
+			expectValue = true
+		case "--help", "-h":
+		default:
+			return fmt.Errorf("unknown argument %q; install-cron accepts --loop-interval <minutes>, --consolidate-interval <minutes>, and --help (values are space-separated, not --flag=value)", a)
+		}
+	}
+	if expectValue {
+		return fmt.Errorf("%s needs a value in minutes", args[len(args)-1])
+	}
+	return nil
+}
+
 // ParseInstallCronFlags parses args into an InstallCronConfig.
 func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 	cfg := InstallCronConfig{
 		LoopInterval:        defaultLoopInterval,
 		ConsolidateInterval: defaultConsolidateInterval,
+	}
+
+	if err := checkInstallCronArgs(args); err != nil {
+		return cfg, err
 	}
 
 	parsed := cli.ParseFlags(args, InstallCronFlags)
@@ -171,14 +201,6 @@ func writeCrontab(content string) error {
 	return nil
 }
 
-// buildCronLines returns the two cron lines that install-cron would add. The
-// binary and claude paths are single-quoted so paths containing spaces survive.
-// Each line changes into the project directory before running, passes the
-// absolute claude path via --claude-path (so cron's limited PATH is irrelevant),
-// runs the observer in headless mode (--headless → claude -p, no TTY required),
-// and redirects output to a log file under the project directory.
-// Overlap prevention is handled in Go (syscall.Flock inside LaunchHeadless),
-// not via a shell flock wrapper, so no flock appears in the cron line.
 // consolidateCron renders the consolidation schedule. It is the scan's
 // schedule moved later, so consolidation curates what the scan just filed
 // instead of starting at the same instant.
@@ -196,9 +218,25 @@ func consolidateCron(minutes int) string {
 	if minutes == maxCronInterval {
 		return "0 1 * * *"
 	}
+	if minutes%60 == 0 {
+		// Every hourly-form scan fires at minute 0, and so does the daily
+		// one. Half past keeps the interval and misses all of them.
+		if minutes == 60 {
+			return "30 * * * *"
+		}
+		return fmt.Sprintf("30 */%d * * *", minutes/60)
+	}
 	return minutesToCron(minutes)
 }
 
+// buildCronLines returns the two cron lines that install-cron would add. The
+// binary and claude paths are single-quoted so paths containing spaces survive.
+// Each line changes into the project directory before running, passes the
+// absolute claude path via --claude-path (so cron's limited PATH is irrelevant),
+// runs the observer in headless mode (--headless → claude -p, no TTY required),
+// and redirects output to a log file under the project directory.
+// Overlap prevention is handled in Go (syscall.Flock inside LaunchHeadless),
+// not via a shell flock wrapper, so no flock appears in the cron line.
 func buildCronLines(binary, claudePath, projectDir string, cfg InstallCronConfig) (loopLine, consolidateLine string) {
 	loopLine = fmt.Sprintf(
 		"%s cd '%s' && '%s' observer --headless --claude-path '%s' >> '%s/.spekk/observer.log' 2>&1 %s",

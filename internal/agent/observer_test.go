@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -283,5 +284,32 @@ func TestObserverLockFile_SanitizesUnsafeNames(t *testing.T) {
 	}
 	if filepath.Dir(got) != filepath.Join("/proj", ".spekk") {
 		t.Errorf("lock file escaped .spekk/: %q", got)
+	}
+}
+
+// RunObserver must refuse a removed flag before anything else reads it as a
+// skill name. RunObserver exits the process, so the assertion runs it in a
+// child copy of the test binary and inspects the exit status and message.
+func TestRunObserver_RefusesRemovedIntervalFlag(t *testing.T) {
+	if os.Getenv("SPEKK_TEST_RUN_OBSERVER_REMOVED_FLAG") == "1" {
+		RunObserver([]string{"--interval", "60"}, t.TempDir())
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run", "^TestRunObserver_RefusesRemovedIntervalFlag$")
+	cmd.Env = append(os.Environ(), "SPEKK_TEST_RUN_OBSERVER_REMOVED_FLAG=1")
+	out, err := cmd.CombinedOutput()
+
+	if err == nil {
+		t.Fatalf("RunObserver accepted the removed --interval flag; output:\n%s", out)
+	}
+	if _, ok := err.(*exec.ExitError); !ok {
+		t.Fatalf("child did not run: %v; output:\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "no longer a flag") {
+		t.Fatalf("exit was not the removed-flag refusal; output:\n%s", out)
+	}
+	if !strings.Contains(string(out), "install-cron") {
+		t.Fatalf("refusal does not say where cadence lives now; output:\n%s", out)
 	}
 }
