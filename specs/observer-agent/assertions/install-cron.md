@@ -31,7 +31,10 @@ requires Go changes to add the subcommand.
   observations arrive rather than how thorough a run is. Every 30 minutes —
   the earlier default, from when a session ran until the next one stopped
   it — is not a rate anyone reviews. Consolidation follows the scan rather
-  than running several times over a set that changes once.
+  than running several times over a set that changes once, and when both are
+  daily the consolidation entry is rendered an hour later so the two runs do
+  not start together — they hold different locks, so an identical schedule
+  would launch two headless sessions in one working tree.
 - One day is the longest interval that can be expressed. `0 */24 * * *` steps
   by 24 across an hour field that only reaches 23, which strict crons reject
   and lax crons quietly reduce to midnight, so a day renders as `0 0 * * *`

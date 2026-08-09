@@ -284,3 +284,26 @@ func TestRemoveCronMarkerLines_Idempotent(t *testing.T) {
 		t.Errorf("removal is not idempotent:\nonce=%q\ntwice=%q", once, twice)
 	}
 }
+
+// The spec says consolidation follows the scan. With both intervals at a day
+// they would otherwise render the same expression and start together: the two
+// runs take different lock files by design, so nothing serializes them, and
+// two headless sessions would run git in one working tree at once.
+// Consolidation would also never see the day's scan until the next day.
+func TestConsolidateDoesNotRunAgainstTheScan(t *testing.T) {
+	cfg := InstallCronConfig{LoopInterval: 1440, ConsolidateInterval: 1440}
+	loop, consolidate := buildCronLines("/usr/local/bin/spekk", "/usr/bin/claude", "/proj", cfg)
+
+	if !strings.Contains(loop, "0 0 * * *") {
+		t.Errorf("daily scan should run at midnight: %q", loop)
+	}
+	if !strings.Contains(consolidate, "0 1 * * *") {
+		t.Errorf("daily consolidation must follow the scan, not start with it: %q", consolidate)
+	}
+
+	// Below a day the schedules are intervals, not times, so they are left as
+	// they were.
+	if got := consolidateCron(360); got != "0 */6 * * *" {
+		t.Errorf("consolidateCron(360) = %q, want the plain interval", got)
+	}
+}

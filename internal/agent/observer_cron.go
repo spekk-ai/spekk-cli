@@ -179,6 +179,26 @@ func writeCrontab(content string) error {
 // and redirects output to a log file under the project directory.
 // Overlap prevention is handled in Go (syscall.Flock inside LaunchHeadless),
 // not via a shell flock wrapper, so no flock appears in the cron line.
+// consolidateCron renders the consolidation schedule. It is the scan's
+// schedule moved later, so consolidation curates what the scan just filed
+// instead of starting at the same instant.
+//
+// Both default to a day, and both would otherwise render `0 0 * * *`. The two
+// runs take different lock files by design, so nothing would serialize them:
+// two headless Claude sessions would start together in one working tree, both
+// running git, and consolidation would never see the day's scan until the
+// next day. An hour is enough — the cap is one observation, so a scan does
+// not run for hours any more.
+//
+// Below a day the schedules are intervals rather than times, so there is no
+// hour to move; the pre-existing overlap there is unchanged.
+func consolidateCron(minutes int) string {
+	if minutes == maxCronInterval {
+		return "0 1 * * *"
+	}
+	return minutesToCron(minutes)
+}
+
 func buildCronLines(binary, claudePath, projectDir string, cfg InstallCronConfig) (loopLine, consolidateLine string) {
 	loopLine = fmt.Sprintf(
 		"%s cd '%s' && '%s' observer --headless --claude-path '%s' >> '%s/.spekk/observer.log' 2>&1 %s",
@@ -191,7 +211,7 @@ func buildCronLines(binary, claudePath, projectDir string, cfg InstallCronConfig
 	)
 	consolidateLine = fmt.Sprintf(
 		"%s cd '%s' && '%s' observer consolidate --headless --claude-path '%s' >> '%s/.spekk/observer-consolidate.log' 2>&1 %s",
-		minutesToCron(cfg.ConsolidateInterval),
+		consolidateCron(cfg.ConsolidateInterval),
 		projectDir,
 		binary,
 		claudePath,

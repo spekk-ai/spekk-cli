@@ -54,6 +54,16 @@ tomorrow.
 - A scan never curates. Steps that dismiss a finding belong to the
   `consolidate` run, which is invoked and scheduled separately, so a scan
   cannot bury a finding that no person has judged.
+- A skill activation chooses the run's work and nothing else. Every rule
+  above the workflow — the write surface, untrusted input, cross-repository
+  hygiene, the lifecycle — binds every run, and no skill can relax any of
+  them. This matters because a skill file can come from the repository being
+  observed: `.spekk/skills/observer/` shadows the packaged skills, so a
+  clause granting a skill authority over the rules would let an observed
+  repository rewrite them.
+- Consolidation is scheduled after the scan, not at the same moment. The two
+  runs hold different locks, so an identical schedule would start two
+  headless sessions together in one working tree.
 - A run names, in its report, the areas it planned to cover but did not, so a
   short run is not mistaken for a clean audit.
 - Nothing in the prompt, the CLI, or the docs offers a per-run cadence, and
