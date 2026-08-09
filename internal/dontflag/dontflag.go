@@ -59,29 +59,32 @@ func (e Entry) ActiveAt(now time.Time) bool {
 // pattern against the slug the observation would be given, or against any
 // of its evidence paths. The match target for path globs is the drift's
 // evidence (what would become `affected`), not every file the scan read.
-// The pattern and the path are BOTH normalized (observation.NormalizePath)
-// before they are compared, for the same reason dedup normalizes: the
-// candidate paths are written by an agent, so the same file arrives spelled
-// several ways. A suppression is an explicit human decision, and a `:42`
-// suffix or a `./` prefix on the path a scan happens to report must not
-// defeat it. Suppression is also the only gate here that dedup cannot back
-// up — suppressed drift never becomes an observation, so nothing lands on a
-// branch to cover it next time.
+// A path matches if the pattern matches it as written OR after
+// observation.NormalizePath. Candidate paths come from an agent, so the same
+// file arrives spelled several ways, and a `:42` suffix or a `./` prefix must
+// not defeat a suppression. Suppression is the only gate here that dedup
+// cannot back up: suppressed drift never becomes an observation, so nothing
+// lands on a branch to cover it next time.
 //
-// Normalizing only one side would be worse than normalizing neither. The
-// glob is segment-exact, so a pattern written `./internal/foo.go` or
-// `internal/foo/` would then match nothing at all — not even a path spelled
-// identically to it. That entry is a suppression a person wrote and reviewed,
-// and it would go dead with no error and no signal.
+// The pattern itself is NEVER rewritten, and that is the whole design. It is
+// a glob, not a path, so a path function has no business cleaning it:
+// path.Clean resolves `..`, which turns the scoped-looking `docs/../**` into
+// `**` and suppresses the entire repository; the location-suffix strip turns
+// `**:1` into `**` for the same result. Both read as narrow to a reviewer,
+// and this file is trusted precisely because a person read it.
+//
+// Trying the pattern against both spellings gets what normalizing was meant
+// to get, and cannot do either of those things. It also removes any need for
+// the normalizer to be idempotent — comparing a normalized pattern with a
+// normalized path was only ever sound if it were.
 //
 // The slug is not a path, so it is compared as written.
 func (e Entry) Matches(slug string, affected []string) bool {
 	if globMatch(e.Match, slug) {
 		return true
 	}
-	pattern := observation.NormalizePath(e.Match)
 	for _, p := range affected {
-		if globMatch(pattern, observation.NormalizePath(p)) {
+		if globMatch(e.Match, p) || globMatch(e.Match, observation.NormalizePath(p)) {
 			return true
 		}
 	}

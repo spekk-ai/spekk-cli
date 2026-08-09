@@ -162,40 +162,75 @@ func TestSuppressionGlobStillMatchesAfterNormalization(t *testing.T) {
 	}
 }
 
-// The pattern is normalized too. Normalizing only the candidate is worse
-// than normalizing neither: the glob is segment-exact, so a pattern written
-// `./internal/foo.go` would match nothing at all -- not even a path spelled
-// identically to it. A person wrote and reviewed that entry, and it would go
-// dead with no error and no signal.
-func TestSuppressionPatternIsNormalizedToo(t *testing.T) {
+// The contract, stated exactly. A pattern written the ordinary way matches
+// every spelling of the path. A pattern written an odd way still matches its
+// own spelling -- it does not go dead, which is what normalizing only the
+// candidate did to it. Two differently-spelled patterns are NOT made
+// equivalent: that would mean rewriting the pattern, and rewriting a glob
+// with a path function is what let `docs/../**` suppress everything.
+func TestSuppressionPathSpellingContract(t *testing.T) {
 	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
 
-	for _, pattern := range []string{
+	ordinary := []Entry{{Match: "internal/foo.go", Reason: "r", By: "b"}}
+	for _, spelling := range []string{
 		"internal/foo.go",
 		"./internal/foo.go",
+		"internal/foo.go:42",
+		"internal/foo.go:42:7",
 		"internal//foo.go",
 	} {
-		entries := []Entry{{Match: pattern, Reason: "accepted", By: "someone"}}
-		for _, spelling := range []string{
-			"internal/foo.go",
-			"./internal/foo.go",
-			"internal/foo.go:42",
-		} {
-			if Suppressed(entries, "s", []string{spelling}, now) == nil {
-				t.Errorf("pattern %q did not suppress %q", pattern, spelling)
-			}
+		if Suppressed(ordinary, "s", []string{spelling}, now) == nil {
+			t.Errorf("an ordinary pattern did not suppress %q", spelling)
 		}
 	}
 
-	// A trailing slash on the pattern must not make it dead either.
-	dir := []Entry{{Match: "internal/foo/**", Reason: "legacy", By: "someone"}}
-	if Suppressed(dir, "s", []string{"internal/foo/bar.go:9"}, now) == nil {
-		t.Error("a glob pattern must still match a normalized path")
+	// An odd pattern still matches what it literally names. Before, a
+	// normalized candidate could not match it at all.
+	odd := []Entry{{Match: "./internal/foo.go", Reason: "r", By: "b"}}
+	if Suppressed(odd, "s", []string{"./internal/foo.go"}, now) == nil {
+		t.Error("an oddly spelled pattern went dead against its own spelling")
 	}
 
-	// Normalization must not widen a pattern onto an unrelated file.
-	entries := []Entry{{Match: "internal/foo.go", Reason: "r", By: "b"}}
-	if Suppressed(entries, "s", []string{"internal/foobar.go"}, now) != nil {
+	// Nothing here widens onto a different file.
+	if Suppressed(ordinary, "s", []string{"internal/foobar.go"}, now) != nil {
 		t.Error("an unrelated file was suppressed")
+	}
+}
+
+// The pattern is never rewritten. It is a glob, not a path, so cleaning it
+// as a path is unsound: path.Clean resolves `..`, and the location-suffix
+// strip removes a trailing `:digits`. Both turn a pattern that reads as
+// narrow into one that matches everything. This file is trusted because a
+// person read it, so a pattern must mean what it says.
+func TestSuppressionNeverWidensThePattern(t *testing.T) {
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+
+	unrelated := []string{"cmd/spekk/main.go", "secrets/key.pem", "anything/at/all.go"}
+	for _, pattern := range []string{
+		"docs/../**",             // path.Clean would make this **
+		"internal/../secrets/**", // path.Clean would retarget this
+		"**:1",                   // the suffix strip would make this **
+		"*:80",                   // and this *
+	} {
+		entries := []Entry{{Match: pattern, Reason: "r", By: "b"}}
+		for _, p := range unrelated {
+			if e := Suppressed(entries, "s", []string{p}, now); e != nil {
+				t.Errorf("pattern %q suppressed the unrelated path %q", pattern, p)
+			}
+		}
+	}
+}
+
+// Normalization runs on the path only, so it does not have to be idempotent.
+// Comparing a normalized pattern against a normalized path would have needed
+// that, and the bounded location strip does not provide it.
+func TestSuppressionDoesNotDependOnIdempotentNormalization(t *testing.T) {
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+	entries := []Entry{{Match: "a:1", Reason: "r", By: "b"}}
+
+	for _, spelling := range []string{"a:1", "a:1:2:3"} {
+		if Suppressed(entries, "s", []string{spelling}, now) == nil {
+			t.Errorf("pattern %q did not suppress %q", "a:1", spelling)
+		}
 	}
 }
