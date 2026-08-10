@@ -4,7 +4,6 @@ parent: list-filter-command
 created: 2026-07-12T20:30:00Z
 priority: 1
 status: done
-branch: feat/list-filter-by-status
 depends-on: list-subcommand-registered
 ---
 

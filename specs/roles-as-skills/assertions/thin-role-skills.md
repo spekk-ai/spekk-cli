@@ -4,7 +4,6 @@ parent: roles-as-skills
 created: 2026-07-27T00:00:00Z
 priority: 1
 status: done
-branch: feat/roles-as-skills
 depends-on: roles-split-agents-and-skills
 ---
 

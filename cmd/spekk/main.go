@@ -158,7 +158,7 @@ func runParser(args []string) {
 	// with `spekk query`.
 	repoRoot := filepath.Dir(specsDir)
 	if rebuilt, err := index.EnsureFresh(specsDir, index.DBPath(repoRoot)); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-rebuild of index failed: %s\n", err)
+		fmt.Fprintf(os.Stderr, "error: %s\n", index.FormatError(err))
 		os.Exit(1)
 	} else if rebuilt {
 		_ = index.EnsureGitignored(repoRoot)

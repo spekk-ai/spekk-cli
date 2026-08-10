@@ -15,6 +15,7 @@ package index
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -158,6 +159,40 @@ type Stats struct {
 	Warnings     []string
 }
 
+// ErrSpecsUnparseable marks an index build that failed at the parse step and
+// not at the database.
+//
+// The two failures need different corrections. A database failure applies to
+// one checkout, and a person deletes .spekk/index.db to correct it. A
+// spec-tree failure applies to all users: each spekk command builds the same
+// index from the same committed files, so one malformed field stops all of
+// them until a person edits that file.
+//
+// The previous message ("cannot parse specs") gave the cause but not the
+// effect. An agent read that message, accepted the syntax error as the full
+// problem, and proposed a second spelling that fails the same check.
+var ErrSpecsUnparseable = errors.New("the spec tree does not parse, so the index cannot be rebuilt")
+
+// specParseGuidance follows the parse error at each surface that a person
+// reads. It gives the scope of the failure and names the command that reports
+// each problem, and not only the first problem that the parser finds.
+const specParseGuidance = `One malformed field fails the parse of the whole tree, not just its own file,
+so no spekk command works until it is fixed — on every branch, for every user.
+Run "spekk validate" to see every problem at once.`
+
+// FormatError writes an index error for a person. A spec-tree failure gets
+// the guidance text. Each other error passes through as written, so a
+// database failure does not show as a spec problem.
+func FormatError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, ErrSpecsUnparseable) {
+		return err.Error() + "\n\n" + specParseGuidance
+	}
+	return err.Error()
+}
+
 // BuildIndex creates or updates the SQLite index at dbPath from specsDir and
 // from the visible git refs (observations). If force is true all tables are
 // dropped and recreated from scratch.
@@ -187,7 +222,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {
-		return stats, fmt.Errorf("cannot parse specs: %w", err)
+		return stats, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
 	}
 
 	tx, err := db.Begin()

@@ -4,7 +4,6 @@ parent: sqlite-index
 created: 2026-08-07T22:00:00Z
 priority: 2
 status: done
-branch: feat/index-custom-frontmatter
 depends-on: index-command-builds-db
 ---
 

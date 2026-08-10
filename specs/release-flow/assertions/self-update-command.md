@@ -5,7 +5,6 @@ created: 2026-06-03T18:00:00Z
 priority: 1
 status: done
 depends-on: github-release-publish
-branch: temporary-target
 ---
 
 # `spekk update` downloads and replaces the running binary
