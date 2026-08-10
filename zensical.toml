@@ -50,6 +50,7 @@ nav = [
   { "Concepts" = "concepts.md" },
   { "CLI Reference" = "cli-reference.md" },
   { "Skills" = "coach-skills.md" },
+  { "Validation in CI" = "ci.md" },
   { "Configuration" = "configuration.md" },
   { "Migration (npm → Go)" = "migration.md" },
   { "Advanced" = [

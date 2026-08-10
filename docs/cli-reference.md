@@ -178,6 +178,43 @@ Shows total specs/assertions, status breakdown, completion percentage, and specs
 
 ---
 
+## `spekk validate`
+
+Check every spec and assertion under `specs/` against a fixed set of invariants.
+
+```bash
+spekk validate
+spekk validate --specs-dir ./my-specs
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--specs-dir <path>` | Read specs from a specific directory (default: git root `specs/`) |
+
+**Checks, all in one pass:**
+
+- Frontmatter well-formedness. A malformed spec or assertion file is a **failure** here, unlike `spekk next`, which skips it silently
+- Parent resolution
+- `depends-on` validity: kebab-case, the target exists, no self-reference, no cycles
+- No duplicate spec or assertion ids
+- Lock-state pairing: `in_progress` requires `locked-by`; every other status forbids it
+- Parent specs carry no rolled-up `status` field (absent, or the literal `draft`)
+
+**Exit codes:**
+
+| Result | Exit | Output |
+|---|---|---|
+| Valid | 0 | One-line summary on stdout |
+| No `specs/` directory | 0 | `validate: 0 specs, 0 assertions OK` |
+| Warnings only | 0 | Warnings on stderr; the check still passes |
+| Any violation | 1 | One failure line per violation (file + problem), sorted by file then message |
+
+A malformed field fails the parse of the **whole tree**, not just its own file, so one bad line on the default branch stops every command that rebuilds the index. Run this before you commit an edit to `specs/` — see [Validation in CI and pre-commit](ci.md).
+
+---
+
 ## `spekk index`
 
 Build `.spekk/index.db`, a SQLite index of the spec tree, for use by `spekk query`.

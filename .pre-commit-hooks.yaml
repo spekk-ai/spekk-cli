@@ -1,0 +1,21 @@
+# Hook definitions for the pre-commit framework (https://pre-commit.com).
+#
+# A project consumes these by pointing at this repository:
+#
+#   - repo: https://github.com/spekk-ai/spekk-cli
+#     rev: v1.22.0
+#     hooks:
+#       - id: spekk-validate
+#
+# `language: system` runs the spekk already on PATH, so the hook agrees with
+# the version the developer and the agents use. `rev` pins this file, not the
+# binary. Pin the binary in CI instead — see docs/ci.md.
+- id: spekk-validate
+  name: Validate spekk specs
+  description: Check specs/ against the spekk invariants before a commit is written.
+  entry: spekk validate
+  language: system
+  # Only files under specs/ can break the spec tree, and a project with no
+  # specs/ never matches — so the hook costs nothing until spekk is adopted.
+  files: ^specs/
+  pass_filenames: false

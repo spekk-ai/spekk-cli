@@ -6,10 +6,12 @@
 #
 # Options (environment variables):
 #   SPEKK_INSTALL_DIR   Install directory (default: ~/.local/bin)
+#   SPEKK_VERSION       Release tag to install, e.g. v1.21.0 (default: latest)
 set -eu
 
 REPO="spekk-ai/spekk-cli"
 INSTALL_DIR="${SPEKK_INSTALL_DIR:-$HOME/.local/bin}"
+VERSION="${SPEKK_VERSION:-latest}"
 
 err() {
     echo "Error: $1" >&2
@@ -30,12 +32,18 @@ case "$arch" in
 esac
 
 binary="spekk-$os-$arch"
-url="https://github.com/$REPO/releases/latest/download/$binary"
+# A pinned version keeps CI reproducible: without it a stricter release turns
+# a repository red with no change on its side.
+if [ "$VERSION" = "latest" ]; then
+    url="https://github.com/$REPO/releases/latest/download/$binary"
+else
+    url="https://github.com/$REPO/releases/download/$VERSION/$binary"
+fi
 
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 
-echo "Downloading $binary ..."
+echo "Downloading $binary ($VERSION) ..."
 curl -fsSL "$url" -o "$tmp" || err "download failed: $url"
 chmod +x "$tmp"
 
