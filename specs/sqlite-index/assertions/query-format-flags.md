@@ -4,7 +4,6 @@ parent: sqlite-index
 created: 2026-07-12T22:00:00Z
 priority: 2
 status: done
-branch: feat/list-filter-by-status
 depends-on: query-command-select-only
 ---
 

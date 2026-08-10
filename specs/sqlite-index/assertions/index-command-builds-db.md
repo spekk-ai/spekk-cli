@@ -4,7 +4,6 @@ parent: sqlite-index
 created: 2026-07-12T22:00:00Z
 priority: 1
 status: done
-branch: feat/list-filter-by-status
 ---
 
 # `spekk index` Builds `.spekk/index.db` with the Spec Tables Populated

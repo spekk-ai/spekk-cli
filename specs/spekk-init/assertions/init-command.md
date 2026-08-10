@@ -4,7 +4,6 @@ parent: spekk-init
 created: 2026-06-11T00:00:00Z
 priority: 1
 status: done
-branch: feat/agent-install
 ---
 
 # `spekk init` Creates the specs/ Directory

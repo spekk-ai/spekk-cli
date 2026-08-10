@@ -4,7 +4,6 @@ parent: install-script
 created: 2026-06-11T00:00:00Z
 priority: 1
 status: done
-branch: feat/agent-install
 ---
 
 # install.sh Installs the Latest Release on macOS and Linux

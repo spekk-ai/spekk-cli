@@ -5,7 +5,6 @@ created: 2026-06-04T12:00:00Z
 priority: 1
 status: done
 depends-on: cross-compile-binaries
-branch: temporary-target
 ---
 
 # CI uploads versioned binaries to GitHub Releases on tag push

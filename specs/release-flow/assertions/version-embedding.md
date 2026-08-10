@@ -4,7 +4,6 @@ parent: release-flow
 created: 2026-06-03T18:00:00Z
 priority: 1
 status: done
-branch: temporary-target
 ---
 
 # Binary embeds a version string

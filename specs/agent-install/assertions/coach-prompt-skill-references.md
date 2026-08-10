@@ -4,7 +4,6 @@ parent: agent-install
 created: 2026-06-11T00:00:00Z
 priority: 2
 status: done
-branch: feat/agent-install
 ---
 
 # Coach Prompt References Skills via `spekk skill`, Not Repo Paths
