@@ -512,8 +512,8 @@ After updating assertions on a feature branch, re-run the coordinator skill to r
 1. Load the coordinator skill: `spekk skill show coach coordinator-skill`
 2. Follow the workflow to analyze current branch state
 3. Show updated dependency tree to user
-4. Validate with parser
-5. Update frontmatter if dependencies changed
+4. Update frontmatter if dependencies changed
+5. Run `spekk validate`
 6. Commit any coordination updates
 
 **Why this matters:**
@@ -647,6 +647,7 @@ branch: feature/name            # Git branch assignment (optional, defaults to m
 After writing assertion files, confirm they appear in the work queue:
 
 ```bash
+spekk validate                           # run before committing — a malformed field fails the whole tree
 spekk list --status not_started          # new assertions should appear here
 spekk next --spec {spec-id}              # verify the specific spec is parseable and ready
 ```
