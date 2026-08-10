@@ -4,7 +4,6 @@ parent: install-script
 created: 2026-06-12T00:00:00Z
 priority: 1
 status: done
-branch: fix/update-permission-message
 ---
 
 # Default Install Directory Is User-Owned (`~/.local/bin`)

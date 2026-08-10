@@ -4,7 +4,6 @@ parent: install-reconciler
 created: 2026-07-27T00:00:00Z
 priority: 2
 status: done
-branch: feat/install-reconciler
 depends-on: scan-owned-files
 ---
 

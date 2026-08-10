@@ -4,7 +4,6 @@ parent: dev-loop-single-session
 created: 2026-07-27T00:00:00Z
 priority: 1
 status: done
-branch: feat/dev-loop-single-session
 ---
 
 # The Skill Describes One Session with Role Phases

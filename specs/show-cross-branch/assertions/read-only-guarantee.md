@@ -4,7 +4,6 @@ parent: show-cross-branch
 created: 2026-06-15T12:00:00Z
 priority: 1
 status: done
-branch: feat/show-cross-branch
 ---
 
 # Cross-Branch Mode Never Mutates the Working Tree or Index

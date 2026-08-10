@@ -5,7 +5,6 @@ created: 2026-06-03T18:00:00Z
 priority: 1
 status: done
 depends-on: version-embedding
-branch: temporary-target
 ---
 
 # Build produces 6 platform/arch binaries

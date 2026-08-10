@@ -4,7 +4,6 @@ parent: specs-readme-orientation
 created: 2026-07-15T00:00:00Z
 priority: 1
 status: done
-branch: feat/specs-readme-orientation
 depends-on: idempotent-regeneration
 ---
 

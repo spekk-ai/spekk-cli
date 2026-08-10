@@ -4,7 +4,6 @@ parent: list-output-format
 created: 2026-07-12T22:00:00Z
 priority: 1
 status: done
-branch: feat/spekk-list
 ---
 
 # Default Output Is an Assertion Table with PARENT Column

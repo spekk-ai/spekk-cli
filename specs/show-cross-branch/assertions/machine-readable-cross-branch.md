@@ -4,7 +4,6 @@ parent: show-cross-branch
 created: 2026-08-07T23:00:00Z
 priority: 2
 status: done
-branch: feat/list-cross-branch
 depends-on: classify-cross-branch-state
 ---
 

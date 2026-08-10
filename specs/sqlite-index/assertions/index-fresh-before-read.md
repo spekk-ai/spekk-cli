@@ -4,7 +4,6 @@ parent: sqlite-index
 created: 2026-07-25T12:00:00Z
 priority: 1
 status: done
-branch: feat/sqlite-index
 depends-on: index-schema-versioned
 ---
 

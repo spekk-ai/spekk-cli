@@ -5,7 +5,6 @@ created: 2026-06-12T00:00:00Z
 priority: 2
 status: done
 depends-on: default-install-dir-user-owned
-branch: fix/update-permission-message
 ---
 
 # Install Warns With a Copy-Paste Fix When the Install Dir Is Not on PATH
