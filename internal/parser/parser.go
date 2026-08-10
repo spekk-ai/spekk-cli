@@ -328,10 +328,44 @@ func validateTimestamp(value string) bool {
 var kebabCasePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 // validBranchPattern matches valid git branch name characters.
-var validBranchPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_-]*$`)
+//
+// A dot is permitted, because git permits it and a release branch usually
+// carries a version. Before this, release/1.22.0 was an error, and release/
+// was in the standard prefix list below. Git's own rules for dots are applied
+// in validateBranch, because a character class cannot express them.
+var validBranchPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/._-]*$`)
 
-// standardBranchPattern matches commonly used branch naming patterns.
-var standardBranchPattern = regexp.MustCompile(`^(main|master|develop|feature/|bugfix/|hotfix/|release/)`)
+// standardBranchNames are branch names that stand alone, with no <type>/
+// prefix.
+var standardBranchNames = []string{"main", "master", "develop"}
+
+// standardBranchTypes are the accepted <type> segments of a <type>/<name>
+// branch.
+//
+// The list covers two conventions, because both are in common use and a
+// project selects one:
+//
+//   - gitflow: feature/, bugfix/, hotfix/, release/
+//   - conventional commits: feat/, fix/, chore/, docs/, and the others
+//
+// Before this, the list accepted gitflow only. A project that uses feat/ then
+// got a warning on each assertion with the field. This repository uses feat/
+// and gave 73 warnings on its own specs.
+//
+// The list is permissive on purpose. The field records where work occurs, and
+// the team selects the vocabulary. The warning keeps its function: it reports
+// a value in neither convention, such as the bare name "temporary-target" or
+// a spelling error. Such a value usually names no branch.
+var standardBranchTypes = []string{
+	"build", "bugfix", "chore", "ci", "docs", "feat", "feature", "fix",
+	"hotfix", "perf", "refactor", "release", "style", "test",
+}
+
+// standardBranchPattern comes from the two lists above, so the pattern and
+// the warning text stay in agreement.
+var standardBranchPattern = regexp.MustCompile(
+	`^(` + strings.Join(standardBranchNames, "|") + `|` +
+		strings.Join(standardBranchTypes, "/|") + `/)`)
 
 // validateBranch validates a branch field value. Returns an error for invalid branches
 // and prints a warning to stderr for non-standard patterns.
@@ -343,10 +377,20 @@ func validateBranch(branch, filePath string) error {
 		return fmt.Errorf("Field 'branch' cannot start or end with '/' in %s", filePath)
 	}
 	if !validBranchPattern.MatchString(branch) {
-		return fmt.Errorf("Field 'branch' contains invalid characters in %s\nFound: %q\nGit branch names can only contain letters, numbers, slashes, hyphens, and underscores.", filePath, branch)
+		return fmt.Errorf("Field 'branch' contains invalid characters in %s\nFound: %q\nGit branch names can only contain letters, numbers, slashes, dots, hyphens, and underscores.", filePath, branch)
+	}
+	// Git's rules for dots, which a character class cannot express: no "..",
+	// no final ".", and no ".lock" suffix. These checks keep the field to
+	// names that git accepts.
+	if strings.Contains(branch, "..") || strings.HasSuffix(branch, ".") || strings.HasSuffix(branch, ".lock") {
+		return fmt.Errorf("Field 'branch' is not a valid git branch name in %s\nFound: %q\nA branch name cannot contain '..', end with '.', or end with '.lock'.", filePath, branch)
 	}
 	if !standardBranchPattern.MatchString(branch) {
-		fmt.Fprintf(os.Stderr, "Warning: Field 'branch' uses non-standard pattern in %s\nFound: %q\nConsider using standard patterns: main, feature/<name>, bugfix/<name>, hotfix/<name>\n", filePath, branch)
+		fmt.Fprintf(os.Stderr, "Warning: Field 'branch' uses non-standard pattern in %s\nFound: %q\nUse %s, or <type>/<name> where <type> is one of: %s\n",
+			filePath,
+			branch,
+			strings.Join(standardBranchNames, ", "),
+			strings.Join(standardBranchTypes, ", "))
 	}
 	return nil
 }
