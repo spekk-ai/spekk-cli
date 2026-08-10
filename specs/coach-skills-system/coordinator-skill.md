@@ -48,7 +48,7 @@ Analyzes draft/not_started assertions and creates a dependency-aware work plan w
    - Update all affected assertion files
 
 6. **Validate with parser**
-   - Run `parseAllSpecs()` to validate the updated structure
+   - Run `spekk validate` to validate the updated structure
    - Parser will catch:
      - Invalid dependency IDs (non-existent assertions)
      - Circular dependencies

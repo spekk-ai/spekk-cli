@@ -86,6 +86,8 @@ Each finding is born on a branch named `observer/<slug>` (slug from `scan-check`
 
 Keep the commits separate so a reviewer can take the observation without the remedy (or vice versa) by cherry-picking one commit. Push the branch to origin, then open a PR for it using the PR body template below.
 
+**Run `spekk validate` before you commit a remedy that edits `specs/`.** A malformed field fails the parse of the whole tree, so a bad remedy on main stops every command that rebuilds the index. If it reports an error you cannot fix, commit the observation alone and say so in the PR body.
+
 ### The branch set is the state machine
 
 State is readable purely via git; `git fetch` is the **only** remote read. Never call a forge API (`gh`, GitHub REST/GraphQL, etc.) to determine observation state — PR open/closed status is deliberately invisible and irrelevant to the tooling.

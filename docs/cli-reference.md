@@ -226,6 +226,18 @@ Value rules:
 - Block-list items are never re-split — an item keeps its commas as written.
 - Comment lines, nested-map children, empty keys, and block scalars (`key: |` / `key: >`) never become custom fields. The frontmatter parser reads top-level scalars, flow sequences, and flat block lists only.
 
+!!! warning "`depends-on` is a chain, not a list"
+
+    A list here is refused, and the error fails the parse of the **whole tree** — one bad line stops every command that rebuilds the index, for every branch and every user, until it is fixed.
+
+    ```yaml
+    depends-on: [first-step, second-step]   # ✗ breaks every index rebuild
+    depends-on: first-step                  # ✓ one id; chain the rest
+    tags: [infrastructure, hipaa]           # ✓ custom field, list is fine
+    ```
+
+    The single id is deliberate. It is what controls the order work reaches builders: a chain releases assertions one at a time, and assertions with no link between them are free to run in parallel. A set of prerequisites carries no such order, so `spekk coach` linearizes it into a chain through its coordinator skill.
+
 This makes per-tag reporting one query:
 
 ```bash
