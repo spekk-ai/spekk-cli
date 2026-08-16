@@ -1260,22 +1260,21 @@ OPTIONS:
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-	if !checkOnly {
-		warnStaleInstall()
-	}
+	warnStaleInstall()
 }
 
-// warnStaleInstall checks every install location for managed files that the
-// current binary no longer writes (an old layout), and warns. It changes no
+// warnStaleInstall checks every install location for a managed file that the
+// current binary no longer writes (an old layout) or that does not match the
+// content this binary installs (an out-of-date file), and warns. It changes no
 // file — the migration is the shown "spekk install" command.
 func warnStaleInstall() {
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
-	stale, err := install.CheckStale(home, cwd)
+	stale, err := install.CheckStale(home, cwd, spekk.EmbeddedFS)
 	if err != nil || len(stale) == 0 {
 		return
 	}
-	fmt.Fprintln(os.Stderr, "\nwarning: some installed spekk files are from an old layout:")
+	fmt.Fprintln(os.Stderr, "\nwarning: some installed spekk files do not match this version of spekk:")
 	for _, s := range stale {
 		fmt.Fprintln(os.Stderr, "  "+s)
 	}

@@ -33,15 +33,26 @@ The reconciler uses no external manifest. It uses two things only:
 
 - Write or update each file in the desired set. Add the stamp to each file.
 - Remove each owned file that is not in the desired set.
-- Before you write over or remove a file, check the body hash against the stamp.
-  If the hash does not agree, the user changed the file. Make a `.bak` backup and
-  give a warning. Do not change the file.
+
+A destination path in the desired set belongs to spekk. Ownership comes from the
+path, never from the file body. The reconciler always brings that file to the
+current content. Before it writes over a file that is not a pristine managed file
+— a file the user edited, or a file with no stamp — it makes a `.bak` backup and
+gives a warning. The stamp decides whether a backup is necessary, not whether the
+file is spekk's.
+
+Before you remove an owned file that is no longer desired, check the body hash
+against the stamp. If the hash does not agree, the user changed the file. Make a
+`.bak` backup, give a warning, and leave the file in place.
 
 ## Update
 
 `spekk update` runs the scan and the desired-set calculation only. It changes no
-file. If an owned file is not in the desired set, an old layout is present.
-`spekk update` gives a warning that shows the `spekk install` command.
+file. It gives a warning for two conditions: an owned file that is not in the
+desired set (an old layout is present), and a file at a desired path whose
+content does not match what this binary installs (the file is out of date). The
+warning shows the `spekk install` command that fixes it. `spekk update --check`
+gives the same warning.
 
 ## Non-goals
 

@@ -371,7 +371,8 @@ func TestInstall_DevLoopCommand(t *testing.T) {
 
 // TestInstall_MigratesUnstampedLegacyShim: an old unstamped coach agent shim
 // (from a version before the reconciler) is backed up and removed, and the new
-// coach skill is written.
+// coach skill is written. The legacy path belongs to spekk by its path, so the
+// body here carries none of the wording an older version wrote.
 func TestInstall_MigratesUnstampedLegacyShim(t *testing.T) {
 	home := t.TempDir()
 	agentsDir := filepath.Join(home, ".claude", "agents")
@@ -379,7 +380,7 @@ func TestInstall_MigratesUnstampedLegacyShim(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy := filepath.Join(agentsDir, "spekk-coach.md")
-	shim := []byte("---\nname: spekk-coach\n---\nYou are the spekk coach agent.\nRun `spekk prompt coach`.\n")
+	shim := []byte("---\nname: spekk-coach\n---\nA coach agent from a much older release.\n")
 	if err := os.WriteFile(legacy, shim, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -437,30 +438,6 @@ func TestInstall_PrunesStampedLegacyShim(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("removed list should include the pruned shim: %v", res.Removed)
-	}
-}
-
-// TestInstall_LeavesUserFileAtLegacyPath: a file at a legacy path that is not a
-// spekk shim is left alone.
-func TestInstall_LeavesUserFileAtLegacyPath(t *testing.T) {
-	home := t.TempDir()
-	agentsDir := filepath.Join(home, ".claude", "agents")
-	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	userFile := filepath.Join(agentsDir, "spekk-coach.md")
-	if err := os.WriteFile(userFile, []byte("my own coach agent, not the tool\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(userFile); err != nil {
-		t.Errorf("user file at legacy path should be left alone: %v", err)
-	}
-	if _, err := os.Stat(userFile + ".bak"); !os.IsNotExist(err) {
-		t.Errorf("user file should not be backed up")
 	}
 }
 
@@ -526,8 +503,9 @@ func TestInstall_MigratesCodexSharedPathShim(t *testing.T) {
 }
 
 // TestInstall_MigratesOldDevLoopSkill: an old, unstamped dev-loop skill at the
-// desired path is recognized as a spekk file and updated, not left as a
-// hand-edited file. This is the main point of the rework for an existing user.
+// desired path is spekk's by its path and is updated, not left as a hand-edited
+// file. This is the main point of the rework for an existing user, and the body
+// here shares no wording with the current skill.
 func TestInstall_MigratesOldDevLoopSkill(t *testing.T) {
 	home := t.TempDir()
 	skillDir := filepath.Join(home, ".claude", "skills", "spekk-dev-loop")
@@ -535,9 +513,7 @@ func TestInstall_MigratesOldDevLoopSkill(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := filepath.Join(skillDir, "SKILL.md")
-	// The old dev-loop skill has no "You are the spekk" text, but it does have the
-	// "Spekk Dev Loop" heading.
-	old := []byte("---\nname: spekk-dev-loop\n---\n# Spekk Dev Loop\nFour subagent stages ...\n")
+	old := []byte("---\nname: spekk-dev-loop\n---\n# An Older Heading\nFour subagent stages ...\n")
 	if err := os.WriteFile(p, old, 0o644); err != nil {
 		t.Fatal(err)
 	}

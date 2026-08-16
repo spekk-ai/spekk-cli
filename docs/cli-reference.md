@@ -622,11 +622,13 @@ spekk install --target codex         # ~/.codex/prompts/ (global only)
 | `--target <tool>` | Host tool to install into (required) |
 | `--project` | Install into the current project instead of globally |
 
-Installs thin shims that fetch their full instructions from the binary at session start via `spekk prompt <agent>`, so they never go stale — updating spekk updates every installed agent. For tools not listed, wire `spekk prompt <agent>` into the tool's custom-agent or rules mechanism directly.
+Installs thin shims that fetch their full instructions from the binary at session start via `spekk prompt <agent>`, so an agent's instructions never go stale — updating spekk updates every installed agent. The `spekk-dev-loop` skill is different: its content is written into the file, so a new spekk version needs a new `spekk install` to bring it current. `spekk update` warns you when it finds an installed file that this binary no longer matches. For tools not listed, wire `spekk prompt <agent>` into the tool's custom-agent or rules mechanism directly.
+
+**A managed path belongs to spekk.** Every destination in the table below is a path `spekk install` writes, so each install brings the file there to the current content. If the file on disk is anything other than what spekk installed — you edited it, or it came from an older version — the install first copies it to `<path>.bak` and reports that on stderr. To keep a permanent local variant of a skill, give it your own name rather than editing the managed file.
 
 ### The `spekk-dev-loop` skill
 
-Every install also writes the `spekk-dev-loop` skill — the outer coach → coordinate → builders → review pipeline — in whatever form the target uses for a reusable, agent-invokable workflow:
+Every install also writes the `spekk-dev-loop` skill — the one-session loop that plays the coach, builder, and verifier roles in turn — in whatever form the target uses for a reusable, agent-invokable workflow:
 
 | Target | Written as | Location |
 |--------|-----------|----------|

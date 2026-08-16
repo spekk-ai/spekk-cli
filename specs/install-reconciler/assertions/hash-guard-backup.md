@@ -7,33 +7,26 @@ status: done
 depends-on: reconcile-writes-and-prunes
 ---
 
-# The Reconciler Does Not Clobber a File the User Changed
+# A Managed Destination Path Is Spekk's, and a Backup Keeps What Was There
 
 ## Description
 
-A user can edit a managed file by hand. The reconciler must not overwrite or
-remove such a file without a record. Before it writes over or removes a file, the
-reconciler checks the body hash against the stamp. When the two do not agree, the
-user changed the file.
+The destination path is the statement of ownership. `spekk install` writes `~/.claude/skills/spekk-dev-loop/SKILL.md` because that is where the skill goes. The reconciler must not re-derive that fact from the file body, because a second source of truth can disagree with the first: change a heading or a sentence in the file, and every unstamped copy in the field stops matching and stays stale with no signal.
+
+So the reconciler decides ownership of a desired path from the path alone. It always brings the file at that path to the current content. The stamp keeps one job only: it tells the reconciler whether it must make a backup first.
 
 ## Success Criteria
 
-- Before `Install` writes over a file that already exists, it reads the file. If
-  the file has a stamp and the on-disk body hash does not agree with the stamp
-  hash, `Install` makes a backup at `<path>.bak` and does not write over the file.
-- Before `Install` removes an owned file, it applies the same check. If the hash
-  does not agree, `Install` makes a `<path>.bak` backup and does not remove the
-  file.
-- `Install` records each such event as a warning in its result. The caller prints
-  each warning to stderr.
-- A pristine file (the hash agrees) is written over or removed with no backup and
-  no warning.
-- A file with no stamp at a desired path is checked by content. If the content
-  is a spekk file (a role shim or the dev-loop skill), the reconciler owns it: it
-  makes a `.bak` backup and updates the file to the current stamped content. This
-  migrates a file that an older, pre-stamp version wrote. If the content is not a
-  spekk file, the reconciler treats it as user content: it makes a `.bak` backup
-  and does not write over it.
-- Tests cover: a changed managed file at a desired path (backup, no overwrite), a
-  changed managed file to be pruned (backup, no removal), and a pristine file
-  (normal write or removal, no backup).
+- No function in `internal/install` decides ownership by reading file content. `looksLikeSpekkFile` does not exist.
+- For a file that already exists at a desired path, `reconcile` acts on exactly three cases:
+  - The on-disk bytes equal the stamped desired content: no write, no backup, no warning (the reconcile stays idempotent).
+  - The file is stamped and its body hash agrees with the stamp (it is pristine, from another spekk version): write the new stamped content, with no backup and no warning.
+  - Any other case — a stamped file the user edited, or a file with no stamp, whatever its content: write `<path>.bak` first, then write the new stamped content, and record one warning.
+- The warning names the file and the backup and says the file was updated. There is one warning wording for this case, not two.
+- `backupFile` still never overwrites an earlier backup: it falls back to `<path>.bak.1`, `<path>.bak.2`, and so on.
+- The prune half of `reconcile` is unchanged: an owned file that is not in the desired set and is not pristine is backed up, left in place, and reported in a warning.
+- Tests cover, at a desired path: a byte-identical file (no write), a pristine stamped file from another version (write, no backup), a stamped file edited by hand (backup, then update), and an unstamped file whose body contains none of the old marker strings (backup, then update).
+
+**Note:** the user-visible cost is that a hand-edited managed file is replaced on the next install. That is deliberate. The edit survives in the `.bak`, and an install that reports success must leave the installed thing current.
+
+**Tests:** `internal/install/reconcile_test.go` — `TestReconcile_UpdatesFileAtDesiredPath` (edited managed file, unstamped file, pristine file from another version) and `TestReconcile_WritesPrunesIdempotent` (byte-identical file); `internal/install/install_test.go` — `TestInstall_MigratesOldDevLoopSkill`.

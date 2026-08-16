@@ -120,31 +120,69 @@ func TestReconcile_WritesPrunesIdempotent(t *testing.T) {
 	}
 }
 
-func TestReconcile_DoesNotClobberEditedDesiredFile(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "a.md")
-	// A managed file the user edited by hand: keep the stale stamp, change body.
-	edited := bytes.Replace(StampContent([]byte("original")), []byte("original"), []byte("EDITED BY USER"), 1)
-	if err := os.WriteFile(p, edited, 0o644); err != nil {
-		t.Fatal(err)
+// TestReconcile_UpdatesFileAtDesiredPath: a desired path belongs to spekk by its
+// path, so the reconciler brings it to the current content whatever is there. It
+// keeps what it replaced in a .bak, unless the file is a pristine managed file
+// from another spekk version.
+func TestReconcile_UpdatesFileAtDesiredPath(t *testing.T) {
+	cases := []struct {
+		name       string
+		existing   []byte
+		wantBackup bool
+	}{
+		{
+			name:       "managed file the user edited by hand",
+			existing:   bytes.Replace(StampContent([]byte("v1 body")), []byte("v1 body"), []byte("EDITED BY USER"), 1),
+			wantBackup: true,
+		},
+		{
+			// No stamp and none of the markers the old content sniff looked for.
+			name:       "unstamped file of any content",
+			existing:   []byte("my own agent, nothing to do with the tool\n"),
+			wantBackup: true,
+		},
+		{
+			name:       "pristine managed file from another version",
+			existing:   StampContent([]byte("v1 body")),
+			wantBackup: false,
+		},
 	}
-	desired := map[string][]byte{p: []byte("original")}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := filepath.Join(dir, "a.md")
+			if err := os.WriteFile(p, tc.existing, 0o644); err != nil {
+				t.Fatal(err)
+			}
 
-	res, err := reconcile(desired, []string{dir})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Written) != 0 {
-		t.Errorf("edited file was overwritten: written=%v", res.Written)
-	}
-	if len(res.Warnings) != 1 {
-		t.Errorf("warnings = %v, want 1", res.Warnings)
-	}
-	if !bytes.Contains(mustRead(t, p), []byte("EDITED BY USER")) {
-		t.Errorf("file body was changed")
-	}
-	if !bytes.Contains(mustRead(t, p+".bak"), []byte("EDITED BY USER")) {
-		t.Errorf(".bak backup was not written")
+			res, err := reconcile(map[string][]byte{p: []byte("v2 body")}, []string{dir})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Written) != 1 || res.Written[0] != p {
+				t.Errorf("written = %v, want [%s]", res.Written, p)
+			}
+			body, _, managed := ParseStamp(mustRead(t, p))
+			if !managed || string(body) != "v2 body" {
+				t.Errorf("file = managed %v body %q, want the current stamped content", managed, body)
+			}
+			bak, err := os.ReadFile(p + ".bak")
+			switch {
+			case tc.wantBackup && err != nil:
+				t.Errorf(".bak backup not written: %v", err)
+			case tc.wantBackup && !bytes.Equal(bak, tc.existing):
+				t.Errorf(".bak = %q, want the replaced file %q", bak, tc.existing)
+			case !tc.wantBackup && err == nil:
+				t.Errorf("a pristine managed file should need no backup")
+			}
+			wantWarnings := 0
+			if tc.wantBackup {
+				wantWarnings = 1
+			}
+			if len(res.Warnings) != wantWarnings {
+				t.Errorf("warnings = %v, want %d", res.Warnings, wantWarnings)
+			}
+		})
 	}
 }
 
@@ -173,27 +211,6 @@ func TestReconcile_DoesNotPruneEditedFile(t *testing.T) {
 	}
 }
 
-func TestReconcile_UnstampedUserFileAtDesiredPathIsNotClobbered(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "a.md")
-	if err := os.WriteFile(p, []byte("hand-written, no stamp\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	res, err := reconcile(map[string][]byte{p: []byte("desired")}, []string{dir})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Written) != 0 {
-		t.Errorf("unstamped user file was overwritten")
-	}
-	if !bytes.Contains(mustRead(t, p), []byte("hand-written")) {
-		t.Errorf("user file body changed")
-	}
-	if _, err := os.Stat(p + ".bak"); err != nil {
-		t.Errorf(".bak backup not written for user file")
-	}
-}
-
 func TestCheckStale(t *testing.T) {
 	home := t.TempDir()
 	skillFS := fakeSkillFS()
@@ -202,8 +219,9 @@ func TestCheckStale(t *testing.T) {
 	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}); err != nil {
 		t.Fatal(err)
 	}
-	// No stale files right after a clean install.
-	stale, err := CheckStale(home, "")
+	// No stale files right after a clean install. A target the user never
+	// installed (every one but claude-code) stays silent too.
+	stale, err := CheckStale(home, "", skillFS)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,20 +229,49 @@ func TestCheckStale(t *testing.T) {
 		t.Fatalf("clean install reports stale files: %v", stale)
 	}
 
-	// Drop a stamped file that the current layout does not write (an old agent).
+	// Drop a stamped file that the current layout does not write (an old agent),
+	// and edit an installed file so it no longer matches this binary.
 	old := filepath.Join(home, ".claude", "agents", "spekk-old.md")
 	if err := os.WriteFile(old, StampContent([]byte("legacy")), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	stale, err = CheckStale(home, "")
+	outdated := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+	if err := os.WriteFile(outdated, []byte("an older dev-loop skill\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stale, err = CheckStale(home, "", skillFS)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stale) != 1 || !strings.Contains(stale[0], old) {
-		t.Fatalf("stale = %v, want one entry for %s", stale, old)
+	if len(stale) != 2 {
+		t.Fatalf("stale = %v, want one old-layout entry and one out-of-date entry", stale)
 	}
-	if !strings.Contains(stale[0], "spekk install --target claude-code") {
-		t.Errorf("stale entry lacks the install command: %q", stale[0])
+	assertStale(t, stale, old, "is from an old layout")
+	assertStale(t, stale, outdated, "is out of date")
+}
+
+// assertStale fails unless exactly one stale line names path, says why, and
+// shows the install command that fixes it.
+func assertStale(t *testing.T, stale []string, path, reason string) {
+	t.Helper()
+	var got string
+	for _, s := range stale {
+		if strings.Contains(s, path) {
+			if got != "" {
+				t.Fatalf("%s reported more than once: %v", path, stale)
+			}
+			got = s
+		}
+	}
+	if got == "" {
+		t.Fatalf("no stale entry for %s: %v", path, stale)
+	}
+	if !strings.Contains(got, reason) {
+		t.Errorf("stale entry %q does not say %q", got, reason)
+	}
+	if !strings.Contains(got, "spekk install --target claude-code") {
+		t.Errorf("stale entry lacks the install command: %q", got)
 	}
 }
 
@@ -235,29 +282,4 @@ func mustRead(t *testing.T, path string) []byte {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return data
-}
-
-// TestReconcile_UpdatesUnstampedSpekkFile: an old unstamped spekk file at a
-// desired path is ours, not the user's. reconcile backs it up and updates it.
-func TestReconcile_UpdatesUnstampedSpekkFile(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "spekk-observer.md")
-	old := []byte("---\nname: spekk-observer\n---\nYou are the spekk observer agent.\nRun `spekk prompt observer`.\n")
-	if err := os.WriteFile(p, old, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	res, err := reconcile(map[string][]byte{p: []byte("new observer body")}, []string{dir})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Written) != 1 {
-		t.Errorf("the unstamped spekk file should be updated: written=%v", res.Written)
-	}
-	body, _, managed := ParseStamp(mustRead(t, p))
-	if !managed || string(body) != "new observer body" {
-		t.Errorf("file should be updated to the new stamped content: managed=%v body=%q", managed, body)
-	}
-	if _, err := os.Stat(p + ".bak"); err != nil {
-		t.Errorf(".bak backup not written: %v", err)
-	}
 }

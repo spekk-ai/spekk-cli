@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -170,26 +171,18 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 			if bytes.Equal(existing, stamped) {
 				continue // already correct: no-op (idempotent)
 			}
-			managed, pristine := isPristine(existing)
-			switch {
-			case managed && pristine:
-				// A managed file from another version: overwrite with the new content.
-			case !managed && looksLikeSpekkFile(existing):
-				// An old, unstamped spekk file from before the reconciler. It is
-				// ours, not the user's. Back it up, then update it.
+			// The path is the statement of ownership: this is a path spekk writes,
+			// so spekk brings it to the current content. The stamp decides only
+			// whether a backup is necessary first. A pristine managed file is
+			// spekk's own content from another version and needs no backup;
+			// anything else — a managed file the user edited, or a file with no
+			// stamp — is kept in a .bak before the update.
+			if managed, pristine := isPristine(existing); !managed || !pristine {
 				if err := backupFile(path); err != nil {
 					return res, fmt.Errorf("backing up %s: %w", path, err)
 				}
 				res.Warnings = append(res.Warnings,
-					fmt.Sprintf("%s was an unstamped spekk file; wrote %s.bak and updated it", path, path))
-			default:
-				// A hand-edited managed file, or genuine user content: do not clobber.
-				if err := backupFile(path); err != nil {
-					return res, fmt.Errorf("backing up %s: %w", path, err)
-				}
-				res.Warnings = append(res.Warnings,
-					fmt.Sprintf("%s was changed by hand; wrote %s.bak and left the file as is", path, path))
-				continue
+					fmt.Sprintf("%s did not match the content spekk installed; wrote %s.bak and updated it", path, path))
 			}
 		} else if !os.IsNotExist(err) {
 			return res, fmt.Errorf("reading %s: %w", path, err)
@@ -225,11 +218,13 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 	return res, nil
 }
 
-// CheckStale scans every supported target and scope for owned files that are not
-// in that target's desired set. It reads files only; it changes nothing. It
-// returns one line per stale file, each naming the file and the install command
-// that migrates it.
-func CheckStale(home, cwd string) ([]string, error) {
+// CheckStale scans every supported target and scope for two conditions: an owned
+// file that is not in that target's desired set (an old layout), and a file at a
+// desired path whose content does not match what this binary installs (an
+// out-of-date file). It reads files only; it changes nothing. It returns one line
+// per file, each naming the file, the condition, and the install command that
+// fixes it.
+func CheckStale(home, cwd string, skillFS fs.FS) ([]string, error) {
 	var stale []string
 	names := ValidTargets()
 	for _, name := range names {
@@ -239,25 +234,42 @@ func CheckStale(home, cwd string) ([]string, error) {
 			scopes = append(scopes, true) // project
 		}
 		for _, project := range scopes {
-			dirs := t.managedDirs(project, home, cwd)
-			want := t.desiredPaths(project, home, cwd)
-			wantSet := map[string]bool{}
-			for _, p := range want {
-				wantSet[p] = true
+			cmd := "spekk install --target " + name
+			if project {
+				cmd += " --project"
 			}
-			owned, err := scanOwned(dirs)
+
+			desired, err := t.desiredFiles(project, home, cwd, skillFS)
+			if err != nil {
+				return nil, err
+			}
+
+			// An owned file the current layout no longer writes.
+			owned, err := scanOwned(t.managedDirs(project, home, cwd))
 			if err != nil {
 				return nil, err
 			}
 			for _, o := range owned {
-				if wantSet[o.Path] {
+				if _, want := desired[o.Path]; want {
 					continue
 				}
-				cmd := "spekk install --target " + name
-				if project {
-					cmd += " --project"
+				stale = append(stale, fmt.Sprintf("%s is from an old layout (run: %s)", o.Path, cmd))
+			}
+
+			// A file that is installed at a desired path but is not current. A
+			// desired path with no file there is not installed, so it is silent.
+			for path, body := range desired {
+				existing, err := os.ReadFile(path)
+				if err != nil {
+					if os.IsNotExist(err) {
+						continue
+					}
+					return nil, fmt.Errorf("reading %s: %w", path, err)
 				}
-				stale = append(stale, fmt.Sprintf("%s (run: %s)", o.Path, cmd))
+				if bytes.Equal(existing, StampContent(body)) {
+					continue
+				}
+				stale = append(stale, fmt.Sprintf("%s is out of date (run: %s)", path, cmd))
 			}
 		}
 	}
@@ -265,27 +277,12 @@ func CheckStale(home, cwd string) ([]string, error) {
 	return stale, nil
 }
 
-// looksLikeSpekkFile reports whether content is one of spekk's managed files: a
-// role shim or the dev-loop skill. It is used only on a spekk-namespaced path,
-// so it needs only to tell an old spekk file from a file the user put there. A
-// plain user file does not match by accident.
-func looksLikeSpekkFile(content []byte) bool {
-	// A role shim (agent shim or thin role skill): it names the spekk agent and
-	// tells the session to run spekk prompt.
-	if bytes.Contains(content, []byte("spekk prompt ")) &&
-		bytes.Contains(content, []byte("You are the spekk")) {
-		return true
-	}
-	// The dev-loop skill: its heading is stable across versions and hosts (it
-	// survives the frontmatter strip for a command host).
-	return bytes.Contains(content, []byte("Spekk Dev Loop"))
-}
-
 // migrateLegacy removes an old coach or builder agent shim that a role no longer
-// uses. It handles only an unstamped file from a version before the reconciler;
-// the reconciler prunes a stamped shim. It backs up the file first, because it
-// cannot prove the file is unchanged. A file at a legacy path that is not a spekk
-// shim (a file the user wrote) is left alone.
+// uses. The path is spekk's own: spekk wrote that spekk-namespaced name into the
+// host's agent directory, so migrateLegacy removes the file whatever the body
+// says. It backs up the file first, because it cannot prove the file is
+// unchanged. It handles only an unstamped file from a version before the
+// reconciler; the reconciler prunes a stamped shim.
 //
 // It skips a legacy path that is also a desired path — a host such as codex that
 // keeps agents and skills in one directory, or a host with no skill path where
@@ -305,9 +302,6 @@ func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 		}
 		if _, _, managed := ParseStamp(content); managed {
 			continue // the reconciler owns and prunes a stamped file
-		}
-		if !looksLikeSpekkFile(content) {
-			continue // not a spekk shim: leave the user's file
 		}
 		if err := backupFile(p); err != nil {
 			return res, fmt.Errorf("backing up %s: %w", p, err)
