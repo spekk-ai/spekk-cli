@@ -144,9 +144,12 @@ func TestRunDevBuild(t *testing.T) {
 	version.Version = "dev"
 	defer func() { version.Version = original }()
 
-	err := Run(false)
+	replaced, err := Run(false)
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("development build")) {
 		t.Errorf("expected dev build error, got: %v", err)
+	}
+	if replaced {
+		t.Errorf("a failed update must not report the binary as replaced")
 	}
 }
 

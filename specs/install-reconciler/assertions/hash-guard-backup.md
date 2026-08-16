@@ -17,7 +17,8 @@ So the reconciler decides ownership of a desired path from the path alone. It al
 
 ## Success Criteria
 
-- No function in `internal/install` decides ownership by reading file content. `looksLikeSpekkFile` does not exist.
+- No function in `internal/install` decides ownership of a desired or a legacy path by reading file content. `looksLikeSpekkFile` does not exist. (The stamp is still read: it tells a scan which files spekk wrote, and it tells the reconciler whether a backup is due.)
+- A backup that spekk wrote is never treated as a managed file. The backup of a managed file the user edited carries the old stamp, so a scan that counted it would back it up again on every install and report it as stale forever. `scanOwned` skips a name in the `<name>.bak` and `<name>.bak.<n>` forms, and one constant holds that suffix for both `backupFile` and the scan.
 - For a file that already exists at a desired path, `reconcile` acts on exactly three cases:
   - The on-disk bytes equal the stamped desired content: no write, no backup, no warning (the reconcile stays idempotent).
   - The file is stamped and its body hash agrees with the stamp (it is pristine, from another spekk version): write the new stamped content, with no backup and no warning.
@@ -29,4 +30,4 @@ So the reconciler decides ownership of a desired path from the path alone. It al
 
 **Note:** the user-visible cost is that a hand-edited managed file is replaced on the next install. That is deliberate. The edit survives in the `.bak`, and an install that reports success must leave the installed thing current.
 
-**Tests:** `internal/install/reconcile_test.go` — `TestReconcile_UpdatesFileAtDesiredPath` (edited managed file, unstamped file, pristine file from another version) and `TestReconcile_WritesPrunesIdempotent` (byte-identical file); `internal/install/install_test.go` — `TestInstall_MigratesOldDevLoopSkill`.
+**Tests:** `internal/install/reconcile_test.go` — `TestReconcile_UpdatesFileAtDesiredPath` (edited managed file, unstamped file, pristine file from another version), `TestReconcile_WritesPrunesIdempotent` (byte-identical file), `TestReconcile_IgnoresItsOwnBackups`; `internal/install/install_test.go` — `TestInstall_MigratesOldDevLoopSkill`.

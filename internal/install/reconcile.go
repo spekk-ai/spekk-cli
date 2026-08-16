@@ -76,13 +76,27 @@ func isPristine(content []byte) (managed, pristine bool) {
 // OwnedFile is one spekk-managed file found by a scan.
 type OwnedFile struct {
 	Path     string
-	Hash     string // hash recorded in the stamp
-	Pristine bool   // the on-disk body still agrees with the stamp
+	Pristine bool // the on-disk body still agrees with the stamp
+}
+
+// backupSuffix is the extension backupFile adds to the file it preserves.
+const backupSuffix = ".bak"
+
+// isBackupName reports whether name is a backup that backupFile wrote: either
+// "<name>.bak" or the "<name>.bak.<n>" form it falls back to.
+func isBackupName(name string) bool {
+	return strings.HasSuffix(name, backupSuffix) || strings.Contains(name, backupSuffix+".")
 }
 
 // scanOwned scans dirs for spekk-managed files and returns the owned set. A file
 // with no stamp (user content) is ignored. A directory that does not exist
 // contributes nothing and is not an error.
+//
+// A backup spekk wrote is not owned. The backup of a managed file the user
+// edited carries the old stamp, so a scan would otherwise call it a managed file
+// that the current layout does not write: every install would back the backup up
+// again, and every "spekk update" would report it as stale with an install
+// command that only makes more copies.
 func scanOwned(dirs []string) ([]OwnedFile, error) {
 	seen := map[string]bool{}
 	var owned []OwnedFile
@@ -98,7 +112,7 @@ func scanOwned(dirs []string) ([]OwnedFile, error) {
 			return nil, fmt.Errorf("scanning %s: %w", dir, err)
 		}
 		for _, e := range entries {
-			if e.IsDir() {
+			if e.IsDir() || isBackupName(e.Name()) {
 				continue
 			}
 			path := filepath.Join(dir, e.Name())
@@ -113,9 +127,8 @@ func scanOwned(dirs []string) ([]OwnedFile, error) {
 			if !managed {
 				continue
 			}
-			_, h, _ := ParseStamp(content)
 			seen[path] = true
-			owned = append(owned, OwnedFile{Path: path, Hash: h, Pristine: pristine})
+			owned = append(owned, OwnedFile{Path: path, Pristine: pristine})
 		}
 	}
 	sort.Slice(owned, func(i, j int) bool { return owned[i].Path < owned[j].Path })
@@ -129,19 +142,19 @@ type Result struct {
 	Warnings []string
 }
 
-// backupFile copies path to a ".bak" file that does not already exist, so it
+// backupFile copies path to a backup file that does not already exist, so it
 // never overwrites an earlier backup (which could be the user's own file).
 func backupFile(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	bak := path + ".bak"
+	bak := path + backupSuffix
 	for i := 1; ; i++ {
 		if _, err := os.Stat(bak); os.IsNotExist(err) {
 			break
 		}
-		bak = fmt.Sprintf("%s.bak.%d", path, i)
+		bak = fmt.Sprintf("%s%s.%d", path, backupSuffix, i)
 	}
 	return os.WriteFile(bak, data, 0o644)
 }
@@ -218,62 +231,165 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 	return res, nil
 }
 
+// StaleReason says why an installed file does not match this binary.
+type StaleReason int
+
+const (
+	// StaleOldLayout: spekk owns the file, but the current layout does not write it.
+	StaleOldLayout StaleReason = iota
+	// StaleOutOfDate: the file sits at a path spekk writes, but its content is not
+	// what this binary installs.
+	StaleOutOfDate
+)
+
+var staleReasonText = map[StaleReason]string{
+	StaleOldLayout: "is from an old layout",
+	StaleOutOfDate: "is out of date",
+}
+
+func (r StaleReason) String() string {
+	if s, ok := staleReasonText[r]; ok {
+		return s
+	}
+	return fmt.Sprintf("StaleReason(%d)", int(r))
+}
+
+// StaleFile is one installed file that does not match this binary.
+type StaleFile struct {
+	Path    string
+	Reason  StaleReason
+	Target  string // the install target that claims the path
+	Project bool   // the path belongs to a project-scope install
+}
+
+// InstallCommand returns the command that brings this file up to date.
+func (s StaleFile) InstallCommand() string {
+	return installScope{name: s.Target, project: s.Project}.installCommand()
+}
+
+// installScope is one target in one scope: everything a scan of the install
+// locations needs to know.
+type installScope struct {
+	name    string
+	target  target
+	project bool
+}
+
+// installCommand returns the command that installs this target and scope.
+func (s installScope) installCommand() string {
+	cmd := "spekk install --target " + s.name
+	if s.project {
+		cmd += " --project"
+	}
+	return cmd
+}
+
+// eachInstallScope returns every target and scope a scan must visit. The global
+// scope of a target comes before its project scope, so a caller that keeps the
+// first result for a path prefers the global install command.
+func eachInstallScope(cwd string) []installScope {
+	var scopes []installScope
+	for _, name := range ValidTargets() {
+		t := targets[name]
+		scopes = append(scopes, installScope{name: name, target: t})
+		if t.projectDir != "" && cwd != "" {
+			scopes = append(scopes, installScope{name: name, target: t, project: true})
+		}
+	}
+	return scopes
+}
+
+// InstalledTargets returns the install command for every target and scope that
+// has at least one spekk-managed file on disk. It reads files only. A caller uses
+// it to name the installs a user actually has, instead of listing every target
+// spekk supports.
+func InstalledTargets(home, cwd string) ([]string, error) {
+	seen := map[string]bool{}
+	var cmds []string
+	for _, s := range eachInstallScope(cwd) {
+		dirs := s.target.managedDirs(s.project, home, cwd)
+		// Two scopes can name the same directories when the working directory is
+		// the home directory. Report the first (global) command only.
+		fresh := false
+		for _, d := range dirs {
+			if !seen[d] {
+				fresh = true
+			}
+		}
+		if !fresh {
+			continue
+		}
+		owned, err := scanOwned(dirs)
+		if err != nil {
+			return nil, err
+		}
+		if len(owned) == 0 {
+			continue
+		}
+		for _, d := range dirs {
+			seen[d] = true
+		}
+		cmds = append(cmds, s.installCommand())
+	}
+	sort.Strings(cmds)
+	return cmds, nil
+}
+
 // CheckStale scans every supported target and scope for two conditions: an owned
 // file that is not in that target's desired set (an old layout), and a file at a
 // desired path whose content does not match what this binary installs (an
-// out-of-date file). It reads files only; it changes nothing. It returns one line
-// per file, each naming the file, the condition, and the install command that
-// fixes it.
-func CheckStale(home, cwd string, skillFS fs.FS) ([]string, error) {
-	var stale []string
-	names := ValidTargets()
-	for _, name := range names {
-		t := targets[name]
-		scopes := []bool{false} // global
-		if t.projectDir != "" && cwd != "" {
-			scopes = append(scopes, true) // project
+// out-of-date file). It reads files only; it changes nothing.
+//
+// It reports each path once. Two scopes can name the same path — a user whose
+// working directory is their home directory has the same .claude directory in
+// both — and one file with two contradictory fix commands helps nobody. The
+// global scope is checked first, so the global command wins the tie.
+func CheckStale(home, cwd string, skillFS fs.FS) ([]StaleFile, error) {
+	seen := map[string]bool{}
+	var stale []StaleFile
+	add := func(f StaleFile) {
+		if seen[f.Path] {
+			return
 		}
-		for _, project := range scopes {
-			cmd := "spekk install --target " + name
-			if project {
-				cmd += " --project"
-			}
+		seen[f.Path] = true
+		stale = append(stale, f)
+	}
 
-			desired, err := t.desiredFiles(project, home, cwd, skillFS)
-			if err != nil {
-				return nil, err
-			}
+	for _, s := range eachInstallScope(cwd) {
+		desired, err := s.target.desiredFiles(s.project, home, cwd, skillFS)
+		if err != nil {
+			return nil, err
+		}
 
-			// An owned file the current layout no longer writes.
-			owned, err := scanOwned(t.managedDirs(project, home, cwd))
-			if err != nil {
-				return nil, err
+		// An owned file the current layout no longer writes.
+		owned, err := scanOwned(s.target.managedDirs(s.project, home, cwd))
+		if err != nil {
+			return nil, err
+		}
+		for _, o := range owned {
+			if _, want := desired[o.Path]; want {
+				continue
 			}
-			for _, o := range owned {
-				if _, want := desired[o.Path]; want {
+			add(StaleFile{Path: o.Path, Reason: StaleOldLayout, Target: s.name, Project: s.project})
+		}
+
+		// A file that is installed at a desired path but is not current. A
+		// desired path with no file there is not installed, so it is silent.
+		for path, body := range desired {
+			existing, err := os.ReadFile(path)
+			if err != nil {
+				if os.IsNotExist(err) {
 					continue
 				}
-				stale = append(stale, fmt.Sprintf("%s is from an old layout (run: %s)", o.Path, cmd))
+				return nil, fmt.Errorf("reading %s: %w", path, err)
 			}
-
-			// A file that is installed at a desired path but is not current. A
-			// desired path with no file there is not installed, so it is silent.
-			for path, body := range desired {
-				existing, err := os.ReadFile(path)
-				if err != nil {
-					if os.IsNotExist(err) {
-						continue
-					}
-					return nil, fmt.Errorf("reading %s: %w", path, err)
-				}
-				if bytes.Equal(existing, StampContent(body)) {
-					continue
-				}
-				stale = append(stale, fmt.Sprintf("%s is out of date (run: %s)", path, cmd))
+			if bytes.Equal(existing, StampContent(body)) {
+				continue
 			}
+			add(StaleFile{Path: path, Reason: StaleOutOfDate, Target: s.name, Project: s.project})
 		}
 	}
-	sort.Strings(stale)
+	sort.Slice(stale, func(i, j int) bool { return stale[i].Path < stale[j].Path })
 	return stale, nil
 }
 

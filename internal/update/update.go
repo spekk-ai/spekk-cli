@@ -42,30 +42,33 @@ type asset struct {
 
 // Run performs the self-update. If checkOnly is true, it prints the available
 // version without installing.
-func Run(checkOnly bool) error {
+// Run updates the binary in place. It reports whether it replaced the binary,
+// so the caller can tell the user that the installed skills now come from a
+// version this process cannot read.
+func Run(checkOnly bool) (replaced bool, err error) {
 	current := version.Version
 	if current == "dev" {
-		return fmt.Errorf("cannot update a development build; install a released version first")
+		return false, fmt.Errorf("cannot update a development build; install a released version first")
 	}
 
 	release, err := FetchLatestRelease()
 	if err != nil {
-		return fmt.Errorf("failed to check for updates: %w", err)
+		return false, fmt.Errorf("failed to check for updates: %w", err)
 	}
 
 	latest := strings.TrimPrefix(release.TagName, "v")
 	if latest == "" {
-		return fmt.Errorf("no releases found on GitHub")
+		return false, fmt.Errorf("no releases found on GitHub")
 	}
 
 	if !IsNewer(latest, current) {
 		fmt.Printf("Already on latest version (%s)\n", current)
-		return nil
+		return false, nil
 	}
 
 	if checkOnly {
 		fmt.Printf("Current version: %s\nLatest version:  %s\nRun 'spekk update' to install\n", current, latest)
-		return nil
+		return false, nil
 	}
 
 	fmt.Printf("Updating %s → %s ...\n", current, latest)
@@ -79,24 +82,24 @@ func Run(checkOnly bool) error {
 		}
 	}
 	if downloadURL == "" {
-		return fmt.Errorf("no binary found for %s/%s in release %s", runtime.GOOS, runtime.GOARCH, release.TagName)
+		return false, fmt.Errorf("no binary found for %s/%s in release %s", runtime.GOOS, runtime.GOARCH, release.TagName)
 	}
 
 	exePath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("cannot determine executable path: %w", err)
+		return false, fmt.Errorf("cannot determine executable path: %w", err)
 	}
 	exePath, err = filepath.EvalSymlinks(exePath)
 	if err != nil {
-		return fmt.Errorf("cannot resolve executable path: %w", err)
+		return false, fmt.Errorf("cannot resolve executable path: %w", err)
 	}
 
 	if err := downloadAndReplace(downloadURL, exePath); err != nil {
-		return fmt.Errorf("update failed: %w", err)
+		return false, fmt.Errorf("update failed: %w", err)
 	}
 
 	fmt.Printf("Updated successfully: %s → %s\n", current, latest)
-	return nil
+	return true, nil
 }
 
 // FetchLatestRelease queries the GitHub Releases API for the latest release.

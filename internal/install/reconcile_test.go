@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
+	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -244,34 +245,93 @@ func TestCheckStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stale) != 2 {
-		t.Fatalf("stale = %v, want one old-layout entry and one out-of-date entry", stale)
+	want := []StaleFile{
+		{Path: old, Reason: StaleOldLayout, Target: "claude-code"},
+		{Path: outdated, Reason: StaleOutOfDate, Target: "claude-code"},
 	}
-	assertStale(t, stale, old, "is from an old layout")
-	assertStale(t, stale, outdated, "is out of date")
+	sort.Slice(want, func(i, j int) bool { return want[i].Path < want[j].Path })
+	if !reflect.DeepEqual(stale, want) {
+		t.Fatalf("stale = %+v, want %+v", stale, want)
+	}
+	if cmd := stale[0].InstallCommand(); cmd != "spekk install --target claude-code" {
+		t.Errorf("InstallCommand() = %q", cmd)
+	}
 }
 
-// assertStale fails unless exactly one stale line names path, says why, and
-// shows the install command that fixes it.
-func assertStale(t *testing.T, stale []string, path, reason string) {
-	t.Helper()
-	var got string
-	for _, s := range stale {
-		if strings.Contains(s, path) {
-			if got != "" {
-				t.Fatalf("%s reported more than once: %v", path, stale)
+// TestCheckStale_ReportsEachPathOnce: a user whose working directory is their
+// home directory has the same .claude directory in both scopes. One file must
+// not produce two lines with two contradictory fix commands.
+func TestCheckStale_ReportsEachPathOnce(t *testing.T) {
+	home := t.TempDir()
+	skillFS := fakeSkillFS()
+	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+	if err := os.WriteFile(p, []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stale, err := CheckStale(home, home, skillFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stale) != 1 || stale[0].Path != p {
+		t.Fatalf("stale = %+v, want one entry for %s", stale, p)
+	}
+	if stale[0].Project {
+		t.Errorf("the global install command should win the tie, got %q", stale[0].InstallCommand())
+	}
+}
+
+// TestReconcile_IgnoresItsOwnBackups: the backup of an edited managed file keeps
+// the old stamp. If a scan counted it as owned, every install would back the
+// backup up again and every check would report it as stale forever, with an
+// install command that only makes more copies.
+func TestReconcile_IgnoresItsOwnBackups(t *testing.T) {
+	home := t.TempDir()
+	skillFS := fakeSkillFS()
+	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".claude", "skills", "spekk-dev-loop")
+	p := filepath.Join(dir, "SKILL.md")
+	// Edit the body and leave the trailing stamp marker in place, as a user
+	// editing the prose of the skill would.
+	cur := mustRead(t, p)
+	body, _, _ := ParseStamp(cur)
+	edited := bytes.Replace(cur, body, append([]byte("HAND EDIT\n"), body...), 1)
+	if err := os.WriteFile(p, edited, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The first install backs the edit up and updates the file; every install
+	// after that is a no-op, so the directory stops growing.
+	for i := 1; i <= 3; i++ {
+		if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}); err != nil {
+			t.Fatal(err)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 2 {
+			names := []string{}
+			for _, e := range entries {
+				names = append(names, e.Name())
 			}
-			got = s
+			t.Fatalf("after install %d the skill directory holds %v, want SKILL.md and one backup", i, names)
 		}
 	}
-	if got == "" {
-		t.Fatalf("no stale entry for %s: %v", path, stale)
+	if !bytes.Equal(mustRead(t, p+".bak"), edited) {
+		t.Errorf("the backup should hold the edit that was replaced")
 	}
-	if !strings.Contains(got, reason) {
-		t.Errorf("stale entry %q does not say %q", got, reason)
+	stale, err := CheckStale(home, "", skillFS)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(got, "spekk install --target claude-code") {
-		t.Errorf("stale entry lacks the install command: %q", got)
+	if len(stale) != 0 {
+		t.Errorf("a backup must not be reported as stale: %+v", stale)
 	}
 }
 

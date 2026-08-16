@@ -1256,11 +1256,37 @@ OPTIONS:
 		}
 	}
 
-	if err := update.Run(checkOnly); err != nil {
+	replaced, err := update.Run(checkOnly)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
+	if replaced {
+		// The check below runs in the old process against the old embedded
+		// content, so it cannot see what the new binary would install. The new
+		// binary is the one that knows, and the user is here now.
+		remindToReinstall()
+		return
+	}
 	warnStaleInstall()
+}
+
+// remindToReinstall names the install targets that have spekk files on disk and
+// asks the user to run the install again. A role shim reads its instructions
+// from the binary at session start, but the spekk-dev-loop skill carries its
+// content in the file, so a new binary can bring content the installed file does
+// not have yet.
+func remindToReinstall() {
+	home, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
+	installed, err := install.InstalledTargets(home, cwd)
+	if err != nil || len(installed) == 0 {
+		return
+	}
+	fmt.Fprintln(os.Stderr, "\nThe installed spekk skills carry their content in the file. Re-run:")
+	for _, cmd := range installed {
+		fmt.Fprintln(os.Stderr, "  "+cmd)
+	}
 }
 
 // warnStaleInstall checks every install location for a managed file that the
@@ -1271,12 +1297,16 @@ func warnStaleInstall() {
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
 	stale, err := install.CheckStale(home, cwd, spekk.EmbeddedFS)
-	if err != nil || len(stale) == 0 {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nwarning: could not check the installed spekk files: %s\n", err)
+		return
+	}
+	if len(stale) == 0 {
 		return
 	}
 	fmt.Fprintln(os.Stderr, "\nwarning: some installed spekk files do not match this version of spekk:")
 	for _, s := range stale {
-		fmt.Fprintln(os.Stderr, "  "+s)
+		fmt.Fprintf(os.Stderr, "  %s %s (run: %s)\n", s.Path, s.Reason, s.InstallCommand())
 	}
 	fmt.Fprintln(os.Stderr, "Re-run the shown install command to migrate.")
 }
