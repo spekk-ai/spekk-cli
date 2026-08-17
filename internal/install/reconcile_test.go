@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -187,6 +188,43 @@ func TestReconcile_UpdatesFileAtDesiredPath(t *testing.T) {
 	}
 }
 
+// TestReconcile_LeavesASymlinkedPathAlone: a managed path that is a symlink has
+// a second owner — a dotfiles manager, usually. The far end is not a path spekk
+// owns, and only the user can say which tool should win, so spekk writes
+// nothing, removes nothing, and says so.
+func TestReconcile_LeavesASymlinkedPathAlone(t *testing.T) {
+	dir := t.TempDir()
+	elsewhere := filepath.Join(t.TempDir(), "dotfiles-copy.md")
+	if err := os.WriteFile(elsewhere, []byte("the user's own file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "a.md")
+	if err := os.Symlink(elsewhere, p); err != nil {
+		t.Skipf("this platform cannot make a symlink: %v", err)
+	}
+
+	res, err := reconcile(map[string][]byte{p: []byte("v2 body")}, []string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Written) != 0 || len(res.Removed) != 0 {
+		t.Errorf("written=%v removed=%v, want neither", res.Written, res.Removed)
+	}
+	if got := string(mustRead(t, elsewhere)); got != "the user's own file" {
+		t.Errorf("the far end of the link was written: %q", got)
+	}
+	fi, err := os.Lstat(p)
+	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the link itself should still be there: %v", err)
+	}
+	if _, err := os.Stat(p + ".bak"); !os.IsNotExist(err) {
+		t.Errorf("a path spekk did not write needs no backup")
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], elsewhere) {
+		t.Errorf("warnings = %v, want one naming %s", res.Warnings, elsewhere)
+	}
+}
+
 func TestReconcile_DoesNotPruneEditedFile(t *testing.T) {
 	dir := t.TempDir()
 	stray := filepath.Join(dir, "stray.md")
@@ -253,8 +291,8 @@ func TestCheckStale(t *testing.T) {
 	if !reflect.DeepEqual(stale, want) {
 		t.Fatalf("stale = %+v, want %+v", stale, want)
 	}
-	if cmd := stale[0].InstallCommand(); cmd != "spekk install --target claude-code" {
-		t.Errorf("InstallCommand() = %q", cmd)
+	if got := stale[0].Remedy(); got != "run: spekk install --target claude-code" {
+		t.Errorf("Remedy() = %q", got)
 	}
 }
 
@@ -280,7 +318,41 @@ func TestCheckStale_ReportsEachPathOnce(t *testing.T) {
 		t.Fatalf("stale = %+v, want one entry for %s", stale, p)
 	}
 	if stale[0].Project {
-		t.Errorf("the global install command should win the tie, got %q", stale[0].InstallCommand())
+		t.Errorf("the global install command should win the tie, got %q", stale[0].Remedy())
+	}
+}
+
+// TestCheckStale_ReportsASymlinkedPath: an install cannot fix a path a second
+// tool owns, so the check must not advertise one. It names the link target and
+// asks the user to choose an owner.
+func TestCheckStale_ReportsASymlinkedPath(t *testing.T) {
+	home := t.TempDir()
+	skillFS := fakeSkillFS()
+	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+	elsewhere := filepath.Join(t.TempDir(), "dotfiles-copy.md")
+	if err := os.WriteFile(elsewhere, []byte("an older skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, p); err != nil {
+		t.Skipf("this platform cannot make a symlink: %v", err)
+	}
+
+	stale, err := CheckStale(home, "", skillFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []StaleFile{{Path: p, Reason: StaleSymlink, Target: "claude-code", LinkTarget: elsewhere}}
+	if !reflect.DeepEqual(stale, want) {
+		t.Fatalf("stale = %+v, want %+v", stale, want)
+	}
+	if got := stale[0].Remedy(); got != "decide which tool owns this path" {
+		t.Errorf("Remedy() = %q, want no install command", got)
 	}
 }
 

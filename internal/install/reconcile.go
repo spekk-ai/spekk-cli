@@ -88,6 +88,38 @@ func isBackupName(name string) bool {
 	return strings.HasSuffix(name, backupSuffix) || strings.Contains(name, backupSuffix+".")
 }
 
+// linkTarget returns what path points to when path is a symlink, and "" when it
+// is a regular file or is not there.
+//
+// A managed path that is a symlink has a second owner: the tool that made the
+// link, usually a dotfiles manager. spekk does not write through it and does not
+// remove it. The far end is not a path spekk owns, and only the user can say
+// which of the two tools should own the path. So spekk reports the conflict and
+// leaves the path alone.
+func linkTarget(path string) (string, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("inspecting %s: %w", path, err)
+	}
+	if fi.Mode()&os.ModeSymlink == 0 {
+		return "", nil
+	}
+	dest, err := os.Readlink(path)
+	if err != nil {
+		return "", fmt.Errorf("reading the link %s: %w", path, err)
+	}
+	return dest, nil
+}
+
+// symlinkWarning is the one wording for a managed path spekk left alone because
+// another tool owns it through a link.
+func symlinkWarning(path, dest string) string {
+	return fmt.Sprintf("%s is a symlink to %s; spekk left it alone — decide which tool owns this path", path, dest)
+}
+
 // scanOwned scans dirs for spekk-managed files and returns the owned set. A file
 // with no stamp (user content) is ignored. A directory that does not exist
 // contributes nothing and is not an error.
@@ -97,6 +129,9 @@ func isBackupName(name string) bool {
 // that the current layout does not write: every install would back the backup up
 // again, and every "spekk update" would report it as stale with an install
 // command that only makes more copies.
+//
+// A symlink is not owned either, so the prune half never removes a link that
+// another tool made.
 func scanOwned(dirs []string) ([]OwnedFile, error) {
 	seen := map[string]bool{}
 	var owned []OwnedFile
@@ -112,7 +147,7 @@ func scanOwned(dirs []string) ([]OwnedFile, error) {
 			return nil, fmt.Errorf("scanning %s: %w", dir, err)
 		}
 		for _, e := range entries {
-			if e.IsDir() || isBackupName(e.Name()) {
+			if e.IsDir() || isBackupName(e.Name()) || e.Type()&os.ModeSymlink != 0 {
 				continue
 			}
 			path := filepath.Join(dir, e.Name())
@@ -179,6 +214,14 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 	sort.Strings(paths)
 
 	for _, path := range paths {
+		dest, err := linkTarget(path)
+		if err != nil {
+			return res, err
+		}
+		if dest != "" {
+			res.Warnings = append(res.Warnings, symlinkWarning(path, dest))
+			continue
+		}
 		stamped := StampContent(desired[path])
 		if existing, err := os.ReadFile(path); err == nil {
 			if bytes.Equal(existing, stamped) {
@@ -240,11 +283,15 @@ const (
 	// StaleOutOfDate: the file sits at a path spekk writes, but its content is not
 	// what this binary installs.
 	StaleOutOfDate
+	// StaleSymlink: the path spekk writes is a symlink, so a second tool owns it.
+	// An install does not fix this one; the user has to choose an owner.
+	StaleSymlink
 )
 
 var staleReasonText = map[StaleReason]string{
 	StaleOldLayout: "is from an old layout",
 	StaleOutOfDate: "is out of date",
+	StaleSymlink:   "is a symlink to another tool's file",
 }
 
 func (r StaleReason) String() string {
@@ -256,15 +303,20 @@ func (r StaleReason) String() string {
 
 // StaleFile is one installed file that does not match this binary.
 type StaleFile struct {
-	Path    string
-	Reason  StaleReason
-	Target  string // the install target that claims the path
-	Project bool   // the path belongs to a project-scope install
+	Path       string
+	Reason     StaleReason
+	Target     string // the install target that claims the path
+	Project    bool   // the path belongs to a project-scope install
+	LinkTarget string // what the path points to; set only for StaleSymlink
 }
 
-// InstallCommand returns the command that brings this file up to date.
-func (s StaleFile) InstallCommand() string {
-	return installScope{name: s.Target, project: s.Project}.installCommand()
+// Remedy returns what the user must do about this file. An install fixes a stale
+// layout or stale content, but it cannot fix a path a second tool owns.
+func (s StaleFile) Remedy() string {
+	if s.Reason == StaleSymlink {
+		return "decide which tool owns this path"
+	}
+	return "run: " + installScope{name: s.Target, project: s.Project}.installCommand()
 }
 
 // installScope is one target in one scope: everything a scan of the install
@@ -376,6 +428,14 @@ func CheckStale(home, cwd string, skillFS fs.FS) ([]StaleFile, error) {
 		// A file that is installed at a desired path but is not current. A
 		// desired path with no file there is not installed, so it is silent.
 		for path, body := range desired {
+			dest, err := linkTarget(path)
+			if err != nil {
+				return nil, err
+			}
+			if dest != "" {
+				add(StaleFile{Path: path, Reason: StaleSymlink, Target: s.name, Project: s.project, LinkTarget: dest})
+				continue
+			}
 			existing, err := os.ReadFile(path)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -408,6 +468,14 @@ func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 	for _, p := range paths {
 		if _, ok := desired[p]; ok {
 			continue // a desired path: the reconcile updates it in place
+		}
+		dest, err := linkTarget(p)
+		if err != nil {
+			return res, err
+		}
+		if dest != "" {
+			res.Warnings = append(res.Warnings, symlinkWarning(p, dest))
+			continue
 		}
 		content, err := os.ReadFile(p)
 		if err != nil {

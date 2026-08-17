@@ -1306,9 +1306,12 @@ func warnStaleInstall() {
 	}
 	fmt.Fprintln(os.Stderr, "\nwarning: some installed spekk files do not match this version of spekk:")
 	for _, s := range stale {
-		fmt.Fprintf(os.Stderr, "  %s %s (run: %s)\n", s.Path, s.Reason, s.InstallCommand())
+		if s.Reason == install.StaleSymlink {
+			fmt.Fprintf(os.Stderr, "  %s %s (%s; %s)\n", s.Path, s.Reason, s.LinkTarget, s.Remedy())
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "  %s %s (%s)\n", s.Path, s.Reason, s.Remedy())
 	}
-	fmt.Fprintln(os.Stderr, "Re-run the shown install command to migrate.")
 }
 
 // runInit creates the specs/ directory so a project can start using spekk.

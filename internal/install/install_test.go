@@ -441,6 +441,45 @@ func TestInstall_PrunesStampedLegacyShim(t *testing.T) {
 	}
 }
 
+// TestInstall_LeavesASymlinkedLegacyShim: the legacy migration removes a file,
+// which for a symlink would quietly undo a dotfiles setup. It leaves the link
+// and reports it instead.
+func TestInstall_LeavesASymlinkedLegacyShim(t *testing.T) {
+	home := t.TempDir()
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := filepath.Join(t.TempDir(), "my-coach.md")
+	if err := os.WriteFile(elsewhere, []byte("the user's own coach"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(agentsDir, "spekk-coach.md")
+	if err := os.Symlink(elsewhere, legacy); err != nil {
+		t.Skipf("this platform cannot make a symlink: %v", err)
+	}
+
+	res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Lstat(legacy); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the symlinked legacy shim should still be there: %v", err)
+	}
+	if _, err := os.Stat(elsewhere); err != nil {
+		t.Errorf("the far end of the link should be untouched: %v", err)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		if strings.Contains(w, elsewhere) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a warning naming the link target, got %v", res.Warnings)
+	}
+}
+
 // TestInstall_CommandHostStripsRoleSkill: a command host (codex) writes the
 // coach skill with the frontmatter stripped.
 func TestInstall_CommandHostStripsRoleSkill(t *testing.T) {
