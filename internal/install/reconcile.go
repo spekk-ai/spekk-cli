@@ -90,12 +90,6 @@ func isBackupName(name string) bool {
 
 // linkTarget returns what path points to when path is a symlink, and "" when it
 // is a regular file or is not there.
-//
-// A managed path that is a symlink has a second owner: the tool that made the
-// link, usually a dotfiles manager. spekk does not write through it and does not
-// remove it. The far end is not a path spekk owns, and only the user can say
-// which of the two tools should own the path. So spekk reports the conflict and
-// leaves the path alone.
 func linkTarget(path string) (string, error) {
 	fi, err := os.Lstat(path)
 	if err != nil {
@@ -114,24 +108,19 @@ func linkTarget(path string) (string, error) {
 	return dest, nil
 }
 
-// symlinkWarning is the one wording for a managed path spekk left alone because
-// another tool owns it through a link.
+// symlinkWarning is the one wording for a managed path spekk left alone.
 func symlinkWarning(path, dest string) string {
 	return fmt.Sprintf("%s is a symlink to %s; spekk left it alone — decide which tool owns this path", path, dest)
 }
 
-// scanOwned scans dirs for spekk-managed files and returns the owned set. A file
-// with no stamp (user content) is ignored. A directory that does not exist
-// contributes nothing and is not an error.
+// scanOwned scans dirs for the spekk-managed files in them.
 //
-// A backup spekk wrote is not owned. The backup of a managed file the user
-// edited carries the old stamp, so a scan would otherwise call it a managed file
-// that the current layout does not write: every install would back the backup up
-// again, and every "spekk update" would report it as stale with an install
-// command that only makes more copies.
-//
-// A symlink is not owned either, so the prune half never removes a link that
-// another tool made.
+//   - A stamped file is owned.
+//   - A file with no stamp is the user's, and is ignored.
+//   - A backup spekk wrote is not owned. It carries an old stamp, so counting it
+//     would back it up again on every install.
+//   - A symlink is not owned. Another tool made it.
+//   - A directory that does not exist contributes nothing, and is not an error.
 func scanOwned(dirs []string) ([]OwnedFile, error) {
 	seen := map[string]bool{}
 	var owned []OwnedFile
@@ -195,9 +184,15 @@ func backupFile(path string) error {
 }
 
 // reconcile drives the managed files in dirs to the desired set. desired maps a
-// destination path to its unstamped body. reconcile stamps and writes each
-// desired file, removes owned files that are not desired, and never changes a
-// file the user edited (it makes a .bak backup and records a warning instead).
+// destination path to its unstamped body.
+//
+//   - A desired path belongs to spekk. reconcile stamps the body and writes it.
+//   - It keeps a .bak of what it replaced, unless the file was a pristine
+//     managed file.
+//   - It removes an owned file that is not desired. An owned file the user
+//     edited is backed up and left in place instead.
+//   - It leaves a symlinked path alone. Another tool owns that one.
+//   - Each backup and each path left alone is one warning in the Result.
 func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 	var res Result
 
@@ -227,12 +222,8 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 			if bytes.Equal(existing, stamped) {
 				continue // already correct: no-op (idempotent)
 			}
-			// The path is the statement of ownership: this is a path spekk writes,
-			// so spekk brings it to the current content. The stamp decides only
-			// whether a backup is necessary first. A pristine managed file is
-			// spekk's own content from another version and needs no backup;
-			// anything else — a managed file the user edited, or a file with no
-			// stamp — is kept in a .bak before the update.
+			// A pristine managed file is spekk's own content from another
+			// version. Every other file is kept in a .bak before the update.
 			if managed, pristine := isPristine(existing); !managed || !pristine {
 				if err := backupFile(path); err != nil {
 					return res, fmt.Errorf("backing up %s: %w", path, err)
@@ -284,7 +275,7 @@ const (
 	// what this binary installs.
 	StaleOutOfDate
 	// StaleSymlink: the path spekk writes is a symlink, so a second tool owns it.
-	// An install does not fix this one; the user has to choose an owner.
+	// The user has to choose an owner.
 	StaleSymlink
 )
 
@@ -311,7 +302,7 @@ type StaleFile struct {
 }
 
 // Remedy returns what the user must do about this file. An install fixes a stale
-// layout or stale content, but it cannot fix a path a second tool owns.
+// layout and stale content. It does not fix a path a second tool owns.
 func (s StaleFile) Remedy() string {
 	if s.Reason == StaleSymlink {
 		return "decide which tool owns this path"
@@ -319,8 +310,7 @@ func (s StaleFile) Remedy() string {
 	return "run: " + installScope{name: s.Target, project: s.Project}.installCommand()
 }
 
-// installScope is one target in one scope: everything a scan of the install
-// locations needs to know.
+// installScope is one target in one scope.
 type installScope struct {
 	name    string
 	target  target
@@ -337,8 +327,7 @@ func (s installScope) installCommand() string {
 }
 
 // eachInstallScope returns every target and scope a scan must visit. The global
-// scope of a target comes before its project scope, so a caller that keeps the
-// first result for a path prefers the global install command.
+// scope of a target comes before its project scope.
 func eachInstallScope(cwd string) []installScope {
 	var scopes []installScope
 	for _, name := range ValidTargets() {
@@ -352,9 +341,7 @@ func eachInstallScope(cwd string) []installScope {
 }
 
 // InstalledTargets returns the install command for every target and scope that
-// has at least one spekk-managed file on disk. It reads files only. A caller uses
-// it to name the installs a user actually has, instead of listing every target
-// spekk supports.
+// has at least one spekk-managed file on disk. It reads files only.
 func InstalledTargets(home, cwd string) ([]string, error) {
 	seen := map[string]bool{}
 	var cmds []string
@@ -387,15 +374,15 @@ func InstalledTargets(home, cwd string) ([]string, error) {
 	return cmds, nil
 }
 
-// CheckStale scans every supported target and scope for two conditions: an owned
-// file that is not in that target's desired set (an old layout), and a file at a
-// desired path whose content does not match what this binary installs (an
-// out-of-date file). It reads files only; it changes nothing.
+// CheckStale reports every installed file that this binary does not match. It
+// reads files only.
 //
-// It reports each path once. Two scopes can name the same path — a user whose
-// working directory is their home directory has the same .claude directory in
-// both — and one file with two contradictory fix commands helps nobody. The
-// global scope is checked first, so the global command wins the tie.
+//   - An owned file the current layout does not write is an old layout.
+//   - A file at a desired path whose content differs is out of date.
+//   - A symlink at a desired path belongs to another tool.
+//
+// It reports each path once, sorted by path. The global scope is checked before
+// the project scope, so the global command wins when two scopes name one path.
 func CheckStale(home, cwd string, skillFS fs.FS) ([]StaleFile, error) {
 	seen := map[string]bool{}
 	var stale []StaleFile
@@ -454,15 +441,14 @@ func CheckStale(home, cwd string, skillFS fs.FS) ([]StaleFile, error) {
 }
 
 // migrateLegacy removes an old coach or builder agent shim that a role no longer
-// uses. The path is spekk's own: spekk wrote that spekk-namespaced name into the
-// host's agent directory, so migrateLegacy removes the file whatever the body
-// says. It backs up the file first, because it cannot prove the file is
-// unchanged. It handles only an unstamped file from a version before the
-// reconciler; the reconciler prunes a stamped shim.
+// uses. The path belongs to spekk, so the body does not decide.
 //
-// It skips a legacy path that is also a desired path — a host such as codex that
-// keeps agents and skills in one directory, or a host with no skill path where
-// the role stays an agent shim. The reconcile updates that file in place.
+//   - It backs the file up first. It cannot prove the file is unchanged.
+//   - It skips a stamped file. reconcile prunes that one.
+//   - It skips a symlink. Another tool owns that one.
+//   - It skips a legacy path that is also a desired path. reconcile updates that
+//     file in place. Codex reaches this case: it keeps agents and skills in one
+//     directory.
 func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 	var res Result
 	for _, p := range paths {

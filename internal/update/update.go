@@ -41,10 +41,7 @@ type asset struct {
 }
 
 // Run performs the self-update. If checkOnly is true, it prints the available
-// version without installing.
-// Run updates the binary in place. It reports whether it replaced the binary,
-// so the caller can tell the user that the installed skills now come from a
-// version this process cannot read.
+// version without installing. It reports whether it replaced the binary.
 func Run(checkOnly bool) (replaced bool, err error) {
 	current := version.Version
 	if current == "dev" {

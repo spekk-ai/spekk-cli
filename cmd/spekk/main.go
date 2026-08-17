@@ -1262,25 +1262,33 @@ OPTIONS:
 		os.Exit(1)
 	}
 	if replaced {
-		// The check below runs in the old process against the old embedded
-		// content, so it cannot see what the new binary would install. The new
-		// binary is the one that knows, and the user is here now.
+		// A stale check here would compare against this process's embedded
+		// content, which the new binary has already replaced.
 		remindToReinstall()
 		return
 	}
 	warnStaleInstall()
 }
 
+// warnCheckFailed reports that a scan of the install locations did not finish.
+// One unreadable directory in one tool's config must not silence the rest.
+func warnCheckFailed(err error) {
+	fmt.Fprintf(os.Stderr, "\nwarning: could not check the installed spekk files: %s\n", err)
+}
+
 // remindToReinstall names the install targets that have spekk files on disk and
 // asks the user to run the install again. A role shim reads its instructions
-// from the binary at session start, but the spekk-dev-loop skill carries its
-// content in the file, so a new binary can bring content the installed file does
-// not have yet.
+// from the binary at session start. The spekk-dev-loop skill carries its content
+// in the file, so a new binary can hold content the installed file does not.
 func remindToReinstall() {
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
 	installed, err := install.InstalledTargets(home, cwd)
-	if err != nil || len(installed) == 0 {
+	if err != nil {
+		warnCheckFailed(err)
+		return
+	}
+	if len(installed) == 0 {
 		return
 	}
 	fmt.Fprintln(os.Stderr, "\nThe installed spekk skills carry their content in the file. Re-run:")
@@ -1289,16 +1297,14 @@ func remindToReinstall() {
 	}
 }
 
-// warnStaleInstall checks every install location for a managed file that the
-// current binary no longer writes (an old layout) or that does not match the
-// content this binary installs (an out-of-date file), and warns. It changes no
-// file — the migration is the shown "spekk install" command.
+// warnStaleInstall reports every installed file that this binary no longer
+// writes or no longer matches. It changes no file.
 func warnStaleInstall() {
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
 	stale, err := install.CheckStale(home, cwd, spekk.EmbeddedFS)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "\nwarning: could not check the installed spekk files: %s\n", err)
+		warnCheckFailed(err)
 		return
 	}
 	if len(stale) == 0 {
