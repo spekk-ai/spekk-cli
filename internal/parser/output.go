@@ -75,6 +75,7 @@ type HierarchyAssertion struct {
 	Title     string   `json:"title"`
 	Status    string   `json:"status"`
 	Priority  int      `json:"priority"`
+	Branch    string   `json:"branch"`
 	File      string   `json:"file"`
 	DependsOn []string `json:"depends_on"`
 }
@@ -148,6 +149,7 @@ func FormatHierarchy(result *ParseResult) ([]byte, error) {
 					Title:     a.Title,
 					Status:    a.Status,
 					Priority:  a.Priority,
+					Branch:    a.Branch,
 					File:      a.File,
 					DependsOn: dependsOn,
 				})
@@ -338,6 +340,7 @@ type FlatAssertion struct {
 	Title     string   `json:"title"`
 	Status    string   `json:"status"`
 	Priority  int      `json:"priority"`
+	Branch    string   `json:"branch"`
 	File      string   `json:"file"`
 	Parent    string   `json:"parent"`
 	DependsOn []string `json:"depends_on"`
@@ -357,6 +360,7 @@ func FormatAssertionsFlat(result *ParseResult) ([]byte, error) {
 			Title:     a.Title,
 			Status:    a.Status,
 			Priority:  a.Priority,
+			Branch:    a.Branch,
 			File:      a.File,
 			Parent:    a.Parent,
 			DependsOn: dependsOn,
