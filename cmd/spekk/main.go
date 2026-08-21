@@ -1258,30 +1258,88 @@ OPTIONS:
 		}
 	}
 
-	if err := update.Run(checkOnly); err != nil {
+	replaced, err := update.Run(checkOnly)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-	if !checkOnly {
-		warnStaleInstall()
+	home, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
+	reportAfterUpdate(os.Stderr, replaced, home, cwd)
+}
+
+// reportAfterUpdate says which report follows a self-update attempt. A stale
+// check after a real replacement would compare against this process's embedded
+// content, which the new binary has already replaced, so that case names the
+// install commands instead.
+func reportAfterUpdate(w io.Writer, replaced bool, home, cwd string) {
+	if replaced {
+		reportReinstall(w, home, cwd)
+		return
+	}
+	reportStale(w, home, cwd)
+}
+
+// warnCheckFailed reports that a scan of the install locations did not finish.
+// A check that cannot run must say so rather than read as "nothing is stale".
+func warnCheckFailed(w io.Writer, err error) {
+	fmt.Fprintf(w, "\nwarning: could not check the installed spekk files: %s\n", err)
+}
+
+// reportReinstall names the install targets that have spekk files on disk and
+// asks the user to run the install again. A role shim reads its instructions
+// from the binary at session start. The spekk-dev-loop skill carries its content
+// in the file, so a new binary can hold content the installed file does not.
+func reportReinstall(w io.Writer, home, cwd string) {
+	reportReinstallWith(w, func() ([]string, error) {
+		return install.InstalledTargets(home, cwd)
+	})
+}
+
+// reportReinstallWith is reportReinstall with the scan as a parameter, so a test
+// can drive the case where the scan does not finish.
+func reportReinstallWith(w io.Writer, scan func() ([]string, error)) {
+	installed, err := scan()
+	if err != nil {
+		warnCheckFailed(w, err)
+		return
+	}
+	if len(installed) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "\nThe installed spekk files come from the binary. Re-run:")
+	for _, cmd := range installed {
+		fmt.Fprintln(w, "  "+cmd)
 	}
 }
 
-// warnStaleInstall checks every install location for managed files that the
-// current binary no longer writes (an old layout), and warns. It changes no
-// file — the migration is the shown "spekk install" command.
-func warnStaleInstall() {
-	home, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
-	stale, err := install.CheckStale(home, cwd)
-	if err != nil || len(stale) == 0 {
+// reportStale reports every installed file that this binary no longer writes or
+// no longer matches. It changes no file.
+func reportStale(w io.Writer, home, cwd string) {
+	reportStaleWith(w, func() ([]install.StaleFile, error) {
+		return install.CheckStale(home, cwd, spekk.EmbeddedFS)
+	})
+}
+
+// reportStaleWith is reportStale with the check as a parameter, so a test can
+// drive the case where the check does not finish.
+func reportStaleWith(w io.Writer, check func() ([]install.StaleFile, error)) {
+	stale, err := check()
+	if err != nil {
+		warnCheckFailed(w, err)
 		return
 	}
-	fmt.Fprintln(os.Stderr, "\nwarning: some installed spekk files are from an old layout:")
-	for _, s := range stale {
-		fmt.Fprintln(os.Stderr, "  "+s)
+	if len(stale) == 0 {
+		return
 	}
-	fmt.Fprintln(os.Stderr, "Re-run the shown install command to migrate.")
+	fmt.Fprintln(w, "\nwarning: some installed spekk files do not match this version of spekk:")
+	for _, s := range stale {
+		if s.Reason == install.StaleSymlink {
+			fmt.Fprintf(w, "  %s %s (%s; %s)\n", s.Path, s.Reason, s.LinkTarget, s.Remedy())
+			continue
+		}
+		fmt.Fprintf(w, "  %s %s (%s)\n", s.Path, s.Reason, s.Remedy())
+	}
 }
 
 // runInit creates the specs/ directory so a project can start using spekk.

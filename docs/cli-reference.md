@@ -622,11 +622,17 @@ spekk install --target codex         # ~/.codex/prompts/ (global only)
 | `--target <tool>` | Host tool to install into (required) |
 | `--project` | Install into the current project instead of globally |
 
-Installs thin shims that fetch their full instructions from the binary at session start via `spekk prompt <agent>`, so they never go stale — updating spekk updates every installed agent. For tools not listed, wire `spekk prompt <agent>` into the tool's custom-agent or rules mechanism directly.
+Installs thin shims that fetch their full instructions from the binary at session start via `spekk prompt <agent>`, so an agent's instructions never go stale — updating spekk updates every installed agent. The `spekk-dev-loop` skill is different: its content is written into the file, so a new spekk version needs a new `spekk install` to bring it current. `spekk update` warns you when it finds an installed file that this binary no longer matches. For tools not listed, wire `spekk prompt <agent>` into the tool's custom-agent or rules mechanism directly.
+
+**A managed path belongs to spekk.** Every destination in the table below is a path `spekk install` writes, so each install brings the file there to the current content. A file with its stamp intact — spekk's own content from another version — is replaced with no backup and no message. Every other file is first copied to `<path>.bak`, and the install reports that path on stderr. When `<path>.bak` already holds a different version, the copy goes to `<path>.bak.1`, `<path>.bak.2`, and so on, so an earlier backup is never overwritten; a backup that already holds the same bytes is kept as it is, so repeated installs do not pile up copies. That includes a file an older spekk version wrote before stamps existed: spekk cannot prove it is unchanged, so it keeps a copy. To keep a permanent local variant of a skill, give it your own name rather than editing the managed file.
+
+**A managed path spekk cannot read is reported, not forced.** If the path holds something that is not a regular file, or a file spekk has no permission to open, `spekk install` leaves it alone and says so, and `spekk update` reports it. No install can settle it, so the message asks you to check the file and its permissions rather than offering a command that would not help. One such path never stops the rest of the run: the other files are still installed and still checked.
+
+**A symlink at a managed path is a conflict spekk will not settle.** If the path is a symlink — a dotfiles manager put it there, for example — two tools own one file. spekk writes nothing, removes nothing, and reports the path and what it points to. `spekk install` reports it for any managed path; `spekk update` reports it for a path the current layout writes. Only you can say which tool should own the path. This test is on the file itself: if a whole parent directory is a symlink, the files inside it are ordinary files and spekk writes them as usual.
 
 ### The `spekk-dev-loop` skill
 
-Every install also writes the `spekk-dev-loop` skill — the outer coach → coordinate → builders → review pipeline — in whatever form the target uses for a reusable, agent-invokable workflow:
+Every install also writes the `spekk-dev-loop` skill — the one-session loop that plays the coach, builder, and verifier roles in turn — in whatever form the target uses for a reusable, agent-invokable workflow:
 
 | Target | Written as | Location |
 |--------|-----------|----------|
