@@ -380,7 +380,9 @@ EXAMPLES:
 		return 0
 	}
 
-	// --json: flat assertion JSON, same content as the default table.
+	// --json: flat assertion JSON, in the same order as the default table.
+	// The JSON is a superset: it also carries branch and depends_on, which the
+	// table, TSV, and CSV columns do not show.
 	if useJSON {
 		out, err := parser.FormatAssertionsFlat(result)
 		if err != nil {
