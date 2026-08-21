@@ -316,7 +316,14 @@ These patterns minimize token cost and maximize accuracy when navigating the cod
 ```bash
 spekk next                                    # lowest-cost: returns one ready assertion as JSON
 spekk list --status not_started --assertions-only  # enumerate all not_started assertions (~5K tokens)
+spekk query "SELECT id, title, branch FROM assertions WHERE status = 'failed'"  # filter on any field
 ```
+`spekk next` answers "what do I work on now" in one call — nothing beats it for that.
+Reach for `spekk query` when you need a field `list` has no flag for, such as `branch`,
+or a count. It reads `.spekk/index.db` and returns whole rows. Tables:
+`specs(id, title, status, priority, branch, file)`,
+`assertions(id, parent_id, title, status, priority, branch, file)`,
+`depends_on(assertion_id, depends_on_id)`.
 Avoid: browsing the full spec directory tree manually. The `spekk` commands enumerate
 exactly what you need without loading the full spec hierarchy (162K+ tokens for large projects).
 
