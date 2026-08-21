@@ -711,15 +711,24 @@ func runQuery(args []string) {
 	fmt.Println(out)
 }
 
-// findSpecsDir locates the specs/ directory using git root.
-func findSpecsDir() string {
+// repoRoot returns the root of the repository that holds the working directory,
+// and the working directory itself when there is no repository. A project is the
+// repository, not the directory the user happens to stand in, so a command run
+// from a subdirectory must find the same project files as one run from the root.
+func repoRoot() string {
 	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err == nil {
-		return filepath.Join(strings.TrimSpace(string(out)), "specs")
+		if root := strings.TrimSpace(string(out)); root != "" {
+			return root
+		}
 	}
-	// Fallback: assume cwd
 	wd, _ := os.Getwd()
-	return filepath.Join(wd, "specs")
+	return wd
+}
+
+// findSpecsDir locates the specs/ directory at the repository root.
+func findSpecsDir() string {
+	return filepath.Join(repoRoot(), "specs")
 }
 
 // currentBranch returns the current git branch name.
@@ -1263,9 +1272,8 @@ OPTIONS:
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-	home, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
-	reportAfterUpdate(os.Stderr, replaced, home, cwd)
+	home, project := scopeForInstall()
+	reportAfterUpdate(os.Stderr, replaced, home, project)
 }
 
 // reportAfterUpdate says which report follows a self-update attempt. A stale
@@ -1553,10 +1561,7 @@ OTHER TOOLS:
 		os.Exit(1)
 	}
 
-	res, err := install.Install(install.Options{
-		Target:  flags.String("target"),
-		Project: flags.Bool("project"),
-	})
+	res, err := install.Install(targetInstallOptions(flags.String("target"), flags.Bool("project")))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
@@ -1569,6 +1574,27 @@ OTHER TOOLS:
 	}
 	for _, path := range res.Removed {
 		fmt.Println("removed:", path)
+	}
+}
+
+// scopeForInstall returns the two directories a target install and its report
+// both work in: the user's home, and the repository that holds the working
+// directory. One function so the install and the report cannot disagree about
+// where the project is.
+func scopeForInstall() (home, project string) {
+	home, _ = os.UserHomeDir()
+	return home, repoRoot()
+}
+
+// targetInstallOptions builds the options for one target install. A project
+// install works on the repository, so the scope is the repository root.
+func targetInstallOptions(target string, project bool) install.Options {
+	home, projectDir := scopeForInstall()
+	return install.Options{
+		Target:  target,
+		Project: project,
+		HomeDir: home,
+		Cwd:     projectDir,
 	}
 }
 

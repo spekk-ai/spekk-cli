@@ -47,8 +47,11 @@ type Options struct {
 	Target  string // claude-code|claude|opencode|codex
 	Project bool   // install into the project instead of globally
 	HomeDir string // defaults to os.UserHomeDir()
-	Cwd     string // defaults to os.Getwd()
-	SkillFS fs.FS  // FS to read the bundled skill from; falls back to DefaultSkillFS
+	// Cwd is the project directory for a project-scope install. The caller
+	// resolves the repository root: a project is the repository, not the
+	// directory the user happens to stand in. Defaults to os.Getwd().
+	Cwd     string
+	SkillFS fs.FS // FS to read the bundled skill from; falls back to DefaultSkillFS
 }
 
 // target describes where the observer agent shim and the skills go for one host

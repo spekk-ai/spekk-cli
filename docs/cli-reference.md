@@ -620,7 +620,7 @@ spekk install --target codex         # ~/.codex/prompts/ (global only)
 | Flag | Description |
 |------|-------------|
 | `--target <tool>` | Host tool to install into (required) |
-| `--project` | Install into the current project instead of globally |
+| `--project` | Install into the current project instead of globally (the repository root, from any directory inside it) |
 
 Installs thin shims that fetch their full instructions from the binary at session start via `spekk prompt <agent>`, so an agent's instructions never go stale — updating spekk updates every installed agent. The `spekk-dev-loop` skill is different: its content is written into the file, so a new spekk version needs a new `spekk install` to bring it current. `spekk update` warns you when it finds an installed file that this binary no longer matches. For tools not listed, wire `spekk prompt <agent>` into the tool's custom-agent or rules mechanism directly.
 
@@ -644,7 +644,7 @@ Every install also writes the `spekk-dev-loop` skill — the one-session loop th
 
 **Automatic vs manual invocation:** Claude Code and OpenCode treat it as a native skill, so the model can invoke it on its own. Cursor, Codex, and Copilot expose it as a `/spekk-dev-loop` command the user triggers manually.
 
-**Scope:** By default, the skill is installed globally. Pass `--project` to write it into the current repo instead. Two targets are exceptions: Copilot is always project-scoped (its personal prompts are IDE-managed), and Codex is always global.
+**Scope:** By default, the skill is installed globally. Pass `--project` to write it into the current repo instead — at the repository root, from any directory inside it, the same root `spekk init` uses for `specs/`. Outside a repository, `--project` writes into the working directory. Two targets are exceptions: Copilot is always project-scoped (its personal prompts are IDE-managed), and Codex is always global.
 
 ---
 
