@@ -65,6 +65,7 @@ type HierarchySpec struct {
 	Title      string               `json:"title"`
 	Status     string               `json:"status"`
 	Priority   int                  `json:"priority"`
+	Branch     string               `json:"branch"`
 	File       string               `json:"file"`
 	Assertions []HierarchyAssertion `json:"assertions"`
 }
@@ -168,6 +169,7 @@ func FormatHierarchy(result *ParseResult) ([]byte, error) {
 			Title:      s.Title,
 			Status:     s.Status,
 			Priority:   s.Priority,
+			Branch:     s.Branch,
 			File:       s.File,
 			Assertions: assertions,
 		})

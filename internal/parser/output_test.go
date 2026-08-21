@@ -341,7 +341,7 @@ func TestFormatAssertionsFlat_Structure(t *testing.T) {
 	}
 
 	// Verify all required fields are present.
-	for _, f := range []string{"id", "title", "status", "priority", "file", "parent"} {
+	for _, f := range []string{"id", "title", "status", "priority", "branch", "file", "parent"} {
 		if _, ok := first[f]; !ok {
 			t.Errorf("missing field %q in flat assertion entry", f)
 		}
@@ -431,6 +431,90 @@ func TestFormatAssertionsFlat_DependsOnField(t *testing.T) {
 	dep2, ok := a2["depends_on"].([]interface{})
 	if !ok || len(dep2) != 0 {
 		t.Errorf("expected depends_on=[], got %v", a2["depends_on"])
+	}
+}
+
+func TestFormatHierarchy_BranchField(t *testing.T) {
+	result := &ParseResult{
+		Specs: []Spec{
+			{ID: "spec-a", Title: "Spec A", Status: "in_progress", Priority: 1, Branch: "main", File: "specs/spec-a/spec-a.md"},
+		},
+		Assertions: []Assertion{
+			{ID: "a1", Parent: "spec-a", Title: "A1", Status: "done", Priority: 1, Branch: "feature/login", File: "f"},
+			{ID: "a2", Parent: "spec-a", Title: "A2", Status: "not_started", Priority: 2, Branch: "main", File: "f"},
+		},
+	}
+
+	data, err := FormatHierarchy(result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var out map[string]interface{}
+	json.Unmarshal(data, &out)
+
+	spec := out["specs"].([]interface{})[0].(map[string]interface{})
+	if spec["branch"] != "main" {
+		t.Errorf("expected spec branch=main, got %v", spec["branch"])
+	}
+
+	assertions := spec["assertions"].([]interface{})
+
+	a1 := assertions[0].(map[string]interface{})
+	if a1["id"] != "a1" {
+		t.Fatalf("expected first assertion a1, got %v", a1["id"])
+	}
+	if a1["branch"] != "feature/login" {
+		t.Errorf("expected branch=feature/login, got %v", a1["branch"])
+	}
+
+	a2 := assertions[1].(map[string]interface{})
+	if a2["id"] != "a2" {
+		t.Fatalf("expected second assertion a2, got %v", a2["id"])
+	}
+	if a2["branch"] != "main" {
+		t.Errorf("expected branch=main, got %v", a2["branch"])
+	}
+}
+
+func TestFormatAssertionsFlat_BranchField(t *testing.T) {
+	result := &ParseResult{
+		Assertions: []Assertion{
+			{ID: "a1", Parent: "spec-a", Title: "A1", Status: "done", Priority: 1, Branch: "feature/login", File: "f"},
+			{ID: "a2", Parent: "spec-a", Title: "A2", Status: "not_started", Priority: 2, Branch: "", File: "f"},
+		},
+	}
+
+	data, err := FormatAssertionsFlat(result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var out map[string]interface{}
+	json.Unmarshal(data, &out)
+
+	assertions := out["assertions"].([]interface{})
+
+	// a1 (priority 1) comes first and keeps its assigned branch.
+	a1 := assertions[0].(map[string]interface{})
+	if a1["id"] != "a1" {
+		t.Fatalf("expected first assertion a1, got %v", a1["id"])
+	}
+	if a1["branch"] != "feature/login" {
+		t.Errorf("expected branch=feature/login, got %v", a1["branch"])
+	}
+
+	// The parser defaults Branch to "main", but an empty value must still
+	// serialize as an empty string, not disappear from the object.
+	a2 := assertions[1].(map[string]interface{})
+	if a2["id"] != "a2" {
+		t.Fatalf("expected second assertion a2, got %v", a2["id"])
+	}
+	branch, ok := a2["branch"]
+	if !ok {
+		t.Error("missing field \"branch\" when Branch is empty")
+	} else if branch != "" {
+		t.Errorf("expected branch=\"\", got %v", branch)
 	}
 }
 
