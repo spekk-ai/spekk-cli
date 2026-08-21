@@ -3,7 +3,8 @@ id: coach-requeues-with-not-started
 parent: lock-is-a-live-claim
 created: 2026-08-21T17:35:19Z
 priority: 1
-status: not_started
+branch: fix/warning-discipline-and-lock-model
+status: done
 ---
 
 # The Coach Prompt Requeues an Edited Assertion With `not_started`

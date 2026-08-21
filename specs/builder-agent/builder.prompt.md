@@ -166,7 +166,7 @@ status: done
 
 **Available Status Values:**
 - `not_started` - Haven't begun work on this assertion (no lock)
-- `in_progress` - Currently working on this assertion (must have `locked-by`)
+- `in_progress` - Currently working on this assertion (a builder adds `locked-by`; a coach cannot, and need not)
 - `done` - All success criteria met and tests pass (no lock)
 - `failed` - Implementation has confirmed issues that need fixing (no lock)
 - `draft` - Planning/placeholder status (excluded from work queue, no lock)
@@ -201,7 +201,7 @@ This command MUST succeed and return valid JSON. If it fails:
 assertion, so it can skip past problems elsewhere in the tree, while
 `spekk validate` checks every spec and assertion for frontmatter
 well-formedness, parent/depends-on validity, duplicate ids, and lock-state
-pairing (`in_progress` requires `locked-by`; every other status forbids it).
+state (only `in_progress` may carry a `locked-by`).
 
 ```bash
 spekk validate

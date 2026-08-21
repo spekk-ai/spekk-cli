@@ -37,9 +37,10 @@ fixed set of invariants and exits non-zero if any is violated. It reuses the
    assertion, is not self-referential, and participates in no cycle.
 4. **Uniqueness.** No two specs share an `id`; no two assertions share an `id`
    (the parser only *warns* on duplicate assertion ids — validate fails).
-5. **Lock-state pairings.** For every assertion:
-   `status: in_progress` ⟹ non-empty `locked-by`; and
-   `status: done|failed|not_started|draft` ⟹ **no** `locked-by`.
+5. **Lock state.** For every assertion:
+   `status: done|failed|not_started|draft` ⟹ **no** `locked-by`. An
+   `in_progress` assertion may carry a lock and need not; see the
+   `lock-is-a-live-claim` spec.
 6. **Parent has no rolled-up status.** A parent spec file's frontmatter has no
    `status` field, OR its only value is `draft`. Any other value
    (`done`, `in_progress`, `failed`, `not_started`) is a failure, because the
@@ -56,22 +57,21 @@ fixed set of invariants and exits non-zero if any is violated. It reuses the
 - **Any invariant fails:** exit code `1`. Every failure is reported (not just the
   first), one per line, each identifying the offending file path and the specific
   problem, e.g.
-  `specs/foo/assertions/bar.md: status is in_progress but locked-by is missing`.
+  `specs/foo/assertions/bar.md: status is done but locked-by is set`.
   Failures are printed deterministically (sorted by file path, then by message)
   so output is stable across runs and diffable in CI.
 - Validate's own report is on **stdout** and is clean: an all-valid run prints
   only the summary line; a run with failures prints only the sorted failure
   lines (plus the non-zero exit). Validate itself introduces no spurious
-  diagnostics into that report. Advisory warnings the *reused parser* already
-  emits to stderr (e.g. `validateBranch`'s "non-standard branch pattern" notice,
-  which fires for many existing assertions) are not validation failures, must
-  not appear as failure lines, and validate is not required to suppress them.
+  diagnostics into that report. Advisory warnings go to **stderr**, never to
+  stdout, and never change the exit code — see `branch-field-typo-guard` and
+  `lock-is-a-live-claim` for the two that exist.
 
 ### Tests
 - `internal/validate/` has a test (`validate_test.go`) that drives validation
   over fixture spec trees and asserts BOTH the returned failures AND the exit
-  code for: an all-valid tree (exit 0); an `in_progress` assertion missing
-  `locked-by` (fail); a `done` assertion that still has `locked-by` (fail); a
+  code for: an all-valid tree (exit 0); an `in_progress` assertion with no
+  `locked-by` (pass); a `done` assertion that still has `locked-by` (fail); a
   `priority: 4` / bad-status file (fail, and it is *not* silently skipped);
   a duplicate assertion id (fail); a parent spec with `status: done` (fail) vs a
   parent with `status: draft` (pass); and a dangling `depends-on` (fail).
@@ -83,7 +83,7 @@ enough text for a human to fix the file. Keep it plain text — no JSON, no
 severity levels, no config flags in v1.
 
 **Tests:** `internal/validate/validate_test.go` — all-valid tree (pass);
-`in_progress` missing `locked-by` (fail); `done` with `locked-by` still set
+`in_progress` with no `locked-by` (pass); `done` with `locked-by` still set
 (fail); malformed assertion (bad priority/status) failing instead of being
 silently skipped; duplicate assertion id (fail); parent `status: done` (fail)
 vs parent `status: draft` (pass); the absent-status-vs-explicit-`not_started`

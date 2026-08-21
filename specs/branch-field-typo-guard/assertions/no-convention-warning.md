@@ -3,6 +3,7 @@ id: no-convention-warning
 parent: branch-field-typo-guard
 created: 2026-08-21T17:35:19Z
 priority: 1
+branch: fix/warning-discipline-and-lock-model
 status: done
 ---
 

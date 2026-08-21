@@ -8,7 +8,7 @@
 // reimplementing a frontmatter parser. What validate adds on top:
 //   - promotes the parser's "skip with a warning" outcomes (malformed
 //     frontmatter, duplicate assertion ids) to hard failures,
-//   - checks lock-state pairing (in_progress <=> locked-by),
+//   - checks lock state (only in_progress may carry a locked-by),
 //   - checks that parent spec files carry no rolled-up status field (or only
 //     the literal value "draft"),
 //   - and reports every violation found in one pass (not just the first),
@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -56,12 +55,6 @@ type Result struct {
 func (r *Result) Passed() bool {
 	return len(r.Failures) == 0
 }
-
-// kebabCasePattern matches valid kebab-case identifiers. Kept in sync with
-// internal/parser's (unexported) pattern of the same name; depends-on is not
-// validated by the parser's per-file parse functions, so validate checks it
-// directly as a relational invariant, not a frontmatter field.
-var kebabCasePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 // Run walks specsDir and validates every invariant in specs/spec-validation.
 // It never returns an error for a merely-invalid tree — problems are reported
@@ -178,7 +171,7 @@ func Run(specsDir string) (*Result, error) {
 
 	checkDependsOn(assertions, assertionIDs, result)
 	checkCycles(assertions, result)
-	checkBranchRefs(assertions, discoveredBranchNames(), result)
+	checkBranchRefs(assertions, discoveredBranchNames(specsDir), result)
 
 	result.SpecCount = len(specs)
 	result.AssertionCount = len(assertions)
@@ -234,19 +227,32 @@ func rawStatusField(content string) (present bool, value string) {
 	return false, ""
 }
 
-// checkLockState enforces: status in_progress requires a non-empty
-// locked-by; every other status (done, failed, not_started, draft) forbids
-// one.
+// checkLockState enforces: only in_progress may carry a locked-by, and it need
+// not carry one.
+//
+// A lock answers "does a builder hold this assertion right now", not "is this
+// assertion in progress". The rule used to demand a lock on every in_progress
+// assertion, which no coach could satisfy: a lock names a builder session, and
+// the CLI has no command to make one. So an edited assertion had to carry an
+// invented lock, which is indistinguishable from the lock a crashed builder
+// left behind. The code already read it this way — IsLockStale("") is true, so
+// FindNextAssertion treats an unlocked in_progress assertion as free work.
 func checkLockState(a parser.Assertion, result *Result) {
-	switch a.Status {
-	case "in_progress":
-		if strings.TrimSpace(a.LockedBy) == "" {
-			result.addFailure(a.File, "status is in_progress but locked-by is missing")
-		}
-	default:
+	if a.Status != "in_progress" {
 		if a.LockedBy != "" {
 			result.addFailure(a.File, fmt.Sprintf("status is %s but locked-by is set (%q); only in_progress may carry a lock", a.Status, a.LockedBy))
 		}
+		return
+	}
+
+	// A lock is a live claim, so an old one is almost always dead. The
+	// non-empty guard matters: IsLockStale("") is true, but no lock at all is
+	// the legal unlocked state above, not a stale one. A value whose tail is
+	// no unix timestamp is stale too — a lock nobody can date is a lock nobody
+	// can trust, and that is what an invented value looks like.
+	if a.LockedBy != "" && parser.IsLockStale(a.LockedBy) {
+		result.Warnings = append(result.Warnings, fmt.Sprintf(
+			"%s: locked-by %q is stale; no builder holds this assertion", a.File, a.LockedBy))
 	}
 }
 
@@ -303,8 +309,23 @@ func checkBranchRefs(assertions []parser.Assertion, refs []string, result *Resul
 }
 
 // discoveredBranchNames returns the logical name of every local head and
-// remote-tracking ref, or nil when git cannot answer.
-func discoveredBranchNames() []string {
+// remote-tracking ref, or nil when there is nothing trustworthy to answer with.
+//
+// crossbranch resolves the repository from the working directory, while Run is
+// given a specsDir. The two agree on the normal path, because findSpecsDir
+// derives specsDir from the same git root. A --specs-dir outside that root
+// would compare one repository's branches against another repository's specs,
+// so the check stands down instead.
+func discoveredBranchNames(specsDir string) []string {
+	root := crossbranch.RepoRoot()
+	if root == "" {
+		return nil
+	}
+	abs, err := filepath.Abs(specsDir)
+	if err != nil || !strings.HasPrefix(abs, root+string(filepath.Separator)) {
+		return nil
+	}
+
 	branches, err := crossbranch.DiscoverAllBranches("")
 	if err != nil {
 		return nil
@@ -347,7 +368,7 @@ func checkDependsOn(assertions []parser.Assertion, assertionIDs map[string]bool,
 		if a.DependsOn == "" {
 			continue
 		}
-		if !kebabCasePattern.MatchString(a.DependsOn) {
+		if !parser.IsKebabCase(a.DependsOn) {
 			result.addFailure(a.File, fmt.Sprintf("depends-on %q is not kebab-case", a.DependsOn))
 			continue
 		}

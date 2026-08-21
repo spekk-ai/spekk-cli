@@ -453,12 +453,13 @@ Use proper format:
 **Status Rules (assertions only):**
 - Parent specs do NOT have a `status` field - parent status is computed at runtime by the parser from child assertions
 - New assertions: Always use `status: not_started`
-- Updating assertion with `status: done`: **Change to `status: in_progress`**
-  - This tells builder to re-implement with new requirements
+- Updating assertion with `status: done`: **Change to `status: not_started`**
+  - This returns the assertion to the work queue, so the builder re-implements it against the new requirements
   - Critical: updated specs must trigger re-work
-- Updating assertion with `status: failed`: **Change to `status: in_progress`**
+- Updating assertion with `status: failed`: **Change to `status: not_started`**
   - This gives builder fresh start after requirements change
 - Updating assertion already `in_progress` or `not_started`: keep as-is
+- Never write a `locked-by` value. A lock names a live builder session, and you have no session to name. `not_started` needs no lock, which is why it is the value above.
 
 **Computed parent status (for reference - the parser handles this):**
 - If ANY child assertion is `failed` → parent becomes `failed`

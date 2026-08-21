@@ -9,9 +9,9 @@ priority: 1
 ## Problem
 
 The builder's lock and status protocol is prompt-only cooperation. The
-"CRITICAL LOCK RULES" and status sections in `builder.prompt.md` (an
-`in_progress` assertion must carry a `locked-by`; `done` / `failed` /
-`not_started` / `draft` must not; status must be a valid enum; priority 1–3;
+"CRITICAL LOCK RULES" and status sections in `builder.prompt.md` (`done` /
+`failed` / `not_started` / `draft` must carry no `locked-by`; status must be a
+valid enum; priority 1–3;
 `depends-on` must resolve; parent specs carry no rolled-up status) are enforced
 by nothing in code. On a solo project a careful author holds these in their
 head. With strangers and CI, they need a machine gate.
@@ -41,8 +41,9 @@ file that the parser would skip-with-warning is instead a hard failure.
 2. Every assertion's `parent` names an existing spec.
 3. Every `depends-on` names an existing assertion; no self-reference; no cycles.
 4. No duplicate assertion IDs and no duplicate spec IDs.
-5. Lock-state pairings: `in_progress` ⟺ has a non-empty `locked-by`; every other
-   status has no `locked-by`.
+5. Lock state: only `in_progress` may carry a `locked-by`, and it need not
+   carry one. See the `lock-is-a-live-claim` spec for why the reverse
+   requirement was removed.
 6. Parent spec files carry no rolled-up status (field absent, or `draft` only —
    the one value the parser honors on a parent).
 

@@ -327,6 +327,13 @@ func validateTimestamp(value string) bool {
 // kebabCasePattern matches valid kebab-case identifiers.
 var kebabCasePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
+// IsKebabCase reports whether s is a valid spec or assertion identifier. It is
+// the one definition of that rule, so a caller outside this package checks the
+// same thing the parser does instead of copying the pattern.
+func IsKebabCase(s string) bool {
+	return kebabCasePattern.MatchString(s)
+}
+
 // validBranchPattern matches valid git branch name characters.
 //
 // A dot is permitted, because git permits it and a release branch usually
@@ -829,25 +836,29 @@ func detectCircularDependencies(assertions []Assertion) error {
 	return nil
 }
 
-// IsLockStale reports whether a lockedBy string represents a stale (>2 hour old) lock.
-// Returns true for empty or malformed lockedBy values.
+// lockLifetime is how long a builder's claim on an assertion stands. A builder
+// works one assertion at a time, so a claim older than this is almost always a
+// session that died rather than one still running.
+const lockLifetime = 2 * time.Hour
+
+// IsLockStale reports whether a lockedBy value names a claim that no longer
+// holds. A lock has the shape builder-{host}-{pid}-{unix-timestamp}, so the
+// last hyphen-separated field dates it.
+//
+// An empty or undatable value is stale: a claim nobody can date is a claim
+// nobody can trust.
 func IsLockStale(lockedBy string) bool {
 	if lockedBy == "" {
 		return true
 	}
 
 	parts := strings.Split(lockedBy, "-")
-	if len(parts) == 0 {
-		return true
-	}
-
-	tsStr := parts[len(parts)-1]
-	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	ts, err := strconv.ParseInt(parts[len(parts)-1], 10, 64)
 	if err != nil {
 		return true
 	}
 
-	return time.Now().Unix()-ts > 7200
+	return time.Since(time.Unix(ts, 0)) > lockLifetime
 }
 
 // FindOptions controls behaviour of FindNextAssertion.

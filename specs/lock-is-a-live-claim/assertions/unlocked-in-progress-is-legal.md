@@ -3,7 +3,8 @@ id: unlocked-in-progress-is-legal
 parent: lock-is-a-live-claim
 created: 2026-08-21T17:35:19Z
 priority: 1
-status: not_started
+branch: fix/warning-discipline-and-lock-model
+status: done
 ---
 
 # `validate` Accepts an `in_progress` Assertion That Carries No Lock
@@ -23,4 +24,4 @@ status: not_started
 
 **Note:** This is a deliberate narrowing of an invariant, so an existing test asserts the old behavior. Change that test to assert the new rule rather than deleting it, because the unlocked `in_progress` case still needs coverage — with the opposite expectation.
 
-**Tests:** `internal/validate/validate_test.go` — an `in_progress` assertion with no `locked-by` passes (this inverts the existing case); an `in_progress` assertion with a `locked-by` still passes; a `done` assertion carrying a `locked-by` still fails; the same for `failed`, `not_started`, and `draft`.
+**Tests:** `internal/validate/validate_test.go` and `cmd/spekk/validate_test.go` — an `in_progress` assertion with no `locked-by` passes (this inverts the existing case); an `in_progress` assertion with a `locked-by` still passes; a `done` assertion carrying a `locked-by` still fails; the same for `failed`, `not_started`, and `draft`.
