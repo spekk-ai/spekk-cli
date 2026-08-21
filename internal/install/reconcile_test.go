@@ -7,7 +7,9 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestStamp_RoundTrip(t *testing.T) {
@@ -694,6 +696,334 @@ func TestInstalledTargets_SilentWithNoInstall(t *testing.T) {
 	}
 	if len(cmds) != 0 {
 		t.Errorf("cmds = %v, want none", cmds)
+	}
+}
+
+// mkfifo makes a FIFO for a test, and skips the test where it cannot.
+func mkfifo(t *testing.T, path string) {
+	t.Helper()
+	if err := syscall.Mkfifo(path, 0o644); err != nil {
+		t.Skipf("cannot make a FIFO here: %v", err)
+	}
+}
+
+// runsWithin fails the test when fn has not returned by d. A read of a FIFO
+// never returns, so a guard that regresses must fail rather than hang the suite.
+func runsWithin(t *testing.T, d time.Duration, what string, fn func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	select {
+	case <-done:
+	case <-time.After(d):
+		t.Fatalf("%s did not return within %s: it read something that never ends", what, d)
+	}
+}
+
+// TestScanOwned_SkipsAFIFO: these directories hold other tools' files. A read of
+// a FIFO would never return, so the scan must not open one.
+func TestScanOwned_SkipsAFIFO(t *testing.T) {
+	dir := t.TempDir()
+	mkfifo(t, filepath.Join(dir, "spekk-coach.md"))
+	if err := os.WriteFile(filepath.Join(dir, "spekk-builder.md"), StampContent([]byte("body")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var owned []OwnedFile
+	var err error
+	runsWithin(t, 5*time.Second, "scanOwned", func() {
+		owned, err = scanOwned([]string{dir})
+	})
+	if err != nil {
+		t.Fatalf("a FIFO stopped the scan: %v", err)
+	}
+	if len(owned) != 1 {
+		t.Fatalf("owned = %+v, want the one stamped file", owned)
+	}
+}
+
+// TestScanOwned_SkipsADirectoryItCannotRead: one tool's config directory closed
+// to spekk must not stop the scan of every other directory.
+func TestScanOwned_SkipsADirectoryItCannotRead(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every directory, so the case cannot be built")
+	}
+	base := t.TempDir()
+	closed := filepath.Join(base, "closed")
+	open := filepath.Join(base, "open")
+	for _, d := range []string{closed, open} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(open, "spekk-coach.md"), StampContent([]byte("body")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(closed, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(closed, 0o755) })
+
+	owned, err := scanOwned([]string{closed, open})
+	if err != nil {
+		t.Fatalf("one closed directory stopped the scan: %v", err)
+	}
+	if len(owned) != 1 {
+		t.Fatalf("owned = %+v, want the one file in the open directory", owned)
+	}
+}
+
+// TestBackupFile_SurvivesABackupItCannotCompare: a .bak spekk cannot read is a
+// taken name, not a failure. An install must still finish.
+func TestBackupFile_SurvivesABackupItCannotCompare(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every file, so the case cannot be built")
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(p, []byte("the user's file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p+".bak", []byte("older\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	bak, err := backupFile(p)
+	if err != nil {
+		t.Fatalf("an unreadable backup failed the whole call: %v", err)
+	}
+	if bak != p+".bak.1" {
+		t.Fatalf("backup = %q, want the next free name %q", bak, p+".bak.1")
+	}
+	if got := string(mustRead(t, bak)); got != "the user's file\n" {
+		t.Errorf("the backup holds %q", got)
+	}
+}
+
+// TestBackupFile_SurvivesADirectoryInItsWay: same rule for a .bak that is a
+// directory. os.ReadFile fails on one, and the install must not.
+func TestBackupFile_SurvivesADirectoryInItsWay(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(p, []byte("the user's file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(p+".bak", 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	bak, err := backupFile(p)
+	if err != nil {
+		t.Fatalf("a directory in the way failed the whole call: %v", err)
+	}
+	if bak != p+".bak.1" {
+		t.Fatalf("backup = %q, want %q", bak, p+".bak.1")
+	}
+}
+
+// TestBackupFile_DoesNotWriteThroughASymlink: a .bak that is a link belongs to
+// whoever made it. Writing through it would put the user's file somewhere they
+// did not choose.
+func TestBackupFile_DoesNotWriteThroughASymlink(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(p, []byte("the user's file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	far := filepath.Join(t.TempDir(), "far.md")
+	if err := os.Symlink(far, p+".bak"); err != nil {
+		t.Fatal(err)
+	}
+
+	bak, err := backupFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bak != p+".bak.1" {
+		t.Fatalf("backup = %q, want %q", bak, p+".bak.1")
+	}
+	if _, err := os.Stat(far); !os.IsNotExist(err) {
+		t.Errorf("the backup was written through the link to %s", far)
+	}
+}
+
+// TestReconcile_LeavesAPathItCannotRead: a FIFO at a desired path must not be
+// read or written, and must not hang the install.
+func TestReconcile_LeavesAPathItCannotRead(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "spekk-coach.md")
+	mkfifo(t, p)
+	desired := map[string][]byte{p: []byte("what spekk installs")}
+
+	var res Result
+	var err error
+	runsWithin(t, 5*time.Second, "reconcile", func() {
+		res, err = reconcile(desired, []string{dir})
+	})
+	if err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if len(res.Written) != 0 {
+		t.Errorf("written = %v, want nothing", res.Written)
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], p) {
+		t.Fatalf("warnings = %v, want one that names %s", res.Warnings, p)
+	}
+	fi, err := os.Lstat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode()&os.ModeNamedPipe == 0 {
+		t.Errorf("the FIFO was replaced: mode %v", fi.Mode())
+	}
+}
+
+// TestReconcile_PruneWarningNamesTheBackupItWrote: the prune half names its
+// backup too, and its backup is not always <path>.bak.
+func TestReconcile_PruneWarningNamesTheBackupItWrote(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "spekk-old.md")
+	edited := bytes.Replace(StampContent([]byte("original")), []byte("original"), []byte("the user's edit"), 1)
+	if err := os.WriteFile(p, edited, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A backup of a different version is already there, so the prune backup
+	// has to take the next name.
+	if err := os.WriteFile(p+backupSuffix, []byte("an older version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := reconcile(map[string][]byte{}, []string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Warnings) != 1 {
+		t.Fatalf("warnings = %v, want one", res.Warnings)
+	}
+	if !strings.Contains(res.Warnings[0], p+".bak.1") {
+		t.Errorf("the warning must name %s.bak.1, got: %s", p, res.Warnings[0])
+	}
+	if !bytes.Equal(mustRead(t, p+".bak.1"), edited) {
+		t.Errorf("the named backup does not hold the edit")
+	}
+}
+
+// TestCheckStale_ReportsAPathItCannotRead: no install can settle a path that
+// holds something spekk cannot read, so the report must say so and must not
+// offer an install command that would not help.
+func TestCheckStale_ReportsAPathItCannotRead(t *testing.T) {
+	home := t.TempDir()
+	skillFS := fakeSkillFS()
+	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	mkfifo(t, p)
+
+	var stale []StaleFile
+	var err error
+	runsWithin(t, 5*time.Second, "CheckStale", func() {
+		stale, err = CheckStale(home, "", skillFS)
+	})
+	if err != nil {
+		t.Fatalf("CheckStale failed: %v", err)
+	}
+	if len(stale) != 1 || stale[0].Path != p {
+		t.Fatalf("stale = %+v, want one entry for %s", stale, p)
+	}
+	if stale[0].Reason != StaleUnreadable {
+		t.Errorf("reason = %v, want StaleUnreadable", stale[0].Reason)
+	}
+	if strings.Contains(stale[0].Remedy(), "spekk install") {
+		t.Errorf("an install cannot settle this, so no install command belongs here: %q", stale[0].Remedy())
+	}
+}
+
+// TestCheckStale_ReportsAPathInsideAClosedDirectory: the parent directory, not
+// the file, can be the one spekk cannot open. os.Lstat fails then, and the check
+// must report the path rather than stop.
+func TestCheckStale_ReportsAPathInsideAClosedDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every directory, so the case cannot be built")
+	}
+	home := t.TempDir()
+	skillFS := fakeSkillFS()
+	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}); err != nil {
+		t.Fatal(err)
+	}
+	closed := filepath.Join(home, ".claude", "skills", "spekk-dev-loop")
+	if err := os.Chmod(closed, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(closed, 0o755) })
+
+	stale, err := CheckStale(home, "", skillFS)
+	if err != nil {
+		t.Fatalf("one closed directory stopped the check: %v", err)
+	}
+	want := filepath.Join(closed, "SKILL.md")
+	for _, f := range stale {
+		if f.Path == want {
+			if f.Reason != StaleUnreadable {
+				t.Errorf("reason = %v, want StaleUnreadable", f.Reason)
+			}
+			return
+		}
+	}
+	t.Errorf("stale = %+v, want an entry for %s", stale, want)
+}
+
+// TestCheckStale_KeepsTwoManagedPathsThatPointAtOneFile: the key must not
+// follow a symlink at the path itself. Each managed path is its own conflict,
+// and each host tool needs its own answer.
+func TestCheckStale_KeepsTwoManagedPathsThatPointAtOneFile(t *testing.T) {
+	home := t.TempDir()
+	skillFS := fakeSkillFS()
+	for _, target := range []string{"claude-code", "opencode"} {
+		if _, err := Install(Options{Target: target, HomeDir: home, SkillFS: skillFS}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	far := filepath.Join(t.TempDir(), "one-file.md")
+	if err := os.WriteFile(far, []byte("the dotfiles copy\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var linked []string
+	for _, rel := range [][]string{
+		{".claude", "agents", "spekk-observer.md"},
+		{".config", "opencode", "agents", "spekk-observer.md"},
+	} {
+		p := filepath.Join(home, filepath.Join(rel...))
+		if err := os.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(far, p); err != nil {
+			t.Fatal(err)
+		}
+		linked = append(linked, p)
+	}
+
+	stale, err := CheckStale(home, "", skillFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, f := range stale {
+		if f.Reason == StaleSymlink {
+			got[f.Path] = true
+		}
+	}
+	for _, p := range linked {
+		if !got[p] {
+			t.Errorf("%s was not reported; two paths that point at one file are two conflicts", p)
+		}
 	}
 }
 

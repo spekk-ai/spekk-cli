@@ -88,26 +88,6 @@ func isBackupName(name string) bool {
 	return strings.HasSuffix(name, backupSuffix) || strings.Contains(name, backupSuffix+".")
 }
 
-// linkTarget returns what path points to when path is a symlink, and "" when it
-// is a regular file or is not there.
-func linkTarget(path string) (string, error) {
-	fi, err := os.Lstat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", fmt.Errorf("inspecting %s: %w", path, err)
-	}
-	if fi.Mode()&os.ModeSymlink == 0 {
-		return "", nil
-	}
-	dest, err := os.Readlink(path)
-	if err != nil {
-		return "", fmt.Errorf("reading the link %s: %w", path, err)
-	}
-	return dest, nil
-}
-
 // symlinkWarning is the one wording for a managed path spekk left alone.
 func symlinkWarning(path, dest string) string {
 	return fmt.Sprintf("%s is a symlink to %s; spekk left it alone — decide which tool owns this path", path, dest)
@@ -148,15 +128,14 @@ func scanOwned(dirs []string) ([]OwnedFile, error) {
 			if seen[path] {
 				continue
 			}
-			content, err := os.ReadFile(path)
+			found, err := inspect(path)
 			if err != nil {
-				// The file went away, or it is not ours to read.
-				if os.IsNotExist(err) || os.IsPermission(err) {
-					continue
-				}
-				return nil, fmt.Errorf("reading %s: %w", path, err)
+				return nil, err
 			}
-			managed, pristine := isPristine(content)
+			if found.State != pathReadable {
+				continue // not ours to read, so not ours to own
+			}
+			managed, pristine := isPristine(found.Content)
 			if !managed {
 				continue
 			}
@@ -192,22 +171,88 @@ func backupFile(path string) (string, error) {
 	}
 	bak := path + backupSuffix
 	for i := 1; ; i++ {
-		existing, err := os.ReadFile(bak)
+		// Lstat, so a symlink counts as taken: a backup must not be written
+		// through a link another tool made.
+		fi, err := os.Lstat(bak)
 		if os.IsNotExist(err) {
-			break
+			break // the name is free
 		}
-		if err != nil {
-			return "", err
+		if err == nil && fi.Mode().IsRegular() {
+			if existing, err := os.ReadFile(bak); err == nil && bytes.Equal(existing, data) {
+				return bak, nil // the same content is already preserved
+			}
 		}
-		if bytes.Equal(existing, data) {
-			return bak, nil // the same content is already preserved
-		}
+		// The name holds a different version, or something spekk cannot read
+		// and must not disturb. Either way the next name is the answer. A
+		// backup that cannot be compared must never fail the install.
 		bak = fmt.Sprintf("%s%s.%d", path, backupSuffix, i)
 	}
 	if err := os.WriteFile(bak, data, mode); err != nil {
 		return "", err
 	}
 	return bak, nil
+}
+
+// pathState says what spekk found at a managed path.
+type pathState int
+
+const (
+	pathAbsent   pathState = iota // nothing is there
+	pathReadable                  // a regular file spekk read
+	pathSymlink                   // a link another tool made
+	pathOpaque                    // something spekk cannot read, or must not read
+)
+
+// managedPath is what spekk found at a managed path.
+type managedPath struct {
+	State   pathState
+	Content []byte // set for pathReadable
+	Link    string // set for pathSymlink: what the path points to
+}
+
+// inspect reads a managed path, and is the one rule for every read of one. It
+// returns pathOpaque, and no error, for a path spekk has no permission to open
+// and for anything that is not a regular file: a read of a FIFO would never
+// return. These directories hold other tools' files beside spekk's, so neither
+// case is a failure of the run. A permission error can come from the parent
+// directory as easily as from the file.
+func inspect(path string) (managedPath, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return managedPath{State: pathAbsent}, nil
+		}
+		if os.IsPermission(err) {
+			return managedPath{State: pathOpaque}, nil
+		}
+		return managedPath{State: pathOpaque}, fmt.Errorf("inspecting %s: %w", path, err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		dest, err := os.Readlink(path)
+		if err != nil {
+			return managedPath{State: pathOpaque}, fmt.Errorf("reading the link %s: %w", path, err)
+		}
+		return managedPath{State: pathSymlink, Link: dest}, nil
+	}
+	if !fi.Mode().IsRegular() {
+		return managedPath{State: pathOpaque}, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return managedPath{State: pathAbsent}, nil
+		}
+		if os.IsPermission(err) {
+			return managedPath{State: pathOpaque}, nil
+		}
+		return managedPath{State: pathOpaque}, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return managedPath{State: pathReadable, Content: data}, nil
+}
+
+// opaqueWarning is the one wording for a managed path spekk could not read.
+func opaqueWarning(path string) string {
+	return fmt.Sprintf("%s is not a regular file spekk can read; spekk left it alone — check the file and its permissions", path)
 }
 
 // dirKey resolves every symlink in dir so two spellings of one directory share
@@ -254,16 +299,23 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 	sort.Strings(paths)
 
 	for _, path := range paths {
-		dest, err := linkTarget(path)
+		found, err := inspect(path)
 		if err != nil {
 			return res, err
 		}
-		if dest != "" {
-			res.Warnings = append(res.Warnings, symlinkWarning(path, dest))
+		switch found.State {
+		case pathSymlink:
+			res.Warnings = append(res.Warnings, symlinkWarning(path, found.Link))
+			continue
+		case pathOpaque:
+			// A write here would replace something spekk cannot read, and a
+			// write to a FIFO would never return.
+			res.Warnings = append(res.Warnings, opaqueWarning(path))
 			continue
 		}
 		stamped := StampContent(desired[path])
-		if existing, err := os.ReadFile(path); err == nil {
+		if found.State == pathReadable {
+			existing := found.Content
 			if bytes.Equal(existing, stamped) {
 				continue // already correct: no-op (idempotent)
 			}
@@ -277,8 +329,6 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 				res.Warnings = append(res.Warnings,
 					fmt.Sprintf("%s did not match the content spekk installed; wrote %s and updated it", path, bak))
 			}
-		} else if !os.IsNotExist(err) {
-			return res, fmt.Errorf("reading %s: %w", path, err)
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return res, fmt.Errorf("creating %s: %w", filepath.Dir(path), err)
@@ -324,12 +374,16 @@ const (
 	// StaleSymlink: the path spekk writes is a symlink, so a second tool owns it.
 	// The user has to choose an owner.
 	StaleSymlink
+	// StaleUnreadable: the path spekk writes holds something spekk cannot read,
+	// so no install can settle it until the user clears the path.
+	StaleUnreadable
 )
 
 var staleReasonText = map[StaleReason]string{
-	StaleOldLayout: "is from an old layout",
-	StaleOutOfDate: "is out of date",
-	StaleSymlink:   "is a symlink to another tool's file",
+	StaleOldLayout:  "is from an old layout",
+	StaleOutOfDate:  "is out of date",
+	StaleSymlink:    "is a symlink to another tool's file",
+	StaleUnreadable: "is not a regular file spekk can read",
 }
 
 func (r StaleReason) String() string {
@@ -351,8 +405,11 @@ type StaleFile struct {
 // Remedy returns what the user must do about this file. An install fixes a stale
 // layout and stale content. It does not fix a path a second tool owns.
 func (s StaleFile) Remedy() string {
-	if s.Reason == StaleSymlink {
+	switch s.Reason {
+	case StaleSymlink:
 		return "decide which tool owns this path"
+	case StaleUnreadable:
+		return "check the file and its permissions"
 	}
 	return "run: " + installScope{name: s.Target, project: s.Project}.installCommand()
 }
@@ -429,6 +486,8 @@ func InstalledTargets(home, cwd string) ([]string, error) {
 //   - An owned file the current layout does not write is an old layout.
 //   - A file at a desired path whose content differs is out of date.
 //   - A symlink at a desired path belongs to another tool.
+//   - A desired path that holds something spekk cannot read is reported too. No
+//     install can settle it until the user clears the path.
 //
 // It reports each path once, sorted by path. The global scope is checked before
 // the project scope, so the global command wins when two scopes name one path.
@@ -468,22 +527,21 @@ func CheckStale(home, cwd string, skillFS fs.FS) ([]StaleFile, error) {
 		// A file that is installed at a desired path but is not current. A
 		// desired path with no file there is not installed, so it is silent.
 		for path, body := range desired {
-			dest, err := linkTarget(path)
+			found, err := inspect(path)
 			if err != nil {
 				return nil, err
 			}
-			if dest != "" {
-				add(StaleFile{Path: path, Reason: StaleSymlink, Target: s.name, Project: s.project, LinkTarget: dest})
+			switch found.State {
+			case pathAbsent:
+				continue
+			case pathSymlink:
+				add(StaleFile{Path: path, Reason: StaleSymlink, Target: s.name, Project: s.project, LinkTarget: found.Link})
+				continue
+			case pathOpaque:
+				add(StaleFile{Path: path, Reason: StaleUnreadable, Target: s.name, Project: s.project})
 				continue
 			}
-			existing, err := os.ReadFile(path)
-			if err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return nil, fmt.Errorf("reading %s: %w", path, err)
-			}
-			if bytes.Equal(existing, StampContent(body)) {
+			if bytes.Equal(found.Content, StampContent(body)) {
 				continue
 			}
 			add(StaleFile{Path: path, Reason: StaleOutOfDate, Target: s.name, Project: s.project})
@@ -508,22 +566,21 @@ func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 		if _, ok := desired[p]; ok {
 			continue // a desired path: the reconcile updates it in place
 		}
-		dest, err := linkTarget(p)
+		found, err := inspect(p)
 		if err != nil {
 			return res, err
 		}
-		if dest != "" {
-			res.Warnings = append(res.Warnings, symlinkWarning(p, dest))
+		switch found.State {
+		case pathAbsent:
+			continue
+		case pathSymlink:
+			res.Warnings = append(res.Warnings, symlinkWarning(p, found.Link))
+			continue
+		case pathOpaque:
+			res.Warnings = append(res.Warnings, opaqueWarning(p))
 			continue
 		}
-		content, err := os.ReadFile(p)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return res, fmt.Errorf("reading %s: %w", p, err)
-		}
-		if _, _, managed := ParseStamp(content); managed {
+		if _, _, managed := ParseStamp(found.Content); managed {
 			continue // the reconciler owns and prunes a stamped file
 		}
 		bak, err := backupFile(p)

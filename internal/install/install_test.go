@@ -409,6 +409,47 @@ func TestInstall_MigratesUnstampedLegacyShim(t *testing.T) {
 	}
 }
 
+// TestInstall_LegacyWarningNamesTheBackupItWrote: the legacy migration names its
+// backup too, and its backup is not always <path>.bak.
+func TestInstall_LegacyWarningNamesTheBackupItWrote(t *testing.T) {
+	home := t.TempDir()
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(agentsDir, "spekk-coach.md")
+	if err := os.WriteFile(legacy, []byte("---\nname: spekk-coach\n---\nAn older release.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A backup of a different version already holds the plain name.
+	if err := os.WriteFile(legacy+".bak", []byte("an older backup\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var warning string
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "legacy agent shim") {
+			warning = w
+		}
+	}
+	if warning == "" {
+		t.Fatalf("no legacy-migration warning in %v", res.Warnings)
+	}
+	if !strings.Contains(warning, legacy+".bak.1") {
+		t.Errorf("the warning must name %s.bak.1, got: %s", legacy, warning)
+	}
+	if _, err := os.Stat(legacy + ".bak.1"); err != nil {
+		t.Errorf("the named backup is missing: %v", err)
+	}
+	if got := string(mustRead(t, legacy+".bak")); got != "an older backup\n" {
+		t.Errorf("the earlier backup was overwritten: %q", got)
+	}
+}
+
 // TestInstall_PrunesStampedLegacyShim: a stamped coach or builder agent shim (a
 // reconciler wrote it) is pruned on install, because the desired set no longer
 // contains it.
