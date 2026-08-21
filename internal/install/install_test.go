@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 // fakeSkillFS returns a minimal in-memory FS that satisfies the skill embed
@@ -447,6 +449,60 @@ func TestInstall_LegacyWarningNamesTheBackupItWrote(t *testing.T) {
 	}
 	if got := string(mustRead(t, legacy+".bak")); got != "an older backup\n" {
 		t.Errorf("the earlier backup was overwritten: %q", got)
+	}
+}
+
+// TestInstall_LeavesALegacyPathItCannotRead: a legacy shim path that holds a
+// FIFO must not be read, removed, or backed up. A read would never return, and
+// spekk cannot tell what it would be deleting.
+func TestInstall_LeavesALegacyPathItCannotRead(t *testing.T) {
+	home := t.TempDir()
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(agentsDir, "spekk-coach.md")
+	if err := syscall.Mkfifo(legacy, 0o644); err != nil {
+		t.Skipf("cannot make a FIFO here: %v", err)
+	}
+
+	type outcome struct {
+		res Result
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()})
+		done <- outcome{res, err}
+	}()
+	var got outcome
+	select {
+	case got = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Install did not return: it read a path that never ends")
+	}
+	if got.err != nil {
+		t.Fatalf("Install failed: %v", got.err)
+	}
+
+	fi, err := os.Lstat(legacy)
+	if err != nil {
+		t.Fatalf("the legacy path was removed: %v", err)
+	}
+	if fi.Mode()&os.ModeNamedPipe == 0 {
+		t.Errorf("the FIFO was replaced: mode %v", fi.Mode())
+	}
+	if _, err := os.Stat(legacy + ".bak"); err == nil {
+		t.Errorf("spekk backed up something it cannot read")
+	}
+	var warned bool
+	for _, w := range got.res.Warnings {
+		if strings.Contains(w, legacy) {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("warnings = %v, want one that names %s", got.res.Warnings, legacy)
 	}
 }
 

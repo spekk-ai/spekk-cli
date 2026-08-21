@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 )
 
 // The managed marker is a single trailing line on every file that spekk
@@ -115,7 +117,7 @@ func scanOwned(dirs []string) ([]OwnedFile, error) {
 		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
-			if os.IsNotExist(err) || os.IsPermission(err) {
+			if isNothingToRead(err) || os.IsPermission(err) {
 				continue
 			}
 			return nil, fmt.Errorf("scanning %s: %w", dir, err)
@@ -155,7 +157,8 @@ type Result struct {
 }
 
 // backupFile copies path to a backup file and returns the path it wrote or
-// kept. It never overwrites an earlier backup, which could be the user's own
+// kept. A caller that reports the result says "kept a copy in", because a
+// backup that already holds these bytes is reused and nothing is written. It never overwrites an earlier backup, which could be the user's own
 // file: it falls back to "<path>.bak.1", "<path>.bak.2", and so on. When a
 // backup already holds the same bytes, it keeps that one and writes nothing, so
 // repeated installs cannot pile up identical copies. The backup keeps the mode
@@ -174,23 +177,37 @@ func backupFile(path string) (string, error) {
 		// Lstat, so a symlink counts as taken: a backup must not be written
 		// through a link another tool made.
 		fi, err := os.Lstat(bak)
-		if os.IsNotExist(err) {
-			break // the name is free
+		if err != nil {
+			if os.IsNotExist(err) {
+				break // the name is free
+			}
+			// The name cannot be looked at, and the next name would fail the
+			// same way: a name too long stays too long. Stop rather than count
+			// up forever.
+			return "", fmt.Errorf("inspecting %s: %w", bak, err)
 		}
-		if err == nil && fi.Mode().IsRegular() {
+		if fi.Mode().IsRegular() {
 			if existing, err := os.ReadFile(bak); err == nil && bytes.Equal(existing, data) {
 				return bak, nil // the same content is already preserved
 			}
 		}
 		// The name holds a different version, or something spekk cannot read
 		// and must not disturb. Either way the next name is the answer. A
-		// backup that cannot be compared must never fail the install.
+		// backup that cannot be read must never fail the install.
 		bak = fmt.Sprintf("%s%s.%d", path, backupSuffix, i)
 	}
 	if err := os.WriteFile(bak, data, mode); err != nil {
 		return "", err
 	}
 	return bak, nil
+}
+
+// isNothingToRead reports whether err says there is nothing at a path to look
+// at. ENOENT is the plain case. ENOTDIR says an ancestor is a file, so the path
+// cannot exist either: a regular file where a tool's config directory belongs
+// must not stop the run for every other tool.
+func isNothingToRead(err error) bool {
+	return os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR)
 }
 
 // pathState says what spekk found at a managed path.
@@ -219,7 +236,7 @@ type managedPath struct {
 func inspect(path string) (managedPath, error) {
 	fi, err := os.Lstat(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if isNothingToRead(err) {
 			return managedPath{State: pathAbsent}, nil
 		}
 		if os.IsPermission(err) {
@@ -263,7 +280,14 @@ func dirKey(dir string) string {
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		return resolved
 	}
-	return dir
+	// The directory is not there, or spekk cannot search it. Resolve the
+	// deepest ancestor that does resolve, and keep the rest as written. A
+	// closed directory must not put one file under two keys.
+	parent := filepath.Dir(dir)
+	if parent == dir {
+		return dir // the root: there is nothing above it
+	}
+	return filepath.Join(dirKey(parent), filepath.Base(dir))
 }
 
 // pathKey is dirKey for the parent of path. It resolves a symlinked ancestor
@@ -327,7 +351,7 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 					return res, fmt.Errorf("backing up %s: %w", path, err)
 				}
 				res.Warnings = append(res.Warnings,
-					fmt.Sprintf("%s did not match the content spekk installed; wrote %s and updated it", path, bak))
+					fmt.Sprintf("%s did not match the content spekk installed; kept a copy in %s and updated it", path, bak))
 			}
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -350,7 +374,7 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 				return res, fmt.Errorf("backing up %s: %w", o.Path, err)
 			}
 			res.Warnings = append(res.Warnings,
-				fmt.Sprintf("%s was changed by hand; wrote %s and did not remove the file", o.Path, bak))
+				fmt.Sprintf("%s was changed by hand; kept a copy in %s and did not remove the file", o.Path, bak))
 			continue
 		}
 		if err := os.Remove(o.Path); err != nil {
@@ -592,7 +616,7 @@ func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 		}
 		res.Removed = append(res.Removed, p)
 		res.Warnings = append(res.Warnings,
-			fmt.Sprintf("%s was a legacy agent shim; wrote %s and removed it", p, bak))
+			fmt.Sprintf("%s was a legacy agent shim; kept a copy in %s and removed it", p, bak))
 	}
 	return res, nil
 }

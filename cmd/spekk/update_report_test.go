@@ -126,6 +126,62 @@ func TestReportReinstall_SilentWithNoInstall(t *testing.T) {
 	}
 }
 
+// TestReportStale_SaysSoWhenTheCheckDidNotFinish: a check that cannot run must
+// not read as "nothing is stale".
+func TestReportStale_SaysSoWhenTheCheckDidNotFinish(t *testing.T) {
+	var buf bytes.Buffer
+	reportStaleWith(&buf, func() ([]install.StaleFile, error) {
+		return nil, errors.New("scanning /x: input/output error")
+	})
+	out := buf.String()
+	if !strings.Contains(out, "could not check the installed spekk files") {
+		t.Errorf("a failed check was swallowed: %q", out)
+	}
+	if !strings.Contains(out, "input/output error") {
+		t.Errorf("the reason is missing: %q", out)
+	}
+}
+
+// TestReportReinstall_SaysSoWhenTheScanDidNotFinish: the same rule on the
+// reminder path.
+func TestReportReinstall_SaysSoWhenTheScanDidNotFinish(t *testing.T) {
+	var buf bytes.Buffer
+	reportReinstallWith(&buf, func() ([]string, error) {
+		return nil, errors.New("scanning /x: input/output error")
+	})
+	out := buf.String()
+	if !strings.Contains(out, "could not check the installed spekk files") {
+		t.Errorf("a failed scan was swallowed: %q", out)
+	}
+}
+
+// TestReportAfterUpdate_PicksTheReportForTheOutcome: a binary that was replaced
+// gets the reinstall commands, because the check would compare against content
+// this process has already replaced. Every other run gets the stale check.
+func TestReportAfterUpdate_PicksTheReportForTheOutcome(t *testing.T) {
+	home := t.TempDir()
+	installInto(t, home)
+	p := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+	if err := os.WriteFile(p, []byte("edited by hand\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var replacedOut bytes.Buffer
+	reportAfterUpdate(&replacedOut, true, home, "")
+	if !strings.Contains(replacedOut.String(), "come from the binary") {
+		t.Errorf("a replaced binary must get the reinstall reminder:\n%s", replacedOut.String())
+	}
+	if strings.Contains(replacedOut.String(), "is out of date") {
+		t.Errorf("the stale check cannot help after a replacement:\n%s", replacedOut.String())
+	}
+
+	var keptOut bytes.Buffer
+	reportAfterUpdate(&keptOut, false, home, "")
+	if !strings.Contains(keptOut.String(), "is out of date") {
+		t.Errorf("a run that replaced nothing must get the stale check:\n%s", keptOut.String())
+	}
+}
+
 // TestWarnCheckFailed_SaysTheCheckDidNotRun: a check that cannot run must not
 // read as "nothing is stale".
 func TestWarnCheckFailed_SaysTheCheckDidNotRun(t *testing.T) {

@@ -1263,13 +1263,19 @@ OPTIONS:
 	}
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
+	reportAfterUpdate(os.Stderr, replaced, home, cwd)
+}
+
+// reportAfterUpdate says which report follows a self-update attempt. A stale
+// check after a real replacement would compare against this process's embedded
+// content, which the new binary has already replaced, so that case names the
+// install commands instead.
+func reportAfterUpdate(w io.Writer, replaced bool, home, cwd string) {
 	if replaced {
-		// A stale check here would compare against this process's embedded
-		// content, which the new binary has already replaced.
-		reportReinstall(os.Stderr, home, cwd)
+		reportReinstall(w, home, cwd)
 		return
 	}
-	reportStale(os.Stderr, home, cwd)
+	reportStale(w, home, cwd)
 }
 
 // warnCheckFailed reports that a scan of the install locations did not finish.
@@ -1283,7 +1289,15 @@ func warnCheckFailed(w io.Writer, err error) {
 // from the binary at session start. The spekk-dev-loop skill carries its content
 // in the file, so a new binary can hold content the installed file does not.
 func reportReinstall(w io.Writer, home, cwd string) {
-	installed, err := install.InstalledTargets(home, cwd)
+	reportReinstallWith(w, func() ([]string, error) {
+		return install.InstalledTargets(home, cwd)
+	})
+}
+
+// reportReinstallWith is reportReinstall with the scan as a parameter, so a test
+// can drive the case where the scan does not finish.
+func reportReinstallWith(w io.Writer, scan func() ([]string, error)) {
+	installed, err := scan()
 	if err != nil {
 		warnCheckFailed(w, err)
 		return
@@ -1300,7 +1314,15 @@ func reportReinstall(w io.Writer, home, cwd string) {
 // reportStale reports every installed file that this binary no longer writes or
 // no longer matches. It changes no file.
 func reportStale(w io.Writer, home, cwd string) {
-	stale, err := install.CheckStale(home, cwd, spekk.EmbeddedFS)
+	reportStaleWith(w, func() ([]install.StaleFile, error) {
+		return install.CheckStale(home, cwd, spekk.EmbeddedFS)
+	})
+}
+
+// reportStaleWith is reportStale with the check as a parameter, so a test can
+// drive the case where the check does not finish.
+func reportStaleWith(w io.Writer, check func() ([]install.StaleFile, error)) {
+	stale, err := check()
 	if err != nil {
 		warnCheckFailed(w, err)
 		return

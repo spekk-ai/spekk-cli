@@ -945,6 +945,125 @@ func TestCheckStale_ReportsAPathItCannotRead(t *testing.T) {
 	}
 }
 
+// TestBackupFile_StopsOnANameItCannotLookAt: a name too long stays too long, so
+// counting up to the next name would never end. The call must return instead.
+func TestBackupFile_StopsOnANameItCannotLookAt(t *testing.T) {
+	dir := t.TempDir()
+	// Adding ".bak" to this name goes past the limit for one path element.
+	p := filepath.Join(dir, strings.Repeat("a", 250)+".md")
+	if err := os.WriteFile(p, []byte("the user's file\n"), 0o644); err != nil {
+		t.Skipf("cannot build the case here: %v", err)
+	}
+	if _, err := os.Lstat(p + backupSuffix); err == nil || os.IsNotExist(err) {
+		t.Skip("this filesystem accepts the longer name, so the case does not arise")
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := backupFile(p)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Errorf("backupFile reported success for a name it cannot write")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("backupFile did not return: it is counting names forever")
+	}
+}
+
+// TestScanOwned_SkipsAFileWhereADirectoryBelongs: a regular file at a tool's
+// config path makes every read under it fail with ENOTDIR. One such path must
+// not stop the scan of every other tool.
+func TestScanOwned_SkipsAFileWhereADirectoryBelongs(t *testing.T) {
+	base := t.TempDir()
+	notADir := filepath.Join(base, "claude")
+	if err := os.WriteFile(notADir, []byte("a file, not a directory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	open := filepath.Join(base, "opencode")
+	if err := os.Mkdir(open, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(open, "spekk-coach.md"), StampContent([]byte("body")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	owned, err := scanOwned([]string{filepath.Join(notADir, "agents"), open})
+	if err != nil {
+		t.Fatalf("a file where a directory belongs stopped the scan: %v", err)
+	}
+	if len(owned) != 1 {
+		t.Fatalf("owned = %+v, want the one file in the real directory", owned)
+	}
+}
+
+// TestInspect_TreatsAFileWhereADirectoryBelongsAsAbsent: the same rule for a
+// single path. Nothing can be at a path whose parent is a file.
+func TestInspect_TreatsAFileWhereADirectoryBelongsAsAbsent(t *testing.T) {
+	base := t.TempDir()
+	notADir := filepath.Join(base, "claude")
+	if err := os.WriteFile(notADir, []byte("a file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := inspect(filepath.Join(notADir, "agents", "spekk-coach.md"))
+	if err != nil {
+		t.Fatalf("inspect failed: %v", err)
+	}
+	if found.State != pathAbsent {
+		t.Errorf("state = %v, want pathAbsent", found.State)
+	}
+}
+
+// TestCheckStale_ReportsEachPathOnceWhenADirectoryIsClosed: the key must resolve
+// the deepest ancestor it can. A closed directory defeats a whole-path resolve,
+// and the two scopes would then report one file under two spellings.
+func TestCheckStale_ReportsEachPathOnceWhenADirectoryIsClosed(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root searches every directory, so the case cannot be built")
+	}
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link-to-home")
+	if err := os.Symlink(home, link); err != nil {
+		t.Fatal(err)
+	}
+	skillFS := fakeSkillFS()
+	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}); err != nil {
+		t.Fatal(err)
+	}
+	// Close the directory ABOVE the one that holds the file. Only then does
+	// resolving the file's own parent fail, which is what makes the key fall
+	// back to the spelling it was given.
+	closed := filepath.Join(home, ".claude", "skills")
+	if err := os.Chmod(closed, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(closed, 0o755) })
+
+	stale, err := CheckStale(home, link, skillFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stale) == 0 {
+		t.Fatal("nothing was reported, so the case does not exercise the key")
+	}
+	seen := map[string]int{}
+	for _, f := range stale {
+		seen[filepath.Base(filepath.Dir(f.Path))+"/"+filepath.Base(f.Path)]++
+	}
+	for name, n := range seen {
+		if n > 1 {
+			t.Errorf("%s was reported %d times; one file is one report", name, n)
+		}
+	}
+}
+
 // TestCheckStale_ReportsAPathInsideAClosedDirectory: the parent directory, not
 // the file, can be the one spekk cannot open. os.Lstat fails then, and the check
 // must report the path rather than stop.
