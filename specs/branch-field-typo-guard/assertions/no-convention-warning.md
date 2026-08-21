@@ -3,7 +3,7 @@ id: no-convention-warning
 parent: branch-field-typo-guard
 created: 2026-08-21T17:35:19Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # The Branch Field Accepts Any Name Git Accepts

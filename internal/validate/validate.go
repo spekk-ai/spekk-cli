@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
@@ -39,8 +40,14 @@ func (f Failure) String() string {
 }
 
 // Result is the outcome of validating a specs/ tree.
+//
+// A Failure breaks the tree and sets the exit code. A Warning reports a
+// condition that is legal but almost always a mistake, so it never changes the
+// exit code: neither a stranded branch value nor a dead builder lock is a
+// reason to break somebody's CI run.
 type Result struct {
 	Failures       []Failure
+	Warnings       []string
 	SpecCount      int
 	AssertionCount int
 }
@@ -171,6 +178,7 @@ func Run(specsDir string) (*Result, error) {
 
 	checkDependsOn(assertions, assertionIDs, result)
 	checkCycles(assertions, result)
+	checkBranchRefs(assertions, discoveredBranchNames(), result)
 
 	result.SpecCount = len(specs)
 	result.AssertionCount = len(assertions)
@@ -240,6 +248,72 @@ func checkLockState(a parser.Assertion, result *Result) {
 			result.addFailure(a.File, fmt.Sprintf("status is %s but locked-by is set (%q); only in_progress may carry a lock", a.Status, a.LockedBy))
 		}
 	}
+}
+
+// queueVisible reports whether spekk next can still reach an assertion. It
+// skips done and draft, so only the remaining statuses can be stranded by a
+// branch value that names nothing.
+func queueVisible(a parser.Assertion) bool {
+	return a.Status != "done" && a.Status != "draft"
+}
+
+// checkBranchRefs reports each distinct branch value that names no branch in
+// refs and that a queue-visible assertion carries. FindNextAssertion filters
+// the queue by this value as a plain string, so an assertion that names a
+// branch nobody has is invisible to spekk next for ever, whether a typo or a
+// deletion put it there.
+//
+// Grouping by distinct value is not cosmetic. The parser defaults an absent
+// branch field to "main", so on a repository whose trunk is master every
+// assertion without the field carries the same wrong value.
+func checkBranchRefs(assertions []parser.Assertion, refs []string, result *Result) {
+	if len(refs) == 0 {
+		// Git is absent, or this tree is in no repository. Neither is a
+		// problem with the specs, so there is nothing to report.
+		return
+	}
+
+	known := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		known[ref] = true
+	}
+
+	counts := map[string]int{}
+	for _, a := range assertions {
+		if a.Branch == "" || known[a.Branch] || !queueVisible(a) {
+			continue
+		}
+		counts[a.Branch]++
+	}
+
+	values := make([]string, 0, len(counts))
+	for value := range counts {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+
+	for _, value := range values {
+		noun := "assertions"
+		if counts[value] == 1 {
+			noun = "assertion"
+		}
+		result.Warnings = append(result.Warnings, fmt.Sprintf(
+			"branch %q matches no branch (%d %s not done)", value, counts[value], noun))
+	}
+}
+
+// discoveredBranchNames returns the logical name of every local head and
+// remote-tracking ref, or nil when git cannot answer.
+func discoveredBranchNames() []string {
+	branches, err := crossbranch.DiscoverAllBranches("")
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(branches))
+	for _, b := range branches {
+		names = append(names, b.Name)
+	}
+	return names
 }
 
 // checkDuplicateIDs reports every file beyond the first that declares a

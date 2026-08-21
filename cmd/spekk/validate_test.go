@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +53,7 @@ func TestExecValidate_CleanTree_ExitZero(t *testing.T) {
 	specsDir := makeCleanValidateFixture(t)
 	var stdout bytes.Buffer
 
-	code := execValidate(nil, &stdout, specsDir)
+	code := execValidate(nil, &stdout, io.Discard, specsDir)
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d; stdout: %q", code, stdout.String())
@@ -82,7 +83,7 @@ status: in_progress
 	}
 
 	var stdout bytes.Buffer
-	code := execValidate(nil, &stdout, specsDir)
+	code := execValidate(nil, &stdout, io.Discard, specsDir)
 
 	if code == 0 {
 		t.Fatal("expected non-zero exit code for a broken tree")
@@ -96,7 +97,7 @@ status: in_progress
 // specsDir resolution.
 func TestExecValidate_Help_ExitZero(t *testing.T) {
 	var stdout bytes.Buffer
-	code := execValidate([]string{"--help"}, &stdout, "")
+	code := execValidate([]string{"--help"}, &stdout, io.Discard, "")
 	if code != 0 {
 		t.Errorf("expected exit code 0 for --help, got %d", code)
 	}

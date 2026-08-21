@@ -20,12 +20,13 @@ The commit that last shaped the list (29568fe) states the real intent: the warni
 
 Delete the convention rule, and check the thing the rule was a proxy for: does the value name a branch that exists?
 
-A missing ref alone is not evidence of a typo, because a merged branch is deleted and that is normal. The second signal is nearness: a typo is by definition almost a real name. So the check reports a value that names no ref **and** sits within a small edit distance of a ref that does exist, and it names that ref.
+The check is plain set membership against the branches git knows. An assertion still in the queue whose branch matches no ref is stranded, whether a typo or a deletion put it there. A `done` assertion on a deleted branch is merged work, so the status filter excludes it, and nothing more is needed to keep the report quiet.
 
 ## Scope
 
-- In scope: removal of the word list and its warning; a typo report in `spekk validate`.
+- In scope: removal of the word list and its warning; a report in `spekk validate` for an assertion whose branch matches no ref.
 - Out of scope, and deliberately so: a `.spekk/config.yml` branch rule (issue #40). Once the guard checks a real ref instead of a naming convention, no team preference is left to configure. Also out of scope: a general parser warnings framework, a `--quiet` flag, and warning grouping anywhere but the one report below. Deleting the noise source beats building machinery to manage it.
+- Out of scope for the same reason: an edit-distance heuristic and a "did you mean" suggestion. The status filter already keeps merged work quiet, so nearness would add a threshold, a tie-break rule, and a distance function to answer a question the filter has answered.
 
 ## Design decisions to sanity-check
 
