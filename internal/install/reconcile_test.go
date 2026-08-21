@@ -407,6 +407,296 @@ func TestReconcile_IgnoresItsOwnBackups(t *testing.T) {
 	}
 }
 
+// TestScanOwned_SkipsASymlinkToStampedContent: the prune half must not follow a
+// link another tool made, even when the far end is a spekk file. Without the
+// guard the scan would claim the link and remove it.
+func TestScanOwned_SkipsASymlinkToStampedContent(t *testing.T) {
+	dir := t.TempDir()
+	far := filepath.Join(t.TempDir(), "far.md")
+	if err := os.WriteFile(far, StampContent([]byte("spekk body")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "spekk-coach.md")
+	if err := os.Symlink(far, link); err != nil {
+		t.Fatal(err)
+	}
+
+	owned, err := scanOwned([]string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(owned) != 0 {
+		t.Fatalf("a symlink must not be owned, got %+v", owned)
+	}
+
+	// The prune half must therefore leave both the link and its far end alone.
+	if _, err := reconcile(map[string][]byte{}, []string{dir}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(link); err != nil {
+		t.Errorf("the link was removed: %v", err)
+	}
+	if _, err := os.Stat(far); err != nil {
+		t.Errorf("the far end was removed: %v", err)
+	}
+}
+
+// TestScanOwned_SkipsAFileItCannotRead: two of these directories hold the user's
+// own prompts beside spekk's files. One file another program locked down must
+// not disable the whole scan.
+func TestScanOwned_SkipsAFileItCannotRead(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every file, so the case cannot be built")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "spekk-coach.md"), StampContent([]byte("body")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "someone-elses-note.md"), []byte("private"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	owned, err := scanOwned([]string{dir})
+	if err != nil {
+		t.Fatalf("one unreadable file stopped the scan: %v", err)
+	}
+	if len(owned) != 1 {
+		t.Fatalf("owned = %+v, want the one stamped file", owned)
+	}
+}
+
+// TestIsBackupName_CoversBothForms: backupFile writes "<name>.bak" and falls
+// back to "<name>.bak.<n>". The scan must skip both, or an install backs its own
+// backup up again.
+func TestIsBackupName_CoversBothForms(t *testing.T) {
+	for _, name := range []string{"SKILL.md.bak", "SKILL.md.bak.1", "SKILL.md.bak.27"} {
+		if !isBackupName(name) {
+			t.Errorf("isBackupName(%q) = false, want true", name)
+		}
+	}
+	for _, name := range []string{"SKILL.md", "spekk-coach.md"} {
+		if isBackupName(name) {
+			t.Errorf("isBackupName(%q) = true, want false", name)
+		}
+	}
+}
+
+// TestBackupFile_NeverOverwritesAnEarlierBackup: a second, different version
+// gets its own file. Overwriting the first one would destroy what the user had.
+func TestBackupFile_NeverOverwritesAnEarlierBackup(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(p, []byte("version one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	first, err := backupFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != p+".bak" {
+		t.Fatalf("first backup = %q, want %q", first, p+".bak")
+	}
+
+	if err := os.WriteFile(p, []byte("version two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second, err := backupFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second != p+".bak.1" {
+		t.Fatalf("second backup = %q, want %q", second, p+".bak.1")
+	}
+	if got := string(mustRead(t, first)); got != "version one\n" {
+		t.Errorf("the first backup was overwritten: %q", got)
+	}
+}
+
+// TestBackupFile_KeepsOneCopyOfTheSameContent: the same bytes must not pile up.
+// A file the prune half backs up and leaves in place is seen on every install.
+func TestBackupFile_KeepsOneCopyOfTheSameContent(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(p, []byte("one version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 3; i++ {
+		bak, err := backupFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bak != p+".bak" {
+			t.Fatalf("call %d wrote %q, want the one backup %q", i, bak, p+".bak")
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("the directory holds %d files, want the file and one backup", len(entries))
+	}
+}
+
+// TestBackupFile_KeepsTheMode: a private file must not become readable by way of
+// its backup.
+func TestBackupFile_KeepsTheMode(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(p, []byte("private\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bak, err := backupFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(bak)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Errorf("the backup is mode %v, want 0600", fi.Mode().Perm())
+	}
+}
+
+// TestReconcile_PruneHalfDoesNotGrowBackups: an edited file at a path the layout
+// no longer writes is backed up and left in place. Every later install sees it
+// again, and must not add a second copy of the same bytes.
+func TestReconcile_PruneHalfDoesNotGrowBackups(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "spekk-old.md")
+	edited := bytes.Replace(StampContent([]byte("original")), []byte("original"), []byte("the user's edit"), 1)
+	if err := os.WriteFile(p, edited, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 1; i <= 4; i++ {
+		res, err := reconcile(map[string][]byte{}, []string{dir})
+		if err != nil {
+			t.Fatalf("run %d: %v", i, err)
+		}
+		if len(res.Warnings) != 1 {
+			t.Errorf("run %d gave %d warnings, want one every run", i, len(res.Warnings))
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 2 {
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			t.Fatalf("after run %d the directory holds %v, want the file and one backup", i, names)
+		}
+	}
+}
+
+// TestReconcile_WarningNamesTheBackupItWrote: the warning sends the user to
+// their replaced content, so it must name the file that holds it.
+func TestReconcile_WarningNamesTheBackupItWrote(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "spekk-coach.md")
+	desired := map[string][]byte{p: []byte("what spekk installs")}
+
+	if err := os.WriteFile(p, []byte("the user's first version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reconcile(desired, []string{dir}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("the user's second version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := reconcile(desired, []string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Warnings) != 1 {
+		t.Fatalf("warnings = %v, want one", res.Warnings)
+	}
+	if !strings.Contains(res.Warnings[0], p+".bak.1") {
+		t.Errorf("the warning must name %s.bak.1, got: %s", p, res.Warnings[0])
+	}
+	if got := string(mustRead(t, p+".bak.1")); got != "the user's second version\n" {
+		t.Errorf("the named backup holds %q", got)
+	}
+}
+
+// TestCheckStale_ReportsEachPathOnceThroughASymlink: os.Getwd gives the spelling
+// the shell used, so a working directory that reaches home through a link names
+// the same .claude directory twice. One file must still be one report.
+func TestCheckStale_ReportsEachPathOnceThroughASymlink(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link-to-home")
+	if err := os.Symlink(home, link); err != nil {
+		t.Fatal(err)
+	}
+
+	skillFS := fakeSkillFS()
+	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: skillFS}); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(home, ".claude", "skills", "spekk-dev-loop", "SKILL.md")
+	if err := os.WriteFile(p, []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stale, err := CheckStale(home, link, skillFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stale) != 1 {
+		t.Fatalf("stale = %+v, want one entry", stale)
+	}
+	if stale[0].Project {
+		t.Errorf("the global install command should win the tie, got %q", stale[0].Remedy())
+	}
+}
+
+// TestInstalledTargets_NamesEachScopeOnce: the reminder after a self-update must
+// not name one directory under two spellings.
+func TestInstalledTargets_NamesEachScopeOnce(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link-to-home")
+	if err := os.Symlink(home, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()}); err != nil {
+		t.Fatal(err)
+	}
+
+	cmds, err := InstalledTargets(home, link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"spekk install --target claude-code"}
+	if len(cmds) != 1 || cmds[0] != want[0] {
+		t.Fatalf("cmds = %v, want %v", cmds, want)
+	}
+}
+
+// TestInstalledTargets_SilentWithNoInstall: a user who never installed gets no
+// reminder.
+func TestInstalledTargets_SilentWithNoInstall(t *testing.T) {
+	home := t.TempDir()
+	cmds, err := InstalledTargets(home, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cmds) != 0 {
+		t.Errorf("cmds = %v, want none", cmds)
+	}
+}
+
 func mustRead(t *testing.T, path string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(path)

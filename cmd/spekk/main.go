@@ -1261,62 +1261,60 @@ OPTIONS:
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
+	home, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
 	if replaced {
 		// A stale check here would compare against this process's embedded
 		// content, which the new binary has already replaced.
-		remindToReinstall()
+		reportReinstall(os.Stderr, home, cwd)
 		return
 	}
-	warnStaleInstall()
+	reportStale(os.Stderr, home, cwd)
 }
 
 // warnCheckFailed reports that a scan of the install locations did not finish.
-// One unreadable directory in one tool's config must not silence the rest.
-func warnCheckFailed(err error) {
-	fmt.Fprintf(os.Stderr, "\nwarning: could not check the installed spekk files: %s\n", err)
+// A check that cannot run must say so rather than read as "nothing is stale".
+func warnCheckFailed(w io.Writer, err error) {
+	fmt.Fprintf(w, "\nwarning: could not check the installed spekk files: %s\n", err)
 }
 
-// remindToReinstall names the install targets that have spekk files on disk and
+// reportReinstall names the install targets that have spekk files on disk and
 // asks the user to run the install again. A role shim reads its instructions
 // from the binary at session start. The spekk-dev-loop skill carries its content
 // in the file, so a new binary can hold content the installed file does not.
-func remindToReinstall() {
-	home, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
+func reportReinstall(w io.Writer, home, cwd string) {
 	installed, err := install.InstalledTargets(home, cwd)
 	if err != nil {
-		warnCheckFailed(err)
+		warnCheckFailed(w, err)
 		return
 	}
 	if len(installed) == 0 {
 		return
 	}
-	fmt.Fprintln(os.Stderr, "\nThe installed spekk skills carry their content in the file. Re-run:")
+	fmt.Fprintln(w, "\nThe installed spekk files come from the binary. Re-run:")
 	for _, cmd := range installed {
-		fmt.Fprintln(os.Stderr, "  "+cmd)
+		fmt.Fprintln(w, "  "+cmd)
 	}
 }
 
-// warnStaleInstall reports every installed file that this binary no longer
-// writes or no longer matches. It changes no file.
-func warnStaleInstall() {
-	home, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
+// reportStale reports every installed file that this binary no longer writes or
+// no longer matches. It changes no file.
+func reportStale(w io.Writer, home, cwd string) {
 	stale, err := install.CheckStale(home, cwd, spekk.EmbeddedFS)
 	if err != nil {
-		warnCheckFailed(err)
+		warnCheckFailed(w, err)
 		return
 	}
 	if len(stale) == 0 {
 		return
 	}
-	fmt.Fprintln(os.Stderr, "\nwarning: some installed spekk files do not match this version of spekk:")
+	fmt.Fprintln(w, "\nwarning: some installed spekk files do not match this version of spekk:")
 	for _, s := range stale {
 		if s.Reason == install.StaleSymlink {
-			fmt.Fprintf(os.Stderr, "  %s %s (%s; %s)\n", s.Path, s.Reason, s.LinkTarget, s.Remedy())
+			fmt.Fprintf(w, "  %s %s (%s; %s)\n", s.Path, s.Reason, s.LinkTarget, s.Remedy())
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "  %s %s (%s)\n", s.Path, s.Reason, s.Remedy())
+		fmt.Fprintf(w, "  %s %s (%s)\n", s.Path, s.Reason, s.Remedy())
 	}
 }
 

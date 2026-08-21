@@ -121,6 +121,11 @@ func symlinkWarning(path, dest string) string {
 //     would back it up again on every install.
 //   - A symlink is not owned. Another tool made it.
 //   - A directory that does not exist contributes nothing, and is not an error.
+//   - A file spekk cannot read is not owned. Two of these directories hold the
+//     user's own prompts beside spekk's files, so one file another program
+//     locked down must not disable the whole scan.
+//   - Only a regular file is read. A FIFO in one of these directories would
+//     block the read forever.
 func scanOwned(dirs []string) ([]OwnedFile, error) {
 	seen := map[string]bool{}
 	var owned []OwnedFile
@@ -130,13 +135,13 @@ func scanOwned(dirs []string) ([]OwnedFile, error) {
 		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) || os.IsPermission(err) {
 				continue
 			}
 			return nil, fmt.Errorf("scanning %s: %w", dir, err)
 		}
 		for _, e := range entries {
-			if e.IsDir() || isBackupName(e.Name()) || e.Type()&os.ModeSymlink != 0 {
+			if !e.Type().IsRegular() || isBackupName(e.Name()) {
 				continue
 			}
 			path := filepath.Join(dir, e.Name())
@@ -145,6 +150,10 @@ func scanOwned(dirs []string) ([]OwnedFile, error) {
 			}
 			content, err := os.ReadFile(path)
 			if err != nil {
+				// The file went away, or it is not ours to read.
+				if os.IsNotExist(err) || os.IsPermission(err) {
+					continue
+				}
 				return nil, fmt.Errorf("reading %s: %w", path, err)
 			}
 			managed, pristine := isPristine(content)
@@ -166,21 +175,57 @@ type Result struct {
 	Warnings []string
 }
 
-// backupFile copies path to a backup file that does not already exist, so it
-// never overwrites an earlier backup (which could be the user's own file).
-func backupFile(path string) error {
+// backupFile copies path to a backup file and returns the path it wrote or
+// kept. It never overwrites an earlier backup, which could be the user's own
+// file: it falls back to "<path>.bak.1", "<path>.bak.2", and so on. When a
+// backup already holds the same bytes, it keeps that one and writes nothing, so
+// repeated installs cannot pile up identical copies. The backup keeps the mode
+// of the file it preserves, so a private file does not become readable.
+func backupFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return "", err
+	}
+	mode := fs.FileMode(0o644)
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
 	}
 	bak := path + backupSuffix
 	for i := 1; ; i++ {
-		if _, err := os.Stat(bak); os.IsNotExist(err) {
+		existing, err := os.ReadFile(bak)
+		if os.IsNotExist(err) {
 			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if bytes.Equal(existing, data) {
+			return bak, nil // the same content is already preserved
 		}
 		bak = fmt.Sprintf("%s%s.%d", path, backupSuffix, i)
 	}
-	return os.WriteFile(bak, data, 0o644)
+	if err := os.WriteFile(bak, data, mode); err != nil {
+		return "", err
+	}
+	return bak, nil
+}
+
+// dirKey resolves every symlink in dir so two spellings of one directory share
+// a key. A user whose working directory reaches home through a symlink has one
+// .claude directory under two names. dirKey returns dir unchanged when the path
+// cannot be resolved, which is the case for a directory that is not there.
+func dirKey(dir string) string {
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		return resolved
+	}
+	return dir
+}
+
+// pathKey is dirKey for the parent of path. It resolves a symlinked ancestor
+// but never follows a symlink at path itself, so two managed paths that point
+// at one file stay two separate reports.
+func pathKey(path string) string {
+	return filepath.Join(dirKey(filepath.Dir(path)), filepath.Base(path))
 }
 
 // reconcile drives the managed files in dirs to the desired set. desired maps a
@@ -225,11 +270,12 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 			// A pristine managed file is spekk's own content from another
 			// version. Every other file is kept in a .bak before the update.
 			if managed, pristine := isPristine(existing); !managed || !pristine {
-				if err := backupFile(path); err != nil {
+				bak, err := backupFile(path)
+				if err != nil {
 					return res, fmt.Errorf("backing up %s: %w", path, err)
 				}
 				res.Warnings = append(res.Warnings,
-					fmt.Sprintf("%s did not match the content spekk installed; wrote %s.bak and updated it", path, path))
+					fmt.Sprintf("%s did not match the content spekk installed; wrote %s and updated it", path, bak))
 			}
 		} else if !os.IsNotExist(err) {
 			return res, fmt.Errorf("reading %s: %w", path, err)
@@ -249,11 +295,12 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 			continue
 		}
 		if !o.Pristine {
-			if err := backupFile(o.Path); err != nil {
+			bak, err := backupFile(o.Path)
+			if err != nil {
 				return res, fmt.Errorf("backing up %s: %w", o.Path, err)
 			}
 			res.Warnings = append(res.Warnings,
-				fmt.Sprintf("%s was changed by hand; wrote %s.bak and did not remove the file", o.Path, o.Path))
+				fmt.Sprintf("%s was changed by hand; wrote %s and did not remove the file", o.Path, bak))
 			continue
 		}
 		if err := os.Remove(o.Path); err != nil {
@@ -348,10 +395,12 @@ func InstalledTargets(home, cwd string) ([]string, error) {
 	for _, s := range eachInstallScope(cwd) {
 		dirs := s.target.managedDirs(s.project, home, cwd)
 		// Two scopes can name the same directories when the working directory is
-		// the home directory. Report the first (global) command only.
+		// the home directory. Report the first (global) command only. The key is
+		// the resolved directory, so a cwd that reaches home through a symlink
+		// is the same directory here too.
 		fresh := false
 		for _, d := range dirs {
-			if !seen[d] {
+			if !seen[dirKey(d)] {
 				fresh = true
 			}
 		}
@@ -366,7 +415,7 @@ func InstalledTargets(home, cwd string) ([]string, error) {
 			continue
 		}
 		for _, d := range dirs {
-			seen[d] = true
+			seen[dirKey(d)] = true
 		}
 		cmds = append(cmds, s.installCommand())
 	}
@@ -383,14 +432,18 @@ func InstalledTargets(home, cwd string) ([]string, error) {
 //
 // It reports each path once, sorted by path. The global scope is checked before
 // the project scope, so the global command wins when two scopes name one path.
+// One file reached by two spellings is one path: the key resolves a symlinked
+// ancestor, which is what a working directory that reaches home through a link
+// produces.
 func CheckStale(home, cwd string, skillFS fs.FS) ([]StaleFile, error) {
 	seen := map[string]bool{}
 	var stale []StaleFile
 	add := func(f StaleFile) {
-		if seen[f.Path] {
+		key := pathKey(f.Path)
+		if seen[key] {
 			return
 		}
-		seen[f.Path] = true
+		seen[key] = true
 		stale = append(stale, f)
 	}
 
@@ -473,7 +526,8 @@ func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 		if _, _, managed := ParseStamp(content); managed {
 			continue // the reconciler owns and prunes a stamped file
 		}
-		if err := backupFile(p); err != nil {
+		bak, err := backupFile(p)
+		if err != nil {
 			return res, fmt.Errorf("backing up %s: %w", p, err)
 		}
 		if err := os.Remove(p); err != nil {
@@ -481,7 +535,7 @@ func migrateLegacy(paths []string, desired map[string][]byte) (Result, error) {
 		}
 		res.Removed = append(res.Removed, p)
 		res.Warnings = append(res.Warnings,
-			fmt.Sprintf("%s was a legacy agent shim; wrote %s.bak and removed it", p, p))
+			fmt.Sprintf("%s was a legacy agent shim; wrote %s and removed it", p, bak))
 	}
 	return res, nil
 }
