@@ -59,8 +59,10 @@ nav = [
   ] },
   { "Release Notes" = [
     "release-notes/index.md",
-    { "1.20.0 — Reliable Headless Runs, Cross-Branch Data" = "release-notes/RELEASE-NOTES-1.20.0.md" },
+    { "1.23.0 — The Answer, Not the Warnings" = "release-notes/RELEASE-NOTES-1.23.0.md" },
+    { "1.22.0 — Validation Becomes a Gate" = "release-notes/RELEASE-NOTES-1.22.0.md" },
     { "1.21.0 — One Run, One Observation" = "release-notes/RELEASE-NOTES-1.21.0.md" },
+    { "1.20.0 — Reliable Headless Runs, Cross-Branch Data" = "release-notes/RELEASE-NOTES-1.20.0.md" },
     { "1.19.0 — Custom Frontmatter Fields, Indexed" = "release-notes/RELEASE-NOTES-1.19.0.md" },
     { "1.18.0 — The Agent Token Leaves the WebSocket URL" = "release-notes/RELEASE-NOTES-1.18.0.md" },
     { "1.17.1 — Announcements Drop the Evidence Path List" = "release-notes/RELEASE-NOTES-1.17.1.md" },

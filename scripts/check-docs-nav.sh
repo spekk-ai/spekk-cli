@@ -18,7 +18,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 NAV="zensical.toml"
 NOTES_DIR="docs/release-notes"
 
-on_disk=$(find "$NOTES_DIR" -name 'RELEASE-NOTES-*.md' -printf '%f\n' | sort)
+# -printf is a GNU extension. BSD find, which is the find on macOS, refuses
+# it, and the script then read an empty list and reported every nav entry as
+# orphaned. Strip the directory with sed instead, which every find supports.
+on_disk=$(find "$NOTES_DIR" -name 'RELEASE-NOTES-*.md' | sed 's|.*/||' | sort)
 in_nav=$(grep -oE 'release-notes/RELEASE-NOTES-[^"]+\.md' "$NAV" | sed 's|release-notes/||' | sort -u)
 
 missing=$(comm -23 <(echo "$on_disk") <(echo "$in_nav"))
@@ -37,6 +40,6 @@ if [ -n "$orphaned" ]; then
 fi
 
 if [ "$status" -eq 0 ]; then
-    echo "check-docs-nav: clean ($(echo "$on_disk" | wc -l) release notes, all listed)."
+    echo "check-docs-nav: clean ($(echo "$on_disk" | wc -l | tr -d ' ') release notes, all listed)."
 fi
 exit "$status"

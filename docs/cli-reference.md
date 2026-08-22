@@ -201,6 +201,15 @@ spekk validate --specs-dir ./my-specs
 - No duplicate spec or assertion ids
 - Lock state: only `in_progress` may carry a `locked-by`, and it need not carry one
 - Parent specs carry no rolled-up `status` field (absent, or the literal `draft`)
+- A spec directory that holds assertion files but no main spec file. The parser drops the whole directory, so every assertion in it is lost from the queue
+- A path named `assertions` that is not a directory, or an `assertions/` directory that cannot be read. Both make the spec's assertions silently absent
+
+A spec directory with **no** `assertions/` directory is not a fault. It is a spec nobody has broken into assertions yet, and it parses correctly.
+
+**Warnings.** These print to stderr and never change the exit code, because a branch can be legitimately absent for a moment and a dead lock is not a broken spec tree:
+
+- A `branch` value that matches no ref, on an assertion that is neither `done` nor `draft`. `spekk next` filters the queue by this value, so such an assertion is unreachable — reported once per distinct value, with a count
+- A `locked-by` that is stale. A lock is a live claim by a builder session, so an old one, or one with no datable tail, names a session that is gone
 
 **Exit codes:**
 
@@ -212,6 +221,18 @@ spekk validate --specs-dir ./my-specs
 | Any violation | 1 | One failure line per violation (file + problem), sorted by file then message |
 
 A malformed field fails the parse of the **whole tree**, not just its own file, so one bad line on the default branch stops every command that rebuilds the index. Run this before you commit an edit to `specs/` — see [Validation in CI and pre-commit](ci.md).
+
+### Skipped files, and where the detail lives
+
+`spekk next`, `spekk list`, `spekk status`, and `spekk show` are lenient by design: a spec or assertion file they cannot parse is skipped, so one typo never stalls the whole queue. Each prints a single line to stderr to say that it happened:
+
+```
+Warning: 3 spec files skipped and missing from the queue. Run "spekk validate" for detail.
+```
+
+One line, whatever the number of files. The detail belongs to `spekk validate`, which names each file and its exact fault, and every skip the parser can make is reachable there. The summary goes to stderr, so `--json`, `--csv`, and `--tsv` output stays machine-readable.
+
+A skipped file is missing from the work queue, so it is silent work loss until somebody looks. That is why the line is printed at all rather than suppressed.
 
 ---
 
