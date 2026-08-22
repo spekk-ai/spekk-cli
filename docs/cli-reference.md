@@ -201,15 +201,15 @@ spekk validate --specs-dir ./my-specs
 - No duplicate spec or assertion ids
 - Lock state: only `in_progress` may carry a `locked-by`, and it need not carry one
 - Parent specs carry no rolled-up `status` field (absent, or the literal `draft`)
-- A spec directory that holds assertion files but no main spec file. The parser drops the whole directory, so every assertion in it is lost from the queue
-- A path named `assertions` that is not a directory, or an `assertions/` directory that cannot be read. Both make the spec's assertions silently absent
+- A spec directory that has assertion files but no main spec file. The parser removes the full directory, so each assertion in it is not in the queue
+- A path with the name `assertions` that is not a directory, or an `assertions/` directory that spekk cannot read. Each one removes the assertions of that spec, and gives no message
 
-A spec directory with **no** `assertions/` directory is not a fault. It is a spec nobody has broken into assertions yet, and it parses correctly.
+A spec directory with **no** `assertions/` directory is not a fault. It is a spec with no assertions, and it parses correctly.
 
-**Warnings.** These print to stderr and never change the exit code, because a branch can be legitimately absent for a moment and a dead lock is not a broken spec tree:
+**Warnings.** These go to stderr and do not change the exit code. A branch can be absent for a short time, and an old lock is not an incorrect spec tree:
 
-- A `branch` value that matches no ref, on an assertion that is neither `done` nor `draft`. `spekk next` filters the queue by this value, so such an assertion is unreachable — reported once per distinct value, with a count
-- A `locked-by` that is stale. A lock is a live claim by a builder session, so an old one, or one with no datable tail, names a session that is gone
+- A `branch` value that no ref matches, on an assertion that is not `done` and not `draft`. `spekk next` selects the queue by this value, so it cannot find such an assertion. `validate` reports each different value one time, with a count
+- A `locked-by` value that is old. A lock shows that a builder session holds the assertion now. Thus an old value, or a value with no date, names a session that stopped
 
 **Exit codes:**
 
@@ -222,17 +222,19 @@ A spec directory with **no** `assertions/` directory is not a fault. It is a spe
 
 A malformed field fails the parse of the **whole tree**, not just its own file, so one bad line on the default branch stops every command that rebuilds the index. Run this before you commit an edit to `specs/` — see [Validation in CI and pre-commit](ci.md).
 
-### Skipped files, and where the detail lives
+### Skipped files
 
-`spekk next`, `spekk list`, `spekk status`, and `spekk show` are lenient by design: a spec or assertion file they cannot parse is skipped, so one typo never stalls the whole queue. Each prints a single line to stderr to say that it happened:
+`spekk next`, `spekk list`, `spekk status`, and `spekk show` are permissive on purpose. Each one skips a spec file or an assertion file that it cannot parse, so one error does not stop the queue. Each one writes a single line to stderr to report this:
 
 ```
 Warning: 3 spec files skipped and missing from the queue. Run "spekk validate" for detail.
 ```
 
-One line, whatever the number of files. The detail belongs to `spekk validate`, which names each file and its exact fault, and every skip the parser can make is reachable there. The summary goes to stderr, so `--json`, `--csv`, and `--tsv` output stays machine-readable.
+The line is the same for any number of files. `spekk validate` gives the detail. It names each file and its fault, and it reports each skip that the parser can make.
 
-A skipped file is missing from the work queue, so it is silent work loss until somebody looks. That is why the line is printed at all rather than suppressed.
+The line goes to stderr. Thus `--json`, `--csv`, and `--tsv` output stays machine-readable.
+
+A skipped file is not in the work queue. Thus you lose that work until a person examines the tree, and this is why the commands report the count.
 
 ---
 
@@ -433,7 +435,7 @@ spekk observer uninstall-cron     # Remove scheduled cron entries
 | `--quiet` | Minimal output mode |
 | `--headless` | Run Claude in non-interactive mode (no TTY); set automatically by `install-cron` |
 
-Detects when code changes but specs don't update (or vice versa). Helps keep specs and implementation synchronized.
+Detects a change to the code that the specs do not record, and a change to the specs that the code does not implement. Keeps the specs and the implementation in agreement.
 
 **A run files one observation.** It searches until it finds drift, files it, and stops. Drift found today is still there tomorrow, so the second finding is the next run's first — run it again to continue. A run says which areas it had not reached, so a short run is never mistaken for a clean bill of health.
 
@@ -471,7 +473,7 @@ spekk observer uninstall-cron                                      # Remove spek
 
 A run files one observation whatever the interval, so this flag sets how many observations arrive, not how thorough a run is. The default of once a day is simply a rate most people can keep up with; shorten it when you want to work through drift faster.
 
-The installed entries run in the project directory, use `claude`'s absolute path (resolved at install time — fails clearly if `claude` isn't found), run headless (no TTY), guard against overlapping sessions via a project-scoped lock file, and append output to `.spekk/observer.log` / `.spekk/observer-consolidate.log`. `uninstall-cron` removes only the entries it added, identified by a `# spekk-observer` marker.
+The installed entries run in the project directory, use `claude`'s absolute path (resolved at install time, and reported clearly if `claude` is not found), run headless (no TTY), guard against overlapping sessions via a project-scoped lock file, and append output to `.spekk/observer.log` / `.spekk/observer-consolidate.log`. `uninstall-cron` removes only the entries it added, identified by a `# spekk-observer` marker.
 
 ---
 

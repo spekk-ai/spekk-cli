@@ -8,13 +8,13 @@ What's new in each version of Spekk CLI.
 
 ---
 
-## [1.23.0 -- The Answer, Not the Warnings](RELEASE-NOTES-1.23.0.md)
+## [1.23.0 -- Quieter Output and a Real Branch Check](RELEASE-NOTES-1.23.0.md)
 
-Two warnings had grown loud enough to hide the output they came with. The `branch` guard matched a value against fourteen fixed words and never looked at git, so it passed a typo that stranded an assertion outside the queue and warned on team names git accepts; it is deleted, and `spekk validate` reads the refs instead. The parser's per-file skip warnings become one line, and `spekk next` stops printing them twice. `validate` also stops demanding a `locked-by` on an `in_progress` assertion, which no coach could mint, and reports a stale lock instead. Installs decide ownership by path and scope `--project` to the repository. **`spekk validate` gained three failure conditions — see the upgrading note before raising a pin.**
+Two warnings made the output difficult to read. The branch guard compared a value with 14 fixed words and did not read git, so it accepted a branch that does not exist and refused team names that git accepts. This release deletes the guard, and `spekk validate` reads the refs instead. The parser now gives one line for the files that it skips, and `spekk next` no longer writes each warning two times. `validate` also stops making a `locked-by` value necessary on an `in_progress` assertion, which a coach cannot make, and it reports an old lock instead. Installs identify a managed file by its path, and `--project` uses the repository root. **`spekk validate` has three new failure conditions. Read the upgrading section before you change a pin.**
 
 ## [1.22.0 -- Validation Becomes a Gate](RELEASE-NOTES-1.22.0.md)
 
-`spekk validate` existed already; nothing made it run. A published `spekk-validate` pre-commit hook catches a malformed field before the commit exists, and a CI gate catches what the hook misses in a fresh clone or under `--no-verify`. Every agent path that writes to `specs/` now names the command, including the observer's remedy path, which had no validation step and put a broken `depends-on` on a default branch. Parse errors say what they cost instead of naming the field alone. The `branch` warning stops firing on conventional-commits prefixes and on a dot, so `feat/login` and `release/1.22.0` pass.
+`spekk validate` was available before this release, but nothing made it run. A `spekk-validate` pre-commit hook now finds an incorrect field before the commit exists, and a CI gate finds what the hook does not: a new clone without `pre-commit install`, and `git commit --no-verify`. Each agent path that writes to `specs/` now names the command. This includes the observer remedy path, which had no validation step and put an incorrect `depends-on` value on a default branch. Parse errors now give the effect and name the command. The `branch` warning accepts conventional-commits prefixes and a dot, so `feat/login` and `release/1.22.0` pass.
 
 ## [1.21.0 -- One Run, One Observation](RELEASE-NOTES-1.21.0.md)
 

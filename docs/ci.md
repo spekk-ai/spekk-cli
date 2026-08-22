@@ -80,7 +80,7 @@ Pin `SPEKK_VERSION` to a release tag. Without it the install takes the latest re
 |---|---|---|
 | Valid tree | 0 | Check passes; a one-line summary is printed |
 | No `specs/` directory | 0 | Check passes — `validate: 0 specs, 0 assertions OK` |
-| Warnings only (a `branch` that matches no ref, a stale lock, or skipped files) | 0 | Check passes; warnings print to stderr |
+| Warnings only (a `branch` that no ref matches, an old lock, or skipped files) | 0 | Check passes; warnings go to stderr |
 | Any invariant violated | 1 | Check fails, naming the file and the offending value |
 
 Warnings do not fail the check. A repository adopting spekk usually has some, and failing on them on the first day teaches people to ignore the result.
