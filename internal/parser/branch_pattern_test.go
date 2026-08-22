@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"io"
-	"os"
 	"testing"
 )
 
@@ -40,24 +38,12 @@ func TestBranchRefusesWhatGitRefuses(t *testing.T) {
 // reached stderr on every command that reads the spec tree, including the
 // spekk next of each builder iteration.
 func TestBranchValidationIsSilent(t *testing.T) {
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	saved := os.Stderr
-	os.Stderr = w
-	for _, branch := range []string{"main", "dana/apx-12-thing", "temporary-target", "/leading"} {
-		_ = validateBranch(branch, "specs/demo/assertions/a.md")
-	}
-	os.Stderr = saved
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(out) != 0 {
+	out := captureStderr(t, func() {
+		for _, branch := range []string{"main", "dana/apx-12-thing", "temporary-target", "/leading"} {
+			_ = validateBranch(branch, "specs/demo/assertions/a.md")
+		}
+	})
+	if out != "" {
 		t.Errorf("validateBranch must write nothing to stderr, got:\n%s", out)
 	}
 }

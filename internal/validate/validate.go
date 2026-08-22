@@ -93,7 +93,11 @@ func Run(specsDir string) (*Result, error) {
 
 		relSpecFilePath := filepath.ToSlash(filepath.Join("specs", specDirName, specDirName+".md"))
 
-		if raw, readErr := os.ReadFile(specFilePath); readErr == nil {
+		specFileMissing := false
+		specDirHasAssertions := false
+		if raw, readErr := os.ReadFile(specFilePath); readErr != nil {
+			specFileMissing = true
+		} else {
 			content := string(raw)
 			if hasFrontmatter(content) {
 				relPath := relSpecFilePath
@@ -112,10 +116,27 @@ func Run(specsDir string) (*Result, error) {
 			}
 		}
 
-		assertionEntries, readErr := os.ReadDir(assertionsDirPath)
-		if readErr != nil {
+		// A path named assertions that is not a directory, or one that cannot
+		// be read, makes the parser drop every assertion under this spec in
+		// silence. A missing assertions/ directory is not either of those: it
+		// is a spec nobody has broken into assertions yet, which parses fine.
+		relAssertionsPath := filepath.ToSlash(filepath.Join("specs", specDirName, "assertions"))
+		if info, statErr := os.Stat(assertionsDirPath); statErr == nil && !info.IsDir() {
+			result.addFailure(relAssertionsPath, "expected a directory")
+			continue
+		} else if statErr != nil && !os.IsNotExist(statErr) {
+			result.addFailure(relAssertionsPath, "cannot read directory: "+statErr.Error())
 			continue
 		}
+
+		assertionEntries, readErr := os.ReadDir(assertionsDirPath)
+		if readErr != nil {
+			if !os.IsNotExist(readErr) {
+				result.addFailure(relAssertionsPath, "cannot read directory: "+readErr.Error())
+			}
+			continue
+		}
+
 		sort.Slice(assertionEntries, func(i, j int) bool {
 			return assertionEntries[i].Name() < assertionEntries[j].Name()
 		})
@@ -137,6 +158,7 @@ func Run(specsDir string) (*Result, error) {
 				// Not every .md file is a spec file; files with no frontmatter are ignored.
 				continue
 			}
+			specDirHasAssertions = true
 
 			assertion, parseErr := parser.ParseAssertionContent(relAPath, content)
 			if parseErr != nil {
@@ -148,6 +170,15 @@ func Run(specsDir string) (*Result, error) {
 			assertions = append(assertions, *assertion)
 
 			checkLockState(*assertion, result)
+		}
+
+		// The parser skips a whole spec directory that holds assertion files
+		// but no main spec file, so every assertion in it is lost from the
+		// queue. Report it once, against the file that is missing. The flag is
+		// set only for a .md file that carries frontmatter, which is the same
+		// condition the parser uses to decide the directory is a spec at all.
+		if specFileMissing && specDirHasAssertions {
+			result.addFailure(relSpecFilePath, "spec directory has assertion files but no main spec file")
 		}
 	}
 

@@ -170,6 +170,9 @@ func runParser(args []string) {
 		fmt.Println(string(out))
 		os.Exit(1)
 	}
+	if summary := result.WarningSummary(); summary != "" {
+		fmt.Fprintln(os.Stderr, summary)
+	}
 
 	if len(result.Specs) == 0 {
 		out, _ := parser.FormatEmpty()
@@ -347,6 +350,9 @@ EXAMPLES:
 		out, _ := parser.FormatError(err.Error())
 		fmt.Fprintln(stdout, string(out))
 		return 1
+	}
+	if summary := result.WarningSummary(); summary != "" {
+		fmt.Fprintln(stderr, summary)
 	}
 
 	// Apply status filter if requested.
