@@ -3,20 +3,52 @@ package parser
 import (
 	"io"
 	"os"
-	"strings"
 	"testing"
 )
 
-// captureStderr runs fn with os.Stderr redirected and returns what it wrote.
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
+// validateBranch judges no naming convention, so any name git accepts passes.
+// A list of accepted <type>/ prefixes warned on every other shape, which
+// passed the typo it was meant to catch and warned on the team names it was
+// not. internal/validate reads the refs instead.
+func TestBranchAcceptsAnyNameGitAccepts(t *testing.T) {
+	accepted := []string{
+		"main", "master", "develop",
+		"feature/list-filter", "feat/list-filter", "release/1.22.0",
+		"dana/apx-12-retry-billing-webhook", "sam/PROJ-441",
+		"temporary-target", "myfeat/thing", "feat/v2.0-spike",
+	}
+	for _, branch := range accepted {
+		if err := validateBranch(branch, "specs/demo/assertions/a.md"); err != nil {
+			t.Errorf("validateBranch(%q) must be accepted, got: %v", branch, err)
+		}
+	}
+}
+
+// The hard errors stay: each value below is one git itself refuses.
+func TestBranchRefusesWhatGitRefuses(t *testing.T) {
+	for _, branch := range []string{
+		"/leading", "trailing/", "feat/thing space",
+		"release/1..22", "feat/thing.", "feat/thing.lock",
+	} {
+		if err := validateBranch(branch, "specs/demo/assertions/a.md"); err == nil {
+			t.Errorf("validateBranch(%q) must be refused: git refuses it too", branch)
+		}
+	}
+}
+
+// The parser owns no output decision for this field. Anything it printed here
+// reached stderr on every command that reads the spec tree, including the
+// spekk next of each builder iteration.
+func TestBranchValidationIsSilent(t *testing.T) {
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	saved := os.Stderr
 	os.Stderr = w
-	fn()
+	for _, branch := range []string{"main", "dana/apx-12-thing", "temporary-target", "/leading"} {
+		_ = validateBranch(branch, "specs/demo/assertions/a.md")
+	}
 	os.Stderr = saved
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
@@ -25,94 +57,7 @@ func captureStderr(t *testing.T, fn func()) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(out)
-}
-
-// The accepted list covers two conventions, because a project selects one.
-// Before this, the list accepted gitflow only, so each assertion in a
-// conventional-commits project got a warning. This repository gave 73.
-func TestStandardBranchesWarnForNeitherConvention(t *testing.T) {
-	accepted := []string{
-		// standalone
-		"main", "master", "develop",
-		// gitflow
-		"feature/list-filter", "bugfix/parser-crash", "hotfix/urgent", "release/1.22.0",
-		// conventional commits
-		"feat/list-filter", "fix/parser-crash", "chore/cleanup", "docs/ci-page",
-		"refactor/index", "test/coverage", "perf/query", "build/release",
-		"ci/workflows", "style/format",
-	}
-	for _, branch := range accepted {
-		out := captureStderr(t, func() {
-			if err := validateBranch(branch, "specs/demo/assertions/a.md"); err != nil {
-				t.Errorf("validateBranch(%q) returned an error: %v", branch, err)
-			}
-		})
-		if out != "" {
-			t.Errorf("%q must not warn, got:\n%s", branch, out)
-		}
-	}
-}
-
-// The warning keeps its function. A value in neither convention is usually a
-// bare name or a spelling error, and such a field usually names no branch.
-// The first two examples below come from this repository.
-func TestBareBranchNamesStillWarn(t *testing.T) {
-	for _, branch := range []string{"temporary-target", "observer-reimpl", "feture/typo"} {
-		out := captureStderr(t, func() {
-			if err := validateBranch(branch, "specs/demo/assertions/a.md"); err != nil {
-				t.Errorf("validateBranch(%q) returned an error: %v", branch, err)
-			}
-		})
-		if !strings.Contains(out, "non-standard pattern") {
-			t.Errorf("%q must warn, got: %q", branch, out)
-		}
-	}
-}
-
-// The old message listed four values, and the pattern accepted seven, so
-// develop, master, and release/ were accepted and not documented. Both now
-// come from the same two lists. This test fails if they disagree again.
-func TestWarningNamesEveryAcceptedValue(t *testing.T) {
-	out := captureStderr(t, func() {
-		_ = validateBranch("temporary-target", "specs/demo/assertions/a.md")
-	})
-	for _, name := range standardBranchNames {
-		if !strings.Contains(out, name) {
-			t.Errorf("warning must name the accepted branch %q, got:\n%s", name, out)
-		}
-	}
-	for _, typ := range standardBranchTypes {
-		if !strings.Contains(out, typ) {
-			t.Errorf("warning must name the accepted type %q, got:\n%s", typ, out)
-		}
-	}
-}
-
-// Git permits a dot in a branch name, and a release branch usually carries a
-// version. Git's rules for dots must continue to apply.
-func TestBranchDotRules(t *testing.T) {
-	for _, branch := range []string{"release/1.22.0", "feat/v2.0-spike"} {
-		if err := validateBranch(branch, "specs/demo/assertions/a.md"); err != nil {
-			t.Errorf("validateBranch(%q) must be accepted, got: %v", branch, err)
-		}
-	}
-	for _, branch := range []string{"release/1..22", "feat/thing.", "feat/thing.lock"} {
-		if err := validateBranch(branch, "specs/demo/assertions/a.md"); err == nil {
-			t.Errorf("validateBranch(%q) must be refused: git refuses it too", branch)
-		}
-	}
-}
-
-// A short type must not match inside a longer name. A match on a substring
-// instead of a prefix would accept an invalid value such as "myfeat/x".
-func TestBranchTypesMatchAsAPrefixOnly(t *testing.T) {
-	for _, branch := range []string{"myfeat/thing", "notfix/thing", "xmain"} {
-		out := captureStderr(t, func() {
-			_ = validateBranch(branch, "specs/demo/assertions/a.md")
-		})
-		if !strings.Contains(out, "non-standard pattern") {
-			t.Errorf("%q must warn: the type is a prefix, not a substring; got: %q", branch, out)
-		}
+	if len(out) != 0 {
+		t.Errorf("validateBranch must write nothing to stderr, got:\n%s", out)
 	}
 }

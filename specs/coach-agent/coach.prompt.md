@@ -93,16 +93,27 @@ Before asking questions, scan the spec landscape to see:
 - Would this update an existing spec or create a new one?
 - Are there conflicts or overlaps with existing specs?
 
-Use `spekk list` for filtered enumeration — it's far cheaper than loading the full spec tree:
+Use `spekk query` to find an assertion by keyword or by any metadata field. It reads `.spekk/index.db`, which the command refreshes first, and it gives you whole rows you can act on:
+
+```bash
+spekk query "SELECT id, status, file FROM assertions WHERE title LIKE '%keyword%'"
+spekk query "SELECT id, title FROM assertions WHERE status = 'failed' AND branch = 'main'"
+spekk query "SELECT parent_id, COUNT(*) FROM assertions WHERE status != 'done' GROUP BY parent_id"
+```
+
+Tables: `specs(id, title, status, priority, branch, file)`, `assertions(id, parent_id, title, status, priority, branch, file)`, `depends_on(assertion_id, depends_on_id)`.
+
+Do **not** pipe `spekk list --json` into `grep`. The JSON is indented, so grep returns the one matching line — a bare `"title": "..."` with no `id` and no `file` — and it matches a keyword in a path or a parent id just as readily as one in a title.
+
+Use `spekk list` to enumerate one status as a table:
 
 ```bash
 spekk list --status in_progress   # what's actively being worked on?
 spekk list --status draft         # what's planned but not yet started?
 spekk list --status not_started   # what's queued up?
-spekk list --json | grep "keyword"  # find assertions by keyword without loading every file
 ```
 
-For keyword search across spec content (not just assertion metadata):
+For a search of spec **prose**, use grep. No index table holds an assertion body, so this is the one search `spekk query` cannot serve:
 ```bash
 grep -rl "keyword" specs/
 ```
@@ -453,12 +464,13 @@ Use proper format:
 **Status Rules (assertions only):**
 - Parent specs do NOT have a `status` field - parent status is computed at runtime by the parser from child assertions
 - New assertions: Always use `status: not_started`
-- Updating assertion with `status: done`: **Change to `status: in_progress`**
-  - This tells builder to re-implement with new requirements
+- Updating assertion with `status: done`: **Change to `status: not_started`**
+  - This returns the assertion to the work queue, so the builder re-implements it against the new requirements
   - Critical: updated specs must trigger re-work
-- Updating assertion with `status: failed`: **Change to `status: in_progress`**
+- Updating assertion with `status: failed`: **Change to `status: not_started`**
   - This gives builder fresh start after requirements change
 - Updating assertion already `in_progress` or `not_started`: keep as-is
+- Never write a `locked-by` value. A lock names a live builder session, and you have no session to name. `not_started` needs no lock, which is why it is the value above.
 
 **Computed parent status (for reference - the parser handles this):**
 - If ANY child assertion is `failed` → parent becomes `failed`

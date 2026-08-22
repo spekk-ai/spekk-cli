@@ -492,7 +492,7 @@ func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
 
 // runValidate implements the `spekk validate` subcommand.
 func runValidate(args []string) {
-	code := execValidate(args, os.Stdout, "")
+	code := execValidate(args, os.Stdout, os.Stderr, "")
 	if code != 0 {
 		os.Exit(code)
 	}
@@ -513,20 +513,25 @@ OPTIONS:
 Checks (all in one pass): frontmatter well-formedness (no silent skips — a
 malformed spec or assertion file is a failure here, unlike "spekk next"),
 parent resolution, depends-on validity (kebab-case, exists, no self-reference,
-no cycles), no duplicate spec or assertion ids, lock-state pairing
-(in_progress requires locked-by; every other status forbids it), and parent
-specs carrying no rolled-up status field (absent, or the literal value
-"draft").
+no cycles), no duplicate spec or assertion ids, lock state (only in_progress
+may carry a locked-by, and it need not carry one), and parent specs carrying
+no rolled-up status field (absent, or the literal value "draft").
 
 Exit 0 and a one-line summary on stdout when everything is valid. Exit 1 and
 one plain-text failure line per violation (file + problem), sorted by file
 then message, when anything is invalid.
+
+Warnings go to stderr and never change the exit code: a branch value that
+matches no branch on an assertion that is not done, and a builder lock that is
+stale.
 `
 
 // execValidate is the testable core of runValidate. It writes the report to
 // stdout and returns an exit code (0 = pass, 1 = at least one failure).
+// Warnings go to stderr, so stdout stays clean and diffable for CI and they
+// never change the exit code.
 // specsDir: if non-empty, skip findSpecsDir() and use this directly.
-func execValidate(args []string, stdout io.Writer, specsDir string) int {
+func execValidate(args []string, stdout, stderr io.Writer, specsDir string) int {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
 		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
@@ -548,6 +553,10 @@ func execValidate(args []string, stdout io.Writer, specsDir string) int {
 	if err != nil {
 		fmt.Fprintf(stdout, "validate: %s\n", err.Error())
 		return 1
+	}
+
+	for _, w := range result.Warnings {
+		fmt.Fprintf(stderr, "Warning: %s\n", w)
 	}
 
 	if result.Passed() {

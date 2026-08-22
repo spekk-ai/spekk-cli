@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +53,7 @@ func TestExecValidate_CleanTree_ExitZero(t *testing.T) {
 	specsDir := makeCleanValidateFixture(t)
 	var stdout bytes.Buffer
 
-	code := execValidate(nil, &stdout, specsDir)
+	code := execValidate(nil, &stdout, io.Discard, specsDir)
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d; stdout: %q", code, stdout.String())
@@ -63,7 +64,7 @@ func TestExecValidate_CleanTree_ExitZero(t *testing.T) {
 }
 
 // TestExecValidate_BrokenTree_ExitNonZero drives the same CLI path over a
-// fixture with an in_progress assertion missing locked-by, confirming the
+// fixture with a done assertion that still carries a lock, confirming the
 // failure surfaces on stdout with a non-zero exit code.
 func TestExecValidate_BrokenTree_ExitNonZero(t *testing.T) {
 	specsDir := makeCleanValidateFixture(t)
@@ -73,7 +74,8 @@ id: my-assertion
 parent: my-spec
 created: 2026-01-01T00:00:00Z
 priority: 1
-status: in_progress
+status: done
+locked-by: builder-host-1-1700000000
 ---
 # My Assertion
 `
@@ -82,12 +84,12 @@ status: in_progress
 	}
 
 	var stdout bytes.Buffer
-	code := execValidate(nil, &stdout, specsDir)
+	code := execValidate(nil, &stdout, io.Discard, specsDir)
 
 	if code == 0 {
 		t.Fatal("expected non-zero exit code for a broken tree")
 	}
-	if !strings.Contains(stdout.String(), "locked-by is missing") {
+	if !strings.Contains(stdout.String(), "locked-by is set") {
 		t.Errorf("expected failure line about locked-by, got: %q", stdout.String())
 	}
 }
@@ -96,7 +98,7 @@ status: in_progress
 // specsDir resolution.
 func TestExecValidate_Help_ExitZero(t *testing.T) {
 	var stdout bytes.Buffer
-	code := execValidate([]string{"--help"}, &stdout, "")
+	code := execValidate([]string{"--help"}, &stdout, io.Discard, "")
 	if code != 0 {
 		t.Errorf("expected exit code 0 for --help, got %d", code)
 	}

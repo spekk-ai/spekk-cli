@@ -199,7 +199,7 @@ spekk validate --specs-dir ./my-specs
 - Parent resolution
 - `depends-on` validity: kebab-case, the target exists, no self-reference, no cycles
 - No duplicate spec or assertion ids
-- Lock-state pairing: `in_progress` requires `locked-by`; every other status forbids it
+- Lock state: only `in_progress` may carry a `locked-by`, and it need not carry one
 - Parent specs carry no rolled-up `status` field (absent, or the literal `draft`)
 
 **Exit codes:**

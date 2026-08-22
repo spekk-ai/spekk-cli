@@ -327,48 +327,29 @@ func validateTimestamp(value string) bool {
 // kebabCasePattern matches valid kebab-case identifiers.
 var kebabCasePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
+// IsKebabCase reports whether s is a valid spec or assertion identifier. It is
+// the one definition of that rule, so a caller outside this package checks the
+// same thing the parser does instead of copying the pattern.
+func IsKebabCase(s string) bool {
+	return kebabCasePattern.MatchString(s)
+}
+
 // validBranchPattern matches valid git branch name characters.
 //
 // A dot is permitted, because git permits it and a release branch usually
-// carries a version. Before this, release/1.22.0 was an error, and release/
-// was in the standard prefix list below. Git's own rules for dots are applied
-// in validateBranch, because a character class cannot express them.
+// carries a version. Git's own rules for dots are applied in validateBranch,
+// because a character class cannot express them.
 var validBranchPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/._-]*$`)
 
-// standardBranchNames are branch names that stand alone, with no <type>/
-// prefix.
-var standardBranchNames = []string{"main", "master", "develop"}
-
-// standardBranchTypes are the accepted <type> segments of a <type>/<name>
-// branch.
+// validateBranch reports a branch value that git itself would refuse. It
+// judges no naming convention.
 //
-// The list covers two conventions, because both are in common use and a
-// project selects one:
-//
-//   - gitflow: feature/, bugfix/, hotfix/, release/
-//   - conventional commits: feat/, fix/, chore/, docs/, and the others
-//
-// Before this, the list accepted gitflow only. A project that uses feat/ then
-// got a warning on each assertion with the field. This repository uses feat/
-// and gave 73 warnings on its own specs.
-//
-// The list is permissive on purpose. The field records where work occurs, and
-// the team selects the vocabulary. The warning keeps its function: it reports
-// a value in neither convention, such as the bare name "temporary-target" or
-// a spelling error. Such a value usually names no branch.
-var standardBranchTypes = []string{
-	"build", "bugfix", "chore", "ci", "docs", "feat", "feature", "fix",
-	"hotfix", "perf", "refactor", "release", "style", "test",
-}
-
-// standardBranchPattern comes from the two lists above, so the pattern and
-// the warning text stay in agreement.
-var standardBranchPattern = regexp.MustCompile(
-	`^(` + strings.Join(standardBranchNames, "|") + `|` +
-		strings.Join(standardBranchTypes, "/|") + `/)`)
-
-// validateBranch validates a branch field value. Returns an error for invalid branches
-// and prints a warning to stderr for non-standard patterns.
+// A list of accepted <type>/ prefixes stood here, and warned on every other
+// shape. It was a proxy for "this value names no branch", and a poor one: it
+// passed a typo such as feat/thing-nmae, which names nothing, and it warned on
+// dana/apx-12-thing, which git accepts and a team uses. The real check reads
+// the refs, so it belongs to validate, not to a pure per-file parse that runs
+// once per file. See internal/validate.
 func validateBranch(branch, filePath string) error {
 	if branch == "" {
 		return nil
@@ -384,13 +365,6 @@ func validateBranch(branch, filePath string) error {
 	// names that git accepts.
 	if strings.Contains(branch, "..") || strings.HasSuffix(branch, ".") || strings.HasSuffix(branch, ".lock") {
 		return fmt.Errorf("Field 'branch' is not a valid git branch name in %s\nFound: %q\nA branch name cannot contain '..', end with '.', or end with '.lock'.", filePath, branch)
-	}
-	if !standardBranchPattern.MatchString(branch) {
-		fmt.Fprintf(os.Stderr, "Warning: Field 'branch' uses non-standard pattern in %s\nFound: %q\nUse %s, or <type>/<name> where <type> is one of: %s\n",
-			filePath,
-			branch,
-			strings.Join(standardBranchNames, ", "),
-			strings.Join(standardBranchTypes, ", "))
 	}
 	return nil
 }
@@ -862,25 +836,29 @@ func detectCircularDependencies(assertions []Assertion) error {
 	return nil
 }
 
-// IsLockStale reports whether a lockedBy string represents a stale (>2 hour old) lock.
-// Returns true for empty or malformed lockedBy values.
+// lockLifetime is how long a builder's claim on an assertion stands. A builder
+// works one assertion at a time, so a claim older than this is almost always a
+// session that died rather than one still running.
+const lockLifetime = 2 * time.Hour
+
+// IsLockStale reports whether a lockedBy value names a claim that no longer
+// holds. A lock has the shape builder-{host}-{pid}-{unix-timestamp}, so the
+// last hyphen-separated field dates it.
+//
+// An empty or undatable value is stale: a claim nobody can date is a claim
+// nobody can trust.
 func IsLockStale(lockedBy string) bool {
 	if lockedBy == "" {
 		return true
 	}
 
 	parts := strings.Split(lockedBy, "-")
-	if len(parts) == 0 {
-		return true
-	}
-
-	tsStr := parts[len(parts)-1]
-	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	ts, err := strconv.ParseInt(parts[len(parts)-1], 10, 64)
 	if err != nil {
 		return true
 	}
 
-	return time.Now().Unix()-ts > 7200
+	return time.Since(time.Unix(ts, 0)) > lockLifetime
 }
 
 // FindOptions controls behaviour of FindNextAssertion.
