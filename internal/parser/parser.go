@@ -54,6 +54,14 @@ type Spec struct {
 type ParseResult struct {
 	Specs      []Spec
 	Assertions []Assertion
+
+	// Warnings records every spec or assertion file the walk skipped, one
+	// entry per file, in the order the walk met them. The parser does not
+	// print them: a caller that shows output decides whether a user sees a
+	// summary, and a caller that only rebuilds the index says nothing. While
+	// the parse printed them itself, spekk next emitted every warning twice,
+	// because it parses once for the index and once to answer.
+	Warnings []string
 }
 
 // frontmatter holds raw parsed YAML frontmatter fields. Scalar values live
@@ -562,6 +570,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 	var specs []Spec
 	var assertions []Assertion
+	var warnings []string
 
 	specIDsSeen := make(map[string]string) // id -> relative file path
 
@@ -612,7 +621,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 		// The main spec file must exist.
 		if _, statErr := os.Stat(specFilePath); os.IsNotExist(statErr) {
-			fmt.Fprintf(os.Stderr, "Warning: Spec %s/ has no main spec file %s.md — skipping.\n", specDirName, specDirName)
+			warnings = append(warnings, fmt.Sprintf("Spec %s/ has no main spec file %s.md — skipping.", specDirName, specDirName))
 			continue
 		}
 
@@ -620,7 +629,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 		spec, parseErr := parseSpec(relSpecFilePath, string(specFileRaw))
 		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Skipping malformed spec file %s: %s\n", relSpecFilePath, parseErr.Error())
+			warnings = append(warnings, fmt.Sprintf("Skipping malformed spec file %s: %s", relSpecFilePath, parseErr.Error()))
 		} else {
 			if existing, dup := specIDsSeen[spec.ID]; dup {
 				return nil, fmt.Errorf("duplicate spec id %q found in files: %s, %s", spec.ID, existing, relSpecFilePath)
@@ -630,19 +639,23 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 		}
 
 		// Check assertions directory.
+		// A spec directory with no assertions/ directory is a normal spec that
+		// nobody has broken into assertions yet. The spec is already in the
+		// result above, and spekk status shows it as 0/0 complete, so there is
+		// nothing to report. This once warned that the spec was "skipping",
+		// which was false on both counts.
 		assertDirInfo, statErr := os.Stat(assertionsDirPath)
 		if os.IsNotExist(statErr) {
-			fmt.Fprintf(os.Stderr, "Warning: Spec %s/ has no assertions/ directory — skipping.\n", specDirName)
 			continue
 		}
 		if statErr != nil || !assertDirInfo.IsDir() {
-			fmt.Fprintf(os.Stderr, "Warning: %s/assertions is not a directory — skipping.\n", specDirName)
+			warnings = append(warnings, fmt.Sprintf("%s/assertions is not a directory — skipping.", specDirName))
 			continue
 		}
 
 		assertionEntries, readAssertErr := os.ReadDir(assertionsDirPath)
 		if readAssertErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: cannot read assertions dir for %s: %s\n", specDirName, readAssertErr.Error())
+			warnings = append(warnings, fmt.Sprintf("cannot read assertions dir for %s: %s", specDirName, readAssertErr.Error()))
 			continue
 		}
 
@@ -663,7 +676,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 			aRaw, aReadErr := os.ReadFile(aFilePath)
 			if aReadErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Skipping unreadable assertion file %s: %s\n", relAFilePath, aReadErr.Error())
+				warnings = append(warnings, fmt.Sprintf("Skipping unreadable assertion file %s: %s", relAFilePath, aReadErr.Error()))
 				continue
 			}
 
@@ -676,13 +689,13 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 			assertion, aParseErr := parseAssertion(relAFilePath, aContent)
 			if aParseErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Skipping malformed assertion file %s: %s\n", relAFilePath, aParseErr.Error())
+				warnings = append(warnings, fmt.Sprintf("Skipping malformed assertion file %s: %s", relAFilePath, aParseErr.Error()))
 				continue
 			}
 
 			if existing, dup := assertionIDsSeen[assertion.ID]; dup {
-				fmt.Fprintf(os.Stderr, "Warning: Duplicate assertion id %q in spec %q: %s and %s — skipping second.\n",
-					assertion.ID, specDirName, existing, aFileName)
+				warnings = append(warnings, fmt.Sprintf("Duplicate assertion id %q in spec %q: %s and %s — skipping second.",
+					assertion.ID, specDirName, existing, aFileName))
 				continue
 			}
 			assertionIDsSeen[assertion.ID] = aFileName
@@ -733,7 +746,26 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 	return &ParseResult{
 		Specs:      specs,
 		Assertions: assertions,
+		Warnings:   warnings,
 	}, nil
+}
+
+// WarningSummary renders Warnings as the one line a command shows instead of
+// one line per skipped file. It returns "" when there is nothing to report, so
+// a caller prints it unconditionally and stays silent on a clean tree.
+//
+// The detail lives in spekk validate, which reports each of these as a failure
+// naming the file and the exact fault.
+func (r *ParseResult) WarningSummary() string {
+	if len(r.Warnings) == 0 {
+		return ""
+	}
+	noun := "spec files"
+	if len(r.Warnings) == 1 {
+		noun = "spec file"
+	}
+	return fmt.Sprintf("Warning: %d %s skipped and missing from the queue. Run \"spekk validate\" for detail.",
+		len(r.Warnings), noun)
 }
 
 // ParentStatusFromChildStatuses derives a spec's rolled-up status from its child

@@ -5,7 +5,7 @@ created: 2026-08-22T15:00:00Z
 priority: 1
 branch: fix/parser-warning-volume
 depends-on: parser-collects-warnings
-status: not_started
+status: done
 ---
 
 # `next`, `list`, `status`, and `show` Print One Line, Not One Per File

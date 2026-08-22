@@ -3,6 +3,7 @@ package status
 
 import (
 	"fmt"
+	"os"
 	"sort"
 
 	"github.com/spekk-ai/spekk-cli/internal/parser"
@@ -29,6 +30,9 @@ func Show(specsDir string) error {
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {
 		return err
+	}
+	if summary := result.WarningSummary(); summary != "" {
+		fmt.Fprintln(os.Stderr, summary)
 	}
 
 	if len(result.Specs) == 0 && len(result.Assertions) == 0 {

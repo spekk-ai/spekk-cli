@@ -4,7 +4,7 @@ parent: parser-warnings-belong-to-the-caller
 created: 2026-08-22T15:00:00Z
 priority: 1
 branch: fix/parser-warning-volume
-status: not_started
+status: done
 ---
 
 # `spekk validate` Reports Every Skip the Parser Records
