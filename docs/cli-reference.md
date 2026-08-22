@@ -201,6 +201,15 @@ spekk validate --specs-dir ./my-specs
 - No duplicate spec or assertion ids
 - Lock state: only `in_progress` may carry a `locked-by`, and it need not carry one
 - Parent specs carry no rolled-up `status` field (absent, or the literal `draft`)
+- A spec directory that has assertion files but no main spec file. The parser removes the full directory, so each assertion in it is not in the queue
+- A path with the name `assertions` that is not a directory, or an `assertions/` directory that spekk cannot read. Each one removes the assertions of that spec, and gives no message
+
+A spec directory with **no** `assertions/` directory is not a fault. It is a spec with no assertions, and it parses correctly.
+
+**Warnings.** These go to stderr and do not change the exit code. A branch can be absent for a short time, and an old lock is not an incorrect spec tree:
+
+- A `branch` value that no ref matches, on an assertion that is not `done` and not `draft`. `spekk next` selects the queue by this value, so it cannot find such an assertion. `validate` reports each different value one time, with a count
+- A `locked-by` value that is old. A lock shows that a builder session holds the assertion now. Thus an old value, or a value with no date, names a session that stopped
 
 **Exit codes:**
 
@@ -212,6 +221,20 @@ spekk validate --specs-dir ./my-specs
 | Any violation | 1 | One failure line per violation (file + problem), sorted by file then message |
 
 A malformed field fails the parse of the **whole tree**, not just its own file, so one bad line on the default branch stops every command that rebuilds the index. Run this before you commit an edit to `specs/` — see [Validation in CI and pre-commit](ci.md).
+
+### Skipped files
+
+`spekk next`, `spekk list`, `spekk status`, and `spekk show` are permissive on purpose. Each one skips a spec file or an assertion file that it cannot parse, so one error does not stop the queue. Each one writes a single line to stderr to report this:
+
+```
+Warning: 3 spec files skipped and missing from the queue. Run "spekk validate" for detail.
+```
+
+The line is the same for any number of files. `spekk validate` gives the detail. It names each file and its fault, and it reports each skip that the parser can make.
+
+The line goes to stderr. Thus `--json`, `--csv`, and `--tsv` output stays machine-readable.
+
+A skipped file is not in the work queue. Thus you lose that work until a person examines the tree, and this is why the commands report the count.
 
 ---
 
@@ -412,7 +435,7 @@ spekk observer uninstall-cron     # Remove scheduled cron entries
 | `--quiet` | Minimal output mode |
 | `--headless` | Run Claude in non-interactive mode (no TTY); set automatically by `install-cron` |
 
-Detects when code changes but specs don't update (or vice versa). Helps keep specs and implementation synchronized.
+Detects a change to the code that the specs do not record, and a change to the specs that the code does not implement. Keeps the specs and the implementation in agreement.
 
 **A run files one observation.** It searches until it finds drift, files it, and stops. Drift found today is still there tomorrow, so the second finding is the next run's first — run it again to continue. A run says which areas it had not reached, so a short run is never mistaken for a clean bill of health.
 
@@ -450,7 +473,7 @@ spekk observer uninstall-cron                                      # Remove spek
 
 A run files one observation whatever the interval, so this flag sets how many observations arrive, not how thorough a run is. The default of once a day is simply a rate most people can keep up with; shorten it when you want to work through drift faster.
 
-The installed entries run in the project directory, use `claude`'s absolute path (resolved at install time — fails clearly if `claude` isn't found), run headless (no TTY), guard against overlapping sessions via a project-scoped lock file, and append output to `.spekk/observer.log` / `.spekk/observer-consolidate.log`. `uninstall-cron` removes only the entries it added, identified by a `# spekk-observer` marker.
+The installed entries run in the project directory, use `claude`'s absolute path (resolved at install time, and reported clearly if `claude` is not found), run headless (no TTY), guard against overlapping sessions via a project-scoped lock file, and append output to `.spekk/observer.log` / `.spekk/observer-consolidate.log`. `uninstall-cron` removes only the entries it added, identified by a `# spekk-observer` marker.
 
 ---
 

@@ -8,6 +8,18 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.23.0 -- Quieter Output and a Real Branch Check](RELEASE-NOTES-1.23.0.md)
+
+Two warnings made the output difficult to read. The branch guard compared a value with 14 fixed words and did not read git, so it accepted a branch that does not exist and refused team names that git accepts. This release deletes the guard, and `spekk validate` reads the refs instead. The parser now gives one line for the files that it skips, and `spekk next` no longer writes each warning two times. `validate` also stops making a `locked-by` value necessary on an `in_progress` assertion, which a coach cannot make, and it reports an old lock instead. Installs identify a managed file by its path, and `--project` uses the repository root. **`spekk validate` has three new failure conditions. Read the upgrading section before you change a pin.**
+
+## [1.22.0 -- Validation Becomes a Gate](RELEASE-NOTES-1.22.0.md)
+
+`spekk validate` was available before this release, but nothing made it run. A `spekk-validate` pre-commit hook now finds an incorrect field before the commit exists, and a CI gate finds what the hook does not: a new clone without `pre-commit install`, and `git commit --no-verify`. Each agent path that writes to `specs/` now names the command. This includes the observer remedy path, which had no validation step and put an incorrect `depends-on` value on a default branch. Parse errors now give the effect and name the command. The `branch` warning accepts conventional-commits prefixes and a dot, so `feat/login` and `release/1.22.0` pass.
+
+## [1.21.0 -- One Run, One Observation](RELEASE-NOTES-1.21.0.md)
+
+The observer files a single observation and ends, and the schedule sets the rate rather than the run itself. `--interval` is removed with an error that names its replacement, `install-cron` defaults to once a day, and an interval longer than a day is refused instead of silently rendering a daily cron line. Dedup compares `affected` paths after normalization, so `parser.go`, `./parser.go`, and `parser.go:42` stop filing a second observation for drift already on a branch. A malformed glob in `.spekk/dont-flag.yaml` is now a parse error rather than a silently dead suppression.
+
 ## [1.20.0 -- Reliable Headless Runs, Cross-Branch Data](RELEASE-NOTES-1.20.0.md)
 
 Scheduled sandbox runs no longer die silently: the headless launcher prepends the spekk binary's directory to the child PATH, so bare `spekk` calls inside spawned sessions resolve under cron and systemd. Each observer skill gets its own lock file (a held lock prints one line instead of a silent exit 0). And `spekk list --cross-branch --json` exposes the merge-preview classification as machine-readable rows for observer agents.
