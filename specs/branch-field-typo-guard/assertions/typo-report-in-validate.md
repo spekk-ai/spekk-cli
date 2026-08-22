@@ -26,12 +26,13 @@ status: done
 - One line per **distinct** branch value, on stderr, with the number of assertions that carry it:
 
   ```
-  Warning: branch "feat/retry-billing-webhok" matches no branch (3 assertions not done)
+  Warning: branch "feat/retry-billing-webhok" does not exist (3 assertions not done). spekk next cannot reach that work.
   ```
 
 - Grouping by distinct value is required, not cosmetic. The parser defaults an absent `branch` field to `"main"`, so on a repository whose trunk is `master` every assertion without the field carries `"main"`. Grouped, that is one line. Ungrouped, it is one line per assertion.
 - Lines are sorted by the reported branch value, for stable and diffable output.
-- The count uses singular or plural correctly: `(1 assertion not done)`, `(3 assertions not done)`.
+- The count uses singular or plural correctly: `(1 assertion not done)`, `(3 assertions not done)`. The sentence that follows names the consequence and stays number-neutral, so the count is the only part that changes.
+- The message states the consequence, not only the fault. A reader who sees a branch name alone has to work out why it matters; a reader who is told `spekk next` cannot reach the work knows at once whether to act.
 
 ### Exit code
 - The report is a **warning, not a failure**. `validate` exits `0` when the only findings are these reports, and its stdout still holds only the `validate: N specs, M assertions OK` line. A branch that is legitimately absent for a moment, such as one not yet pushed or fetched, must never break CI.

@@ -304,7 +304,8 @@ func checkBranchRefs(assertions []parser.Assertion, refs []string, result *Resul
 			noun = "assertion"
 		}
 		result.Warnings = append(result.Warnings, fmt.Sprintf(
-			"branch %q matches no branch (%d %s not done)", value, counts[value], noun))
+			"branch %q does not exist (%d %s not done). spekk next cannot reach that work.",
+			value, counts[value], noun))
 	}
 }
 
