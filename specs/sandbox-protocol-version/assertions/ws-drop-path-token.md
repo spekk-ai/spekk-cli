@@ -8,7 +8,7 @@ status: done
 
 # Agent Auth Token Leaves the WebSocket URL Path
 
-**Cross-repo precondition — met.** The control host now authenticates the agent from the `Authorization` header alone: the `ws/agent/<token>/` route was removed and `connect()` reads no path token (spekk-app #148). The fleet was verified to send the header before that change shipped: all seven agents reported `protocol_version = "1.0"`, and this client sets `Authorization` and the protocol header in the same `HTTPHeader` block, so one proves the other.
+**Cross-repo precondition — met.** The control host now authenticates the agent from the `Authorization` header alone: the `ws/agent/<token>/` route was removed and `connect()` reads no path token. The fleet was verified to send the header before that change shipped: all seven agents reported `protocol_version = "1.0"`, and this client sets `Authorization` and the protocol header in the same `HTTPHeader` block, so one proves the other.
 
 The client sends the token in **both** the URL path and an `Authorization: Bearer` header, additively, for compatibility. Once the deployed control host authenticates on the header, the path token is pure liability: it is the last place the token appears in the URL, where it can leak into logs, proxies, and error strings. This assertion removes it.
 
