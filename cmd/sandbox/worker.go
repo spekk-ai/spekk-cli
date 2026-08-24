@@ -5,8 +5,6 @@ import (
 	"os"
 	"sync"
 	"syscall"
-
-	"github.com/coder/websocket"
 )
 
 type Worker struct {
@@ -16,7 +14,10 @@ type Worker struct {
 	current        *os.Process
 }
 
-func (w *Worker) Run(ctx context.Context, cfg Config, conn *websocket.Conn, pool *WorkerPool) {
+// Run drains this worker's queue. ctx is the process lifetime, so a turn
+// outlives the connection that carried its dispatch, and conns resolves
+// whichever connection is live at the moment a frame is sent.
+func (w *Worker) Run(ctx context.Context, cfg Config, conns *connHolder, pool *WorkerPool) {
 	defer pool.Release(w.agentSessionID)
 
 	for {
@@ -25,7 +26,7 @@ func (w *Worker) Run(ctx context.Context, cfg Config, conn *websocket.Conn, pool
 			if !ok {
 				return
 			}
-			w.invoke(ctx, cfg, conn, msg)
+			w.invoke(ctx, cfg, conns, msg)
 		default:
 			return // queue empty - release
 		}

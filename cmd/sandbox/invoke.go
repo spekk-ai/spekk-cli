@@ -11,12 +11,10 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
 )
 
-func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, msg Message) {
+func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg Message) {
 	args := []string{
 		"-p", "-",
 		"--output-format", "stream-json",
@@ -30,7 +28,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 
 	spoolDir, cleanupSpool, err := provisionSpool()
 	if err != nil {
-		sendError(ctx, conn, fmt.Sprintf("create conversation spool: %v", err))
+		sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("create conversation spool: %v", err))
 		return
 	}
 	defer cleanupSpool()
@@ -46,17 +44,17 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		sendError(ctx, conn, fmt.Sprintf("stdin pipe: %v", err))
+		sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("stdin pipe: %v", err))
 		return
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		sendError(ctx, conn, fmt.Sprintf("stdout pipe: %v", err))
+		sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("stdout pipe: %v", err))
 		return
 	}
 
 	if err := cmd.Start(); err != nil {
-		sendError(ctx, conn, fmt.Sprintf("start claude: %v", err))
+		sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("start claude: %v", err))
 		return
 	}
 
@@ -69,14 +67,21 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 		w.mu.Unlock()
 	}()
 
-	// SIGTERM on shutdown
+	// SIGTERM on shutdown. ctx is the process lifetime, so this watcher has to
+	// stop when the turn does: without turnDone it would outlive every turn
+	// and the sandbox would accumulate one goroutine per dispatch.
+	turnDone := make(chan struct{})
+	defer close(turnDone)
 	go func() {
-		<-ctx.Done()
-		w.mu.Lock()
-		if w.current != nil {
-			w.current.Signal(syscall.SIGTERM)
+		select {
+		case <-ctx.Done():
+			w.mu.Lock()
+			if w.current != nil {
+				w.current.Signal(syscall.SIGTERM)
+			}
+			w.mu.Unlock()
+		case <-turnDone:
 		}
-		w.mu.Unlock()
 	}()
 
 	// Write message to stdin
@@ -100,8 +105,10 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 	// stamps any conversation_open frame drained from the spool — never a
 	// session id supplied by the request file itself.
 	sessionID := msg.SessionID
+	// A conversation_open frame keeps its existing semantics: fire once, and a
+	// send that fails neither stops the drain nor the turn.
 	send := func(ctx context.Context, frame map[string]any) error {
-		return wsjson.Write(ctx, conn, frame)
+		return conns.send(ctx, frame)
 	}
 
 	// Stream stdout line by line
@@ -113,7 +120,10 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 		if line == "" {
 			continue
 		}
-		wsjson.Write(ctx, conn, map[string]any{"type": "stream", "data": line})
+		// Dropped when no connection is live. A stream frame drives a live
+		// display, so a late one has no value, and waiting here would stall
+		// the read of the child's stdout.
+		conns.send(ctx, map[string]any{"type": "stream", "data": line})
 
 		var event map[string]any
 		if json.Unmarshal([]byte(line), &event) == nil {
@@ -144,7 +154,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 		if len(detail) > 2000 {
 			detail = detail[:2000]
 		}
-		wsjson.Write(ctx, conn, map[string]any{
+		reportTurnEnd(ctx, conns, msg.AgentSessionID, map[string]any{
 			"type":   "error",
 			"error":  fmt.Sprintf("claude exited: %v", waitErr),
 			"detail": detail,
@@ -153,7 +163,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 		return
 	}
 
-	wsjson.Write(ctx, conn, map[string]any{
+	reportTurnEnd(ctx, conns, msg.AgentSessionID, map[string]any{
 		"type":             "result",
 		"session_id":       lastSessionID,
 		"agent_session_id": msg.AgentSessionID,
@@ -162,9 +172,22 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conn *websocket.Conn, m
 	log.Printf("Claude finished: session=%s", lastSessionID)
 }
 
-func sendError(ctx context.Context, conn *websocket.Conn, detail string) {
-	wsjson.Write(ctx, conn, map[string]any{
+// sendError reports a turn that failed before claude produced anything. Every
+// caller returns straight after it, so it ends the turn and is delivered like
+// any other final frame.
+func sendError(ctx context.Context, conns *connHolder, agentSessionID, detail string) {
+	reportTurnEnd(ctx, conns, agentSessionID, map[string]any{
 		"type":  "error",
 		"error": detail,
 	})
+}
+
+// reportTurnEnd delivers a frame that ends a turn, and names the turn if it
+// could not be delivered at all. Silence on the control host reads as a turn
+// that died, so a lost final frame has to leave a trace that says which turn
+// was lost.
+func reportTurnEnd(ctx context.Context, conns *connHolder, agentSessionID string, frame map[string]any) {
+	if err := conns.sendFinal(ctx, frame); err != nil {
+		log.Printf("could not deliver the %v frame ending agent session %s: %v", frame["type"], agentSessionID, err)
+	}
 }

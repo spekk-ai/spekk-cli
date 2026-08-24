@@ -20,14 +20,22 @@ const (
 )
 
 type AgentClient struct {
-	cfg  Config
-	pool *WorkerPool
+	cfg   Config
+	pool  *WorkerPool
+	conns *connHolder
+
+	// procCtx is the process lifetime, handed to Run by main. Workers get this
+	// context and never the per-connection one: a turn belongs to the process,
+	// not to the connection that happened to carry its dispatch.
+	procCtx context.Context
 }
 
 func NewAgentClient(cfg Config) *AgentClient {
 	return &AgentClient{
-		cfg:  cfg,
-		pool: NewWorkerPool(5),
+		cfg:     cfg,
+		pool:    NewWorkerPool(5),
+		conns:   newConnHolder(),
+		procCtx: context.Background(),
 	}
 }
 
@@ -57,41 +65,69 @@ func (c *AgentClient) dialOptions() *websocket.DialOptions {
 }
 
 func (c *AgentClient) Run(ctx context.Context) {
-	delay := reconnectBase
+	c.procCtx = ctx
+
+	var delay time.Duration
 	for {
-		err := c.connect(ctx)
+		established, err := c.connect(ctx)
 		if ctx.Err() != nil {
 			return // clean shutdown
 		}
 		if isProtocolReject(err) {
 			log.Printf("Control host rejected protocol version %s (close 4004). Update this sandbox's agent-client.", ProtocolVersion)
 		}
+		delay = reconnectDelay(delay, established)
 		log.Printf("Connection lost: %v. Reconnecting in %s...", err, delay)
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(delay):
 		}
-		delay = min(delay*2, reconnectMax)
 	}
 }
 
-func (c *AgentClient) connect(ctx context.Context) error {
+// reconnectDelay returns how long to wait before the next dial attempt, given
+// the previous wait and whether the attempt that just ended had actually
+// established a connection.
+//
+// An established connection resets the backoff. The delay measures how long
+// the control host has been unreachable, not how long this process has been
+// alive: while the delay only ever grew, a process that had dropped about five
+// times waited the full reconnectMax for every later reconnect, even when the
+// connection before it had been healthy for hours. A zero last, before the
+// first attempt, also yields reconnectBase.
+func reconnectDelay(last time.Duration, established bool) time.Duration {
+	if established || last == 0 {
+		return reconnectBase
+	}
+	return min(last*2, reconnectMax)
+}
+
+// connect dials, serves the connection until it ends, and reports whether the
+// connection was ever established. A dial that failed must keep backing off,
+// so that a control host which is down is not dialed every few seconds.
+func (c *AgentClient) connect(ctx context.Context) (established bool, err error) {
 	conn, _, err := websocket.Dial(ctx, c.wsURL(), c.dialOptions())
 	if err != nil {
-		return fmt.Errorf("dial: %w", err)
+		return false, fmt.Errorf("dial: %w", err)
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	conn.SetReadLimit(wsMaxMessageSize)
 
 	log.Println("Connected")
 
+	// Publish before serving and withdraw after, so a worker sending mid-turn
+	// resolves this connection while it lives and waits for the next one after
+	// it ends.
+	c.conns.set(conn)
+	defer c.conns.clear()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	go c.heartbeat(ctx, conn)
 
-	return c.readLoop(ctx, conn)
+	return true, c.readLoop(ctx, conn)
 }
 
 func (c *AgentClient) heartbeat(ctx context.Context, conn *websocket.Conn) {
@@ -117,17 +153,21 @@ func (c *AgentClient) readLoop(ctx context.Context, conn *websocket.Conn) error 
 			return err
 		}
 
-		c.handleInbound(ctx, conn, msg)
+		c.handleInbound(ctx, msg)
 	}
 }
 
 // handleInbound dispatches a single decoded inbound frame. Split out from
 // readLoop so the dispatch logic is exercisable in tests without a real
 // websocket connection.
-func (c *AgentClient) handleInbound(ctx context.Context, conn *websocket.Conn, msg Message) {
+//
+// ctx here is the per-connection context, and it is used only for an immediate
+// reply to the frame being handled. Work that outlives the frame takes
+// c.procCtx instead — see handleMessage.
+func (c *AgentClient) handleInbound(ctx context.Context, msg Message) {
 	switch msg.Type {
 	case MessageTypeMessage:
-		c.handleMessage(ctx, conn, msg)
+		c.handleMessage(ctx, msg)
 	case MessageTypeCancel:
 		c.handleCancel(msg)
 	case MessageTypeHeartbeatAck:
@@ -169,10 +209,11 @@ func handleErrorFrame(msg Message) {
 	log.Printf("error frame received: %s — %s", msg.Error, msg.Detail)
 }
 
-func (c *AgentClient) handleMessage(ctx context.Context, conn *websocket.Conn, msg Message) {
+func (c *AgentClient) handleMessage(ctx context.Context, msg Message) {
 	w := c.pool.Dispatch(msg)
 	if w == nil {
-		wsjson.Write(ctx, conn, map[string]any{
+		// An immediate refusal, so it belongs to the connection that asked.
+		c.conns.send(ctx, map[string]any{
 			"type":   "error",
 			"error":  "capacity_exceeded",
 			"detail": "All 5 agent worker slots are busy. Try again shortly.",
@@ -180,7 +221,11 @@ func (c *AgentClient) handleMessage(ctx context.Context, conn *websocket.Conn, m
 		return
 	}
 
-	go w.Run(ctx, c.cfg, conn, c.pool)
+	// The process context, never the connection's. A dropped connection used
+	// to cancel this context, which signaled the running claude process and
+	// killed the turn; the client then reconnected onto work that was already
+	// dead. The worker resolves its connection through c.conns as it sends.
+	go w.Run(c.procCtx, c.cfg, c.conns, c.pool)
 }
 
 func (c *AgentClient) handleCancel(msg Message) {
