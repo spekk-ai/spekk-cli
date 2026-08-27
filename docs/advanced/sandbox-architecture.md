@@ -235,3 +235,5 @@ The agent binary reads its configuration from environment variables, typically s
 | `WORKSPACE` | No | Working directory for Claude sessions (default: `/opt/spekk/workspace`) |
 
 The `SPEKK_CONVERSATION_SPOOL` variable is set per-invocation by the agent itself — it is not configured in `agent.env`.
+
+The same file also carries the model credential, which the agent does not read itself: it passes its environment to the `claude` child process, and Claude Code reads it there. Which variables those are depends on the sandbox's auth mode — see [Configuration](../configuration.md#agent-runtime).

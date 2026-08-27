@@ -67,10 +67,22 @@ write_files:
       SPEKK_AGENT_TOKEN=
       # Required: Control host (e.g., your-control-host.example)
       SPEKK_HOST=
-      # Required: Anthropic API key for Claude Code
-      ANTHROPIC_API_KEY=
       # Required: GitHub PAT for the agent's GitHub identity
       GITHUB_TOKEN=
+
+      # Model credential: keep exactly one of the two blocks below, matching the
+      # sandbox's auth mode. Claude Code reads whichever it finds, so a file
+      # carrying both leaves the choice to chance.
+
+      # Auth mode "bedrock" (the default): bill through the AWS Bedrock API.
+      AWS_ACCESS_KEY_ID=
+      AWS_SECRET_ACCESS_KEY=
+      AWS_DEFAULT_REGION=
+      CLAUDE_CODE_USE_BEDROCK=1
+
+      # Auth mode "subscription": a Claude subscription token from
+      # `claude setup-token`. Delete the Bedrock block above before using this.
+      #CLAUDE_CODE_OAUTH_TOKEN=
 
   # fail2ban: ban an address after repeated failed SSH logins.
   - path: /etc/fail2ban/jail.d/sandbox-sshd.local
