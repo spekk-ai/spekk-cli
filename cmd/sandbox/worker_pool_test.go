@@ -320,8 +320,10 @@ func TestFullSessionQueueIsRefusedNotBlocked(t *testing.T) {
 	if _, accepted := pool.Dispatch(msg); !accepted {
 		t.Fatal("first dispatch must be accepted")
 	}
-	// Fill the queue: one message is already on it, and it holds ten.
-	for i := 0; i < 9; i++ {
+	// Fill the queue. Derive the room from the channel rather than a
+	// literal, so a capacity change cannot silently weaken this test.
+	room := cap(poolQueue(pool, "s")) - len(poolQueue(pool, "s"))
+	for i := 0; i < room; i++ {
 		if _, accepted := pool.Dispatch(msg); !accepted {
 			t.Fatalf("follow-up %d must be accepted while the queue has room", i)
 		}
@@ -345,4 +347,12 @@ func TestFullSessionQueueIsRefusedNotBlocked(t *testing.T) {
 	if _, accepted := pool.Dispatch(Message{Type: MessageTypeMessage, AgentSessionID: "other"}); !accepted {
 		t.Error("an unrelated session must still be dispatchable")
 	}
+}
+
+// poolQueue returns a session's queue, so a test can derive its room
+// instead of restating the capacity the pool chose.
+func poolQueue(p *WorkerPool, agentSessionID string) chan Message {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.sessions[agentSessionID].msgs
 }

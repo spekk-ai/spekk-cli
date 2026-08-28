@@ -2,6 +2,7 @@ package main
 
 import "sync"
 
+// numWorkers is how many agent sessions a sandbox runs at once.
 const numWorkers = 5
 
 type WorkerPool struct {

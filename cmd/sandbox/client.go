@@ -33,7 +33,7 @@ type AgentClient struct {
 func NewAgentClient(cfg Config) *AgentClient {
 	return &AgentClient{
 		cfg:     cfg,
-		pool:    NewWorkerPool(5),
+		pool:    NewWorkerPool(numWorkers),
 		conns:   newConnHolder(),
 		procCtx: context.Background(),
 	}
