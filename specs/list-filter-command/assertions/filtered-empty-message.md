@@ -4,7 +4,6 @@ parent: list-filter-command
 created: 2026-07-13T00:00:00Z
 priority: 1
 status: done
-branch: feat/spekk-list
 depends-on: status-flag-filters-assertions
 ---
 

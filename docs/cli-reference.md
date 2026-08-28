@@ -178,6 +178,66 @@ Shows total specs/assertions, status breakdown, completion percentage, and specs
 
 ---
 
+## `spekk validate`
+
+Check every spec and assertion under `specs/` against a fixed set of invariants.
+
+```bash
+spekk validate
+spekk validate --specs-dir ./my-specs
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--specs-dir <path>` | Read specs from a specific directory (default: git root `specs/`) |
+
+**Checks, all in one pass:**
+
+- Frontmatter well-formedness. A malformed spec or assertion file is a **failure** here, unlike `spekk next`, which skips it silently
+- Parent resolution
+- `depends-on` validity: kebab-case, the target exists, no self-reference, no cycles
+- No duplicate spec or assertion ids
+- Lock state: only `in_progress` may carry a `locked-by`, and it need not carry one
+- Parent specs carry no rolled-up `status` field (absent, or the literal `draft`)
+- A spec directory that has assertion files but no main spec file. The parser removes the full directory, so each assertion in it is not in the queue
+- A path with the name `assertions` that is not a directory, or an `assertions/` directory that spekk cannot read. Each one removes the assertions of that spec, and gives no message
+
+A spec directory with **no** `assertions/` directory is not a fault. It is a spec with no assertions, and it parses correctly.
+
+**Warnings.** These go to stderr and do not change the exit code. A branch can be absent for a short time, and an old lock is not an incorrect spec tree:
+
+- A `branch` value that no ref matches, on an assertion that is not `done` and not `draft`. `spekk next` selects the queue by this value, so it cannot find such an assertion. `validate` reports each different value one time, with a count
+- A `locked-by` value that is old. A lock shows that a builder session holds the assertion now. Thus an old value, or a value with no date, names a session that stopped
+
+**Exit codes:**
+
+| Result | Exit | Output |
+|---|---|---|
+| Valid | 0 | One-line summary on stdout |
+| No `specs/` directory | 0 | `validate: 0 specs, 0 assertions OK` |
+| Warnings only | 0 | Warnings on stderr; the check still passes |
+| Any violation | 1 | One failure line per violation (file + problem), sorted by file then message |
+
+A malformed field fails the parse of the **whole tree**, not just its own file, so one bad line on the default branch stops every command that rebuilds the index. Run this before you commit an edit to `specs/` — see [Validation in CI and pre-commit](ci.md).
+
+### Skipped files
+
+`spekk next`, `spekk list`, `spekk status`, and `spekk show` are permissive on purpose. Each one skips a spec file or an assertion file that it cannot parse, so one error does not stop the queue. Each one writes a single line to stderr to report this:
+
+```
+Warning: 3 spec files skipped and missing from the queue. Run "spekk validate" for detail.
+```
+
+The line is the same for any number of files. `spekk validate` gives the detail. It names each file and its fault, and it reports each skip that the parser can make.
+
+The line goes to stderr. Thus `--json`, `--csv`, and `--tsv` output stays machine-readable.
+
+A skipped file is not in the work queue. Thus you lose that work until a person examines the tree, and this is why the commands report the count.
+
+---
+
 ## `spekk index`
 
 Build `.spekk/index.db`, a SQLite index of the spec tree, for use by `spekk query`.
@@ -212,8 +272,53 @@ Schema:
 | `specs` | `id`, `title`, `status`, `priority`, `branch`, `file` |
 | `assertions` | `id`, `parent_id` (→ `specs.id`), `title`, `status`, `priority`, `branch`, `file` |
 | `depends_on` | `assertion_id`, `depends_on_id` (both → `assertions.id`) |
+| `frontmatter_fields` | `owner_type` (`spec` \| `assertion` \| `observation`), `owner_id`, `key`, `value` |
 
 `depends_on` holds **assertion-level** edges only; spec-level relationships are not modeled as data (see the spec bodies).
+
+### Custom frontmatter fields
+
+Any **top-level** frontmatter key outside the known set (`id`, `parent`, `created`, `priority`, `status`, `branch`, `depends-on`, `locked-by`) is a **custom field**. `spekk validate` accepts it without warnings, and the index stores it in `frontmatter_fields` — one row per distinct value (a repeated value inserts once). Three multi-value spellings index identically: a flow sequence (`tags: [infrastructure, hipaa]`), a bare comma-separated scalar (`workflows: w1-note-and-claim, w2-claim-reimbursement`), and a YAML block list (`- item` lines).
+
+Value rules:
+
+- In a bare scalar or flow sequence, an **unquoted comma always splits**. A quoted region protects its commas: `note: "Hello, world"` is one value, and `[a, "b, c"]` is two.
+- Block-list items are never re-split — an item keeps its commas as written.
+- Comment lines, nested-map children, empty keys, and block scalars (`key: |` / `key: >`) never become custom fields. The frontmatter parser reads top-level scalars, flow sequences, and flat block lists only.
+
+An observation carries custom fields under the same rule, with its own known set (`slug`, `type`, `severity`, `status`, `created`, `announced`, `pr`, `affected`). Its rows use `owner_type = 'observation'` and the slug as `owner_id`. `affected` is a known key and never becomes a custom field: it is the evidence gate and the dedup key, and `observation_files` is its table.
+
+The `owner_id` of an observation is the slug alone, although `observations` and `observation_files` are keyed by (slug, ref). Each observer branch is cut from main and inherits every observation already merged, so the same slug reaches the index once per ref; the rows are merged across refs, and a slug carried by twenty branches indexes exactly as a slug carried by one.
+
+So ask `frontmatter_fields` alone. Joining it to `observations` on the slug returns one copy of every field row per ref, which is the one way to un-merge what the table merged; add `DISTINCT` when a join is unavoidable.
+
+```sql
+SELECT owner_id AS slug, key, value
+  FROM frontmatter_fields
+ WHERE owner_type = 'observation' AND key = 'skill';
+```
+
+!!! warning "`depends-on` is a chain, not a list"
+
+    A list here is refused, and the error fails the parse of the **whole tree** — one bad line stops every command that rebuilds the index, for every branch and every user, until it is fixed.
+
+    ```yaml
+    depends-on: [first-step, second-step]   # ✗ breaks every index rebuild
+    depends-on: first-step                  # ✓ one id; chain the rest
+    tags: [infrastructure, hipaa]           # ✓ custom field, list is fine
+    ```
+
+    The single id is deliberate. It is what controls the order work reaches builders: a chain releases assertions one at a time, and assertions with no link between them are free to run in parallel. A set of prerequisites carries no such order, so `spekk coach` linearizes it into a chain through its coordinator skill.
+
+This makes per-tag reporting one query:
+
+```bash
+spekk query "SELECT f.value AS workflow, COUNT(*) AS total, SUM(a.status = 'done') AS done
+  FROM assertions a
+  JOIN frontmatter_fields f
+    ON f.owner_type = 'assertion' AND f.owner_id = a.id AND f.key = 'workflows'
+  GROUP BY f.value"
+```
 
 ---
 
@@ -298,6 +403,18 @@ On older git, the feature **degrades gracefully** rather than failing:
 
 All git operations are funnelled through a single allowlist chokepoint that permits only a small set of read-only subcommands (`rev-parse`, `for-each-ref`, `merge-tree`, and a few others). No checkout, merge, index mutation, or ref mutation can occur.
 
+#### Machine-readable output — `spekk list --cross-branch`
+
+The same classification is available as data for agents and scripts (the HTML explorer stays the human surface):
+
+```bash
+spekk list --cross-branch --json
+spekk list --cross-branch --branch-filter 'feat/*' --json
+spekk list --cross-branch --tsv
+```
+
+One row per changed (file, branch) pair, with columns `path`, `branch`, `state` (`incoming_add` | `incoming_mod` | `conflict` | `incoming_del`), `degraded` (a conflict that could not be confirmed on git < 2.38), and `old_status`/`new_status` (assertion status drift on a clean incoming modification, e.g. `not_started` → `done`; empty otherwise). Default output is a table; `--json` emits an array of objects (every row carries every key, and an empty set renders `[]`), and `--tsv`/`--csv` emit the same columns. This lets an observer flag, for example, an assertion `done` on `main` that a feature branch moves back to `in_progress` — before the branch merges. The same read-only guarantee applies.
+
 #### Watch mode with cross-branch
 
 When combined with `--watch`, cross-branch classification is cached on a git ref-state fingerprint:
@@ -311,11 +428,10 @@ When combined with `--watch`, cross-branch classification is cached on a git ref
 
 ## `spekk observer`
 
-Monitor spec-code drift.
+Find spec-code drift, one observation at a time.
 
 ```bash
-spekk observer                    # Default monitoring loop
-spekk observer --interval 30      # Check every 30 seconds
+spekk observer                    # Run one scan
 spekk observer --quiet            # Minimal output
 spekk observer coverage-gap       # Run with a specific skill
 spekk observer prune              # Surface unused-code / consolidation candidates (recommend-only)
@@ -328,13 +444,16 @@ spekk observer uninstall-cron     # Remove scheduled cron entries
 
 | Flag | Description |
 |------|-------------|
-| `--interval <seconds>` | Preferred scan interval in seconds (positive integer) |
 | `--quiet` | Minimal output mode |
 | `--headless` | Run Claude in non-interactive mode (no TTY); set automatically by `install-cron` |
 
-Detects when code changes but specs don't update (or vice versa). Helps keep specs and implementation synchronized.
+Detects a change to the code that the specs do not record, and a change to the specs that the code does not implement. Keeps the specs and the implementation in agreement.
 
-The default loop closes each scan cycle with a quiet consolidation pass and reports only a brief summary from `observations/DIGEST.md`. When the digest is empty, the observer stays silent.
+**A run files one observation.** It searches until it finds drift, files it, and stops. Drift found today is still there tomorrow, so the second finding is the next run's first — run it again to continue. A run says which areas it had not reached, so a short run is never mistaken for a clean bill of health.
+
+A run reports only a brief summary from the rendered digest (`spekk observer digest`) — there is no committed digest file. When the digest is empty, the observer stays silent.
+
+How many observations you receive is therefore set by how often you run it, not by how long a run goes on. That is the schedule's business — see `install-cron` below, or use whatever scheduler you prefer.
 
 **Skills:** Observer supports skills with the same layered resolution as coach and builder (`.spekk/skills/observer/` > `~/.config/spekk/skills/observer/` > package > embedded). Run `spekk observer --help` to see available skills.
 
@@ -344,15 +463,15 @@ The default loop closes each scan cycle with a quiet consolidation pass and repo
 |-------|-------------|
 | `coverage-gap` | Surfaces code a spec could optionally document — a progressive-adoption aid, not a defect report (un-spec'd code is normal) |
 | `prune` | Surfaces genuinely-unused code and design-level redundancy (duplication, over-abstraction, dead config) as candidates for human review — recommend-only, never deletes; a missing spec is never a signal |
-| `consolidate` | Reviews all raw observations, archives stale/duplicates, rewrites `observations/DIGEST.md` with at most 5 severity-ranked items |
+| `consolidate` | Curates observations by editing frontmatter on their own branches (for example `open` → `dismissed`); writes no digest file |
 
 ### `spekk observer install-cron`
 
 Install crontab entries that run the observer on a schedule.
 
 ```bash
-spekk observer install-cron                                        # Defaults
-spekk observer install-cron --loop-interval 60                     # Loop every hour
+spekk observer install-cron                                        # Defaults: once a day
+spekk observer install-cron --loop-interval 60                     # Scan every hour
 spekk observer install-cron --consolidate-interval 720             # Consolidate every 12 h
 spekk observer uninstall-cron                                      # Remove spekk-managed entries
 ```
@@ -361,10 +480,12 @@ spekk observer uninstall-cron                                      # Remove spek
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--loop-interval <minutes>` | `30` | How often to run the observer loop (must be ≤ 60 or a multiple of 60) |
-| `--consolidate-interval <minutes>` | `360` | How often to run consolidation (must be ≤ 60 or a multiple of 60) |
+| `--loop-interval <minutes>` | `1440` (once a day) | How often to scan (≤ 60, or an exact multiple of 60 up to 1440) |
+| `--consolidate-interval <minutes>` | `1440` (once a day) | How often to run consolidation (same rule) |
 
-The installed entries run in the project directory, use `claude`'s absolute path (resolved at install time — fails clearly if `claude` isn't found), run headless (no TTY), guard against overlapping sessions via a project-scoped lock file, and append output to `.spekk/observer.log` / `.spekk/observer-consolidate.log`. `uninstall-cron` removes only the entries it added, identified by a `# spekk-observer` marker.
+A run files one observation whatever the interval, so this flag sets how many observations arrive, not how thorough a run is. The default of once a day is simply a rate most people can keep up with; shorten it when you want to work through drift faster.
+
+The installed entries run in the project directory, use `claude`'s absolute path (resolved at install time, and reported clearly if `claude` is not found), run headless (no TTY), guard against overlapping sessions via a project-scoped lock file, and append output to `.spekk/observer.log` / `.spekk/observer-consolidate.log`. `uninstall-cron` removes only the entries it added, identified by a `# spekk-observer` marker.
 
 ---
 
@@ -534,13 +655,19 @@ spekk install --target codex         # ~/.codex/prompts/ (global only)
 | Flag | Description |
 |------|-------------|
 | `--target <tool>` | Host tool to install into (required) |
-| `--project` | Install into the current project instead of globally |
+| `--project` | Install into the current project instead of globally (the repository root, from any directory inside it) |
 
-Installs thin shims that fetch their full instructions from the binary at session start via `spekk prompt <agent>`, so they never go stale — updating spekk updates every installed agent. For tools not listed, wire `spekk prompt <agent>` into the tool's custom-agent or rules mechanism directly.
+Installs thin shims that fetch their full instructions from the binary at session start via `spekk prompt <agent>`, so an agent's instructions never go stale — updating spekk updates every installed agent. The `spekk-dev-loop` skill is different: its content is written into the file, so a new spekk version needs a new `spekk install` to bring it current. `spekk update` warns you when it finds an installed file that this binary no longer matches. For tools not listed, wire `spekk prompt <agent>` into the tool's custom-agent or rules mechanism directly.
+
+**A managed path belongs to spekk.** Every destination in the table below is a path `spekk install` writes, so each install brings the file there to the current content. A file with its stamp intact — spekk's own content from another version — is replaced with no backup and no message. Every other file is first copied to `<path>.bak`, and the install reports that path on stderr. When `<path>.bak` already holds a different version, the copy goes to `<path>.bak.1`, `<path>.bak.2`, and so on, so an earlier backup is never overwritten; a backup that already holds the same bytes is kept as it is, so repeated installs do not pile up copies. That includes a file an older spekk version wrote before stamps existed: spekk cannot prove it is unchanged, so it keeps a copy. To keep a permanent local variant of a skill, give it your own name rather than editing the managed file.
+
+**A managed path spekk cannot read is reported, not forced.** If the path holds something that is not a regular file, or a file spekk has no permission to open, `spekk install` leaves it alone and says so, and `spekk update` reports it. No install can settle it, so the message asks you to check the file and its permissions rather than offering a command that would not help. One such path never stops the rest of the run: the other files are still installed and still checked.
+
+**A symlink at a managed path is a conflict spekk will not settle.** If the path is a symlink — a dotfiles manager put it there, for example — two tools own one file. spekk writes nothing, removes nothing, and reports the path and what it points to. `spekk install` reports it for any managed path; `spekk update` reports it for a path the current layout writes. Only you can say which tool should own the path. This test is on the file itself: if a whole parent directory is a symlink, the files inside it are ordinary files and spekk writes them as usual.
 
 ### The `spekk-dev-loop` skill
 
-Every install also writes the `spekk-dev-loop` skill — the outer coach → coordinate → builders → review pipeline — in whatever form the target uses for a reusable, agent-invokable workflow:
+Every install also writes the `spekk-dev-loop` skill — the one-session loop that plays the coach, builder, and verifier roles in turn — in whatever form the target uses for a reusable, agent-invokable workflow:
 
 | Target | Written as | Location |
 |--------|-----------|----------|
@@ -552,7 +679,7 @@ Every install also writes the `spekk-dev-loop` skill — the outer coach → coo
 
 **Automatic vs manual invocation:** Claude Code and OpenCode treat it as a native skill, so the model can invoke it on its own. Cursor, Codex, and Copilot expose it as a `/spekk-dev-loop` command the user triggers manually.
 
-**Scope:** By default, the skill is installed globally. Pass `--project` to write it into the current repo instead. Two targets are exceptions: Copilot is always project-scoped (its personal prompts are IDE-managed), and Codex is always global.
+**Scope:** By default, the skill is installed globally. Pass `--project` to write it into the current repo instead — at the repository root, from any directory inside it, the same root `spekk init` uses for `specs/`. Outside a repository, `--project` writes into the working directory. Two targets are exceptions: Copilot is always project-scoped (its personal prompts are IDE-managed), and Codex is always global.
 
 ---
 

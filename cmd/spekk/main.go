@@ -13,6 +13,7 @@ import (
 	spekk "github.com/spekk-ai/spekk-cli"
 	"github.com/spekk-ai/spekk-cli/internal/agent"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/formatter"
 	"github.com/spekk-ai/spekk-cli/internal/index"
 	"github.com/spekk-ai/spekk-cli/internal/install"
@@ -157,7 +158,7 @@ func runParser(args []string) {
 	// with `spekk query`.
 	repoRoot := filepath.Dir(specsDir)
 	if rebuilt, err := index.EnsureFresh(specsDir, index.DBPath(repoRoot)); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-rebuild of index failed: %s\n", err)
+		fmt.Fprintf(os.Stderr, "error: %s\n", index.FormatError(err))
 		os.Exit(1)
 	} else if rebuilt {
 		_ = index.EnsureGitignored(repoRoot)
@@ -168,6 +169,9 @@ func runParser(args []string) {
 		out, _ := parser.FormatError(err.Error())
 		fmt.Println(string(out))
 		os.Exit(1)
+	}
+	if summary := result.WarningSummary(); summary != "" {
+		fmt.Fprintln(os.Stderr, summary)
 	}
 
 	if len(result.Specs) == 0 {
@@ -232,6 +236,8 @@ func execList(args []string, stdout, stderr io.Writer, specsDir string) int {
 		"tsv":            {Names: []string{"--tsv"}, Type: cli.BoolFlag},
 		"csv":            {Names: []string{"--csv"}, Type: cli.BoolFlag},
 		"long":           {Names: []string{"--long", "-l"}, Type: cli.BoolFlag},
+		"crossBranch":    {Names: []string{"--cross-branch"}, Type: cli.BoolFlag},
+		"branchFilter":   {Names: []string{"--branch-filter"}, Type: cli.StringFlag},
 		"help":           {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -255,6 +261,15 @@ FILTER OPTIONS:
   --specs-dir <path>    Read specs from a specific directory (default: git root specs/)
   --help, -h            Show this help message
 
+CROSS-BRANCH MODE:
+  --cross-branch           List spec/assertion state across all branches
+                           instead of assertions: one row per changed
+                           (file, branch) pair with columns path, branch,
+                           state (incoming_add, incoming_mod, conflict,
+                           incoming_del), degraded, old_status, new_status.
+                           Read-only; never touches the working tree.
+  --branch-filter <glob>   Only include branches matching the glob (e.g. 'feat/*')
+
 NOTES:
   The default output shows all assertions. Hierarchy output is available via spekk next --all.
 
@@ -268,6 +283,8 @@ EXAMPLES:
   spekk list --status draft --tsv
   spekk list --assertions-only --csv
   spekk list --specs-dir /path/to/specs
+  spekk list --cross-branch --json
+  spekk list --cross-branch --branch-filter 'feat/*' --json
 `)
 		return 0
 	}
@@ -294,6 +311,27 @@ EXAMPLES:
 		return 1
 	}
 
+	if flags.Bool("crossBranch") {
+		if statusVal != "" {
+			fmt.Fprintln(stderr, "Error: --status does not apply to --cross-branch output")
+			return 1
+		}
+		if specsDir != "" || flags.String("specsDir") != "" {
+			// The cross-branch engine reads the git object store across
+			// branches, not one specs directory, so it cannot honour a
+			// different one. Refuse rather than return git-root results
+			// under a path the caller chose: a silent substitution reports
+			// success for something the command did not do.
+			fmt.Fprintln(stderr, "Error: --specs-dir does not apply to --cross-branch output")
+			return 1
+		}
+		return execListCrossBranch(flags.String("branchFilter"), stdout, stderr, useJSON, useTSV, useCSV)
+	}
+	if flags.String("branchFilter") != "" {
+		fmt.Fprintln(stderr, "Error: --branch-filter requires --cross-branch")
+		return 1
+	}
+
 	// Build opts before empty check — opts determines which header columns appear.
 	opts := formatter.Options{
 		ShowParent: assertionsOnly,
@@ -312,6 +350,9 @@ EXAMPLES:
 		out, _ := parser.FormatError(err.Error())
 		fmt.Fprintln(stdout, string(out))
 		return 1
+	}
+	if summary := result.WarningSummary(); summary != "" {
+		fmt.Fprintln(stderr, summary)
 	}
 
 	// Apply status filter if requested.
@@ -345,7 +386,9 @@ EXAMPLES:
 		return 0
 	}
 
-	// --json: flat assertion JSON, same content as the default table.
+	// --json: flat assertion JSON, in the same order as the default table.
+	// The JSON is a superset: it also carries branch and depends_on, which the
+	// table, TSV, and CSV columns do not show.
 	if useJSON {
 		out, err := parser.FormatAssertionsFlat(result)
 		if err != nil {
@@ -371,6 +414,44 @@ EXAMPLES:
 	default:
 		// Default: human-readable table.
 		fmt.Fprintln(stdout, formatter.FormatTable(rows, opts))
+	}
+	return 0
+}
+
+// execListCrossBranch renders the cross-branch classification — the same
+// read-only engine behind `spekk show --cross-branch` — as machine-readable
+// rows, one per changed (file, branch) pair. This is the surface an observer
+// agent consumes; the HTML explorer stays the human surface.
+func execListCrossBranch(branchFilter string, stdout, stderr io.Writer, useJSON, useTSV, useCSV bool) int {
+	states, _, err := crossbranch.Classify(branchFilter)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", err)
+		return 1
+	}
+
+	switch {
+	case useJSON:
+		out, jerr := crossbranch.FormatJSON(states)
+		if jerr != nil {
+			fmt.Fprintf(stderr, "Error: %s\n", jerr)
+			return 1
+		}
+		fmt.Fprintln(stdout, out)
+	case useTSV:
+		fmt.Fprint(stdout, formatter.RenderTSV(crossbranch.OutputColumns, crossbranch.OutputRows(states)))
+	case useCSV:
+		fmt.Fprint(stdout, formatter.RenderCSV(crossbranch.OutputColumns, crossbranch.OutputRows(states)))
+	default:
+		if len(states) == 0 {
+			fmt.Fprintln(stdout, "No cross-branch spec changes.")
+			return 0
+		}
+		hdr := make([]string, len(crossbranch.OutputColumns))
+		for i, c := range crossbranch.OutputColumns {
+			hdr[i] = strings.ToUpper(c)
+		}
+		matrix := append([][]string{hdr}, crossbranch.OutputRows(states)...)
+		fmt.Fprintln(stdout, formatter.RenderTable(matrix))
 	}
 	return 0
 }
@@ -417,7 +498,7 @@ func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
 
 // runValidate implements the `spekk validate` subcommand.
 func runValidate(args []string) {
-	code := execValidate(args, os.Stdout, "")
+	code := execValidate(args, os.Stdout, os.Stderr, "")
 	if code != 0 {
 		os.Exit(code)
 	}
@@ -438,20 +519,25 @@ OPTIONS:
 Checks (all in one pass): frontmatter well-formedness (no silent skips — a
 malformed spec or assertion file is a failure here, unlike "spekk next"),
 parent resolution, depends-on validity (kebab-case, exists, no self-reference,
-no cycles), no duplicate spec or assertion ids, lock-state pairing
-(in_progress requires locked-by; every other status forbids it), and parent
-specs carrying no rolled-up status field (absent, or the literal value
-"draft").
+no cycles), no duplicate spec or assertion ids, lock state (only in_progress
+may carry a locked-by, and it need not carry one), and parent specs carrying
+no rolled-up status field (absent, or the literal value "draft").
 
 Exit 0 and a one-line summary on stdout when everything is valid. Exit 1 and
 one plain-text failure line per violation (file + problem), sorted by file
 then message, when anything is invalid.
+
+Warnings go to stderr and never change the exit code: a branch value that
+matches no branch on an assertion that is not done, and a builder lock that is
+stale.
 `
 
 // execValidate is the testable core of runValidate. It writes the report to
 // stdout and returns an exit code (0 = pass, 1 = at least one failure).
+// Warnings go to stderr, so stdout stays clean and diffable for CI and they
+// never change the exit code.
 // specsDir: if non-empty, skip findSpecsDir() and use this directly.
-func execValidate(args []string, stdout io.Writer, specsDir string) int {
+func execValidate(args []string, stdout, stderr io.Writer, specsDir string) int {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
 		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
@@ -473,6 +559,10 @@ func execValidate(args []string, stdout io.Writer, specsDir string) int {
 	if err != nil {
 		fmt.Fprintf(stdout, "validate: %s\n", err.Error())
 		return 1
+	}
+
+	for _, w := range result.Warnings {
+		fmt.Fprintf(stderr, "Warning: %s\n", w)
 	}
 
 	if result.Passed() {
@@ -636,15 +726,24 @@ func runQuery(args []string) {
 	fmt.Println(out)
 }
 
-// findSpecsDir locates the specs/ directory using git root.
-func findSpecsDir() string {
+// repoRoot returns the root of the repository that holds the working directory,
+// and the working directory itself when there is no repository. A project is the
+// repository, not the directory the user happens to stand in, so a command run
+// from a subdirectory must find the same project files as one run from the root.
+func repoRoot() string {
 	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err == nil {
-		return filepath.Join(strings.TrimSpace(string(out)), "specs")
+		if root := strings.TrimSpace(string(out)); root != "" {
+			return root
+		}
 	}
-	// Fallback: assume cwd
 	wd, _ := os.Getwd()
-	return filepath.Join(wd, "specs")
+	return wd
+}
+
+// findSpecsDir locates the specs/ directory at the repository root.
+func findSpecsDir() string {
+	return filepath.Join(repoRoot(), "specs")
 }
 
 // currentBranch returns the current git branch name.
@@ -1195,30 +1294,87 @@ OPTIONS:
 		}
 	}
 
-	if err := update.Run(checkOnly); err != nil {
+	replaced, err := update.Run(checkOnly)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-	if !checkOnly {
-		warnStaleInstall()
+	home, project := scopeForInstall()
+	reportAfterUpdate(os.Stderr, replaced, home, project)
+}
+
+// reportAfterUpdate says which report follows a self-update attempt. A stale
+// check after a real replacement would compare against this process's embedded
+// content, which the new binary has already replaced, so that case names the
+// install commands instead.
+func reportAfterUpdate(w io.Writer, replaced bool, home, cwd string) {
+	if replaced {
+		reportReinstall(w, home, cwd)
+		return
+	}
+	reportStale(w, home, cwd)
+}
+
+// warnCheckFailed reports that a scan of the install locations did not finish.
+// A check that cannot run must say so rather than read as "nothing is stale".
+func warnCheckFailed(w io.Writer, err error) {
+	fmt.Fprintf(w, "\nwarning: could not check the installed spekk files: %s\n", err)
+}
+
+// reportReinstall names the install targets that have spekk files on disk and
+// asks the user to run the install again. A role shim reads its instructions
+// from the binary at session start. The spekk-dev-loop skill carries its content
+// in the file, so a new binary can hold content the installed file does not.
+func reportReinstall(w io.Writer, home, cwd string) {
+	reportReinstallWith(w, func() ([]string, error) {
+		return install.InstalledTargets(home, cwd)
+	})
+}
+
+// reportReinstallWith is reportReinstall with the scan as a parameter, so a test
+// can drive the case where the scan does not finish.
+func reportReinstallWith(w io.Writer, scan func() ([]string, error)) {
+	installed, err := scan()
+	if err != nil {
+		warnCheckFailed(w, err)
+		return
+	}
+	if len(installed) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "\nThe installed spekk files come from the binary. Re-run:")
+	for _, cmd := range installed {
+		fmt.Fprintln(w, "  "+cmd)
 	}
 }
 
-// warnStaleInstall checks every install location for managed files that the
-// current binary no longer writes (an old layout), and warns. It changes no
-// file — the migration is the shown "spekk install" command.
-func warnStaleInstall() {
-	home, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
-	stale, err := install.CheckStale(home, cwd)
-	if err != nil || len(stale) == 0 {
+// reportStale reports every installed file that this binary no longer writes or
+// no longer matches. It changes no file.
+func reportStale(w io.Writer, home, cwd string) {
+	reportStaleWith(w, func() ([]install.StaleFile, error) {
+		return install.CheckStale(home, cwd, spekk.EmbeddedFS)
+	})
+}
+
+// reportStaleWith is reportStale with the check as a parameter, so a test can
+// drive the case where the check does not finish.
+func reportStaleWith(w io.Writer, check func() ([]install.StaleFile, error)) {
+	stale, err := check()
+	if err != nil {
+		warnCheckFailed(w, err)
 		return
 	}
-	fmt.Fprintln(os.Stderr, "\nwarning: some installed spekk files are from an old layout:")
-	for _, s := range stale {
-		fmt.Fprintln(os.Stderr, "  "+s)
+	if len(stale) == 0 {
+		return
 	}
-	fmt.Fprintln(os.Stderr, "Re-run the shown install command to migrate.")
+	fmt.Fprintln(w, "\nwarning: some installed spekk files do not match this version of spekk:")
+	for _, s := range stale {
+		if s.Reason == install.StaleSymlink {
+			fmt.Fprintf(w, "  %s %s (%s; %s)\n", s.Path, s.Reason, s.LinkTarget, s.Remedy())
+			continue
+		}
+		fmt.Fprintf(w, "  %s %s (%s)\n", s.Path, s.Reason, s.Remedy())
+	}
 }
 
 // runInit creates the specs/ directory so a project can start using spekk.
@@ -1432,10 +1588,7 @@ OTHER TOOLS:
 		os.Exit(1)
 	}
 
-	res, err := install.Install(install.Options{
-		Target:  flags.String("target"),
-		Project: flags.Bool("project"),
-	})
+	res, err := install.Install(targetInstallOptions(flags.String("target"), flags.Bool("project")))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
@@ -1448,6 +1601,27 @@ OTHER TOOLS:
 	}
 	for _, path := range res.Removed {
 		fmt.Println("removed:", path)
+	}
+}
+
+// scopeForInstall returns the two directories a target install and its report
+// both work in: the user's home, and the repository that holds the working
+// directory. One function so the install and the report cannot disagree about
+// where the project is.
+func scopeForInstall() (home, project string) {
+	home, _ = os.UserHomeDir()
+	return home, repoRoot()
+}
+
+// targetInstallOptions builds the options for one target install. A project
+// install works on the repository, so the scope is the repository root.
+func targetInstallOptions(target string, project bool) install.Options {
+	home, projectDir := scopeForInstall()
+	return install.Options{
+		Target:  target,
+		Project: project,
+		HomeDir: home,
+		Cwd:     projectDir,
 	}
 }
 
@@ -1486,7 +1660,7 @@ COMMANDS:
   serve     Start WebSocket server for browser extension (--port, --host)
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
-  observer  Launch the Observer Agent to monitor spec-code drift
+  observer  Launch the Observer Agent to find spec-code drift
   sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
   conversation  Request a conversation on the connected chat surface (open)
   install   Install a skill for an agent (coach/builder/observer)

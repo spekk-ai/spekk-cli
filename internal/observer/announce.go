@@ -1,6 +1,7 @@
 package observer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -98,7 +99,11 @@ func Announce(opts AnnounceOptions) int {
 	}
 	dbPath := index.DBPath(root)
 	if _, err := index.EnsureFresh(specsDir, dbPath); err != nil {
-		return fail("", fmt.Errorf("index refresh failed: %w", err))
+		// index.FormatError, and not the plain error. An unattended announce
+		// run reports to a log file and to a chat summary, so the message
+		// must give its own scope. Without it, the reader sees an error about
+		// one file and no indication that each spekk command has stopped.
+		return fail("", errors.New(index.FormatError(err)))
 	}
 
 	// 3. Deterministic selection from the index.

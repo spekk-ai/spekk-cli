@@ -365,11 +365,11 @@ func TestBuildHelpText_ObserverWithSkills(t *testing.T) {
 	if strings.Contains(out, "prune-skill") {
 		t.Error("help should not expose the raw filename stem prune-skill")
 	}
-	if !strings.Contains(out, "--interval") {
-		t.Error("help should document observer's --interval option")
-	}
 	if !strings.Contains(out, "--quiet") {
 		t.Error("help should document observer's --quiet option")
+	}
+	if strings.Contains(out, "--interval") {
+		t.Error("help still documents --interval, which was removed")
 	}
 	if !strings.Contains(out, "spekk observer") {
 		t.Error("help should reference the observer command")
@@ -390,11 +390,11 @@ func TestBuildHelpText_ObserverAlwaysShowsOptions(t *testing.T) {
 
 	out := buildHelpText(install, "observer")
 
-	if !strings.Contains(out, "--interval") {
-		t.Error("help should document observer's --interval option")
-	}
 	if !strings.Contains(out, "--quiet") {
 		t.Error("help should document observer's --quiet option")
+	}
+	if strings.Contains(out, "--interval") {
+		t.Error("help still documents --interval, which was removed")
 	}
 	if !strings.Contains(out, "spekk observer") {
 		t.Error("help should reference the observer command")

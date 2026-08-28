@@ -47,17 +47,20 @@ type Options struct {
 	Target  string // claude-code|claude|opencode|codex
 	Project bool   // install into the project instead of globally
 	HomeDir string // defaults to os.UserHomeDir()
-	Cwd     string // defaults to os.Getwd()
-	SkillFS fs.FS  // FS to read the bundled skill from; falls back to DefaultSkillFS
+	// Cwd is the project directory for a project-scope install. The caller
+	// resolves the repository root: a project is the repository, not the
+	// directory the user happens to stand in. Defaults to os.Getwd().
+	Cwd     string
+	SkillFS fs.FS // FS to read the bundled skill from; falls back to DefaultSkillFS
 }
 
 // target describes where the observer agent shim and the skills go for one host
 // tool.
 type target struct {
 	globalDir   func(home string) string
-	projectDir  string                     // empty means --project is unsupported
-	fileExt     string                     // defaults to ".md"
-	frontmatter func(agent string) string  // frontmatter for the observer agent shim
+	projectDir  string                    // empty means --project is unsupported
+	fileExt     string                    // defaults to ".md"
+	frontmatter func(agent string) string // frontmatter for the observer agent shim
 
 	// Skill destinations. Each function returns the path for a named skill
 	// (spekk-coach, spekk-builder, or spekk-dev-loop) in one scope. A nil
@@ -231,26 +234,6 @@ func (t target) managedDirs(project bool, home, cwd string) []string {
 		out = append(out, d)
 	}
 	return out
-}
-
-// desiredPaths returns the destination paths this target writes for the given
-// scope: the observer agent shim and the skills. It reads no files, so a caller
-// that needs only paths (CheckStale) avoids the embedded skill.
-func (t target) desiredPaths(project bool, home, cwd string) []string {
-	paths := []string{t.observerShimPath(project, home, cwd)}
-	// The coach and builder are skills where the host has a skill path, and agent
-	// shims where it does not (the same rule as desiredFiles).
-	for _, role := range []string{"coach", "builder"} {
-		if sp := t.skillPath(project, home, cwd, "spekk-"+role); sp != "" {
-			paths = append(paths, sp)
-		} else {
-			paths = append(paths, t.agentShimPath(project, home, cwd, role))
-		}
-	}
-	if sp := t.skillPath(project, home, cwd, "spekk-dev-loop"); sp != "" {
-		paths = append(paths, sp)
-	}
-	return paths
 }
 
 // agentShimPath returns the path of an agent shim for the given role and scope.

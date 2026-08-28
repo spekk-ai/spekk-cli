@@ -2,7 +2,6 @@
 id: specs-readme-orientation
 created: 2026-07-15T00:00:00Z
 priority: 2
-branch: feat/specs-readme-orientation
 ---
 
 # Orient Cold Readers to a `specs/` Tree

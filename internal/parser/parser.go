@@ -26,6 +26,11 @@ type Assertion struct {
 	File      string
 	Title     string
 	Content   string
+	// Fields holds custom frontmatter keys (everything outside the known
+	// set) with their parsed values, one entry per item — every list
+	// spelling (flow sequence, comma scalar, block list) arrives in the
+	// same shape. nil when the file has none.
+	Fields map[string][]string
 }
 
 // Spec represents a parsed spec group with its frontmatter and content.
@@ -38,17 +43,50 @@ type Spec struct {
 	File     string
 	Title    string
 	Content  string
+	// Fields holds custom frontmatter keys (everything outside the known
+	// set) with their parsed values, one entry per item — every list
+	// spelling (flow sequence, comma scalar, block list) arrives in the
+	// same shape. nil when the file has none.
+	Fields map[string][]string
 }
 
 // ParseResult holds the full result of parsing a specs directory.
 type ParseResult struct {
 	Specs      []Spec
 	Assertions []Assertion
+
+	// Warnings records every spec or assertion file the walk skipped, one
+	// entry per file, in the order the walk met them. The parser does not
+	// print them: a caller that shows output decides whether a user sees a
+	// summary, and a caller that only rebuilds the index says nothing. While
+	// the parse printed them itself, spekk next emitted every warning twice,
+	// because it parses once for the index and once to answer.
+	Warnings []string
 }
 
-// frontmatter holds raw parsed YAML frontmatter fields.
+// frontmatter holds raw parsed YAML frontmatter fields. Scalar values live
+// in fields (double quotes stripped), so known-key handling stays
+// byte-for-byte unchanged. The custom-field layer reads from raw and lists
+// instead: raw keeps the unstripped scalar of every top-level key (so a
+// quoted scalar is still recognizable as one value), and lists holds
+// block-list items (`- foo` lines under a bare `key:`).
 type frontmatter struct {
 	fields map[string]string
+	raw    map[string]string
+	lists  map[string][]string
+}
+
+// knownFrontmatterKeys are the keys the parser maps onto Spec/Assertion
+// struct fields. Every other key is a custom field, preserved on Fields.
+var knownFrontmatterKeys = map[string]bool{
+	"id":         true,
+	"parent":     true,
+	"created":    true,
+	"priority":   true,
+	"status":     true,
+	"branch":     true,
+	"depends-on": true,
+	"locked-by":  true,
 }
 
 func (f *frontmatter) get(key string) string {
@@ -91,24 +129,64 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	yamlLines := lines[1:frontmatterEnd]
 	markdownContent := strings.Join(lines[frontmatterEnd+1:], "\n")
 
-	fm := &frontmatter{fields: make(map[string]string)}
+	fm := &frontmatter{
+		fields: make(map[string]string),
+		raw:    make(map[string]string),
+		lists:  make(map[string][]string),
+	}
+
+	// The key a following block-list item belongs to: the most recent
+	// top-level `key:` line with an empty value.
+	pendingListKey := ""
 
 	for _, line := range yamlLines {
-		if strings.TrimSpace(line) == "" {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
 			continue
 		}
-		// Skip YAML array items (we only handle scalar values).
-		if strings.HasPrefix(strings.TrimSpace(line), "- ") {
+		// A YAML block-list item. Collect it under the key that opened the
+		// list. The item is kept whole — commas inside an item never split.
+		if strings.HasPrefix(trimmed, "- ") {
+			if pendingListKey != "" {
+				item := stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+				if item != "" {
+					fm.lists[pendingListKey] = append(fm.lists[pendingListKey], item)
+				}
+			}
 			continue
 		}
+		// A YAML comment. Invisible, and it does not interrupt a block list.
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		// An indented line is a nested child (nested map, block-scalar
+		// body). It must not become a top-level custom field or close an
+		// open block list. The fields map still records it for byte-for-byte
+		// compatibility with the known-key scanner.
+		indented := line[0] == ' ' || line[0] == '\t'
 
 		colonIdx := strings.Index(line, ":")
 		if colonIdx == -1 {
+			if !indented {
+				pendingListKey = ""
+			}
 			continue
 		}
 
 		key := strings.TrimSpace(line[:colonIdx])
 		value := strings.TrimSpace(line[colonIdx+1:])
+
+		if !indented {
+			if value == "" {
+				pendingListKey = key
+			} else {
+				pendingListKey = ""
+			}
+			if key != "" {
+				fm.raw[key] = value
+			}
+		}
 
 		// Strip surrounding quotes if present.
 		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
@@ -119,6 +197,134 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	}
 
 	return fm, markdownContent, nil
+}
+
+// CustomFields parses content's YAML frontmatter and returns every
+// top-level key outside known, with its values already split into items.
+// It is the shared entry point for a file type whose known keys are not a
+// spec's — an observation, say — so that every owner type indexes custom
+// fields under one rule instead of one copy of it per format.
+func CustomFields(content string, known map[string]bool) (map[string][]string, error) {
+	fm, _, err := parseFrontmatter(content)
+	if err != nil {
+		return nil, err
+	}
+	return customFields(fm, known), nil
+}
+
+// stripQuotes removes one matching pair of surrounding double or single
+// quotes.
+func stripQuotes(s string) string {
+	if len(s) >= 2 &&
+		((s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'')) {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
+// customFields returns every top-level frontmatter key outside the known
+// set, with its values already split into items. Three list spellings
+// produce identical items: a flow sequence (`[a, b]`), a bare
+// comma-separated scalar (`a, b`), and a block list (whose items are never
+// re-split, so an item may contain commas). Nested-map children, comments,
+// empty keys, and block-scalar bodies never appear. Returns nil when the
+// file has no custom fields.
+func customFields(fm *frontmatter, known map[string]bool) map[string][]string {
+	out := make(map[string][]string)
+	for k, raw := range fm.raw {
+		if known[k] {
+			continue
+		}
+		var values []string
+		if items, ok := fm.lists[k]; ok && raw == "" {
+			values = items
+		} else {
+			values = splitFieldValues(raw)
+		}
+		if len(values) > 0 {
+			out[k] = values
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// blockScalarIndicators are scalar values that announce a YAML block scalar
+// (`key: |`). The line scanner cannot read the indented body, so the value
+// carries no data — customFields drops the key instead of indexing "|".
+var blockScalarIndicators = map[string]bool{
+	"|": true, "|-": true, "|+": true,
+	">": true, ">-": true, ">+": true,
+}
+
+// splitFieldValues splits a custom frontmatter scalar into its items. A
+// fully quoted scalar is one item. A flow sequence loses its brackets and
+// splits on commas outside quotes; a bare scalar splits on commas outside
+// quotes. Items are trimmed and one pair of surrounding quotes is removed
+// per item. An empty value or a block-scalar indicator yields nil.
+func splitFieldValues(value string) []string {
+	v := strings.TrimSpace(value)
+	if v == "" || blockScalarIndicators[v] {
+		return nil
+	}
+	if isOneQuotedScalar(v) {
+		return []string{v[1 : len(v)-1]}
+	}
+	if strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]") && len(v) >= 2 {
+		v = v[1 : len(v)-1]
+	}
+	var out []string
+	for _, part := range splitOutsideQuotes(v, ',') {
+		p := stripQuotes(strings.TrimSpace(part))
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// isOneQuotedScalar reports whether s is a single quoted string — quoted at
+// both ends with no inner occurrence of the same quote, so `"Hello, world"`
+// is one value while `"a", "b"` is not.
+func isOneQuotedScalar(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	q := s[0]
+	if (q != '"' && q != '\'') || s[len(s)-1] != q {
+		return false
+	}
+	return !strings.ContainsRune(s[1:len(s)-1], rune(q))
+}
+
+// splitOutsideQuotes splits s on sep, ignoring separators inside single- or
+// double-quoted regions, so a quoted item keeps its commas.
+func splitOutsideQuotes(s string, sep byte) []string {
+	var parts []string
+	var cur strings.Builder
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			cur.WriteByte(c)
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+			cur.WriteByte(c)
+		case c == sep:
+			parts = append(parts, cur.String())
+			cur.Reset()
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	parts = append(parts, cur.String())
+	return parts
 }
 
 // extractTitle finds the first H1 heading in markdown content.
@@ -142,14 +348,29 @@ func validateTimestamp(value string) bool {
 // kebabCasePattern matches valid kebab-case identifiers.
 var kebabCasePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
+// IsKebabCase reports whether s is a valid spec or assertion identifier. It is
+// the one definition of that rule, so a caller outside this package checks the
+// same thing the parser does instead of copying the pattern.
+func IsKebabCase(s string) bool {
+	return kebabCasePattern.MatchString(s)
+}
+
 // validBranchPattern matches valid git branch name characters.
-var validBranchPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_-]*$`)
+//
+// A dot is permitted, because git permits it and a release branch usually
+// carries a version. Git's own rules for dots are applied in validateBranch,
+// because a character class cannot express them.
+var validBranchPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/._-]*$`)
 
-// standardBranchPattern matches commonly used branch naming patterns.
-var standardBranchPattern = regexp.MustCompile(`^(main|master|develop|feature/|bugfix/|hotfix/|release/)`)
-
-// validateBranch validates a branch field value. Returns an error for invalid branches
-// and prints a warning to stderr for non-standard patterns.
+// validateBranch reports a branch value that git itself would refuse. It
+// judges no naming convention.
+//
+// A list of accepted <type>/ prefixes stood here, and warned on every other
+// shape. It was a proxy for "this value names no branch", and a poor one: it
+// passed a typo such as feat/thing-nmae, which names nothing, and it warned on
+// dana/apx-12-thing, which git accepts and a team uses. The real check reads
+// the refs, so it belongs to validate, not to a pure per-file parse that runs
+// once per file. See internal/validate.
 func validateBranch(branch, filePath string) error {
 	if branch == "" {
 		return nil
@@ -158,10 +379,13 @@ func validateBranch(branch, filePath string) error {
 		return fmt.Errorf("Field 'branch' cannot start or end with '/' in %s", filePath)
 	}
 	if !validBranchPattern.MatchString(branch) {
-		return fmt.Errorf("Field 'branch' contains invalid characters in %s\nFound: %q\nGit branch names can only contain letters, numbers, slashes, hyphens, and underscores.", filePath, branch)
+		return fmt.Errorf("Field 'branch' contains invalid characters in %s\nFound: %q\nGit branch names can only contain letters, numbers, slashes, dots, hyphens, and underscores.", filePath, branch)
 	}
-	if !standardBranchPattern.MatchString(branch) {
-		fmt.Fprintf(os.Stderr, "Warning: Field 'branch' uses non-standard pattern in %s\nFound: %q\nConsider using standard patterns: main, feature/<name>, bugfix/<name>, hotfix/<name>\n", filePath, branch)
+	// Git's rules for dots, which a character class cannot express: no "..",
+	// no final ".", and no ".lock" suffix. These checks keep the field to
+	// names that git accepts.
+	if strings.Contains(branch, "..") || strings.HasSuffix(branch, ".") || strings.HasSuffix(branch, ".lock") {
+		return fmt.Errorf("Field 'branch' is not a valid git branch name in %s\nFound: %q\nA branch name cannot contain '..', end with '.', or end with '.lock'.", filePath, branch)
 	}
 	return nil
 }
@@ -230,6 +454,7 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 		File:     relFilePath,
 		Title:    extractTitle(body),
 		Content:  strings.TrimSpace(body),
+		Fields:   customFields(fm, knownFrontmatterKeys),
 	}, nil
 }
 
@@ -297,6 +522,7 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		File:      relFilePath,
 		Title:     extractTitle(body),
 		Content:   strings.TrimSpace(body),
+		Fields:    customFields(fm, knownFrontmatterKeys),
 	}, nil
 }
 
@@ -357,6 +583,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 	var specs []Spec
 	var assertions []Assertion
+	var warnings []string
 
 	specIDsSeen := make(map[string]string) // id -> relative file path
 
@@ -407,7 +634,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 		// The main spec file must exist.
 		if _, statErr := os.Stat(specFilePath); os.IsNotExist(statErr) {
-			fmt.Fprintf(os.Stderr, "Warning: Spec %s/ has no main spec file %s.md — skipping.\n", specDirName, specDirName)
+			warnings = append(warnings, fmt.Sprintf("Spec %s/ has no main spec file %s.md — skipping.", specDirName, specDirName))
 			continue
 		}
 
@@ -415,7 +642,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 		spec, parseErr := parseSpec(relSpecFilePath, string(specFileRaw))
 		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Skipping malformed spec file %s: %s\n", relSpecFilePath, parseErr.Error())
+			warnings = append(warnings, fmt.Sprintf("Skipping malformed spec file %s: %s", relSpecFilePath, parseErr.Error()))
 		} else {
 			if existing, dup := specIDsSeen[spec.ID]; dup {
 				return nil, fmt.Errorf("duplicate spec id %q found in files: %s, %s", spec.ID, existing, relSpecFilePath)
@@ -425,19 +652,23 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 		}
 
 		// Check assertions directory.
+		// A spec directory with no assertions/ directory is a normal spec that
+		// nobody has broken into assertions yet. The spec is already in the
+		// result above, and spekk status shows it as 0/0 complete, so there is
+		// nothing to report. This once warned that the spec was "skipping",
+		// which was false on both counts.
 		assertDirInfo, statErr := os.Stat(assertionsDirPath)
 		if os.IsNotExist(statErr) {
-			fmt.Fprintf(os.Stderr, "Warning: Spec %s/ has no assertions/ directory — skipping.\n", specDirName)
 			continue
 		}
 		if statErr != nil || !assertDirInfo.IsDir() {
-			fmt.Fprintf(os.Stderr, "Warning: %s/assertions is not a directory — skipping.\n", specDirName)
+			warnings = append(warnings, fmt.Sprintf("%s/assertions is not a directory — skipping.", specDirName))
 			continue
 		}
 
 		assertionEntries, readAssertErr := os.ReadDir(assertionsDirPath)
 		if readAssertErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: cannot read assertions dir for %s: %s\n", specDirName, readAssertErr.Error())
+			warnings = append(warnings, fmt.Sprintf("cannot read assertions dir for %s: %s", specDirName, readAssertErr.Error()))
 			continue
 		}
 
@@ -458,7 +689,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 			aRaw, aReadErr := os.ReadFile(aFilePath)
 			if aReadErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Skipping unreadable assertion file %s: %s\n", relAFilePath, aReadErr.Error())
+				warnings = append(warnings, fmt.Sprintf("Skipping unreadable assertion file %s: %s", relAFilePath, aReadErr.Error()))
 				continue
 			}
 
@@ -471,13 +702,13 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 
 			assertion, aParseErr := parseAssertion(relAFilePath, aContent)
 			if aParseErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Skipping malformed assertion file %s: %s\n", relAFilePath, aParseErr.Error())
+				warnings = append(warnings, fmt.Sprintf("Skipping malformed assertion file %s: %s", relAFilePath, aParseErr.Error()))
 				continue
 			}
 
 			if existing, dup := assertionIDsSeen[assertion.ID]; dup {
-				fmt.Fprintf(os.Stderr, "Warning: Duplicate assertion id %q in spec %q: %s and %s — skipping second.\n",
-					assertion.ID, specDirName, existing, aFileName)
+				warnings = append(warnings, fmt.Sprintf("Duplicate assertion id %q in spec %q: %s and %s — skipping second.",
+					assertion.ID, specDirName, existing, aFileName))
 				continue
 			}
 			assertionIDsSeen[assertion.ID] = aFileName
@@ -528,7 +759,26 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 	return &ParseResult{
 		Specs:      specs,
 		Assertions: assertions,
+		Warnings:   warnings,
 	}, nil
+}
+
+// WarningSummary renders Warnings as the one line a command shows instead of
+// one line per skipped file. It returns "" when there is nothing to report, so
+// a caller prints it unconditionally and stays silent on a clean tree.
+//
+// The detail lives in spekk validate, which reports each of these as a failure
+// naming the file and the exact fault.
+func (r *ParseResult) WarningSummary() string {
+	if len(r.Warnings) == 0 {
+		return ""
+	}
+	noun := "spec files"
+	if len(r.Warnings) == 1 {
+		noun = "spec file"
+	}
+	return fmt.Sprintf("Warning: %d %s skipped and missing from the queue. Run \"spekk validate\" for detail.",
+		len(r.Warnings), noun)
 }
 
 // ParentStatusFromChildStatuses derives a spec's rolled-up status from its child
@@ -631,25 +881,29 @@ func detectCircularDependencies(assertions []Assertion) error {
 	return nil
 }
 
-// IsLockStale reports whether a lockedBy string represents a stale (>2 hour old) lock.
-// Returns true for empty or malformed lockedBy values.
+// lockLifetime is how long a builder's claim on an assertion stands. A builder
+// works one assertion at a time, so a claim older than this is almost always a
+// session that died rather than one still running.
+const lockLifetime = 2 * time.Hour
+
+// IsLockStale reports whether a lockedBy value names a claim that no longer
+// holds. A lock has the shape builder-{host}-{pid}-{unix-timestamp}, so the
+// last hyphen-separated field dates it.
+//
+// An empty or undatable value is stale: a claim nobody can date is a claim
+// nobody can trust.
 func IsLockStale(lockedBy string) bool {
 	if lockedBy == "" {
 		return true
 	}
 
 	parts := strings.Split(lockedBy, "-")
-	if len(parts) == 0 {
-		return true
-	}
-
-	tsStr := parts[len(parts)-1]
-	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	ts, err := strconv.ParseInt(parts[len(parts)-1], 10, 64)
 	if err != nil {
 		return true
 	}
 
-	return time.Now().Unix()-ts > 7200
+	return time.Since(time.Unix(ts, 0)) > lockLifetime
 }
 
 // FindOptions controls behaviour of FindNextAssertion.

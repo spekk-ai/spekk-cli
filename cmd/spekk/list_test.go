@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -196,5 +197,140 @@ func TestListRows_MatchesFormatAssertionsFlat(t *testing.T) {
 		if rows[i].ID != flatOut.Assertions[i].ID {
 			t.Errorf("position %d: listRows=%q, FormatAssertionsFlat=%q", i, rows[i].ID, flatOut.Assertions[i].ID)
 		}
+	}
+}
+
+// --- Cross-branch mode tests ---
+
+// gitList runs a raw git command in dir for cross-branch fixtures.
+func gitList(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// makeCrossBranchRepo creates a temp git repo where branch "feat/x" adds one
+// assertion that main does not have, and chdirs into it (Classify shells out
+// in the process cwd).
+func makeCrossBranchRepo(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	gitList(t, dir, "init", "-q", "-b", "main")
+	gitList(t, dir, "config", "user.email", "test@example.com")
+	gitList(t, dir, "config", "user.name", "Test")
+	gitList(t, dir, "config", "commit.gpgsign", "false")
+
+	specDir := filepath.Join(dir, "specs", "demo")
+	if err := os.MkdirAll(filepath.Join(specDir, "assertions"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(specDir, "demo.md"),
+		[]byte("---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n# Demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitList(t, dir, "add", "-A")
+	gitList(t, dir, "commit", "-qm", "base")
+
+	gitList(t, dir, "checkout", "-q", "-b", "feat/x")
+	if err := os.WriteFile(filepath.Join(specDir, "assertions", "foreign.md"),
+		[]byte("---\nid: foreign\nparent: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\nstatus: done\n---\n# Foreign\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitList(t, dir, "add", "-A")
+	gitList(t, dir, "commit", "-qm", "add foreign")
+	gitList(t, dir, "checkout", "-q", "main")
+
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+}
+
+func TestExecList_CrossBranchJSON(t *testing.T) {
+	makeCrossBranchRepo(t)
+	var stdout, stderr bytes.Buffer
+	code := execList([]string{"--cross-branch", "--json"}, &stdout, &stderr, "")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr: %s", code, stderr.String())
+	}
+
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d: %v", len(rows), rows)
+	}
+	r := rows[0]
+	if r["path"] != "specs/demo/assertions/foreign.md" || r["branch"] != "feat/x" || r["state"] != "incoming_add" {
+		t.Errorf("unexpected row: %v", r)
+	}
+}
+
+func TestExecList_CrossBranchFilterExcludes(t *testing.T) {
+	makeCrossBranchRepo(t)
+	var stdout, stderr bytes.Buffer
+	code := execList([]string{"--cross-branch", "--branch-filter", "release/*", "--json"}, &stdout, &stderr, "")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr: %s", code, stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "[]" {
+		t.Errorf("expected empty array for non-matching filter, got %s", stdout.String())
+	}
+}
+
+func TestExecList_CrossBranchRejectsStatus(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execList([]string{"--cross-branch", "--status", "done"}, &stdout, &stderr, "")
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "--status") {
+		t.Errorf("expected --status error, got %q", stderr.String())
+	}
+}
+
+func TestExecList_CrossBranchRejectsSpecsDir(t *testing.T) {
+	// Silently ignoring --specs-dir would report success for a scope the
+	// command never used: the engine reads the git object store, not a
+	// directory.
+	var stdout, stderr bytes.Buffer
+	code := execList([]string{"--cross-branch", "--specs-dir", "/nonexistent"}, &stdout, &stderr, "")
+	if code != 1 {
+		t.Errorf("expected exit 1, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "--specs-dir does not apply") {
+		t.Errorf("expected a --specs-dir error, got %q", stderr.String())
+	}
+}
+
+func TestExecList_CrossBranchRejectsCallerSpecsDir(t *testing.T) {
+	// The same guard for the plumbed-in directory, so a future caller cannot
+	// reintroduce the silent substitution.
+	var stdout, stderr bytes.Buffer
+	code := execList([]string{"--cross-branch"}, &stdout, &stderr, t.TempDir())
+	if code != 1 {
+		t.Errorf("expected exit 1, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "--specs-dir does not apply") {
+		t.Errorf("expected a --specs-dir error, got %q", stderr.String())
+	}
+}
+
+func TestExecList_BranchFilterRequiresCrossBranch(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execList([]string{"--branch-filter", "feat/*"}, &stdout, &stderr, makeTmpSpecs(t))
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "--cross-branch") {
+		t.Errorf("expected --cross-branch error, got %q", stderr.String())
 	}
 }

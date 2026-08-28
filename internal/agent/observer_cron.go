@@ -23,27 +23,87 @@ var InstallCronFlags = cli.FlagSet{
 	"help":                {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
+// Default schedule: one scan a day, and one consolidation a day after it.
+//
+// A scan used to run every 30 minutes because a session did not end on its
+// own — the schedule was what bounded the run. A run now ends by itself, so
+// the schedule does one job only: it sets how often the observer looks, and
+// therefore how many observations arrive. Once a day is a rate a person can
+// keep up with; every 30 minutes is not.
+//
+// Consolidation follows the scan. Curating several times a day over a set
+// that changes once a day spends an agent session on nothing.
+const (
+	defaultLoopInterval        = 1440 // 24 h
+	defaultConsolidateInterval = 1440 // 24 h
+)
+
+// maxCronInterval is one day. Above it, the hourly form 0 */H * * * runs off
+// the end of the hour field (0-23) and either fails or silently collapses to
+// midnight, so a longer interval cannot be expressed and is refused instead.
+const maxCronInterval = 1440
+
 // InstallCronConfig holds parsed install-cron options.
 type InstallCronConfig struct {
-	// LoopInterval is the observer default loop interval in minutes (default 30).
+	// LoopInterval is how often the observer scans, in minutes.
 	LoopInterval int
-	// ConsolidateInterval is the consolidation interval in minutes (default 360 = 6 h).
+	// ConsolidateInterval is how often consolidation runs, in minutes.
 	ConsolidateInterval int
 }
 
 // isValidCronInterval reports whether minutes can be expressed exactly as a cron
-// schedule. Only values ≤ 60 (sub-hourly */N) or exact multiples of 60 (hourly
-// 0 */H) are accepted; values like 90 would produce a syntactically invalid or
-// misinterpreted cron expression.
+// schedule. Only values ≤ 60 (sub-hourly */N), exact multiples of 60 up to a
+// day (hourly 0 */H), and a day itself are accepted; values like 90 would
+// produce a syntactically invalid or misinterpreted cron expression.
 func isValidCronInterval(minutes int) bool {
+	if minutes > maxCronInterval {
+		return false
+	}
 	return minutes <= 60 || minutes%60 == 0
+}
+
+// checkInstallCronArgs refuses any argument install-cron does not
+// understand. The shared parser ignores unknown flags, but install-cron
+// installs a schedule: a mistyped flag, or the unsupported --flag=value
+// form, would otherwise install the default schedule in place of the one
+// the operator asked for, silently.
+func checkInstallCronArgs(args []string) error {
+	valueFlag := ""
+	for _, a := range args {
+		if valueFlag != "" {
+			// The shared parser does not consume a flag-shaped token as a
+			// value, so accepting one here would install the defaults
+			// silently — refuse it. A negative number ("-5") is let through
+			// so the parser's clearer positive-number error can fire.
+			if strings.HasPrefix(a, "--") || (len(a) >= 2 && a[0] == '-' && (a[1] < '0' || a[1] > '9')) {
+				return fmt.Errorf("%s needs a value in minutes, got %q", valueFlag, a)
+			}
+			valueFlag = ""
+			continue
+		}
+		switch a {
+		case "--loop-interval", "--consolidate-interval":
+			valueFlag = a
+		case "--help", "-h":
+		default:
+			return fmt.Errorf("unknown argument %q; install-cron accepts --loop-interval <minutes>, --consolidate-interval <minutes>, and --help (values are space-separated, not --flag=value)", a)
+		}
+	}
+	if valueFlag != "" {
+		return fmt.Errorf("%s needs a value in minutes", valueFlag)
+	}
+	return nil
 }
 
 // ParseInstallCronFlags parses args into an InstallCronConfig.
 func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 	cfg := InstallCronConfig{
-		LoopInterval:        30,
-		ConsolidateInterval: 360,
+		LoopInterval:        defaultLoopInterval,
+		ConsolidateInterval: defaultConsolidateInterval,
+	}
+
+	if err := checkInstallCronArgs(args); err != nil {
+		return cfg, err
 	}
 
 	parsed := cli.ParseFlags(args, InstallCronFlags)
@@ -54,7 +114,7 @@ func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 			return cfg, fmt.Errorf("--loop-interval must be a positive number of minutes")
 		}
 		if !isValidCronInterval(n) {
-			return cfg, fmt.Errorf("--loop-interval %d cannot be expressed as a valid cron schedule; use a value ≤ 60 or an exact multiple of 60 (e.g. 30, 60, 120, 360)", n)
+			return cfg, fmt.Errorf("--loop-interval %d cannot be expressed as a valid cron schedule; use a value ≤ 60, or an exact multiple of 60 up to 1440 (e.g. 30, 60, 360, 1440)", n)
 		}
 		cfg.LoopInterval = n
 	}
@@ -65,7 +125,7 @@ func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 			return cfg, fmt.Errorf("--consolidate-interval must be a positive number of minutes")
 		}
 		if !isValidCronInterval(n) {
-			return cfg, fmt.Errorf("--consolidate-interval %d cannot be expressed as a valid cron schedule; use a value ≤ 60 or an exact multiple of 60 (e.g. 60, 120, 360)", n)
+			return cfg, fmt.Errorf("--consolidate-interval %d cannot be expressed as a valid cron schedule; use a value ≤ 60, or an exact multiple of 60 up to 1440 (e.g. 60, 360, 1440)", n)
 		}
 		cfg.ConsolidateInterval = n
 	}
@@ -75,11 +135,27 @@ func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 
 // minutesToCron converts a positive interval in minutes to a cron schedule expression.
 //
-//   - Intervals ≤ 60 m:               */N * * * *
-//   - Intervals that are exact multiples of 60:  0 */H * * *
+//   - Intervals < 60 m:                          */N * * * *
+//   - One hour:                                  0 * * * *
+//   - One day:                                   0 0 * * *
+//   - Other exact multiples of 60:               0 */H * * *
+//
+// An hour and a day are written out rather than left to the stepped forms.
+// `*/60 * * * *` steps by 60 across a minute field that only reaches 59, and
+// `0 */24 * * *` steps by 24 across an hour field that only reaches 23:
+// strict crons reject both, and lax crons quietly reduce them to the first
+// value — the right time by accident, from an expression that does not mean
+// it. An hour matters as much as a day here, because the error message for a
+// rejected interval offers 60 as an example.
 func minutesToCron(minutes int) string {
-	if minutes <= 60 {
+	if minutes == 60 {
+		return "0 * * * *"
+	}
+	if minutes < 60 {
 		return fmt.Sprintf("*/%d * * * *", minutes)
+	}
+	if minutes == maxCronInterval {
+		return "0 0 * * *"
 	}
 	// Only exact multiples of 60 reach here (validated by ParseInstallCronFlags).
 	hours := minutes / 60
@@ -132,6 +208,36 @@ func writeCrontab(content string) error {
 	return nil
 }
 
+// consolidateCron renders the consolidation schedule. It is the scan's
+// schedule moved later, so consolidation curates what the scan just filed
+// instead of starting at the same instant.
+//
+// Both default to a day, and both would otherwise render `0 0 * * *`. The two
+// runs take different lock files by design, so nothing would serialize them:
+// two headless Claude sessions would start together in one working tree, both
+// running git, and consolidation would never see the day's scan until the
+// next day. Half an hour is enough — the cap is one observation, so a scan
+// does not run for hours any more — and half past misses every scan schedule
+// of an hour or longer, because those all fire at minute 0. An hour later at
+// minute 0 would not: an hourly scan (`0 * * * *`) fires at 01:00 too.
+//
+// Below a day the schedules are intervals rather than times, so there is no
+// hour to move; the pre-existing overlap there is unchanged.
+func consolidateCron(minutes int) string {
+	if minutes == maxCronInterval {
+		return "30 0 * * *"
+	}
+	if minutes%60 == 0 {
+		// Every hourly-form scan fires at minute 0, and so does the daily
+		// one. Half past keeps the interval and misses all of them.
+		if minutes == 60 {
+			return "30 * * * *"
+		}
+		return fmt.Sprintf("30 */%d * * *", minutes/60)
+	}
+	return minutesToCron(minutes)
+}
+
 // buildCronLines returns the two cron lines that install-cron would add. The
 // binary and claude paths are single-quoted so paths containing spaces survive.
 // Each line changes into the project directory before running, passes the
@@ -152,7 +258,7 @@ func buildCronLines(binary, claudePath, projectDir string, cfg InstallCronConfig
 	)
 	consolidateLine = fmt.Sprintf(
 		"%s cd '%s' && '%s' observer consolidate --headless --claude-path '%s' >> '%s/.spekk/observer-consolidate.log' 2>&1 %s",
-		minutesToCron(cfg.ConsolidateInterval),
+		consolidateCron(cfg.ConsolidateInterval),
 		projectDir,
 		binary,
 		claudePath,
@@ -230,15 +336,18 @@ USAGE:
   spekk observer install-cron [OPTIONS]
 
 OPTIONS:
-  --loop-interval <minutes>        How often to run the observer loop (default: 30)
-  --consolidate-interval <minutes> How often to consolidate observations (default: 360)
+  --loop-interval <minutes>        How often to scan (default: 1440, once a day)
+  --consolidate-interval <minutes> How often to consolidate observations (default: 1440)
   --help, -h                       Show this help message
 
 Installs two crontab entries:
-  1. spekk observer              (default loop, runs every --loop-interval minutes)
-  2. spekk observer consolidate  (consolidation, runs every --consolidate-interval minutes)
+  1. spekk observer              (a scan, every --loop-interval minutes)
+  2. spekk observer consolidate  (consolidation, every --consolidate-interval minutes)
 
-Intervals must be ≤ 60 or an exact multiple of 60 (e.g. 30, 60, 120, 360).
+A run files one observation and then stops, so the schedule sets how many
+arrive: one a day by default. Set --loop-interval for a different rate.
+
+Intervals must be ≤ 60, or an exact multiple of 60 up to 1440 (one day).
 
 Lines are tagged with a comment so uninstall-cron can find and remove them later.
 Run "spekk observer uninstall-cron" to remove the installed entries.

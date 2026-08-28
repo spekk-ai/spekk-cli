@@ -91,14 +91,41 @@ func TestParseValidation(t *testing.T) {
 	}
 }
 
-func TestParseIgnoresUnknownFields(t *testing.T) {
-	content := strings.Replace(validObs(nil), "status: open\n", "status: open\nfuture-field: value\nnested-list:\n  - a\n", 1)
+func TestParseCustomFields(t *testing.T) {
+	extra := "status: open\n" +
+		"skill: observer-prune\n" +
+		"tags: [provenance, \"drift, recurring\"]\n" +
+		"runs:\n  - 2026-01-01\n  - 2026-02-01\n" +
+		"# comment: not-a-field\n" +
+		"note: |\n"
+	content := strings.Replace(validObs(nil), "status: open\n", extra, 1)
 	o, err := Parse("observations/x.md", content)
 	if err != nil {
-		t.Fatalf("unknown fields must not break parsing: %v", err)
+		t.Fatalf("custom fields must not break parsing: %v", err)
 	}
 	if o.Status != StatusOpen {
 		t.Fatalf("status: %q", o.Status)
+	}
+
+	want := map[string][]string{
+		"skill": {"observer-prune"},
+		"tags":  {"provenance", "drift, recurring"},
+		"runs":  {"2026-01-01", "2026-02-01"},
+	}
+	if len(o.Fields) != len(want) {
+		t.Fatalf("custom fields: got %v, want %v", o.Fields, want)
+	}
+	for key, values := range want {
+		if strings.Join(o.Fields[key], "|") != strings.Join(values, "|") {
+			t.Fatalf("field %q: got %v, want %v", key, o.Fields[key], values)
+		}
+	}
+	// A lifecycle key is not a custom field; affected in particular stays
+	// the evidence gate, and observation_files is its only table.
+	for _, key := range []string{"slug", "type", "severity", "status", "created", "affected"} {
+		if _, ok := o.Fields[key]; ok {
+			t.Fatalf("known key %q must not appear as a custom field", key)
+		}
 	}
 }
 

@@ -31,22 +31,20 @@ func NewAgentClient(cfg Config) *AgentClient {
 	}
 }
 
+// wsURL builds the dial target. The token is deliberately absent: it travels
+// only in the Authorization header (see dialOptions). A token in the URL path
+// leaks into access logs, proxy logs, and any error string that echoes the
+// target -- including this client's own reconnect log.
 func (c *AgentClient) wsURL() string {
 	scheme := "wss"
 	if contains(c.cfg.Host, "localhost") {
 		scheme = "ws"
 	}
-	// The path token is the current (soon-to-be-deprecated) auth carrier:
-	// the control host authenticates the agent from this path segment today.
-	// Removing it is deferred until the control host reads the Authorization
-	// header sent alongside it in dialOptions below (a coordinated
-	// cross-repo follow-up).
-	return fmt.Sprintf("%s://%s/ws/agent/%s/", scheme, c.cfg.Host, c.cfg.Token)
+	return fmt.Sprintf("%s://%s/ws/agent/", scheme, c.cfg.Host)
 }
 
-// dialOptions builds the websocket.DialOptions used to connect. The agent
-// token is sent as an Authorization header in addition to (not instead of)
-// the path token wsURL() embeds — see the comment on wsURL(). Split out from
+// dialOptions builds the websocket.DialOptions used to connect. The
+// Authorization header is the sole carrier of the agent token. Split out from
 // connect() so the header construction is exercisable without a real dial.
 func (c *AgentClient) dialOptions() *websocket.DialOptions {
 	return &websocket.DialOptions{

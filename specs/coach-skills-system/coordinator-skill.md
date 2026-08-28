@@ -48,7 +48,7 @@ Analyzes draft/not_started assertions and creates a dependency-aware work plan w
    - Update all affected assertion files
 
 6. **Validate with parser**
-   - Run `parseAllSpecs()` to validate the updated structure
+   - Run `spekk validate` to validate the updated structure
    - Parser will catch:
      - Invalid dependency IDs (non-existent assertions)
      - Circular dependencies
@@ -86,7 +86,7 @@ feature/chat-system (4 assertions):
   chat-message-input (depends-on: chat-session-model)
   user-presence-tracking (no dependencies)
 
-feature/clinical-trials (2 assertions):
+feature/audit-log (2 assertions):
   trial-search-api (no dependencies)
     ↓
   trial-eligibility-check (depends-on: trial-search-api)

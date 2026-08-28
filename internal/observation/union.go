@@ -2,6 +2,7 @@ package observation
 
 import (
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 
@@ -131,20 +132,79 @@ func (u *Union) OnMain(slug string) bool {
 	return false
 }
 
+// NormalizePath reduces an affected path to the form paths are compared in:
+// as written, but with no location suffix, no ./ prefix, no redundant
+// slashes, and no surrounding whitespace. It does not make an absolute path
+// repository-root-relative — writing root-relative paths is the prompt's
+// job, like naming files rather than directories.
+//
+// Dedup compares these strings exactly, and the strings are written by an
+// agent rather than produced by the code — so the same file arrives spelled
+// several ways. A run that names `internal/parser/parser.go:42` where an
+// earlier run named `internal/parser/parser.go` is describing the same file,
+// but the raw strings differ, so nothing covers it and the finding is filed
+// again. Normalizing removes the three spellings that carry no meaning:
+//
+//	./internal/parser/parser.go     leading ./
+//	internal/parser/parser.go:42    a line, or line:column
+//	internal/parser/parser.go/      a trailing slash
+//
+// A directory is deliberately NOT reduced to the files under it. Prefix
+// containment would let one directory-level finding swallow every
+// file-level finding beneath it — a false negative that hides real drift,
+// which is worse than a duplicate. Naming files rather than directories is
+// the prompt's job, not this function's.
+func NormalizePath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	// A trailing :line or :line:column. Only digits qualify, and at most two
+	// are removed, because that is all a location can be. A file whose name
+	// genuinely ends in a colon and digits still loses that much -- rare, and
+	// preferred to leaving every real location suffix in place -- but a name
+	// like `a:1:2:3` is not eaten whole.
+	for strips := 0; strips < 2; strips++ {
+		i := strings.LastIndex(p, ":")
+		if i <= 0 || i == len(p)-1 || !allDigits(p[i+1:]) {
+			break
+		}
+		p = p[:i]
+	}
+	// path.Clean settles the rest: ./ prefixes however many, duplicate
+	// slashes, a trailing slash, and any . or .. segment.
+	return path.Clean(p)
+}
+
+// allDigits reports whether s is one or more ASCII digits.
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // Covers reports whether the observation covers a candidate finding: same
-// type and at least one overlapping affected path. This is the scan-time
-// dedup test — a covered finding must not produce a new observation or a
-// new branch, whatever the covering branch's PR state (parked branches
-// participate exactly like pending ones).
+// type and at least one overlapping affected path, compared after
+// NormalizePath. This is the scan-time dedup test — a covered finding must
+// not produce a new observation or a new branch, whatever the covering
+// branch's PR state (parked branches participate exactly like pending ones).
 func (o *Observation) Covers(typ string, affected []string) bool {
 	if o.Type != typ {
 		return false
 	}
+	existing := make(map[string]bool, len(o.Affected))
+	for _, e := range o.Affected {
+		existing[NormalizePath(e)] = true
+	}
 	for _, candidate := range affected {
-		for _, existing := range o.Affected {
-			if candidate == existing {
-				return true
-			}
+		if existing[NormalizePath(candidate)] {
+			return true
 		}
 	}
 	return false

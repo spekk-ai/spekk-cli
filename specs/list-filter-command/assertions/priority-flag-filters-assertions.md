@@ -4,7 +4,6 @@ parent: list-filter-command
 created: 2026-07-13T01:00:00Z
 priority: 2
 status: not_started
-branch: feat/list-filter-by-status
 depends-on: status-flag-filters-assertions
 ---
 

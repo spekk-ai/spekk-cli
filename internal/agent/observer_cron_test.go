@@ -5,17 +5,22 @@ import (
 	"testing"
 )
 
-// TestParseInstallCronFlags_Defaults checks that defaults are 30 and 360 minutes.
-func TestParseInstallCronFlags_Defaults(t *testing.T) {
+// A run files one observation and then ends, so the schedule sets how many
+// arrive rather than how thorough a run is. The old 30-minute default came
+// from a session that ran until the next one stopped it; kept now it would
+// file up to 48 observations a day, which is not a rate anyone reviews. The
+// default is one a day, and consolidation follows it rather than running
+// several times over a set that changes once.
+func TestParseInstallCronFlags_DefaultsToOnceADay(t *testing.T) {
 	cfg, err := ParseInstallCronFlags([]string{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.LoopInterval != 30 {
-		t.Errorf("expected LoopInterval=30, got %d", cfg.LoopInterval)
+	if cfg.LoopInterval != 1440 {
+		t.Errorf("expected LoopInterval=1440 (once a day), got %d", cfg.LoopInterval)
 	}
-	if cfg.ConsolidateInterval != 360 {
-		t.Errorf("expected ConsolidateInterval=360, got %d", cfg.ConsolidateInterval)
+	if cfg.ConsolidateInterval != 1440 {
+		t.Errorf("expected ConsolidateInterval=1440 (once a day), got %d", cfg.ConsolidateInterval)
 	}
 }
 
@@ -95,15 +100,40 @@ func TestMinutesToCron(t *testing.T) {
 	}{
 		{30, "*/30 * * * *"},
 		{15, "*/15 * * * *"},
-		{60, "*/60 * * * *"},
+		// An hour is written out for the same reason a day is. `*/60 * * * *`
+		// steps by 60 across a minute field that only reaches 59, so strict
+		// crons reject it and lax crons quietly reduce it to :00. The error
+		// message for a rejected interval offers 60 as an example, so it must
+		// render an expression that means what it says.
+		{60, "0 * * * *"},
 		{360, "0 */6 * * *"},
 		{120, "0 */2 * * *"},
+		// A day is written out. The hourly form would be `0 */24 * * *`,
+		// which steps by 24 across an hour field that only reaches 23:
+		// strict crons reject it, and lax crons quietly reduce it to
+		// midnight -- the right time, from an expression that does not
+		// mean it. This is the default schedule, so it has to be exact.
+		{1440, "0 0 * * *"},
 	}
 	for _, tc := range cases {
 		got := minutesToCron(tc.minutes)
 		if got != tc.want {
 			t.Errorf("minutesToCron(%d) = %q, want %q", tc.minutes, got, tc.want)
 		}
+	}
+}
+
+// Longer than a day cannot be expressed at all: the hourly form runs off the
+// end of the hour field. It is refused at parse time rather than emitted as a
+// schedule that does not mean what it says.
+func TestParseInstallCronFlags_RejectsLongerThanADay(t *testing.T) {
+	for _, flag := range []string{"--loop-interval", "--consolidate-interval"} {
+		if _, err := ParseInstallCronFlags([]string{flag, "2880"}); err == nil {
+			t.Errorf("%s 2880 (two days) was accepted; it cannot be expressed in cron", flag)
+		}
+	}
+	if _, err := ParseInstallCronFlags([]string{"--loop-interval", "1440"}); err != nil {
+		t.Errorf("a day must remain valid: %v", err)
 	}
 }
 
@@ -252,5 +282,90 @@ func TestRemoveCronMarkerLines_Idempotent(t *testing.T) {
 	twice := removeCronMarkerLines(once)
 	if once != twice {
 		t.Errorf("removal is not idempotent:\nonce=%q\ntwice=%q", once, twice)
+	}
+}
+
+// The spec says consolidation follows the scan. With both intervals at a day
+// they would otherwise render the same expression and start together: the two
+// runs take different lock files by design, so nothing serializes them, and
+// two headless sessions would run git in one working tree at once.
+// Consolidation would also never see the day's scan until the next day.
+func TestConsolidateDoesNotRunAgainstTheScan(t *testing.T) {
+	cfg := InstallCronConfig{LoopInterval: 1440, ConsolidateInterval: 1440}
+	loop, consolidate := buildCronLines("/usr/local/bin/spekk", "/usr/bin/claude", "/proj", cfg)
+
+	if !strings.Contains(loop, "0 0 * * *") {
+		t.Errorf("daily scan should run at midnight: %q", loop)
+	}
+	if !strings.Contains(consolidate, "30 0 * * *") {
+		t.Errorf("daily consolidation must follow the scan, not start with it: %q", consolidate)
+	}
+
+	// Hourly forms keep their interval but move to half past, because every
+	// scan schedule (daily, and 0 */H) fires at minute 0.
+	if got := consolidateCron(360); got != "30 */6 * * *" {
+		t.Errorf("consolidateCron(360) = %q, want the half-past interval", got)
+	}
+	if got := consolidateCron(60); got != "30 * * * *" {
+		t.Errorf("consolidateCron(60) = %q, want the half-past interval", got)
+	}
+	// Sub-hourly consolidation is an interval with no minute to move.
+	if got := consolidateCron(30); got != "*/30 * * * *" {
+		t.Errorf("consolidateCron(30) = %q, want the plain interval", got)
+	}
+}
+
+// install-cron installs a schedule, so an argument it does not understand
+// must fail loudly. The shared parser ignores unknown flags; left alone,
+// a typo or the --flag=value form would install the daily default in place
+// of the schedule the operator asked for.
+func TestParseInstallCronFlags_RefusesUnknownArguments(t *testing.T) {
+	for _, args := range [][]string{
+		{"--loop-interval=60"},   // = form is not supported
+		{"--lop-interval", "60"}, // typo
+		{"--interval", "60"},     // the removed observer flag
+		{"--loop-interval"},      // missing value
+		{"stray"},                // bare positional
+	} {
+		if _, err := ParseInstallCronFlags(args); err == nil {
+			t.Errorf("args %v were accepted; the default schedule would be installed silently", args)
+		}
+	}
+
+	cfg, err := ParseInstallCronFlags([]string{"--loop-interval", "60", "--consolidate-interval", "360"})
+	if err != nil {
+		t.Fatalf("supported form rejected: %v", err)
+	}
+	if cfg.LoopInterval != 60 || cfg.ConsolidateInterval != 360 {
+		t.Errorf("supported form mis-parsed: %+v", cfg)
+	}
+}
+
+// The daily consolidation must not fire at minute 0 of any hour: every scan
+// schedule of an hour or longer fires at minute 0, so a minute-0 daily
+// consolidation would co-start with an hourly scan (--loop-interval 60).
+func TestDailyConsolidationAvoidsEveryHourlyScan(t *testing.T) {
+	fields := strings.Fields(consolidateCron(1440))
+	if fields[0] == "0" {
+		t.Errorf("consolidateCron(1440) = %q fires at minute 0 and co-starts with an hourly scan", consolidateCron(1440))
+	}
+}
+
+// A flag-shaped token in value position is refused: the shared parser would
+// not consume it as a value, so the defaults would be installed silently.
+func TestCheckInstallCronArgs_RefusesFlagInValuePosition(t *testing.T) {
+	for _, args := range [][]string{
+		{"--loop-interval", "--consolidate-interval"},
+		{"--loop-interval", "--quiet"},
+		{"--consolidate-interval", "--loop-interval"},
+	} {
+		if _, err := ParseInstallCronFlags(args); err == nil {
+			t.Errorf("args %v were accepted; the parser would not consume the flag as a value and the defaults would be installed silently", args)
+		}
+	}
+	// A negative number still reaches the positive-number error.
+	if _, err := ParseInstallCronFlags([]string{"--loop-interval", "-5"}); err == nil ||
+		!strings.Contains(err.Error(), "positive") {
+		t.Errorf("expected the positive-number error for -5, got %v", err)
 	}
 }

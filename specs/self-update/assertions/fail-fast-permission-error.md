@@ -4,7 +4,6 @@ parent: self-update
 created: 2026-06-12T00:00:00Z
 priority: 1
 status: done
-branch: fix/update-permission-message
 ---
 
 # Permission Problems Fail Fast With an Actionable Message

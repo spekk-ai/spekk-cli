@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 // fakeSkillFS returns a minimal in-memory FS that satisfies the skill embed
@@ -371,7 +373,8 @@ func TestInstall_DevLoopCommand(t *testing.T) {
 
 // TestInstall_MigratesUnstampedLegacyShim: an old unstamped coach agent shim
 // (from a version before the reconciler) is backed up and removed, and the new
-// coach skill is written.
+// coach skill is written. The legacy path belongs to spekk by its path, so the
+// body here carries none of the wording an older version wrote.
 func TestInstall_MigratesUnstampedLegacyShim(t *testing.T) {
 	home := t.TempDir()
 	agentsDir := filepath.Join(home, ".claude", "agents")
@@ -379,7 +382,7 @@ func TestInstall_MigratesUnstampedLegacyShim(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy := filepath.Join(agentsDir, "spekk-coach.md")
-	shim := []byte("---\nname: spekk-coach\n---\nYou are the spekk coach agent.\nRun `spekk prompt coach`.\n")
+	shim := []byte("---\nname: spekk-coach\n---\nA coach agent from a much older release.\n")
 	if err := os.WriteFile(legacy, shim, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -405,6 +408,101 @@ func TestInstall_MigratesUnstampedLegacyShim(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected a legacy-migration warning, got %v", res.Warnings)
+	}
+}
+
+// TestInstall_LegacyWarningNamesTheBackupItWrote: the legacy migration names its
+// backup too, and its backup is not always <path>.bak.
+func TestInstall_LegacyWarningNamesTheBackupItWrote(t *testing.T) {
+	home := t.TempDir()
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(agentsDir, "spekk-coach.md")
+	if err := os.WriteFile(legacy, []byte("---\nname: spekk-coach\n---\nAn older release.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A backup of a different version already holds the plain name.
+	if err := os.WriteFile(legacy+".bak", []byte("an older backup\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var warning string
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "legacy agent shim") {
+			warning = w
+		}
+	}
+	if warning == "" {
+		t.Fatalf("no legacy-migration warning in %v", res.Warnings)
+	}
+	if !strings.Contains(warning, legacy+".bak.1") {
+		t.Errorf("the warning must name %s.bak.1, got: %s", legacy, warning)
+	}
+	if _, err := os.Stat(legacy + ".bak.1"); err != nil {
+		t.Errorf("the named backup is missing: %v", err)
+	}
+	if got := string(mustRead(t, legacy+".bak")); got != "an older backup\n" {
+		t.Errorf("the earlier backup was overwritten: %q", got)
+	}
+}
+
+// TestInstall_LeavesALegacyPathItCannotRead: a legacy shim path that holds a
+// FIFO must not be read, removed, or backed up. A read would never return, and
+// spekk cannot tell what it would be deleting.
+func TestInstall_LeavesALegacyPathItCannotRead(t *testing.T) {
+	home := t.TempDir()
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(agentsDir, "spekk-coach.md")
+	if err := syscall.Mkfifo(legacy, 0o644); err != nil {
+		t.Skipf("cannot make a FIFO here: %v", err)
+	}
+
+	type outcome struct {
+		res Result
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()})
+		done <- outcome{res, err}
+	}()
+	var got outcome
+	select {
+	case got = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Install did not return: it read a path that never ends")
+	}
+	if got.err != nil {
+		t.Fatalf("Install failed: %v", got.err)
+	}
+
+	fi, err := os.Lstat(legacy)
+	if err != nil {
+		t.Fatalf("the legacy path was removed: %v", err)
+	}
+	if fi.Mode()&os.ModeNamedPipe == 0 {
+		t.Errorf("the FIFO was replaced: mode %v", fi.Mode())
+	}
+	if _, err := os.Stat(legacy + ".bak"); err == nil {
+		t.Errorf("spekk backed up something it cannot read")
+	}
+	var warned bool
+	for _, w := range got.res.Warnings {
+		if strings.Contains(w, legacy) {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("warnings = %v, want one that names %s", got.res.Warnings, legacy)
 	}
 }
 
@@ -440,27 +538,42 @@ func TestInstall_PrunesStampedLegacyShim(t *testing.T) {
 	}
 }
 
-// TestInstall_LeavesUserFileAtLegacyPath: a file at a legacy path that is not a
-// spekk shim is left alone.
-func TestInstall_LeavesUserFileAtLegacyPath(t *testing.T) {
+// TestInstall_LeavesASymlinkedLegacyShim: the legacy migration removes a file,
+// which for a symlink would quietly undo a dotfiles setup. It leaves the link
+// and reports it instead.
+func TestInstall_LeavesASymlinkedLegacyShim(t *testing.T) {
 	home := t.TempDir()
 	agentsDir := filepath.Join(home, ".claude", "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	userFile := filepath.Join(agentsDir, "spekk-coach.md")
-	if err := os.WriteFile(userFile, []byte("my own coach agent, not the tool\n"), 0o644); err != nil {
+	elsewhere := filepath.Join(t.TempDir(), "my-coach.md")
+	if err := os.WriteFile(elsewhere, []byte("the user's own coach"), 0o644); err != nil {
 		t.Fatal(err)
+	}
+	legacy := filepath.Join(agentsDir, "spekk-coach.md")
+	if err := os.Symlink(elsewhere, legacy); err != nil {
+		t.Skipf("this platform cannot make a symlink: %v", err)
 	}
 
-	if _, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()}); err != nil {
+	res, err := Install(Options{Target: "claude-code", HomeDir: home, SkillFS: fakeSkillFS()})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(userFile); err != nil {
-		t.Errorf("user file at legacy path should be left alone: %v", err)
+	if fi, err := os.Lstat(legacy); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the symlinked legacy shim should still be there: %v", err)
 	}
-	if _, err := os.Stat(userFile + ".bak"); !os.IsNotExist(err) {
-		t.Errorf("user file should not be backed up")
+	if _, err := os.Stat(elsewhere); err != nil {
+		t.Errorf("the far end of the link should be untouched: %v", err)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		if strings.Contains(w, elsewhere) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a warning naming the link target, got %v", res.Warnings)
 	}
 }
 
@@ -526,8 +639,9 @@ func TestInstall_MigratesCodexSharedPathShim(t *testing.T) {
 }
 
 // TestInstall_MigratesOldDevLoopSkill: an old, unstamped dev-loop skill at the
-// desired path is recognized as a spekk file and updated, not left as a
-// hand-edited file. This is the main point of the rework for an existing user.
+// desired path is spekk's by its path and is updated, not left as a hand-edited
+// file. This is the main point of the rework for an existing user, and the body
+// here shares no wording with the current skill.
 func TestInstall_MigratesOldDevLoopSkill(t *testing.T) {
 	home := t.TempDir()
 	skillDir := filepath.Join(home, ".claude", "skills", "spekk-dev-loop")
@@ -535,9 +649,7 @@ func TestInstall_MigratesOldDevLoopSkill(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := filepath.Join(skillDir, "SKILL.md")
-	// The old dev-loop skill has no "You are the spekk" text, but it does have the
-	// "Spekk Dev Loop" heading.
-	old := []byte("---\nname: spekk-dev-loop\n---\n# Spekk Dev Loop\nFour subagent stages ...\n")
+	old := []byte("---\nname: spekk-dev-loop\n---\n# An Older Heading\nFour subagent stages ...\n")
 	if err := os.WriteFile(p, old, 0o644); err != nil {
 		t.Fatal(err)
 	}

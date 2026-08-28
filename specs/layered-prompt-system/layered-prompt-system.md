@@ -59,7 +59,7 @@ Create `.spekk/coach.prompt.md`:
 This is a healthcare app. When creating specs:
 - Consider HIPAA compliance
 - PHI must never be logged
-- All dates must be in patient's timezone
+- All dates must be in the account's timezone
 ```
 
 This is appended to the base coach prompt for this project only.

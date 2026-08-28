@@ -29,11 +29,13 @@ curation is.
 heartbeat/consolidation pattern used in agent harnesses that manage
 long-running memory:
 
-1. **Raw observations are cheap and private.** Scan modes (default loop,
-   skills) write freely to `observations/{mode}/` per the existing output
-   contract. These are the observer's working memory — dated, verbose,
-   never shown to users directly. Analogous to dated memory files in a
-   heartbeat-driven agent.
+1. **Raw observations are cheap and private.** Skill runs write advisory
+   reports freely under `observations/<skill-name>/`. These are the
+   observer's working memory — verbose, never shown to users directly.
+   Analogous to dated memory files in a heartbeat-driven agent. A scan's
+   own findings are not written this way: a lifecycle observation is always
+   a top-level `observations/<slug>.md`, and only those participate in the
+   branch state machine, the dedup union, the digest, and announce.
 
 2. **A consolidation pass maintains a lean curated surface.** A distinct
    consolidation mode periodically reviews all raw observations: merges

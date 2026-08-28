@@ -15,10 +15,12 @@ package index
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -49,6 +51,19 @@ CREATE TABLE IF NOT EXISTS assertions (
 CREATE TABLE IF NOT EXISTS depends_on (
   assertion_id  TEXT REFERENCES assertions(id),
   depends_on_id TEXT REFERENCES assertions(id)
+);
+-- Custom frontmatter fields (keys outside the known set of the owner's own
+-- format) on specs, assertions, and observations. Multi-value spellings
+-- ([a, b] / a, b) are split into one row per value, so a query can filter
+-- and aggregate on any custom tag. owner_id is the spec or assertion id, or
+-- the observation slug: an observation is keyed by (slug, ref) elsewhere,
+-- but a custom key is not a lifecycle field, so the rows are merged across
+-- refs and do not depend on how many branches carry the slug.
+CREATE TABLE IF NOT EXISTS frontmatter_fields (
+  owner_type TEXT,   -- 'spec' | 'assertion' | 'observation'
+  owner_id   TEXT,
+  key        TEXT,
+  value      TEXT
 );
 -- Observation tables mirror the observation frontmatter schema
 -- (specs/observation-lifecycle/): one row per (slug, ref) pair read from the
@@ -83,14 +98,40 @@ CREATE TABLE IF NOT EXISTS index_meta (
 );
 `
 
-const dropTables = `
-DROP TABLE IF EXISTS depends_on;
-DROP TABLE IF EXISTS assertions;
-DROP TABLE IF EXISTS specs;
-DROP TABLE IF EXISTS observation_files;
-DROP TABLE IF EXISTS observations;
-DROP TABLE IF EXISTS index_meta;
-`
+// dropAllTables drops every table in the database, enumerated from
+// sqlite_master rather than a hardcoded list. A binary can only name the
+// tables of its own generation, and a hardcoded list is exactly how a
+// version-skewed force rebuild leaves a future table's stale rows in place
+// (an old binary rebuilding a newer database refreshed every table it knew
+// and silently kept the rest). Dropping whatever exists makes every future
+// schema bump safe against this binary going stale.
+func dropAllTables(db *sql.DB) error {
+	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return fmt.Errorf("cannot list tables: %w", err)
+	}
+	defer rows.Close()
+
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return fmt.Errorf("cannot read table name: %w", err)
+		}
+		names = append(names, n)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("cannot list tables: %w", err)
+	}
+
+	for _, n := range names {
+		quoted := `"` + strings.ReplaceAll(n, `"`, `""`) + `"`
+		if _, err := db.Exec(`DROP TABLE IF EXISTS ` + quoted); err != nil {
+			return fmt.Errorf("cannot drop table %q: %w", n, err)
+		}
+	}
+	return nil
+}
 
 // schemaVersion is the current on-disk index schema. Bump it whenever the table
 // shape changes. Because the index is a derived artifact, migration is never an
@@ -99,8 +140,13 @@ DROP TABLE IF EXISTS index_meta;
 // first use.
 //
 // Version history: 1 = specs/assertions/depends_on; 2 adds the observation
-// tables (observations, observation_files, index_meta).
-const schemaVersion = 2
+// tables (observations, observation_files, index_meta); 3 adds
+// frontmatter_fields; 4 adds observation rows to frontmatter_fields. Version
+// 4 changes no column — the bump is what makes an index that version 3 built
+// rebuild, instead of answering a custom-key query from rows that predate
+// the change. Bump on a change to the rows a build writes, not only on a
+// change to the shape it writes them into.
+const schemaVersion = 4
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
@@ -121,6 +167,40 @@ type Stats struct {
 	Warnings     []string
 }
 
+// ErrSpecsUnparseable marks an index build that failed at the parse step and
+// not at the database.
+//
+// The two failures need different corrections. A database failure applies to
+// one checkout, and a person deletes .spekk/index.db to correct it. A
+// spec-tree failure applies to all users: each spekk command builds the same
+// index from the same committed files, so one malformed field stops all of
+// them until a person edits that file.
+//
+// The previous message ("cannot parse specs") gave the cause but not the
+// effect. An agent read that message, accepted the syntax error as the full
+// problem, and proposed a second spelling that fails the same check.
+var ErrSpecsUnparseable = errors.New("the spec tree does not parse, so the index cannot be rebuilt")
+
+// specParseGuidance follows the parse error at each surface that a person
+// reads. It gives the scope of the failure and names the command that reports
+// each problem, and not only the first problem that the parser finds.
+const specParseGuidance = `One malformed field fails the parse of the whole tree, not just its own file,
+so no spekk command works until it is fixed — on every branch, for every user.
+Run "spekk validate" to see every problem at once.`
+
+// FormatError writes an index error for a person. A spec-tree failure gets
+// the guidance text. Each other error passes through as written, so a
+// database failure does not show as a spec problem.
+func FormatError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, ErrSpecsUnparseable) {
+		return err.Error() + "\n\n" + specParseGuidance
+	}
+	return err.Error()
+}
+
 // BuildIndex creates or updates the SQLite index at dbPath from specsDir and
 // from the visible git refs (observations). If force is true all tables are
 // dropped and recreated from scratch.
@@ -139,7 +219,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	defer db.Close()
 
 	if force {
-		if _, err = db.Exec(dropTables); err != nil {
+		if err = dropAllTables(db); err != nil {
 			return stats, fmt.Errorf("cannot drop tables: %w", err)
 		}
 	}
@@ -150,7 +230,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 
 	result, err := parser.ParseAllSpecs(specsDir)
 	if err != nil {
-		return stats, fmt.Errorf("cannot parse specs: %w", err)
+		return stats, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
 	}
 
 	tx, err := db.Begin()
@@ -160,7 +240,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	defer tx.Rollback() //nolint:errcheck
 
 	// Clear existing rows for idempotency (delete-all + re-insert).
-	for _, table := range []string{"depends_on", "assertions", "specs", "observation_files", "observations", "index_meta"} {
+	for _, table := range []string{"depends_on", "frontmatter_fields", "assertions", "specs", "observation_files", "observations", "index_meta"} {
 		if _, err = tx.Exec("DELETE FROM " + table); err != nil {
 			return stats, fmt.Errorf("cannot clear %s: %w", table, err)
 		}
@@ -173,6 +253,9 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 			s.ID, s.Title, s.Status, s.Priority, s.Branch, s.File,
 		); err != nil {
 			return stats, fmt.Errorf("cannot insert spec %q: %w", s.ID, err)
+		}
+		if err = insertFrontmatterFields(tx, "spec", s.ID, s.Fields); err != nil {
+			return stats, err
 		}
 	}
 
@@ -192,6 +275,10 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 			); err != nil {
 				return stats, fmt.Errorf("cannot insert depends_on edge for %q: %w", a.ID, err)
 			}
+		}
+
+		if err = insertFrontmatterFields(tx, "assertion", a.ID, a.Fields); err != nil {
+			return stats, err
 		}
 	}
 
@@ -219,6 +306,34 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	return stats, nil
 }
 
+// insertFrontmatterFields writes one row per distinct (key, value) for an
+// owner's custom frontmatter fields. The parser already split every
+// multi-value spelling into items; a repeated value (`workflows: w1, w1`)
+// inserts once, so COUNT-style report queries stay accurate.
+func insertFrontmatterFields(tx *sql.Tx, ownerType, ownerID string, fields map[string][]string) error {
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		seen := make(map[string]bool)
+		for _, value := range fields[key] {
+			if seen[value] {
+				continue
+			}
+			seen[value] = true
+			if _, err := tx.Exec(
+				`INSERT INTO frontmatter_fields (owner_type, owner_id, key, value) VALUES (?, ?, ?, ?)`,
+				ownerType, ownerID, key, value,
+			); err != nil {
+				return fmt.Errorf("cannot insert frontmatter field %q for %s %q: %w", key, ownerType, ownerID, err)
+			}
+		}
+	}
+	return nil
+}
+
 // indexObservations populates the observation tables inside the build
 // transaction. It reads the observation union from the visible observer/*
 // branches plus main via git object reads (internal/crossbranch) — never by
@@ -243,6 +358,11 @@ func indexObservations(tx *sql.Tx) (int, []string, error) {
 			return 0, nil, fmt.Errorf("cannot load observation union: %w", err)
 		}
 		warnings = u.Warnings
+
+		// Custom fields per slug, collected here and written after the
+		// loop, once per slug. See the frontmatter_fields comment above for
+		// why the rows are merged across refs.
+		fields := map[string]map[string][]string{}
 
 		for _, o := range u.Observations {
 			// announced must be SQL NULL when the frontmatter field is
@@ -270,7 +390,24 @@ func indexObservations(tx *sql.Tx) (int, []string, error) {
 					return 0, nil, fmt.Errorf("cannot insert observation file for %q: %w", o.Slug, err)
 				}
 			}
+			if len(o.Fields) > 0 && fields[o.Slug] == nil {
+				fields[o.Slug] = map[string][]string{}
+			}
+			for key, values := range o.Fields {
+				fields[o.Slug][key] = append(fields[o.Slug][key], values...)
+			}
 			count++
+		}
+
+		slugs := make([]string, 0, len(fields))
+		for slug := range fields {
+			slugs = append(slugs, slug)
+		}
+		sort.Strings(slugs)
+		for _, slug := range slugs {
+			if err := insertFrontmatterFields(tx, "observation", slug, fields[slug]); err != nil {
+				return 0, nil, err
+			}
 		}
 	}
 

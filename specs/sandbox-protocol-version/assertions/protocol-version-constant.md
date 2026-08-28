@@ -14,7 +14,7 @@ The protocol version lives in one Go constant. Nothing else in the client states
 
 ## Success Criteria
 
-- A constant `ProtocolVersion = "1.0"` exists in `cmd/sandbox` (for example `protocol.go`), with a comment stating the bump rules: breaking change to message types, frame fields, or close codes bumps the major; additive change bumps the minor; a major bump names the companion spekk-app PR.
+- A constant `ProtocolVersion = "1.0"` exists in `cmd/sandbox` (for example `protocol.go`), with a comment stating the bump rules: breaking change to message types, frame fields, or close codes bumps the major; additive change bumps the minor; a major bump names the companion control-host PR.
 - A helper returns the major part (`"1"` from `"1.0"`); malformed input returns the whole string (never panics).
 - A test pins the constant's value, so a change is always a deliberate, reviewed diff.
 

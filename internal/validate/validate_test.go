@@ -70,7 +70,11 @@ func TestRun_AllValidTree_PassesWithZeroExit(t *testing.T) {
 	}
 }
 
-func TestRun_InProgressMissingLockedBy_Fails(t *testing.T) {
+// A lock says a builder holds the assertion now. An assertion somebody started
+// and nobody holds is a real state, and it is the state a crashed builder
+// leaves behind. Demanding a lock here forced a coach to invent one, because
+// no CLI command mints a lock.
+func TestRun_InProgressWithoutLockedBy_Passes(t *testing.T) {
 	specsDir := t.TempDir()
 	writeSpec(t, specsDir, "my-spec", "")
 	writeAssertion(t, specsDir, "my-spec", "my-assertion",
@@ -80,10 +84,9 @@ func TestRun_InProgressMissingLockedBy_Fails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Passed() {
-		t.Fatal("expected failure for in_progress without locked-by")
+	if !result.Passed() {
+		t.Fatalf("an unlocked in_progress assertion must pass, got: %v", result.Failures)
 	}
-	hasFailureContaining(t, result, "locked-by is missing")
 }
 
 func TestRun_DoneWithLockedBy_Fails(t *testing.T) {

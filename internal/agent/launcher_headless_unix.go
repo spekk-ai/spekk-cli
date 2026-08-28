@@ -20,8 +20,9 @@ import (
 // lockFile is an optional project-scoped lock file path. When non-empty,
 // LaunchHeadless acquires an exclusive non-blocking flock on the file before
 // launching Claude. If the lock cannot be acquired (another instance is already
-// running), it exits 0 silently. The lock is released automatically when the
-// process exits; the fd is kept alive for the lifetime of the call.
+// running), it prints one skip line and exits 0. The lock is released
+// automatically when the process exits; the fd is kept alive for the lifetime
+// of the call.
 func LaunchHeadless(claudePath, lockFile, message string) error {
 	if claudePath == "" {
 		claudePath = "claude"
@@ -34,7 +35,11 @@ func LaunchHeadless(claudePath, lockFile, message string) error {
 			return fmt.Errorf("opening lock file %s: %w", lockFile, err)
 		}
 		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-			// Another instance is already running — exit 0 silently.
+			// Another instance is already running. This is the normal
+			// overlap case, so exit 0 — but say so, because a cron log
+			// that shows nothing cannot be told apart from a run that
+			// never happened.
+			fmt.Fprintf(os.Stderr, "another observer run holds %s; exiting\n", lockFile)
 			os.Exit(0)
 		}
 		lockF = f
@@ -44,6 +49,7 @@ func LaunchHeadless(claudePath, lockFile, message string) error {
 	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Env = headlessChildEnv()
 
 	if err := cmd.Start(); err != nil {
 		if isNotFound(err) {

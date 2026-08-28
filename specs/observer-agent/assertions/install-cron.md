@@ -1,7 +1,6 @@
 ---
 id: install-cron
 parent: observer-agent
-branch: observer-reimpl
 created: 2026-07-11T15:00:00Z
 priority: 2
 status: done
@@ -26,8 +25,19 @@ requires Go changes to add the subcommand.
   `spekk observer` (default loop) and one running
   `spekk observer consolidate`
 - Intervals are configurable via `--loop-interval` and
-  `--consolidate-interval` flags, with sensible defaults (default loop every
-  30 minutes, consolidation every 6 hours)
+  `--consolidate-interval` flags. Both default to once a day (1440 minutes).
+  A run files one observation and then ends, so the interval sets how many
+  observations arrive rather than how thorough a run is. Every 30 minutes —
+  the earlier default, from when a session ran until the next one stopped
+  it — is not a rate anyone reviews. Consolidation follows the scan rather
+  than running several times over a set that changes once, and when both are
+  daily the consolidation entry is rendered an hour later so the two runs do
+  not start together — they hold different locks, so an identical schedule
+  would launch two headless sessions in one working tree.
+- One day is the longest interval that can be expressed. `0 */24 * * *` steps
+  by 24 across an hour field that only reaches 23, which strict crons reject
+  and lax crons quietly reduce to midnight, so a day renders as `0 0 * * *`
+  and anything longer is refused at parse time.
 - The command prints what it installed, including the exact crontab lines,
   so the user can verify the schedule
 - A companion `spekk observer uninstall-cron` subcommand removes exactly the
@@ -71,9 +81,12 @@ non-functional. Each installed line must satisfy all of:
   `<project-dir>/.spekk/` (if absent) before writing the crontab entry;
   otherwise the shell redirect fails and the cron command crashes before
   spekk runs.
-- **Guards against overlap (in Go, not shell `flock`).** The observer prompt
-  defines an infinite monitoring loop, so launching a fresh session every
-  interval would pile up unbounded concurrent sessions. The overlap guard is
+- **Guards against overlap (in Go, not shell `flock`).** A scan ends on its
+  own now, but it has no deadline: a run has taken over an hour, so a
+  schedule shorter than the slowest run would still pile up concurrent
+  sessions. (The guard was first written when the prompt defined an infinite
+  monitoring loop and every run had to be interrupted by the next; the
+  overlap it prevents is narrower now, and just as real.) The overlap guard is
   implemented in Go, not via a shell `flock` wrapper on the cron line —
   `flock(1)` is a util-linux CLI that macOS does not ship, so a `flock -n ...`
   cron line would fail with `flock: command not found` on every macOS run. The
@@ -83,13 +96,24 @@ non-functional. Each installed line must satisfy all of:
   an `O_CREATE | O_RDWR` file descriptor before launching Claude.
   `syscall.Flock` is available on both macOS and Linux and needs no external
   binary; the kernel releases the lock automatically when the process exits. A
-  new invocation that cannot acquire the lock exits 0 silently (this is the
-  normal "already running" case, not an error). The lock files are
-  project-scoped, living under `<project-dir>/.spekk/` (e.g.
-  `.spekk/observer-loop.lock` and `.spekk/observer-consolidate.lock`), never
-  under a global path like `/tmp` — otherwise two projects on the same machine
-  would share one lock and silently starve each other. The loop entry and the
-  consolidate entry use distinct lock files so they do not block each other.
+  new invocation that cannot acquire the lock exits 0 (this is the normal
+  "already running" case, not an error), but first prints one line naming the
+  held lock file — a cron log that shows nothing cannot be told apart from a
+  run that never happened. The lock files are project-scoped, living under
+  `<project-dir>/.spekk/`, never under a global path like `/tmp` — otherwise
+  two projects on the same machine would share one lock and silently starve
+  each other. Each headless run locks a file derived from what it runs: the
+  default loop locks `.spekk/observer-loop.lock`, and a skill run locks
+  `.spekk/observer-<skill>.lock` (so `consolidate` locks
+  `.spekk/observer-consolidate.lock`). Distinct lock files mean the loop, the
+  consolidate entry, and any scheduled custom skill never block each other —
+  only two invocations of the same thing overlap on a lock.
+- **The child session finds `spekk` on PATH.** The headless launch prepends
+  the spekk binary's own directory to the spawned session's PATH. Cron and
+  systemd environments often lack the install directory (`~/.local/bin`),
+  and agent prompts run bare `spekk` commands inside the session — without
+  the prepend, those calls fail with "command not found" while the outer
+  absolute-path invocation works, and the scheduled run dies silently.
 
 ### Interval validation rejects non-cron-expressible values
 

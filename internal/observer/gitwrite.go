@@ -103,11 +103,69 @@ func (g gitRunner) commitFileChange(parentRev, path, content, message string) (s
 		return "", err
 	}
 
-	commit, err := g.run(nil, "commit-tree", tree, "-p", parent, "-m", message)
+	commit, err := g.run(commitIdentityEnv(g.resolvesIdent), "commit-tree", tree, "-p", parent, "-m", message)
 	if err != nil {
 		return "", err
 	}
 	return commit, nil
+}
+
+// Identity of last resort for the announce flip commit, used when git can
+// name no author of its own.
+//
+// `commit-tree` needs an author and a committer, and unlike `git commit` it
+// takes them only from the environment or from config. Announce runs
+// unattended on a sandbox where neither was set: measured on 2026-08-08, no
+// spekk sandbox carried a git identity, global or per-repo. The agent that
+// shares those repos sets one inline per command, which leaves nothing behind
+// for a later process to find, so announce failed with "Author identity
+// unknown" and could not mark its finding announced -- and an unmarked
+// finding is announced again on the next run, for ever.
+//
+// Supplying it here rather than only provisioning the machines is deliberate.
+// A commit this code writes should not depend on how the host it happens to
+// run on was set up.
+const (
+	defaultCommitName  = "spekk-observer"
+	defaultCommitEmail = "observer@spekk.local"
+)
+
+// commitIdentityEnv returns the GIT_AUTHOR_*/GIT_COMMITTER_* variables
+// commit-tree needs, and only for the role git cannot name for itself.
+//
+// resolves reports whether git can build the named identity from what it
+// already has. git is the oracle, so the fallback applies exactly when
+// commit-tree would otherwise fail, and an identity from any source git
+// honours is left alone -- the environment, and equally `git config`, global
+// or per-repo. That matters because a provisioned sandbox carries its own
+// name in `git config --global`: reading the environment alone would
+// overwrite it with this constant and make every box's commits look alike.
+//
+// Author and committer are asked separately, so a half-named identity is
+// completed rather than ignored.
+func commitIdentityEnv(resolves func(identVar string) bool) []string {
+	var env []string
+	for _, role := range []struct{ ident, name, email string }{
+		{"GIT_AUTHOR_IDENT", "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL"},
+		{"GIT_COMMITTER_IDENT", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"},
+	} {
+		if resolves(role.ident) {
+			continue
+		}
+		env = append(env, role.name+"="+defaultCommitName, role.email+"="+defaultCommitEmail)
+	}
+	return env
+}
+
+// resolvesIdent reports whether git can build identVar in this repository.
+//
+// `git var` refuses with the same "Author identity unknown" that commit-tree
+// refuses with, and on the same inputs, so asking it is a direct test of
+// whether the commit would succeed. An identity git infers from the user and
+// the hostname does not count as known to either command.
+func (g gitRunner) resolvesIdent(identVar string) bool {
+	_, err := g.run(nil, "var", identVar)
+	return err == nil
 }
 
 // pushCommit pushes a commit sha to branch on origin. The push is a plain

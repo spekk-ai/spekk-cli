@@ -8,7 +8,7 @@
 // reimplementing a frontmatter parser. What validate adds on top:
 //   - promotes the parser's "skip with a warning" outcomes (malformed
 //     frontmatter, duplicate assertion ids) to hard failures,
-//   - checks lock-state pairing (in_progress <=> locked-by),
+//   - checks lock state (only in_progress may carry a locked-by),
 //   - checks that parent spec files carry no rolled-up status field (or only
 //     the literal value "draft"),
 //   - and reports every violation found in one pass (not just the first),
@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
@@ -39,8 +39,14 @@ func (f Failure) String() string {
 }
 
 // Result is the outcome of validating a specs/ tree.
+//
+// A Failure breaks the tree and sets the exit code. A Warning reports a
+// condition that is legal but almost always a mistake, so it never changes the
+// exit code: neither a stranded branch value nor a dead builder lock is a
+// reason to break somebody's CI run.
 type Result struct {
 	Failures       []Failure
+	Warnings       []string
 	SpecCount      int
 	AssertionCount int
 }
@@ -49,12 +55,6 @@ type Result struct {
 func (r *Result) Passed() bool {
 	return len(r.Failures) == 0
 }
-
-// kebabCasePattern matches valid kebab-case identifiers. Kept in sync with
-// internal/parser's (unexported) pattern of the same name; depends-on is not
-// validated by the parser's per-file parse functions, so validate checks it
-// directly as a relational invariant, not a frontmatter field.
-var kebabCasePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 // Run walks specsDir and validates every invariant in specs/spec-validation.
 // It never returns an error for a merely-invalid tree — problems are reported
@@ -93,7 +93,11 @@ func Run(specsDir string) (*Result, error) {
 
 		relSpecFilePath := filepath.ToSlash(filepath.Join("specs", specDirName, specDirName+".md"))
 
-		if raw, readErr := os.ReadFile(specFilePath); readErr == nil {
+		specFileMissing := false
+		specDirHasAssertions := false
+		if raw, readErr := os.ReadFile(specFilePath); readErr != nil {
+			specFileMissing = true
+		} else {
 			content := string(raw)
 			if hasFrontmatter(content) {
 				relPath := relSpecFilePath
@@ -112,10 +116,27 @@ func Run(specsDir string) (*Result, error) {
 			}
 		}
 
-		assertionEntries, readErr := os.ReadDir(assertionsDirPath)
-		if readErr != nil {
+		// A path named assertions that is not a directory, or one that cannot
+		// be read, makes the parser drop every assertion under this spec in
+		// silence. A missing assertions/ directory is not either of those: it
+		// is a spec nobody has broken into assertions yet, which parses fine.
+		relAssertionsPath := filepath.ToSlash(filepath.Join("specs", specDirName, "assertions"))
+		if info, statErr := os.Stat(assertionsDirPath); statErr == nil && !info.IsDir() {
+			result.addFailure(relAssertionsPath, "expected a directory")
+			continue
+		} else if statErr != nil && !os.IsNotExist(statErr) {
+			result.addFailure(relAssertionsPath, "cannot read directory: "+statErr.Error())
 			continue
 		}
+
+		assertionEntries, readErr := os.ReadDir(assertionsDirPath)
+		if readErr != nil {
+			if !os.IsNotExist(readErr) {
+				result.addFailure(relAssertionsPath, "cannot read directory: "+readErr.Error())
+			}
+			continue
+		}
+
 		sort.Slice(assertionEntries, func(i, j int) bool {
 			return assertionEntries[i].Name() < assertionEntries[j].Name()
 		})
@@ -137,6 +158,7 @@ func Run(specsDir string) (*Result, error) {
 				// Not every .md file is a spec file; files with no frontmatter are ignored.
 				continue
 			}
+			specDirHasAssertions = true
 
 			assertion, parseErr := parser.ParseAssertionContent(relAPath, content)
 			if parseErr != nil {
@@ -148,6 +170,15 @@ func Run(specsDir string) (*Result, error) {
 			assertions = append(assertions, *assertion)
 
 			checkLockState(*assertion, result)
+		}
+
+		// The parser skips a whole spec directory that holds assertion files
+		// but no main spec file, so every assertion in it is lost from the
+		// queue. Report it once, against the file that is missing. The flag is
+		// set only for a .md file that carries frontmatter, which is the same
+		// condition the parser uses to decide the directory is a spec at all.
+		if specFileMissing && specDirHasAssertions {
+			result.addFailure(relSpecFilePath, "spec directory has assertion files but no main spec file")
 		}
 	}
 
@@ -171,6 +202,7 @@ func Run(specsDir string) (*Result, error) {
 
 	checkDependsOn(assertions, assertionIDs, result)
 	checkCycles(assertions, result)
+	checkBranchRefs(assertions, discoveredBranchNames(specsDir), result)
 
 	result.SpecCount = len(specs)
 	result.AssertionCount = len(assertions)
@@ -226,20 +258,115 @@ func rawStatusField(content string) (present bool, value string) {
 	return false, ""
 }
 
-// checkLockState enforces: status in_progress requires a non-empty
-// locked-by; every other status (done, failed, not_started, draft) forbids
-// one.
+// checkLockState enforces: only in_progress may carry a locked-by, and it need
+// not carry one.
+//
+// A lock answers "does a builder hold this assertion right now", not "is this
+// assertion in progress". The rule used to demand a lock on every in_progress
+// assertion, which no coach could satisfy: a lock names a builder session, and
+// the CLI has no command to make one. So an edited assertion had to carry an
+// invented lock, which is indistinguishable from the lock a crashed builder
+// left behind. The code already read it this way — IsLockStale("") is true, so
+// FindNextAssertion treats an unlocked in_progress assertion as free work.
 func checkLockState(a parser.Assertion, result *Result) {
-	switch a.Status {
-	case "in_progress":
-		if strings.TrimSpace(a.LockedBy) == "" {
-			result.addFailure(a.File, "status is in_progress but locked-by is missing")
-		}
-	default:
+	if a.Status != "in_progress" {
 		if a.LockedBy != "" {
 			result.addFailure(a.File, fmt.Sprintf("status is %s but locked-by is set (%q); only in_progress may carry a lock", a.Status, a.LockedBy))
 		}
+		return
 	}
+
+	// A lock is a live claim, so an old one is almost always dead. The
+	// non-empty guard matters: IsLockStale("") is true, but no lock at all is
+	// the legal unlocked state above, not a stale one. A value whose tail is
+	// no unix timestamp is stale too — a lock nobody can date is a lock nobody
+	// can trust, and that is what an invented value looks like.
+	if a.LockedBy != "" && parser.IsLockStale(a.LockedBy) {
+		result.Warnings = append(result.Warnings, fmt.Sprintf(
+			"%s: locked-by %q is stale; no builder holds this assertion", a.File, a.LockedBy))
+	}
+}
+
+// queueVisible reports whether spekk next can still reach an assertion. It
+// skips done and draft, so only the remaining statuses can be stranded by a
+// branch value that names nothing.
+func queueVisible(a parser.Assertion) bool {
+	return a.Status != "done" && a.Status != "draft"
+}
+
+// checkBranchRefs reports each distinct branch value that names no branch in
+// refs and that a queue-visible assertion carries. FindNextAssertion filters
+// the queue by this value as a plain string, so an assertion that names a
+// branch nobody has is invisible to spekk next for ever, whether a typo or a
+// deletion put it there.
+//
+// Grouping by distinct value is not cosmetic. The parser defaults an absent
+// branch field to "main", so on a repository whose trunk is master every
+// assertion without the field carries the same wrong value.
+func checkBranchRefs(assertions []parser.Assertion, refs []string, result *Result) {
+	if len(refs) == 0 {
+		// Git is absent, or this tree is in no repository. Neither is a
+		// problem with the specs, so there is nothing to report.
+		return
+	}
+
+	known := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		known[ref] = true
+	}
+
+	counts := map[string]int{}
+	for _, a := range assertions {
+		if a.Branch == "" || known[a.Branch] || !queueVisible(a) {
+			continue
+		}
+		counts[a.Branch]++
+	}
+
+	values := make([]string, 0, len(counts))
+	for value := range counts {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+
+	for _, value := range values {
+		noun := "assertions"
+		if counts[value] == 1 {
+			noun = "assertion"
+		}
+		result.Warnings = append(result.Warnings, fmt.Sprintf(
+			"branch %q does not exist (%d %s not done). spekk next cannot reach that work.",
+			value, counts[value], noun))
+	}
+}
+
+// discoveredBranchNames returns the logical name of every local head and
+// remote-tracking ref, or nil when there is nothing trustworthy to answer with.
+//
+// crossbranch resolves the repository from the working directory, while Run is
+// given a specsDir. The two agree on the normal path, because findSpecsDir
+// derives specsDir from the same git root. A --specs-dir outside that root
+// would compare one repository's branches against another repository's specs,
+// so the check stands down instead.
+func discoveredBranchNames(specsDir string) []string {
+	root := crossbranch.RepoRoot()
+	if root == "" {
+		return nil
+	}
+	abs, err := filepath.Abs(specsDir)
+	if err != nil || !strings.HasPrefix(abs, root+string(filepath.Separator)) {
+		return nil
+	}
+
+	branches, err := crossbranch.DiscoverAllBranches("")
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(branches))
+	for _, b := range branches {
+		names = append(names, b.Name)
+	}
+	return names
 }
 
 // checkDuplicateIDs reports every file beyond the first that declares a
@@ -273,7 +400,7 @@ func checkDependsOn(assertions []parser.Assertion, assertionIDs map[string]bool,
 		if a.DependsOn == "" {
 			continue
 		}
-		if !kebabCasePattern.MatchString(a.DependsOn) {
+		if !parser.IsKebabCase(a.DependsOn) {
 			result.addFailure(a.File, fmt.Sprintf("depends-on %q is not kebab-case", a.DependsOn))
 			continue
 		}

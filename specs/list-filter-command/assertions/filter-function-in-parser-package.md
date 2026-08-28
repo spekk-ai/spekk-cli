@@ -4,7 +4,6 @@ parent: list-filter-command
 created: 2026-07-12T20:30:00Z
 priority: 2
 status: done
-branch: feat/list-filter-by-status
 ---
 
 # Filter Logic Lives in the `parser` Package

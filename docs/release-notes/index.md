@@ -8,6 +8,38 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.24.0 -- An Observation's Own Keys, Indexed](RELEASE-NOTES-1.24.0.md)
+
+A custom frontmatter key on an observation validated, survived a round trip, and reached no table, so it was worse than prose: a reader assumes a key is queryable. Provenance an observation carries beyond the lifecycle set -- which skill found it, which run, which document narrated it -- was unreachable from `spekk query`. Such a key now reaches `frontmatter_fields` under `owner_type = 'observation'`, keyed on the slug, under the same split rule a spec and an assertion already use. `affected` stays out: it is the evidence gate and the dedup key, and `observation_files` is its table. The index schema version goes to 4, and existing databases rebuild transparently.
+
+## [1.23.0 -- Quieter Output and a Real Branch Check](RELEASE-NOTES-1.23.0.md)
+
+Two warnings made the output difficult to read. The branch guard compared a value with 14 fixed words and did not read git, so it accepted a branch that does not exist and refused team names that git accepts. This release deletes the guard, and `spekk validate` reads the refs instead. The parser now gives one line for the files that it skips, and `spekk next` no longer writes each warning two times. `validate` also stops making a `locked-by` value necessary on an `in_progress` assertion, which a coach cannot make, and it reports an old lock instead. Installs identify a managed file by its path, and `--project` uses the repository root. **`spekk validate` has three new failure conditions. Read the upgrading section before you change a pin.**
+
+## [1.22.0 -- Validation Becomes a Gate](RELEASE-NOTES-1.22.0.md)
+
+`spekk validate` was available before this release, but nothing made it run. A `spekk-validate` pre-commit hook now finds an incorrect field before the commit exists, and a CI gate finds what the hook does not: a new clone without `pre-commit install`, and `git commit --no-verify`. Each agent path that writes to `specs/` now names the command. This includes the observer remedy path, which had no validation step and put an incorrect `depends-on` value on a default branch. Parse errors now give the effect and name the command. The `branch` warning accepts conventional-commits prefixes and a dot, so `feat/login` and `release/1.22.0` pass.
+
+## [1.21.0 -- One Run, One Observation](RELEASE-NOTES-1.21.0.md)
+
+The observer files a single observation and ends, and the schedule sets the rate rather than the run itself. `--interval` is removed with an error that names its replacement, `install-cron` defaults to once a day, and an interval longer than a day is refused instead of silently rendering a daily cron line. Dedup compares `affected` paths after normalization, so `parser.go`, `./parser.go`, and `parser.go:42` stop filing a second observation for drift already on a branch. A malformed glob in `.spekk/dont-flag.yaml` is now a parse error rather than a silently dead suppression.
+
+## [1.20.0 -- Reliable Headless Runs, Cross-Branch Data](RELEASE-NOTES-1.20.0.md)
+
+Scheduled sandbox runs no longer die silently: the headless launcher prepends the spekk binary's directory to the child PATH, so bare `spekk` calls inside spawned sessions resolve under cron and systemd. Each observer skill gets its own lock file (a held lock prints one line instead of a silent exit 0). And `spekk list --cross-branch --json` exposes the merge-preview classification as machine-readable rows for observer agents.
+
+## [1.19.0 -- Custom Frontmatter Fields, Indexed](RELEASE-NOTES-1.19.0.md)
+
+Projects attach their own frontmatter keys (`workflows:`, `tags: [infrastructure, compliance]`) to specs and assertions. The parser now preserves every key outside the known set, and `spekk index` stores them in a new `frontmatter_fields` table — one row per distinct value, with flow sequences, comma scalars, and block lists indexing identically and quotes protecting commas. Per-tag progress reporting becomes one `spekk query`. The schema version goes to 3 (existing databases rebuild transparently), and `--force` now drops every table in `sqlite_master`, so a stale binary can never leave a future table's rows behind.
+
+## [1.18.0 -- The Agent Token Leaves the WebSocket URL](RELEASE-NOTES-1.18.0.md)
+
+The sandbox agent-client dials the path-less WebSocket route; the `Authorization: Bearer` header is the sole carrier of the token. The control host authenticates on the header alone, so the path token was pure leak surface — proxy logs, access logs, dial-error strings. Gone.
+
+## [1.17.1 -- Announcements Drop the Evidence Path List](RELEASE-NOTES-1.17.1.md)
+
+Observer announcements no longer carry an `Evidence:` line of `affected` paths. On a finding that touches ten files the line was longer than the finding itself, it repeated what the PR already shows, and it pushed the pointer line out of view. Evidence keeps its other two roles: an observation with no `affected` path stays invalid and never announces, and the observation file and the PR body still carry the paths in context.
+
 ## [1.17.0 -- The Sandbox States Its Protocol Version](RELEASE-NOTES-1.17.0.md)
 
 The WebSocket contract between the agent-client and the control host gets one version number, exchanged at connect. The client sends `X-Spekk-Protocol: 1.0` on every dial and reads the server's `welcome` frame in return: a different major produces a clear operator warning, and a 4004 close logs one line without a reconnect hot-loop. A pinned constant makes every version change a deliberate diff. Either side deploys first safely.

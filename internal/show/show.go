@@ -130,6 +130,9 @@ func Run(specsDir string, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("parsing specs: %w", err)
 	}
+	if summary := result.WarningSummary(); summary != "" {
+		fmt.Fprintln(os.Stderr, summary)
+	}
 
 	if len(result.Specs) == 0 {
 		return fmt.Errorf("no specifications found in %s", specsDir)

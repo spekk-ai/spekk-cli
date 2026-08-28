@@ -126,3 +126,156 @@ func TestSuppressed(t *testing.T) {
 		t.Fatal("permanent entry must outlive the dated one")
 	}
 }
+
+// A suppression is an explicit human decision, so it must not be defeated by
+// the spelling of the path a scan happens to report. This is stricter than
+// dedup: suppressed drift never becomes an observation, so nothing lands on a
+// branch to cover it next time -- a missed suppression files the observation
+// its author asked never to see again, on every run.
+func TestSuppressionMatchesHoweverThePathIsSpelled(t *testing.T) {
+	entries := []Entry{{Match: "internal/foo.go", Reason: "accepted", By: "someone"}}
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+
+	for _, spelling := range []string{
+		"internal/foo.go",
+		"internal/foo.go:42",
+		"internal/foo.go:42:7",
+		"./internal/foo.go",
+		"internal//foo.go",
+	} {
+		if Suppressed(entries, "some-slug", []string{spelling}, now) == nil {
+			t.Errorf("%q was not suppressed; the observation would be filed anyway", spelling)
+		}
+	}
+
+	if Suppressed(entries, "some-slug", []string{"internal/bar.go"}, now) != nil {
+		t.Error("an unrelated file must not be suppressed")
+	}
+}
+
+// Glob suppressions keep working over normalized paths.
+func TestSuppressionGlobStillMatchesAfterNormalization(t *testing.T) {
+	entries := []Entry{{Match: "internal/**", Reason: "legacy", By: "someone"}}
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+	if Suppressed(entries, "s", []string{"./internal/deep/x.go:9"}, now) == nil {
+		t.Error("glob suppression must survive a location suffix and a ./ prefix")
+	}
+}
+
+// The contract, stated exactly. A pattern written the ordinary way matches
+// every spelling of the path. A pattern written an odd way still matches its
+// own spelling -- it does not go dead, which is what normalizing only the
+// candidate did to it. Two differently-spelled patterns are NOT made
+// equivalent: that would mean rewriting the pattern, and rewriting a glob
+// with a path function is what let `docs/../**` suppress everything.
+func TestSuppressionPathSpellingContract(t *testing.T) {
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+
+	ordinary := []Entry{{Match: "internal/foo.go", Reason: "r", By: "b"}}
+	for _, spelling := range []string{
+		"internal/foo.go",
+		"./internal/foo.go",
+		"internal/foo.go:42",
+		"internal/foo.go:42:7",
+		"internal//foo.go",
+	} {
+		if Suppressed(ordinary, "s", []string{spelling}, now) == nil {
+			t.Errorf("an ordinary pattern did not suppress %q", spelling)
+		}
+	}
+
+	// An odd pattern still matches what it literally names. Before, a
+	// normalized candidate could not match it at all.
+	odd := []Entry{{Match: "./internal/foo.go", Reason: "r", By: "b"}}
+	if Suppressed(odd, "s", []string{"./internal/foo.go"}, now) == nil {
+		t.Error("an oddly spelled pattern went dead against its own spelling")
+	}
+
+	// Nothing here widens onto a different file.
+	if Suppressed(ordinary, "s", []string{"internal/foobar.go"}, now) != nil {
+		t.Error("an unrelated file was suppressed")
+	}
+}
+
+// The pattern is never rewritten. It is a glob, not a path, so cleaning it
+// as a path is unsound: path.Clean resolves `..`, and the location-suffix
+// strip removes a trailing `:digits`. Both turn a pattern that reads as
+// narrow into one that matches everything. This file is trusted because a
+// person read it, so a pattern must mean what it says.
+func TestSuppressionNeverWidensThePattern(t *testing.T) {
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+
+	unrelated := []string{"cmd/spekk/main.go", "secrets/key.pem", "anything/at/all.go"}
+	for _, pattern := range []string{
+		"docs/../**",             // path.Clean would make this **
+		"internal/../secrets/**", // path.Clean would retarget this
+		"**:1",                   // the suffix strip would make this **
+		"*:80",                   // and this *
+	} {
+		entries := []Entry{{Match: pattern, Reason: "r", By: "b"}}
+		for _, p := range unrelated {
+			if e := Suppressed(entries, "s", []string{p}, now); e != nil {
+				t.Errorf("pattern %q suppressed the unrelated path %q", pattern, p)
+			}
+		}
+	}
+}
+
+// A pattern names a file. One that carries a location suffix matches only its
+// own spelling, and this pins that limit so nobody mistakes it for a bug.
+//
+// The pattern is never rewritten, so the two spellings tried are the path as
+// written and the path fully normalized. A pattern sitting between those two
+// points -- `x.go:42`, which is decorated but not fully -- is reached by
+// neither when the path is decorated differently. Covering every intermediate
+// spelling would mean rewriting the pattern, and that is what let
+// `docs/../**` suppress the whole repository.
+//
+// This costs nothing in practice because `affected` paths name files: the
+// prompt forbids a location suffix there, so a pattern copied from an
+// observation has none either. An ordinary pattern matches every spelling,
+// which is the case that matters.
+func TestSuppressionPatternNamesAFileNotALocation(t *testing.T) {
+	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
+
+	located := []Entry{{Match: "x.go:42", Reason: "r", By: "b"}}
+	if Suppressed(located, "s", []string{"x.go:42"}, now) == nil {
+		t.Error("a located pattern must still match its own spelling")
+	}
+	for _, differently := range []string{"x.go:42:7", "./x.go:42", "x.go"} {
+		if Suppressed(located, "s", []string{differently}, now) != nil {
+			t.Errorf("a located pattern unexpectedly matched %q; if this now "+
+				"passes, the pattern is being rewritten somewhere", differently)
+		}
+	}
+
+	// The ordinary pattern -- the one the prompt produces -- covers every
+	// spelling, including the located ones above.
+	ordinary := []Entry{{Match: "x.go", Reason: "r", By: "b"}}
+	for _, spelling := range []string{"x.go", "./x.go", "x.go:42", "x.go:42:7"} {
+		if Suppressed(ordinary, "s", []string{spelling}, now) == nil {
+			t.Errorf("an ordinary pattern did not suppress %q", spelling)
+		}
+	}
+}
+
+// A malformed glob would validate and then match nothing: a suppression a
+// person wrote and reviewed, silently dead, so the observation it names is
+// filed on every run. In a safety file that must be a parse error, for the
+// same reason an unknown key is.
+func TestParseRejectsMalformedGlob(t *testing.T) {
+	_, err := Parse("- match: \"internal/[a-z.go\"\n  reason: r\n  by: b\n")
+	if err == nil {
+		t.Fatal("a malformed glob parsed cleanly; the entry would silently suppress nothing")
+	}
+	if !strings.Contains(err.Error(), "glob") {
+		t.Errorf("error does not name the glob problem: %v", err)
+	}
+
+	// The patterns the file is meant to hold still parse.
+	for _, ok := range []string{"internal/**", "*.md", "specs/[a-z]*/**", "a?c.go", "slug-pattern-*"} {
+		if _, err := Parse("- match: \"" + ok + "\"\n  reason: r\n  by: b\n"); err != nil {
+			t.Errorf("valid pattern %q rejected: %v", ok, err)
+		}
+	}
+}

@@ -4,8 +4,7 @@ parent: layered-prompt-system
 created: 2026-03-16T00:00:00Z
 priority: 1
 status: done
-depends_on:
-  - works-for-all-agents
+depends-on: works-for-all-agents
 ---
 
 # README Documents Prompt Customization

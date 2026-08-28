@@ -27,6 +27,12 @@ spekk next
 - Start with priority 1, oldest `created` timestamp first
 - Build the parser so we can use `spekk next` and be fully spec-driven
 
+## Never Carry Real Work Between Repositories
+
+When you write into a repository other than the one the work came from — prompt, spec, release note, test fixture, commit message, PR, chat message — invent the examples. Never carry across a client or project name, a real scenario, a quotation from anyone, a commercial detail, or another project's spec vocabulary.
+
+Do not try to judge which of those are confidential: you cannot tell from the text alone, and the nearest example to hand is always a real one. Invent it instead — a fictional example teaches the same thing and can never become a disclosure. Assume a repository is public unless you have checked that it is not.
+
 ## Dependency-Aware Building
 
 Before starting work on an assertion:
@@ -160,7 +166,7 @@ status: done
 
 **Available Status Values:**
 - `not_started` - Haven't begun work on this assertion (no lock)
-- `in_progress` - Currently working on this assertion (must have `locked-by`)
+- `in_progress` - Currently working on this assertion (a builder adds `locked-by`; a coach cannot, and need not)
 - `done` - All success criteria met and tests pass (no lock)
 - `failed` - Implementation has confirmed issues that need fixing (no lock)
 - `draft` - Planning/placeholder status (excluded from work queue, no lock)
@@ -195,7 +201,7 @@ This command MUST succeed and return valid JSON. If it fails:
 assertion, so it can skip past problems elsewhere in the tree, while
 `spekk validate` checks every spec and assertion for frontmatter
 well-formedness, parent/depends-on validity, duplicate ids, and lock-state
-pairing (`in_progress` requires `locked-by`; every other status forbids it).
+state (only `in_progress` may carry a `locked-by`).
 
 ```bash
 spekk validate
@@ -310,7 +316,14 @@ These patterns minimize token cost and maximize accuracy when navigating the cod
 ```bash
 spekk next                                    # lowest-cost: returns one ready assertion as JSON
 spekk list --status not_started --assertions-only  # enumerate all not_started assertions (~5K tokens)
+spekk query "SELECT id, title, branch FROM assertions WHERE status = 'failed'"  # filter on any field
 ```
+`spekk next` answers "what do I work on now" in one call — nothing beats it for that.
+Reach for `spekk query` when you need a field `list` has no flag for, such as `branch`,
+or a count. It reads `.spekk/index.db` and returns whole rows. Tables:
+`specs(id, title, status, priority, branch, file)`,
+`assertions(id, parent_id, title, status, priority, branch, file)`,
+`depends_on(assertion_id, depends_on_id)`.
 Avoid: browsing the full spec directory tree manually. The `spekk` commands enumerate
 exactly what you need without loading the full spec hierarchy (162K+ tokens for large projects).
 
