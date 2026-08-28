@@ -155,9 +155,10 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 			detail = detail[:2000]
 		}
 		reportTurnEnd(ctx, conns, msg.AgentSessionID, map[string]any{
-			"type":   "error",
-			"error":  fmt.Sprintf("claude exited: %v", waitErr),
-			"detail": detail,
+			"type":             "error",
+			"error":            fmt.Sprintf("claude exited: %v", waitErr),
+			"detail":           detail,
+			"agent_session_id": msg.AgentSessionID,
 		})
 		log.Printf("Claude failed: %v", waitErr)
 		return
@@ -175,10 +176,17 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 // sendError reports a turn that failed before claude produced anything. Every
 // caller returns straight after it, so it ends the turn and is delivered like
 // any other final frame.
+//
+// It names its turn, as every frame that ends one now does. A final frame can
+// arrive up to finalSendTimeout later and on a different connection than the
+// dispatch, among as many turns as the pool runs, so an anonymous error
+// cannot be attributed to any of them. The field is additive: a result frame
+// already carried it, and no existing field changed.
 func sendError(ctx context.Context, conns *connHolder, agentSessionID, detail string) {
 	reportTurnEnd(ctx, conns, agentSessionID, map[string]any{
-		"type":  "error",
-		"error": detail,
+		"type":             "error",
+		"error":            detail,
+		"agent_session_id": agentSessionID,
 	})
 }
 

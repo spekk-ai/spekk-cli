@@ -86,6 +86,11 @@ func (c *AgentClient) Run(ctx context.Context) {
 	}
 }
 
+// establishedMin is how long a connection must live before it counts as
+// established and resets the backoff. A connection that ends sooner tells us
+// the control host is not ready, whatever the dial reported.
+const establishedMin = 10 * time.Second
+
 // reconnectDelay returns how long to wait before the next dial attempt, given
 // the previous wait and whether the attempt that just ended had actually
 // established a connection.
@@ -106,11 +111,18 @@ func reconnectDelay(last time.Duration, established bool) time.Duration {
 // connect dials, serves the connection until it ends, and reports whether the
 // connection was ever established. A dial that failed must keep backing off,
 // so that a control host which is down is not dialed every few seconds.
+//
+// Established means the connection lived, not merely that the dial returned.
+// A control host that accepts and closes at once — which is exactly the
+// documented protocol reject, close 4004 — otherwise reset the backoff on
+// every attempt, and an outdated sandbox dialed it twenty times a minute for
+// the length of the deploy gap.
 func (c *AgentClient) connect(ctx context.Context) (established bool, err error) {
 	conn, _, err := websocket.Dial(ctx, c.wsURL(), c.dialOptions())
 	if err != nil {
 		return false, fmt.Errorf("dial: %w", err)
 	}
+	opened := time.Now()
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	conn.SetReadLimit(wsMaxMessageSize)
 
@@ -127,7 +139,8 @@ func (c *AgentClient) connect(ctx context.Context) (established bool, err error)
 
 	go c.heartbeat(ctx, conn)
 
-	return true, c.readLoop(ctx, conn)
+	err = c.readLoop(ctx, conn)
+	return time.Since(opened) >= establishedMin, err
 }
 
 func (c *AgentClient) heartbeat(ctx context.Context, conn *websocket.Conn) {
@@ -210,14 +223,21 @@ func handleErrorFrame(msg Message) {
 }
 
 func (c *AgentClient) handleMessage(ctx context.Context, msg Message) {
-	w := c.pool.Dispatch(msg)
-	if w == nil {
+	w, accepted := c.pool.Dispatch(msg)
+	if !accepted {
 		// An immediate refusal, so it belongs to the connection that asked.
 		c.conns.send(ctx, map[string]any{
 			"type":   "error",
 			"error":  "capacity_exceeded",
 			"detail": "All 5 agent worker slots are busy. Try again shortly.",
 		})
+		return
+	}
+
+	// Nil means the message joined a worker that is already draining, and
+	// that worker's own runner will take it. Starting a second runner over
+	// one worker wedged the client.
+	if w == nil {
 		return
 	}
 

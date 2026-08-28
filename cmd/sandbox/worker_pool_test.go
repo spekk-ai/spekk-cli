@@ -21,25 +21,29 @@ func sleepCmd(t *testing.T) *exec.Cmd {
 // --- Worker routing ---
 
 // TestWorkerRouting verifies that messages for the same agent_session_id
-// are dispatched to the same worker.
+// reach the same worker, and that only the first dispatch asks for a runner.
+// A second runner over one worker released the same slot twice and wedged
+// the client.
 func TestWorkerRouting(t *testing.T) {
 	pool := NewWorkerPool(5)
 
 	msg1 := Message{Type: MessageTypeMessage, AgentSessionID: "session-A"}
 	msg2 := Message{Type: MessageTypeMessage, AgentSessionID: "session-A"}
 
-	w1 := pool.Dispatch(msg1)
-	if w1 == nil {
-		t.Fatal("expected a worker for first dispatch, got nil")
+	w1, accepted := pool.Dispatch(msg1)
+	if !accepted || w1 == nil {
+		t.Fatalf("first dispatch: worker %v, accepted %v", w1, accepted)
 	}
 
-	w2 := pool.Dispatch(msg2)
-	if w2 == nil {
-		t.Fatal("expected a worker for second dispatch on same session, got nil")
+	w2, accepted := pool.Dispatch(msg2)
+	if !accepted {
+		t.Fatal("a follow-up for a running session must be accepted")
 	}
-
-	if w1 != w2 {
-		t.Errorf("expected same worker for same session_id, got different workers")
+	if w2 != nil {
+		t.Error("a follow-up must not ask for a second runner")
+	}
+	if len(w1.msgs) != 2 {
+		t.Errorf("both messages must queue on the one worker, got %d", len(w1.msgs))
 	}
 }
 
@@ -51,11 +55,11 @@ func TestWorkerRoutingDistinctSessions(t *testing.T) {
 	msgA := Message{Type: MessageTypeMessage, AgentSessionID: "session-A"}
 	msgB := Message{Type: MessageTypeMessage, AgentSessionID: "session-B"}
 
-	wA := pool.Dispatch(msgA)
+	wA, _ := pool.Dispatch(msgA)
 	if wA == nil {
 		t.Fatal("expected worker for session-A")
 	}
-	wB := pool.Dispatch(msgB)
+	wB, _ := pool.Dispatch(msgB)
 	if wB == nil {
 		t.Fatal("expected worker for session-B")
 	}
@@ -77,7 +81,7 @@ func TestSessionCap(t *testing.T) {
 			Type:           MessageTypeMessage,
 			AgentSessionID: "session-" + string(rune('A'+i)),
 		}
-		w := pool.Dispatch(msg)
+		w, _ := pool.Dispatch(msg)
 		if w == nil {
 			t.Fatalf("expected worker for session %d, got nil", i)
 		}
@@ -85,9 +89,9 @@ func TestSessionCap(t *testing.T) {
 
 	// 6th new session should be rejected
 	msg6 := Message{Type: MessageTypeMessage, AgentSessionID: "session-F"}
-	w6 := pool.Dispatch(msg6)
-	if w6 != nil {
-		t.Errorf("expected nil for 6th session (capacity exceeded), got a worker")
+	w6, accepted := pool.Dispatch(msg6)
+	if accepted || w6 != nil {
+		t.Errorf("6th session must be refused, got worker %v accepted %v", w6, accepted)
 	}
 }
 
@@ -96,20 +100,24 @@ func TestSessionCap(t *testing.T) {
 func TestSessionCapRelease(t *testing.T) {
 	pool := NewWorkerPool(5)
 
+	var first *Worker
 	for i := 0; i < 5; i++ {
 		msg := Message{
 			Type:           MessageTypeMessage,
 			AgentSessionID: "session-" + string(rune('A'+i)),
 		}
-		pool.Dispatch(msg)
+		w, _ := pool.Dispatch(msg)
+		if i == 0 {
+			first = w
+		}
 	}
 
 	// Release one slot
-	pool.Release("session-A")
+	pool.Release(first)
 
 	// Now a new session should succeed
 	msgNew := Message{Type: MessageTypeMessage, AgentSessionID: "session-NEW"}
-	wNew := pool.Dispatch(msgNew)
+	wNew, _ := pool.Dispatch(msgNew)
 	if wNew == nil {
 		t.Errorf("expected worker after releasing a slot, got nil")
 	}
@@ -123,7 +131,7 @@ func TestCancelActiveSession(t *testing.T) {
 	pool := NewWorkerPool(5)
 
 	msg := Message{Type: MessageTypeMessage, AgentSessionID: "session-cancel"}
-	w := pool.Dispatch(msg)
+	w, _ := pool.Dispatch(msg)
 	if w == nil {
 		t.Fatal("expected worker for cancel test session")
 	}
@@ -240,5 +248,64 @@ func TestGracefulShutdown(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Error("process did not exit after simulated shutdown SIGTERM")
+	}
+}
+
+// TestFollowUpDoesNotWedgeThePool pins the failure a second runner caused.
+// Two runners over one worker each released the same slot; the second
+// release blocked on a channel already at its cap while holding the mutex,
+// and every later dispatch then blocked on that mutex forever. The
+// connection stayed up and the heartbeats kept flowing, so the sandbox
+// looked healthy while accepting no work at all.
+func TestFollowUpDoesNotWedgeThePool(t *testing.T) {
+	pool := NewWorkerPool(2)
+
+	w, _ := pool.Dispatch(Message{Type: MessageTypeMessage, AgentSessionID: "s"})
+	if w == nil {
+		t.Fatal("expected a worker")
+	}
+	// A follow-up arrives while the turn runs.
+	pool.Dispatch(Message{Type: MessageTypeMessage, AgentSessionID: "s"})
+
+	// Drain both messages the way a runner does, then let it finish.
+	<-w.msgs
+	<-w.msgs
+	if !pool.finish(w) {
+		t.Fatal("finish must release a worker whose queue is empty")
+	}
+	// A second release must be a no-op, not an extra token.
+	pool.Release(w)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 2; i++ {
+			if _, accepted := pool.Dispatch(Message{
+				Type:           MessageTypeMessage,
+				AgentSessionID: "later-" + string(rune('a'+i)),
+			}); !accepted {
+				t.Errorf("dispatch %d refused: the slot was not returned", i)
+			}
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatch wedged: the pool never recovered the slot")
+	}
+}
+
+// TestFinishKeepsAWorkerWithAQueuedMessage pins the handoff. A runner that
+// checked its queue outside the lock could stop while Dispatch was
+// enqueueing, and that message would wait on a worker nobody was draining.
+func TestFinishKeepsAWorkerWithAQueuedMessage(t *testing.T) {
+	pool := NewWorkerPool(2)
+	w, _ := pool.Dispatch(Message{Type: MessageTypeMessage, AgentSessionID: "s"})
+	if pool.finish(w) {
+		t.Fatal("finish must refuse while a message is queued")
+	}
+	<-w.msgs
+	if !pool.finish(w) {
+		t.Fatal("finish must release once the queue is empty")
 	}
 }

@@ -16,6 +16,17 @@ import (
 // loses a result.
 const finalSendTimeout = 90 * time.Second
 
+// streamSendTimeout bounds a single stream write. A connection that cannot
+// take a small frame within this is not carrying a live display any more.
+//
+// The bound is the point. The context a worker sends with is the process
+// lifetime, so a write with no deadline blocks for as long as the kernel
+// retries a socket whose peer has stopped reading — minutes, during which
+// the stdout scanner stops draining the child, the pipe fills, and claude
+// itself stops. The library tears down a connection whose write deadline
+// expires, which forces the reconnect this state already needs.
+const streamSendTimeout = 5 * time.Second
+
 // errNoConnection reports that a frame could not be sent because no connection
 // was live. It is not a protocol error: the connection drops several times a
 // day for reasons outside this program.
@@ -74,6 +85,8 @@ func (h *connHolder) send(ctx context.Context, frame any) error {
 	if conn == nil {
 		return errNoConnection
 	}
+	ctx, cancel := context.WithTimeout(ctx, streamSendTimeout)
+	defer cancel()
 	return wsjson.Write(ctx, conn, frame)
 }
 
