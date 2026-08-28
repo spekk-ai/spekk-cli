@@ -37,9 +37,19 @@ func (p *WorkerPool) Dispatch(msg Message) (start *Worker, accepted bool) {
 	defer p.mu.Unlock()
 
 	// Existing session - enqueue on its worker, which is still draining.
+	//
+	// The send must not block. It happens under the pool mutex, so a full
+	// queue would hold that mutex until the worker drained one message, and
+	// every other dispatch would wait behind it — the same total stall as a
+	// double release, reached from the other side. A full queue is refused
+	// instead, and the control host is told so.
 	if w, ok := p.sessions[msg.AgentSessionID]; ok {
-		w.msgs <- msg
-		return nil, true
+		select {
+		case w.msgs <- msg:
+			return nil, true
+		default:
+			return nil, false
+		}
 	}
 
 	// New session - try to claim a worker slot

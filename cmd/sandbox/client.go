@@ -227,9 +227,10 @@ func (c *AgentClient) handleMessage(ctx context.Context, msg Message) {
 	if !accepted {
 		// An immediate refusal, so it belongs to the connection that asked.
 		c.conns.send(ctx, map[string]any{
-			"type":   "error",
-			"error":  "capacity_exceeded",
-			"detail": "All 5 agent worker slots are busy. Try again shortly.",
+			"type":             "error",
+			"error":            "capacity_exceeded",
+			"detail":           "No agent worker slot is free, or this session's queue is full. Try again shortly.",
+			"agent_session_id": msg.AgentSessionID,
 		})
 		return
 	}

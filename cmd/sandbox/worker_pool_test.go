@@ -309,3 +309,40 @@ func TestFinishKeepsAWorkerWithAQueuedMessage(t *testing.T) {
 		t.Fatal("finish must release once the queue is empty")
 	}
 }
+
+// TestFullSessionQueueIsRefusedNotBlocked pins the other way one dispatch
+// could stall every other one. The queue send happens under the pool mutex,
+// so a blocking send on a full queue holds that mutex until the worker
+// drains — and no other session can be dispatched meanwhile.
+func TestFullSessionQueueIsRefusedNotBlocked(t *testing.T) {
+	pool := NewWorkerPool(2)
+	msg := Message{Type: MessageTypeMessage, AgentSessionID: "s"}
+	if _, accepted := pool.Dispatch(msg); !accepted {
+		t.Fatal("first dispatch must be accepted")
+	}
+	// Fill the queue: one message is already on it, and it holds ten.
+	for i := 0; i < 9; i++ {
+		if _, accepted := pool.Dispatch(msg); !accepted {
+			t.Fatalf("follow-up %d must be accepted while the queue has room", i)
+		}
+	}
+
+	done := make(chan bool, 1)
+	go func() {
+		_, accepted := pool.Dispatch(msg)
+		done <- accepted
+	}()
+	select {
+	case accepted := <-done:
+		if accepted {
+			t.Error("a full queue must be refused, not accepted")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatch blocked on a full queue while holding the pool mutex")
+	}
+
+	// The pool still works for another session.
+	if _, accepted := pool.Dispatch(Message{Type: MessageTypeMessage, AgentSessionID: "other"}); !accepted {
+		t.Error("an unrelated session must still be dispatchable")
+	}
+}
