@@ -199,6 +199,19 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	return fm, markdownContent, nil
 }
 
+// CustomFields parses content's YAML frontmatter and returns every
+// top-level key outside known, with its values already split into items.
+// It is the shared entry point for a file type whose known keys are not a
+// spec's — an observation, say — so that every owner type indexes custom
+// fields under one rule instead of one copy of it per format.
+func CustomFields(content string, known map[string]bool) (map[string][]string, error) {
+	fm, _, err := parseFrontmatter(content)
+	if err != nil {
+		return nil, err
+	}
+	return customFields(fm, known), nil
+}
+
 // stripQuotes removes one matching pair of surrounding double or single
 // quotes.
 func stripQuotes(s string) string {
@@ -216,10 +229,10 @@ func stripQuotes(s string) string {
 // re-split, so an item may contain commas). Nested-map children, comments,
 // empty keys, and block-scalar bodies never appear. Returns nil when the
 // file has no custom fields.
-func customFields(fm *frontmatter) map[string][]string {
+func customFields(fm *frontmatter, known map[string]bool) map[string][]string {
 	out := make(map[string][]string)
 	for k, raw := range fm.raw {
-		if knownFrontmatterKeys[k] {
+		if known[k] {
 			continue
 		}
 		var values []string
@@ -441,7 +454,7 @@ func parseSpec(relFilePath string, content string) (*Spec, error) {
 		File:     relFilePath,
 		Title:    extractTitle(body),
 		Content:  strings.TrimSpace(body),
-		Fields:   customFields(fm),
+		Fields:   customFields(fm, knownFrontmatterKeys),
 	}, nil
 }
 
@@ -509,7 +522,7 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		File:      relFilePath,
 		Title:     extractTitle(body),
 		Content:   strings.TrimSpace(body),
-		Fields:    customFields(fm),
+		Fields:    customFields(fm, knownFrontmatterKeys),
 	}, nil
 }
 

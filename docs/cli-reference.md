@@ -272,7 +272,7 @@ Schema:
 | `specs` | `id`, `title`, `status`, `priority`, `branch`, `file` |
 | `assertions` | `id`, `parent_id` (→ `specs.id`), `title`, `status`, `priority`, `branch`, `file` |
 | `depends_on` | `assertion_id`, `depends_on_id` (both → `assertions.id`) |
-| `frontmatter_fields` | `owner_type` (`spec` \| `assertion`), `owner_id`, `key`, `value` |
+| `frontmatter_fields` | `owner_type` (`spec` \| `assertion` \| `observation`), `owner_id`, `key`, `value` |
 
 `depends_on` holds **assertion-level** edges only; spec-level relationships are not modeled as data (see the spec bodies).
 
@@ -285,6 +285,18 @@ Value rules:
 - In a bare scalar or flow sequence, an **unquoted comma always splits**. A quoted region protects its commas: `note: "Hello, world"` is one value, and `[a, "b, c"]` is two.
 - Block-list items are never re-split — an item keeps its commas as written.
 - Comment lines, nested-map children, empty keys, and block scalars (`key: |` / `key: >`) never become custom fields. The frontmatter parser reads top-level scalars, flow sequences, and flat block lists only.
+
+An observation carries custom fields under the same rule, with its own known set (`slug`, `type`, `severity`, `status`, `created`, `announced`, `pr`, `affected`). Its rows use `owner_type = 'observation'` and the slug as `owner_id`. `affected` is a known key and never becomes a custom field: it is the evidence gate and the dedup key, and `observation_files` is its table.
+
+The `owner_id` of an observation is the slug alone, although `observations` and `observation_files` are keyed by (slug, ref). Each observer branch is cut from main and inherits every observation already merged, so the same slug reaches the index once per ref; the rows are merged across refs, and a slug carried by twenty branches indexes exactly as a slug carried by one.
+
+So ask `frontmatter_fields` alone. Joining it to `observations` on the slug returns one copy of every field row per ref, which is the one way to un-merge what the table merged; add `DISTINCT` when a join is unavoidable.
+
+```sql
+SELECT owner_id AS slug, key, value
+  FROM frontmatter_fields
+ WHERE owner_type = 'observation' AND key = 'skill';
+```
 
 !!! warning "`depends-on` is a chain, not a list"
 
