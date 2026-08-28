@@ -139,16 +139,27 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	// top-level `key:` line with an empty value.
 	pendingListKey := ""
 
-	for _, line := range yamlLines {
+	// Which column counts as top level. A root mapping is allowed to be
+	// indented, as long as it is indented consistently, so "top level"
+	// means the shallowest line in this block and not column zero.
+	base := baseIndent(yamlLines)
+
+	for _, rawLine := range yamlLines {
+		// A trailing ` # ...` is a comment, and it is cut before anything
+		// else reads the line. Without this an inline comment becomes part
+		// of the value, and a comment on a key that opens a block list
+		// (`tags: # my tags`) makes the key look like a scalar, which
+		// discards every item under it.
+		line := stripInlineComment(rawLine)
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
 		// A YAML block-list item. Collect it under the key that opened the
 		// list. The item is kept whole — commas inside an item never split.
-		if strings.HasPrefix(trimmed, "- ") {
+		if strings.HasPrefix(trimmed, "- ") || trimmed == "-" {
 			if pendingListKey != "" {
-				item := stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+				item := stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "-")))
 				if item != "" {
 					fm.lists[pendingListKey] = append(fm.lists[pendingListKey], item)
 				}
@@ -160,11 +171,10 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 			continue
 		}
 
-		// An indented line is a nested child (nested map, block-scalar
-		// body). It must not become a top-level custom field or close an
-		// open block list. The fields map still records it for byte-for-byte
-		// compatibility with the known-key scanner.
-		indented := line[0] == ' ' || line[0] == '\t'
+		// A line deeper than the base column is a nested child (nested map,
+		// block-scalar body). It must not become a top-level custom field
+		// or close an open block list.
+		indented := leadingWidth(line) > base
 
 		colonIdx := strings.Index(line, ":")
 		if colonIdx == -1 {
@@ -174,18 +184,30 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 			continue
 		}
 
+		// An indented `key: value` is a nested child or a block-scalar body
+		// line. It sets nothing: a child that reaches fields overwrites the
+		// top-level key of the same name, so a `priority:` written inside a
+		// prose block became the assertion's priority.
+		//
+		// It does close an open block list. The items under a nested key
+		// belong to that key, and leaving the list open gave them to the
+		// nearest top-level key instead — so `env: matrix: [- linux]`
+		// indexed linux as a value of env.
+		if indented {
+			pendingListKey = ""
+			continue
+		}
+
 		key := strings.TrimSpace(line[:colonIdx])
 		value := strings.TrimSpace(line[colonIdx+1:])
 
-		if !indented {
-			if value == "" {
-				pendingListKey = key
-			} else {
-				pendingListKey = ""
-			}
-			if key != "" {
-				fm.raw[key] = value
-			}
+		if value == "" {
+			pendingListKey = key
+		} else {
+			pendingListKey = ""
+		}
+		if key != "" {
+			fm.raw[key] = value
 		}
 
 		// Strip surrounding quotes if present.
@@ -210,6 +232,90 @@ func CustomFields(content string, known map[string]bool) (map[string][]string, e
 		return nil, err
 	}
 	return customFields(fm, known), nil
+}
+
+// baseIndent returns the column the frontmatter's own keys sit at: the
+// smallest indentation among the lines that carry data. Reading column zero
+// as the only top level would reject a whole block that is indented
+// together, which is valid YAML and which parsed before this rule existed.
+//
+// It must measure the same lines the scanner keeps, so it drops a comment
+// and a blank first. A comment shallower than an indented block would
+// otherwise set the base below the block's own keys, and every key would
+// then read as a nested child and set nothing.
+func baseIndent(lines []string) int {
+	base := -1
+	for _, line := range lines {
+		line = stripInlineComment(line)
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if w := leadingWidth(line); base == -1 || w < base {
+			base = w
+		}
+	}
+	if base == -1 {
+		return 0
+	}
+	return base
+}
+
+// leadingWidth counts the spaces and tabs a line starts with.
+func leadingWidth(line string) int {
+	for i := 0; i < len(line); i++ {
+		if line[i] != ' ' && line[i] != '\t' {
+			return i
+		}
+	}
+	return len(line)
+}
+
+// stripInlineComment cuts a trailing YAML comment from a frontmatter line.
+// The comment opens at a `#` that follows whitespace and sits outside a
+// quoted scalar, so `url: https://x#frag` keeps its fragment and
+// `note: "a # b"` keeps its hash. Leading whitespace survives, because the
+// caller reads it to tell a top-level key from a nested child.
+func stripInlineComment(line string) string {
+	var quote byte
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case quote == '"' && c == '\\':
+			i++ // a backslash escapes the next byte, `\"` included
+		case quote == '\'' && c == '\'' && i+1 < len(line) && line[i+1] == '\'':
+			i++ // '' is one literal quote, and it does not close the scalar
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case (c == '"' || c == '\'') && opensQuotedScalar(line, i):
+			quote = c
+		case c == '#' && i > 0 && (line[i-1] == ' ' || line[i-1] == '\t'):
+			return strings.TrimRight(line[:i], " \t")
+		}
+	}
+	return line
+}
+
+// opensQuotedScalar reports whether the quote byte at i starts a quoted
+// scalar. A quote opens one only where a value or an item starts. Anywhere
+// else it is a character in a plain scalar, so `it's fine # note` loses its
+// comment and `height: 5'9"` keeps its marks.
+//
+// The test is the byte before, so an apostrophe that follows a hyphen or a
+// comma still reads as an opening quote, and a comment after it survives
+// (`note: re-'do it # test`). A line scanner cannot tell that case from a
+// real quoted scalar without parsing the value.
+func opensQuotedScalar(line string, i int) bool {
+	if i == 0 {
+		return true
+	}
+	switch line[i-1] {
+	case ' ', '\t', ':', ',', '[', '{', '-':
+		return true
+	}
+	return false
 }
 
 // stripQuotes removes one matching pair of surrounding double or single
