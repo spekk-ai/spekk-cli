@@ -14,6 +14,8 @@ Two findings in one file are two findings. The slug says which finding this is; 
 
 ## Success criteria
 
+- A dated slug and its plain form are the same finding. `ResolveSlug` appends `-YYYYMMDD` when a plain slug is taken by history, so a recurrence files under a dated name; the comparison strips that suffix. Comparing whole slugs made a recurrence's own live claim invisible to the next scan, which then answered `clear` with a branch that already existed and could not be created.
+
 - `Covers` takes the candidate type and the candidate slug, and reports true only when both equal the observation's own. It no longer reads `Affected`, and it no longer calls `NormalizePath`.
 - `FindCovering` takes the same two values and returns the first live claim that matches.
 - `spekk observer scan-check` passes `--slug` to the covering test. `--type` and `--affected` stay required flags: the type is half the key, and `--affected` is what `.spekk/dont-flag.yaml` matches on.

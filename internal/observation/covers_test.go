@@ -2,10 +2,10 @@ package observation
 
 import "testing"
 
-// The dedup key is a string an agent writes, not one the code derives, so
-// the same file arrives spelled several ways across runs. Every spelling
-// that carries no meaning must reduce to the same thing, or a second run
-// files a finding a first run already filed.
+// An affected path is a string an agent writes, not one the code derives,
+// so the same file arrives spelled several ways across runs. Every spelling
+// that carries no meaning must reduce to the same thing, or a dont-flag
+// entry stops matching the drift it was written to suppress.
 func TestNormalizePathStripsSpellingThatCarriesNoMeaning(t *testing.T) {
 	const want = "internal/parser/parser.go"
 

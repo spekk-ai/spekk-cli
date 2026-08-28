@@ -290,3 +290,116 @@ func TestScanCheckMalformedDontFlagFailsLoudly(t *testing.T) {
 		t.Fatalf("error must name the offending entry: %q", errOut.String())
 	}
 }
+
+// TestScanCheckDatedRecurrenceIsCovered pins the case a recurrence creates.
+// A slug already on main files under a -YYYYMMDD name, and the next scan
+// proposes the plain slug again. Comparing whole slugs missed that live
+// claim, so the tool answered "clear" with a branch that already existed
+// and could not be created.
+func TestScanCheckDatedRecurrenceIsCovered(t *testing.T) {
+	dir := newObserverRepo(t)
+	now := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+
+	// A finding resolved long ago on main, and the same drift claimed again
+	// today under the dated slug the tool itself hands out.
+	writeObservationOnMain(t, dir, "old-drift", "resolved")
+	writeObservationBranch(t, dir, "old-drift-20260828", "high", "internal/parser/parser.go")
+
+	res := runScanCheck(t, now, "old-drift", "internal/parser/parser.go")
+	if res.Result != "covered" || res.Slug != "old-drift-20260828" {
+		t.Fatalf("the dated claim covers its own plain slug, got %+v", res)
+	}
+	if res.Branch != "observer/old-drift-20260828" {
+		t.Fatalf("branch must name the claim that exists, got %+v", res)
+	}
+}
+
+// TestScanCheckCoveredAtRemoteRef pins the ref-stripping rule at the CLI
+// boundary. A local ref cannot catch it: there BranchFromRef and the old
+// slug-derived name produce the same string.
+func TestScanCheckCoveredAtRemoteRef(t *testing.T) {
+	dir := t.TempDir()
+	origin := filepath.Join(dir, "origin")
+	if err := os.MkdirAll(origin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitT(t, origin, "init", "-q", "-b", "main")
+	gitT(t, origin, "config", "user.email", "test@example.com")
+	gitT(t, origin, "config", "user.name", "Test")
+	gitT(t, origin, "config", "commit.gpgsign", "false")
+	gitT(t, origin, "commit", "-q", "--allow-empty", "-m", "init")
+	writeObservationBranch(t, origin, "remote-claim", "high", "internal/parser/parser.go")
+
+	clone := filepath.Join(dir, "clone")
+	gitT(t, dir, "clone", "-q", origin, clone)
+	chdirT(t, clone)
+
+	res := runScanCheck(t, time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC),
+		"remote-claim", "internal/parser/parser.go")
+	if res.Result != "covered" {
+		t.Fatalf("a claim on a remote-tracking ref still covers, got %+v", res)
+	}
+	if res.Branch != "observer/remote-claim" {
+		t.Fatalf("branch must be the logical name, got %q", res.Branch)
+	}
+	if res.Ref != "refs/remotes/origin/observer/remote-claim" {
+		t.Fatalf("ref must be fully qualified, got %q", res.Ref)
+	}
+}
+
+// TestScanCheckRejectsAMalformedSlug pins the gate. The slug is the dedup
+// identity and the observation's own name, so one the format rejects would
+// file an observation the union skips forever, with no failure anybody sees.
+func TestScanCheckRejectsAMalformedSlug(t *testing.T) {
+	newObserverRepo(t)
+	var out, errOut bytes.Buffer
+	code := execObserverScanCheck([]string{
+		"--type", "code_spec_misalignment",
+		"--slug", "New_Finding!",
+		"--affected", "internal/parser/parser.go",
+	}, &out, &errOut, time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC))
+	if code == 0 {
+		t.Fatalf("a malformed slug must fail, got exit 0 and %s", out.String())
+	}
+	if !strings.Contains(errOut.String(), "kebab-case") {
+		t.Fatalf("the error must name the rule, got %q", errOut.String())
+	}
+}
+
+// runScanCheck runs the command and decodes its JSON result.
+func runScanCheck(t *testing.T, now time.Time, slug, affected string) scanCheckResult {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	code := execObserverScanCheck([]string{
+		"--type", "code_spec_misalignment",
+		"--slug", slug,
+		"--affected", affected,
+	}, &out, &errOut, now)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	var res scanCheckResult
+	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	return res
+}
+
+// writeObservationOnMain commits an observation directly on main, which is
+// how a resolved finding looks after its remedy merged.
+func writeObservationOnMain(t *testing.T, dir, slug, status string) {
+	t.Helper()
+	content := "---\nslug: " + slug + "\ntype: code_spec_misalignment\n" +
+		"severity: high\nstatus: " + status + "\ncreated: 2026-07-26T12:00:00Z\n" +
+		"affected:\n  - internal/parser/parser.go\n---\n\n# Finding " + slug + "\n"
+	gitT(t, dir, "checkout", "-q", "main")
+	path := filepath.Join(dir, "observations", slug+".md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitT(t, dir, "add", ".")
+	gitT(t, dir, "commit", "-q", "-m", "resolve "+slug)
+}

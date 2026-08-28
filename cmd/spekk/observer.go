@@ -82,10 +82,11 @@ OPTIONS:
   --json      Emit the digest as a JSON array
   --help, -h  Show this help message
 
-The digest is a rendered view, not a committed file: the open observations
-across all visible observer/* branches plus main, ranked by severity
-(high > medium > low, oldest first within a severity), capped at 5. A slug
-whose observation is already on main counts as not open.
+The digest is a rendered view, not a committed file: the open findings that
+are live claims, ranked by severity (high > medium > low, oldest first
+within a severity), capped at 5. A live claim is the observation read from
+the branch named after it, whose slug has not reached main — a copy another
+branch inherited is not a claim, and a slug already on main is resolved.
 
 The view reads committed git state only (no checkout, no remote call). Run
 "git fetch" first when you want remote-tracking observer branches current.
@@ -184,13 +185,20 @@ The observer runs this before creating any observation. The result is JSON:
   {"result":"suppressed", ...}  an active .spekk/dont-flag.yaml entry (as
                                 committed on main) matches an evidence path
                                 or the slug; create nothing
-  {"result":"covered", ...}     an observation on a visible branch already
-                                covers the drift (same type, overlapping
-                                affected paths); create nothing
+  {"result":"covered", ...}     a live claim already covers the drift: the
+                                same type and the same slug, read from the
+                                branch named after it, with that slug not
+                                yet on main; create nothing
   {"result":"clear","slug":..}  no coverage; create the observation with the
                                 returned slug (a -YYYYMMDD suffix is added
                                 when the plain slug is taken by an
-                                observation already on main)
+                                observation already on main). A dated slug
+                                and its plain form are the same finding, so
+                                a recurrence still under review is covered.
+
+--slug must be kebab-case, because it is the identity a later scan dedups
+on and the name the observation file must carry. A slug the observation
+format rejects would file an observation the index skips forever.
 
 A malformed .spekk/dont-flag.yaml fails the check with a message naming the
 offending entry — a broken suppression file is never treated as empty.
@@ -247,6 +255,16 @@ func execObserverScanCheck(args []string, stdout, stderr io.Writer, now time.Tim
 	}
 	if len(missing) > 0 {
 		fmt.Fprintf(stderr, "Error: missing required flag(s): %s\n", strings.Join(missing, ", "))
+		return 1
+	}
+
+	// The slug is the dedup identity and the name the observation file must
+	// carry, so it is checked here rather than at the file. A slug the
+	// observation format rejects would pass this gate, file an observation
+	// the union skips forever, and never dedup or announce — invisible,
+	// with only a warning on a later command's stderr.
+	if !observation.ValidSlug(slug) {
+		fmt.Fprintf(stderr, "Error: --slug must be kebab-case (lowercase letters and digits, single hyphens), got %q\n", slug)
 		return 1
 	}
 

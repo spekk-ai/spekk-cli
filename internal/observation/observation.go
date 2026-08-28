@@ -117,6 +117,14 @@ var (
 	validStatuses   = map[string]bool{StatusOpen: true, StatusResolved: true, StatusDismissed: true}
 )
 
+// ValidSlug reports whether s is a well-formed observation slug: kebab-case,
+// which is what Parse requires and what BranchName assumes. A caller that
+// takes a slug from outside checks it here, so a slug the format rejects is
+// refused at the gate rather than written into a file the union then skips.
+func ValidSlug(s string) bool {
+	return slugPattern.MatchString(s)
+}
+
 // SeverityRank orders severities for ranking: high (0) before medium (1)
 // before low (2). Unknown severities sort last.
 func SeverityRank(severity string) int {

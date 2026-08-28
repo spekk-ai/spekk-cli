@@ -19,4 +19,4 @@ A `covered` result tells a person where to go and look. The field must be a fact
 
 **Note:** with `covering-needs-the-owning-branch` in place the two values agree by construction, because only the owning branch can cover. The field is still read from the ref, so it stays a fact if the covering rule ever widens again.
 
-**Tests:** `cmd/spekk/` — a `covered` result found at a remote-tracking ref reports `branch` as the logical branch name and `ref` as the fully-qualified ref.
+**Tests:** `cmd/spekk/observer_test.go` — a `covered` result found at a remote-tracking ref reports `branch` as the logical branch name and `ref` as the fully-qualified ref.

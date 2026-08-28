@@ -156,22 +156,26 @@ func (u *Union) OnMain(slug string) bool {
 // repository-root-relative — writing root-relative paths is the prompt's
 // job, like naming files rather than directories.
 //
-// Dedup compares these strings exactly, and the strings are written by an
-// agent rather than produced by the code — so the same file arrives spelled
-// several ways. A run that names `internal/parser/parser.go:42` where an
-// earlier run named `internal/parser/parser.go` is describing the same file,
-// but the raw strings differ, so nothing covers it and the finding is filed
-// again. Normalizing removes the three spellings that carry no meaning:
+// Dont-flag suppression matches on these strings, and the strings are
+// written by an agent rather than produced by the code — so the same file
+// arrives spelled several ways. A run that names
+// `internal/parser/parser.go:42` where a suppression entry named
+// `internal/parser/parser.go` is describing the same file, but the raw
+// strings differ, so the entry does not match. Normalizing removes the
+// three spellings that carry no meaning:
 //
 //	./internal/parser/parser.go     leading ./
 //	internal/parser/parser.go:42    a line, or line:column
 //	internal/parser/parser.go/      a trailing slash
 //
 // A directory is deliberately NOT reduced to the files under it. Prefix
-// containment would let one directory-level finding swallow every
-// file-level finding beneath it — a false negative that hides real drift,
-// which is worse than a duplicate. Naming files rather than directories is
-// the prompt's job, not this function's.
+// containment would let one directory-level entry swallow every file-level
+// finding beneath it — a false negative that hides real drift, which is
+// worse than a duplicate. Naming files rather than directories is the
+// prompt's job, not this function's.
+//
+// Scan-time dedup no longer reads these strings at all: it keys on the type
+// and the slug (see Covers).
 func NormalizePath(p string) string {
 	p = strings.TrimSpace(p)
 	if p == "" {
@@ -210,6 +214,9 @@ func allDigits(s string) bool {
 // Covers reports whether the observation is the same finding as a
 // candidate: same type and same slug.
 //
+// A dated slug and its plain form are the same finding, so the comparison
+// is on the base slug (see BaseSlug).
+//
 // The slug is what a finding is called; an affected path is only where it
 // lives. Keying on an overlapping path made two unrelated findings in one
 // file the same finding — and the affected list of a code_spec_misalignment
@@ -219,7 +226,23 @@ func allDigits(s string) bool {
 // NormalizePath on directories). The type stays in the key because one file
 // can carry drift of both types at once.
 func (o *Observation) Covers(typ, slug string) bool {
-	return o.Type == typ && o.Slug == slug
+	return o.Type == typ && BaseSlug(o.Slug) == BaseSlug(slug)
+}
+
+// BaseSlug strips a trailing -YYYYMMDD from a slug.
+//
+// ResolveSlug appends that suffix when a plain slug is already taken by
+// history, so a recurrence files under a dated name. The suffix uniquifies
+// the branch; it does not make the finding a different finding. Comparing
+// whole slugs made a recurrence's own live claim invisible to the next
+// scan, which then proposed a branch that already existed and could not be
+// created.
+func BaseSlug(slug string) string {
+	i := strings.LastIndexByte(slug, '-')
+	if i <= 0 || len(slug)-i-1 != 8 || !allDigits(slug[i+1:]) {
+		return slug
+	}
+	return slug[:i]
 }
 
 // FindCovering returns the live claim in the union that is the candidate
