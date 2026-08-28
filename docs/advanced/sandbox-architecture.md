@@ -18,7 +18,9 @@ This separation means the agent binary is reusable for any task a control host w
 
 ## Connection model
 
-The agent connects **out** to the control host — you never connect to the agent directly. On startup, the agent dials a WebSocket endpoint on the control host and holds the connection open indefinitely. If the connection drops, the agent reconnects with exponential backoff (3 s base, 60 s cap).
+The agent connects **out** to the control host — you never connect to the agent directly. On startup, the agent dials a WebSocket endpoint on the control host and holds the connection open indefinitely. If the connection drops, the agent reconnects with exponential backoff (3 s base, 60 s cap). The backoff resets after a connection that **lived** — one that ends within 10 seconds does not count, so a control host that accepts and closes at once still backs off.
+
+**A dropped connection does not end a turn.** The work belongs to the agent process, not to the connection that carried its dispatch, so `claude` keeps running and its output keeps being read. A frame that ends a turn waits up to 90 seconds for a live connection and is delivered on whichever one is live when it is sent, which carries the report across a reconnect. Stream frames do not wait: with no connection they are dropped, because they drive a live display and blocking on them would stall the read of the child's output.
 
 ```
 ┌─────────────┐         WebSocket (outbound)        ┌──────────────┐
@@ -101,7 +103,7 @@ All frames are JSON objects with a `type` field. The `Message` struct defines th
 |------|---------|------------|
 | `stream` | One line of Claude's streaming JSON output | `data` |
 | `result` | Claude finished successfully | `session_id`, `agent_session_id`, `output` |
-| `error` | Something went wrong | `error`, `detail` |
+| `error` | Something went wrong | `error`, `detail`, `agent_session_id` |
 | `heartbeat` | Keep-alive sent every 30 seconds | *(none)* |
 | `conversation_open` | Request a human conversation (from the spool) | `session_id`, `title`, `body`, `severity` |
 
@@ -115,19 +117,20 @@ Every `message` frame carries an `agent_session_id` that the worker pool uses to
 
 The agent runs a pool of **5 concurrent workers**. Each worker handles one `agent_session_id` at a time.
 
-- A new `agent_session_id` claims an available slot. If all 5 are busy, the agent replies with a `capacity_exceeded` error:
+- A new `agent_session_id` claims an available slot. If all 5 are busy, or if the session's own queue is full, the agent replies with a `capacity_exceeded` error:
 
 ```json
 {
-  "type":   "error",
-  "error":  "capacity_exceeded",
-  "detail": "All 5 agent worker slots are busy. Try again shortly."
+  "type":             "error",
+  "error":            "capacity_exceeded",
+  "detail":           "No agent worker slot is free, or this session's queue is full. Try again shortly.",
+  "agent_session_id": "..."
 }
 ```
 
-- Messages with an already-active `agent_session_id` are enqueued on that worker (buffer of 10).
-- When a worker finishes its queue, the slot is released for new sessions.
-- A `cancel` frame sends SIGTERM to the worker's running Claude process.
+- Messages with an already-active `agent_session_id` are enqueued on that worker (buffer of 10). One runner drains that queue; a follow-up starts no second runner. A full queue is refused rather than waited on, because the enqueue happens under the pool lock and blocking there would stall every other session's dispatch.
+- When a worker finishes its queue, the slot is released for new sessions. The emptiness check and the release share the pool lock, so a message that arrives at the last moment is never left on a worker nobody is draining.
+- A `cancel` frame sends SIGTERM to the worker's running Claude process. It does not clear that session's queue, so a queued follow-up still runs (see issue #212).
 
 ---
 
