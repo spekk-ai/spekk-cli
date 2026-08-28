@@ -1508,6 +1508,26 @@ func TestCustomFields_InlineCommentsStripped(t *testing.T) {
 	fieldsEq(t, a.Fields, "link", []string{"https://example.com/x#frag"})
 }
 
+func TestFrontmatter_BlockScalarHeaderWithIndicator(t *testing.T) {
+	// `|2` is a block-scalar header too. Matching only the six unadorned
+	// spellings left its body reading as top-level keys, so a priority
+	// written in prose became the assertion's priority.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 2\n" +
+		"desc: |2\n  priority: 9\n  note: hello\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Priority != 2 {
+		t.Fatalf("block-scalar body set priority: got %d, want 2", a.Priority)
+	}
+	for _, k := range []string{"desc", "note", "priority"} {
+		if v, ok := a.Fields[k]; ok {
+			t.Errorf("key %q must have no values, got %v", k, v)
+		}
+	}
+}
+
 func TestFrontmatter_ListSurvivesAMappingItem(t *testing.T) {
 	// `run: make` continues the item above it. Reading it as the end of the
 	// list dropped every later item, so `deploy` vanished in silence.

@@ -227,7 +227,7 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 			pendingListKey = ""
 			// A block scalar opens a region too, although its value is not
 			// empty. Its body lines are prose and must set nothing.
-			if blockScalarIndicators[value] {
+			if isBlockScalar(value) {
 				nestedOwner = key
 			} else {
 				nestedOwner = ""
@@ -384,12 +384,32 @@ func customFields(fm *frontmatter, known map[string]bool) map[string][]string {
 	return out
 }
 
-// blockScalarIndicators are scalar values that announce a YAML block scalar
-// (`key: |`). The line scanner cannot read the indented body, so the value
-// carries no data — customFields drops the key instead of indexing "|".
-var blockScalarIndicators = map[string]bool{
-	"|": true, "|-": true, "|+": true,
-	">": true, ">-": true, ">+": true,
+// isBlockScalar reports whether a frontmatter value announces a YAML block
+// scalar. The header is `|` or `>`, and it may carry an indentation digit
+// and a chomping sign in either order — `|`, `>-`, `|2`, `|+1`, `>2-`. An
+// exact-match list of the six unadorned spellings missed every header with
+// an indicator, so its body was read as top-level keys and a `priority:`
+// written in prose overwrote the real one.
+//
+// The line scanner cannot read the indented body, so the value carries no
+// data: customFields drops the key instead of indexing "|", and the key
+// owns the indented region below it.
+func isBlockScalar(v string) bool {
+	if v == "" || (v[0] != '|' && v[0] != '>') {
+		return false
+	}
+	digits, signs := 0, 0
+	for i := 1; i < len(v); i++ {
+		switch c := v[i]; {
+		case c >= '0' && c <= '9':
+			digits++
+		case c == '-' || c == '+':
+			signs++
+		default:
+			return false
+		}
+	}
+	return digits <= 1 && signs <= 1
 }
 
 // splitFieldValues splits a custom frontmatter scalar into its items. A
@@ -399,7 +419,7 @@ var blockScalarIndicators = map[string]bool{
 // per item. An empty value or a block-scalar indicator yields nil.
 func splitFieldValues(value string) []string {
 	v := strings.TrimSpace(value)
-	if v == "" || blockScalarIndicators[v] {
+	if v == "" || isBlockScalar(v) {
 		return nil
 	}
 	if isOneQuotedScalar(v) {
