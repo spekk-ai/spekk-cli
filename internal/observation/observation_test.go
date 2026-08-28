@@ -173,6 +173,16 @@ func TestBranchNameRoundTrip(t *testing.T) {
 	if _, ok := SlugFromBranch("observer/"); ok {
 		t.Fatal("empty slug must not be ok")
 	}
+	for ref, want := range map[string]string{
+		"refs/heads/observer/my-slug":            "observer/my-slug",
+		"refs/remotes/origin/observer/my-slug":   "observer/my-slug",
+		"refs/remotes/upstream/observer/my-slug": "observer/my-slug",
+		"refs/heads/main":                        "main",
+	} {
+		if got := BranchFromRef(ref); got != want {
+			t.Errorf("BranchFromRef(%q) = %q, want %q", ref, got, want)
+		}
+	}
 }
 
 func TestResolveSlug(t *testing.T) {
@@ -183,19 +193,6 @@ func TestResolveSlug(t *testing.T) {
 	}
 	if got := ResolveSlug("taken", onMain, now); got != "taken-20260727" {
 		t.Fatalf("colliding slug must get a dated suffix: %q", got)
-	}
-}
-
-func TestCovers(t *testing.T) {
-	o := &Observation{Type: TypeCodeSpecMisalignment, Affected: []string{"a.go", "b.go"}}
-	if !o.Covers(TypeCodeSpecMisalignment, []string{"x.go", "b.go"}) {
-		t.Fatal("overlapping path with same type must be covered")
-	}
-	if o.Covers(TypeOutdatedSpecs, []string{"b.go"}) {
-		t.Fatal("different type must not be covered")
-	}
-	if o.Covers(TypeCodeSpecMisalignment, []string{"x.go"}) {
-		t.Fatal("disjoint paths must not be covered")
 	}
 }
 
@@ -216,6 +213,9 @@ func TestDigestSemantics(t *testing.T) {
 		mk("merged", SeverityHigh, StatusOpen, "2026-01-01T00:00:00Z", "refs/heads/observer/merged"),
 		mk("merged", SeverityHigh, StatusResolved, "2026-01-01T00:00:00Z", "refs/heads/main"),
 		mk("low-2", SeverityLow, StatusOpen, "2026-01-02T00:00:00Z", "refs/heads/observer/low-2"),
+		// An inherited copy at another finding's branch is not a claim, so
+		// the digest never shows a finding whose own branch is gone.
+		mk("inherited", SeverityHigh, StatusOpen, "2026-01-01T00:00:00Z", "refs/heads/observer/low-2"),
 		mk("high-2", SeverityHigh, StatusOpen, "2026-01-01T00:00:00Z", "refs/heads/observer/high-2"),
 	}}
 

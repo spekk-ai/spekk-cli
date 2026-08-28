@@ -15,7 +15,7 @@ An observation carries provenance that the closed lifecycle set has no field for
 ## Success criteria
 
 - After `spekk index`, an observation whose frontmatter carries a key outside the known lifecycle set (`slug`, `type`, `severity`, `status`, `created`, `announced`, `pr`, `affected`) has `frontmatter_fields` rows with `owner_type = 'observation'` and `owner_id` set to the slug. A known key produces no row.
-- `affected` produces no `frontmatter_fields` row. It is the evidence gate and the dedup key, `observation_files` is its table, and a second copy of it under a different name invites a query to read the gate as a tag.
+- `affected` produces no `frontmatter_fields` row. It is the evidence gate, `observation_files` is its table, and a second copy of it under a different name invites a query to read the gate as a tag.
 - The split rule is one rule, not a second copy of one. The same code that decides a spec's values decides an observation's, so a flow sequence (`tags: [a, b]`), a bare comma scalar (`a, b`), and a block list index identically; quoting protects commas; and comment lines, nested-map children, empty keys, and block scalars (`key: |`) never become rows.
 - One row per distinct `(owner_id, key, value)`. The union holds one entry per (slug, ref) and every branch inherits every merged observation, so the same slug arrives many times; the rows are the same whether a slug is carried by one ref or by twenty. Where two refs disagree on a value, both values appear, exactly as a genuine multi-value key does.
 - The index schema version rises, so an index that an earlier binary built rebuilds on first read instead of answering from rows that predate this change. The rows a build writes have changed even though no column has.

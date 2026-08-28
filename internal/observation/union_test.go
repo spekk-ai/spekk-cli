@@ -114,23 +114,64 @@ func TestLoadUnionReadsBranchesAndMain(t *testing.T) {
 		t.Fatalf("working tree branch changed to %q", branch)
 	}
 
-	// Deleting a branch forgets its observation: the union no longer covers
-	// the drift and a re-scan may legitimately re-flag it.
+	// Deleting a branch forgets its observation: nothing claims the finding
+	// any more, and a re-scan may legitimately file it again.
 	git(t, dir, "branch", "-q", "-D", "observer/finding-a")
 	u2, err := LoadUnion()
 	if err != nil {
 		t.Fatalf("LoadUnion after delete: %v", err)
 	}
-	if u2.FindCovering(TypeCodeSpecMisalignment, []string{"internal/parser/parser.go"}) == nil {
-		t.Fatal("finding-b still covers the drift (same type, overlapping path)")
+	if c := u2.FindCovering(TypeCodeSpecMisalignment, "finding-a"); c != nil {
+		t.Fatalf("a deleted branch must be forgotten; still claimed at %q", c.Ref)
 	}
-	git(t, dir, "branch", "-q", "-D", "observer/finding-b")
-	u3, err := LoadUnion()
+	if u2.FindCovering(TypeCodeSpecMisalignment, "finding-b") == nil {
+		t.Fatal("finding-b is still on its own branch and must still claim its finding")
+	}
+}
+
+// Every observer branch is cut from origin/main, so every branch carries a
+// copy of every observation already merged. A copy is not a claim: only the
+// branch named after an observation speaks for it, and only until the slug
+// reaches main.
+func TestOnlyTheOwningBranchCovers(t *testing.T) {
+	dir := newRepo(t)
+
+	// One finding merged to main, resolved long ago.
+	if err := os.MkdirAll(filepath.Join(dir, "observations"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolved := strings.Replace(validObs(map[string]string{"slug": "old-drift"}), "status: open", "status: resolved", 1)
+	if err := os.WriteFile(filepath.Join(dir, "observations/old-drift.md"), []byte(resolved), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-q", "-m", "merge old-drift")
+
+	// An unrelated finding filed afterwards inherits old-drift.md.
+	commitObservation(t, dir, "observer/unrelated", "observations/unrelated.md",
+		validObs(map[string]string{"slug": "unrelated"}))
+
+	u, err := LoadUnion()
 	if err != nil {
-		t.Fatalf("LoadUnion after second delete: %v", err)
+		t.Fatalf("LoadUnion: %v", err)
 	}
-	if c := u3.FindCovering(TypeCodeSpecMisalignment, []string{"internal/parser/parser.go"}); c != nil {
-		t.Fatalf("deleted branches must be forgotten; still covered by %q", c.Slug)
+	if c := u.FindCovering(TypeCodeSpecMisalignment, "old-drift"); c != nil {
+		t.Fatalf("an inherited copy must not claim the finding; claimed at %q", c.Ref)
+	}
+	claim := u.FindCovering(TypeCodeSpecMisalignment, "unrelated")
+	if claim == nil || claim.Ref != "refs/heads/observer/unrelated" {
+		t.Fatalf("the live finding must be claimed from its own branch, got %+v", claim)
+	}
+
+	// A branch merged but never deleted carries the observation at its own
+	// name. Main wins: the finding is resolved while the branch survives.
+	git(t, dir, "branch", "-q", "observer/old-drift", "main")
+	u2, err := LoadUnion()
+	if err != nil {
+		t.Fatalf("LoadUnion after restoring the merged branch: %v", err)
+	}
+	if c := u2.FindCovering(TypeCodeSpecMisalignment, "old-drift"); c != nil {
+		t.Fatalf("a slug on main must not claim, even from its own branch; claimed at %q", c.Ref)
 	}
 }
 
