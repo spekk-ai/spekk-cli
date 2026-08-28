@@ -144,6 +144,16 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	// means the shallowest line in this block and not column zero.
 	base := baseIndent(yamlLines)
 
+	// Whether the open block list has produced an item yet. A mapping item
+	// continues on deeper lines, and those lines must not end the list.
+	sawListItem := false
+
+	// The top-level key that opened an indented region: one whose value is
+	// empty (a nested map or a block list) or a block-scalar indicator. It
+	// is "" when the last top-level key carried a plain value, and a deeper
+	// line is then a stray indent rather than a child of anything.
+	nestedOwner := ""
+
 	for _, rawLine := range yamlLines {
 		// A trailing ` # ...` is a comment, and it is cut before anything
 		// else reads the line. Without this an inline comment becomes part
@@ -159,6 +169,7 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 		// list. The item is kept whole — commas inside an item never split.
 		if strings.HasPrefix(trimmed, "- ") || trimmed == "-" {
 			if pendingListKey != "" {
+				sawListItem = true
 				item := stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "-")))
 				if item != "" {
 					fm.lists[pendingListKey] = append(fm.lists[pendingListKey], item)
@@ -171,40 +182,56 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 			continue
 		}
 
-		// A line deeper than the base column is a nested child (nested map,
-		// block-scalar body). It must not become a top-level custom field
-		// or close an open block list.
-		indented := leadingWidth(line) > base
+		// A line is a nested child only when it is deeper than the base
+		// column AND a key above it opened a region for it. Depth alone is
+		// not enough: a top-level key written with one stray leading space
+		// has no parent, and treating it as a child swallowed it in
+		// silence, so an assertion that says `status: done` reported
+		// not_started.
+		nested := leadingWidth(line) > base && nestedOwner != ""
 
 		colonIdx := strings.Index(line, ":")
 		if colonIdx == -1 {
-			if !indented {
+			if !nested {
 				pendingListKey = ""
+				sawListItem = false
 			}
 			continue
 		}
 
-		// An indented `key: value` is a nested child or a block-scalar body
-		// line. It sets nothing: a child that reaches fields overwrites the
-		// top-level key of the same name, so a `priority:` written inside a
-		// prose block became the assertion's priority.
+		// A nested `key: value` sets nothing. A child that reaches fields
+		// overwrites the top-level key of the same name, so a `priority:`
+		// written inside a prose block became the assertion's priority.
 		//
-		// It does close an open block list. The items under a nested key
-		// belong to that key, and leaving the list open gave them to the
-		// nearest top-level key instead — so `env: matrix: [- linux]`
-		// indexed linux as a value of env.
-		if indented {
-			pendingListKey = ""
+		// Before the list has an item, such a key also closes the list: its
+		// own children belong to it, and leaving the list open gave them to
+		// the key above instead, so `env:` / `matrix:` / `- linux` indexed
+		// linux as a value of env. After the list has an item, the same
+		// line is that item's own continuation (`- name: build` / `run:
+		// make`), and closing the list there dropped every later item.
+		if nested {
+			if !sawListItem {
+				pendingListKey = ""
+			}
 			continue
 		}
 
 		key := strings.TrimSpace(line[:colonIdx])
 		value := strings.TrimSpace(line[colonIdx+1:])
 
+		sawListItem = false
 		if value == "" {
 			pendingListKey = key
+			nestedOwner = key
 		} else {
 			pendingListKey = ""
+			// A block scalar opens a region too, although its value is not
+			// empty. Its body lines are prose and must set nothing.
+			if blockScalarIndicators[value] {
+				nestedOwner = key
+			} else {
+				nestedOwner = ""
+			}
 		}
 		if key != "" {
 			fm.raw[key] = value

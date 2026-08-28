@@ -1508,6 +1508,45 @@ func TestCustomFields_InlineCommentsStripped(t *testing.T) {
 	fieldsEq(t, a.Fields, "link", []string{"https://example.com/x#frag"})
 }
 
+func TestFrontmatter_ListSurvivesAMappingItem(t *testing.T) {
+	// `run: make` continues the item above it. Reading it as the end of the
+	// list dropped every later item, so `deploy` vanished in silence.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\n" +
+		"steps:\n  - name: build\n    run: make\n  - deploy\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fieldsEq(t, a.Fields, "steps", []string{"name: build", "deploy"})
+}
+
+func TestFrontmatter_StrayIndentIsStillATopLevelKey(t *testing.T) {
+	// One leading space, and no key above that opened a region for it. The
+	// depth-alone rule swallowed the key, so a file that says done reported
+	// not_started and said nothing about the indentation.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\n" +
+		" status: done\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Status != "done" {
+		t.Fatalf("status: got %q, want done", a.Status)
+	}
+
+	// The same rule applied to a block whose shallowest line is a stray one:
+	// the base drops to that line, and every real key must still parse.
+	content = "---\n  id: a2\n  parent: s1\n  created: 2026-08-06T00:00:00Z\n" +
+		"  priority: 1\nstatus: done\n---\n# A2\n"
+	a, err = parseAssertion("specs/s1/assertions/a2.md", content)
+	if err != nil {
+		t.Fatalf("a stray shallow line must not disqualify the block: %v", err)
+	}
+	if a.ID != "a2" || a.Status != "done" {
+		t.Fatalf("id %q, status %q", a.ID, a.Status)
+	}
+}
+
 func TestCustomFields_NestedListNeverJoinsTopLevelKey(t *testing.T) {
 	// The items belong to env.matrix and to meta.desc, not to env and meta.
 	// While a nested key left the list open, they were indexed as values of
