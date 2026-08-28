@@ -109,14 +109,32 @@ func MainRef() (string, error) {
 // isMainRef reports whether ref names the main (or master) branch, locally
 // or on a remote.
 func isMainRef(ref string) bool {
-	name := ref
-	name = strings.TrimPrefix(name, "refs/heads/")
-	if rest, ok := strings.CutPrefix(name, "refs/remotes/"); ok {
-		if i := strings.IndexByte(rest, '/'); i >= 0 {
-			name = rest[i+1:]
-		}
-	}
+	name := BranchFromRef(ref)
 	return name == "main" || name == "master"
+}
+
+// isLiveClaim reports whether an observation still speaks for its finding:
+// somebody filed it, its branch is there, and the work is not finished.
+// Both facts come from git, not from the frontmatter:
+//
+//   - The ref is the branch named after the observation. Every observer
+//     branch is cut from origin/main, so every branch carries a copy of
+//     every observation already merged. Such a copy sits at another
+//     finding's branch and is not a claim on anything. Main is never
+//     observer/<slug>, so this excludes main as well.
+//   - The slug is not on main. Presence on main ends the claim, whatever a
+//     lagging status field says, and it settles the branch that was merged
+//     but not deleted: both facts are true at once, and main wins.
+//
+// The branch-local `status: resolved` is deliberately not part of this. The
+// frontmatter is the record and the branch set is the state machine, so a
+// status flipped while the remedy PR is still open must not end a claim
+// that is live.
+func (u *Union) isLiveClaim(o *Observation) bool {
+	if BranchFromRef(o.Ref) != BranchName(o.Slug) {
+		return false
+	}
+	return !u.OnMain(o.Slug)
 }
 
 // OnMain reports whether an observation with the given slug exists on main.
@@ -189,40 +207,32 @@ func allDigits(s string) bool {
 	return true
 }
 
-// Covers reports whether the observation covers a candidate finding: same
-// type and at least one overlapping affected path, compared after
-// NormalizePath. This is the scan-time dedup test — a covered finding must
-// not produce a new observation or a new branch, whatever the covering
-// branch's PR state (parked branches participate exactly like pending ones).
-func (o *Observation) Covers(typ string, affected []string) bool {
-	if o.Type != typ {
-		return false
-	}
-	existing := make(map[string]bool, len(o.Affected))
-	for _, e := range o.Affected {
-		existing[NormalizePath(e)] = true
-	}
-	for _, candidate := range affected {
-		if existing[NormalizePath(candidate)] {
-			return true
-		}
-	}
-	return false
+// Covers reports whether the observation is the same finding as a
+// candidate: same type and same slug.
+//
+// The slug is what a finding is called; an affected path is only where it
+// lives. Keying on an overlapping path made two unrelated findings in one
+// file the same finding — and the affected list of a code_spec_misalignment
+// names the code as well as the assertion, so the code file is exactly the
+// half that unrelated findings share. That is a false negative, and this
+// package prefers a visible duplicate to drift nobody hears about (see
+// NormalizePath on directories). The type stays in the key because one file
+// can carry drift of both types at once.
+func (o *Observation) Covers(typ, slug string) bool {
+	return o.Type == typ && o.Slug == slug
 }
 
-// FindCovering returns the first observation in the union that covers the
-// candidate finding, or nil when the drift is not yet covered.
+// FindCovering returns the live claim in the union that is the candidate
+// finding, or nil when nobody is claiming it.
 //
-// Observations on observer/* branches always participate. Observations on
-// main participate only while not superseded by recurrence semantics:
-// resolved drift that recurs is new drift, so a row on main suppresses a
-// re-flag only when the same slug is still carried by a visible observer
-// branch — history alone does not. Open/parked findings are what dedup
-// protects, not history.
-func (u *Union) FindCovering(typ string, affected []string) *Observation {
-	// Branch-carried observations first: they are the live state machine.
+// Only a live claim covers (see isLiveClaim): the observation on the branch
+// named after it, whose slug has not reached main. A parked branch (its PR
+// closed, the branch kept) claims exactly like a pending one, because the
+// tooling never reads PR state. A covered finding must not produce a new
+// observation or a new branch.
+func (u *Union) FindCovering(typ, slug string) *Observation {
 	for _, o := range u.Observations {
-		if !isMainRef(o.Ref) && o.Covers(typ, affected) {
+		if u.isLiveClaim(o) && o.Covers(typ, slug) {
 			return o
 		}
 	}
@@ -238,16 +248,18 @@ const DigestCap = 5
 //
 // The digest is a query, never a committed artifact: observations/DIGEST.md
 // is abolished, and no part of the observer workflow writes a digest file.
-// A slug present on main is excluded (effectively not open — the backstop),
-// and each slug appears at most once even when visible on several refs.
+// It shows the live claims that are open (see isLiveClaim), so the digest
+// and scan-time dedup answer "which findings are live" the same way. Each
+// slug appears at most once, and it is the copy on the branch named after
+// it — the copies other branches inherited are not claims.
 func (u *Union) Digest() []*Observation {
 	seen := map[string]bool{}
 	var open []*Observation
 	for _, o := range u.Observations {
-		if o.Status != StatusOpen || isMainRef(o.Ref) {
+		if o.Status != StatusOpen || !u.isLiveClaim(o) {
 			continue
 		}
-		if u.OnMain(o.Slug) || seen[o.Slug] {
+		if seen[o.Slug] {
 			continue
 		}
 		seen[o.Slug] = true

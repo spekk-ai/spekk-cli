@@ -5,7 +5,7 @@ created: 2026-08-28T12:00:00Z
 priority: 1
 branch: fix/only-a-live-claim-covers
 depends-on: covering-needs-the-owning-branch
-status: not_started
+status: done
 ---
 
 # The Dedup Key Is the Type and the Slug, Not a Shared File

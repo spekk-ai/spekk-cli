@@ -18,6 +18,13 @@
 //	                                          it; persistent drift is
 //	                                          legitimately re-found
 //
+// Two rules make the table readable off a union that mixes refs. Only the
+// branch named after an observation speaks for it: every branch is cut from
+// origin/main and carries a copy of everything already merged, and such a
+// copy is not a claim on anything. And where two rows are true at once —
+// the slug is on main and its branch is still visible — main wins, so a
+// merged finding is resolved even while its branch survives.
+//
 // Every lifecycle question is answerable from local git state after a
 // `git fetch` — the only remote read any observer tooling performs. No code
 // path consults a forge API (gh, GitHub REST/GraphQL, ...) for state: PR

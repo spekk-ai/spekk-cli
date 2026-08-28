@@ -4,7 +4,7 @@ parent: only-a-live-claim-covers
 created: 2026-08-28T12:00:00Z
 priority: 1
 branch: fix/only-a-live-claim-covers
-status: not_started
+status: done
 ---
 
 # An Observation Covers Only From Its Own Branch, and Only Until It Reaches Main

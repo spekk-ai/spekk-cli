@@ -79,43 +79,42 @@ func writeObservationBranch(t *testing.T, dir, slug, severity, affected string) 
 func TestScanCheckCoveredAndClear(t *testing.T) {
 	newObserverRepo(t)
 	now := time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
+	run := func(slug, affected string) scanCheckResult {
+		t.Helper()
+		var out, errOut bytes.Buffer
+		code := execObserverScanCheck([]string{
+			"--type", "code_spec_misalignment",
+			"--slug", slug,
+			"--affected", affected,
+		}, &out, &errOut, now)
+		if code != 0 {
+			t.Fatalf("exit %d: %s", code, errOut.String())
+		}
+		var res scanCheckResult
+		if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+			t.Fatalf("bad JSON: %v", err)
+		}
+		return res
+	}
 
-	// Same type + overlapping path: covered.
-	var out, errOut bytes.Buffer
-	code := execObserverScanCheck([]string{
-		"--type", "code_spec_misalignment",
-		"--slug", "new-finding",
-		"--affected", "internal/parser/parser.go,internal/other.go",
-	}, &out, &errOut, now)
-	if code != 0 {
-		t.Fatalf("exit %d: %s", code, errOut.String())
-	}
-	var res scanCheckResult
-	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
-		t.Fatalf("bad JSON: %v", err)
-	}
+	// The same finding is claimed already. The branch is read from the ref
+	// the observation was found at, so it names a branch that exists.
+	res := run("existing-finding", "internal/parser/parser.go")
 	if res.Result != "covered" || res.Slug != "existing-finding" {
 		t.Fatalf("want covered by existing-finding, got %+v", res)
 	}
+	if res.Ref != "refs/heads/observer/existing-finding" || res.Branch != "observer/existing-finding" {
+		t.Fatalf("branch must come from the ref, got %+v", res)
+	}
 
-	// Disjoint drift: clear, slug reused as-is.
-	out.Reset()
-	code = execObserverScanCheck([]string{
-		"--type", "code_spec_misalignment",
-		"--slug", "new-finding",
-		"--affected", "internal/other.go",
-	}, &out, &errOut, now)
-	if code != 0 {
-		t.Fatalf("exit %d: %s", code, errOut.String())
-	}
-	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
-		t.Fatalf("bad JSON: %v", err)
-	}
+	// A different finding in a file the claim also names is still a finding.
+	res = run("new-finding", "internal/parser/parser.go,internal/other.go")
 	if res.Result != "clear" || res.Slug != "new-finding" || res.Branch != "observer/new-finding" {
-		t.Fatalf("want clear/new-finding, got %+v", res)
+		t.Fatalf("a shared path is not the same finding, got %+v", res)
 	}
 
 	// Missing flags fail fast.
+	var out, errOut bytes.Buffer
 	if code := execObserverScanCheck(nil, &out, &errOut, now); code == 0 {
 		t.Fatal("missing flags must exit non-zero")
 	}

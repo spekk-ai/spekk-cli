@@ -58,6 +58,7 @@ Presence on main gives the resolved semantics that the comment asks for, from gi
   - **A relation between findings** (supersedes, related-to, a recurrence counter). The union is a set of files in git, and a link field would need a writer, a validator, and a repair path.
   - **A dated slug for a slug an observer branch already holds.** `ResolveSlug` dates a slug taken on main only. A candidate that keeps the plain slug while a branch of that name exists is a pre-existing hazard, and it is not what this issue reports.
   - **Path overlap as a second, weaker match.** Keeping it as a fallback keeps the false negative it causes.
+  - **A warning for an observation whose slug does not match its branch.** Such a file stops being a claim, and the branch it should have been on is free, so the next scan files the finding properly. A new warning channel for a filing that the prompt already forbids costs more than it saves.
 
 ## Cost
 

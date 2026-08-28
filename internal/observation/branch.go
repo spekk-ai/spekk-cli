@@ -16,6 +16,20 @@ func BranchName(slug string) string {
 	return BranchPrefix + slug
 }
 
+// BranchFromRef reduces a fully-qualified ref to its logical branch name:
+// refs/heads/observer/x and refs/remotes/origin/observer/x both give
+// observer/x. A ref is read from git, so this is a fact about where a file
+// was found — never a name rebuilt from the file's contents.
+func BranchFromRef(ref string) string {
+	name := strings.TrimPrefix(ref, "refs/heads/")
+	if rest, ok := strings.CutPrefix(name, "refs/remotes/"); ok {
+		if i := strings.IndexByte(rest, '/'); i >= 0 {
+			name = rest[i+1:]
+		}
+	}
+	return name
+}
+
 // SlugFromBranch extracts the slug from an observation branch name. ok is
 // false when the name is not under the observer/ namespace.
 func SlugFromBranch(branch string) (slug string, ok bool) {

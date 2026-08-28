@@ -4,7 +4,7 @@ parent: only-a-live-claim-covers
 created: 2026-08-28T12:00:00Z
 priority: 1
 branch: fix/only-a-live-claim-covers
-status: not_started
+status: done
 ---
 
 # The `branch` of a Covered Result Names the Ref the Observation Came From

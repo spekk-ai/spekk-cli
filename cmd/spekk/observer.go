@@ -272,10 +272,10 @@ func execObserverScanCheck(args []string, stdout, stderr io.Writer, now time.Tim
 	}
 	warn(stderr, u.Warnings)
 
-	if covering := u.FindCovering(typ, affected); covering != nil {
+	if covering := u.FindCovering(typ, slug); covering != nil {
 		printJSON(stdout, scanCheckResult{
 			Result: "covered", Slug: covering.Slug,
-			Branch: observation.BranchName(covering.Slug), Ref: covering.Ref,
+			Branch: observation.BranchFromRef(covering.Ref), Ref: covering.Ref,
 		})
 		return 0
 	}
