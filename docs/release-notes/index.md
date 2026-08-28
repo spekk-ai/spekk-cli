@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.25.0 -- Four Silent Failures](RELEASE-NOTES-1.25.0.md)
+
+Every fix here is for something that failed without saying so. A dropped WebSocket killed the turn it was carrying, so a long job reported nothing at all. A follow-up message for a running session wedged the sandbox permanently, while its heartbeats kept it looking healthy. An observation suppressed new findings from any branch, so drift a team had already fixed once could never be reported again. And a comment in frontmatter quietly changed a value or discarded a list. **A value with an unquoted `#` now loses its tail, which rewrites rows an existing index holds -- read the upgrading section before you take this.**
+
 ## [1.24.0 -- An Observation's Own Keys, Indexed](RELEASE-NOTES-1.24.0.md)
 
 A custom frontmatter key on an observation validated, survived a round trip, and reached no table, so it was worse than prose: a reader assumes a key is queryable. Provenance an observation carries beyond the lifecycle set -- which skill found it, which run, which document narrated it -- was unreachable from `spekk query`. Such a key now reaches `frontmatter_fields` under `owner_type = 'observation'`, keyed on the slug, under the same split rule a spec and an assertion already use. `affected` stays out: it is the evidence gate and the dedup key, and `observation_files` is its table. The index schema version goes to 4, and existing databases rebuild transparently.

@@ -236,7 +236,7 @@ Curation is the work of `spekk observer consolidate`, and **the consolidate skil
 
 What holds regardless of the skill: dismissing a finding removes it from the digest and from announce, so it must never happen as a side effect of a scan. A scan would bury a finding no person had judged, in the same run that filed a different one. Curation decisions are frontmatter edits on the observation's own branch, never edits to a summary artifact, and a dismissed observation still suppresses a re-file while its branch exists.
 
-There is no digest file to maintain. `observations/DIGEST.md` is abolished; the digest is a rendered view (`spekk observer digest`): open observations across the visible branch union, severity-ranked, capped at 5.
+There is no digest file to maintain. `observations/DIGEST.md` is abolished; the digest is a rendered view (`spekk observer digest`): the open findings that are live claims, severity-ranked, capped at 5. A live claim is the observation on the branch named after it, whose slug has not reached main — a copy another branch inherited is not a claim, and a slug already on main is resolved.
 
 ### 6. Reporting
 
