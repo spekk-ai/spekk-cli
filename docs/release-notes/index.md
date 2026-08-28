@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.24.0 -- An Observation's Own Keys, Indexed](RELEASE-NOTES-1.24.0.md)
+
+A custom frontmatter key on an observation validated, survived a round trip, and reached no table, so it was worse than prose: a reader assumes a key is queryable. Provenance an observation carries beyond the lifecycle set -- which skill found it, which run, which document narrated it -- was unreachable from `spekk query`. Such a key now reaches `frontmatter_fields` under `owner_type = 'observation'`, keyed on the slug, under the same split rule a spec and an assertion already use. `affected` stays out: it is the evidence gate and the dedup key, and `observation_files` is its table. The index schema version goes to 4, and existing databases rebuild transparently.
+
 ## [1.23.0 -- Quieter Output and a Real Branch Check](RELEASE-NOTES-1.23.0.md)
 
 Two warnings made the output difficult to read. The branch guard compared a value with 14 fixed words and did not read git, so it accepted a branch that does not exist and refused team names that git accepts. This release deletes the guard, and `spekk validate` reads the refs instead. The parser now gives one line for the files that it skips, and `spekk next` no longer writes each warning two times. `validate` also stops making a `locked-by` value necessary on an `in_progress` assertion, which a coach cannot make, and it reports an old lock instead. Installs identify a managed file by its path, and `--project` uses the repository root. **`spekk validate` has three new failure conditions. Read the upgrading section before you change a pin.**
