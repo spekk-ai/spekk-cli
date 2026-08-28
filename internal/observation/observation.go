@@ -33,6 +33,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
 // Dir is the repo-root-relative directory that holds observation files.
@@ -74,6 +76,29 @@ type Observation struct {
 	Body      string   // markdown body after the closing frontmatter delimiter
 	File      string   // repo-root-relative path the observation was read from
 	Ref       string   // git ref the observation was read from ("" = working tree)
+
+	// Fields holds every frontmatter key outside knownKeys, with its values
+	// already split into items. The index writes them to frontmatter_fields
+	// under owner_type 'observation', so provenance an observation carries
+	// beyond the lifecycle set (which skill found it, which run) is
+	// reachable from spekk query rather than only from the file.
+	Fields map[string][]string
+}
+
+// knownKeys are the frontmatter keys the lifecycle schema defines and Parse
+// maps onto Observation. Every other key is a custom field, preserved on
+// Fields. `affected` is known: it is the evidence gate and the dedup key,
+// observation_files is its table, and a second copy of it under a custom
+// name would invite a query to read the gate as a tag.
+var knownKeys = map[string]bool{
+	"slug":      true,
+	"type":      true,
+	"severity":  true,
+	"status":    true,
+	"created":   true,
+	"announced": true,
+	"pr":        true,
+	"affected":  true,
 }
 
 var (
@@ -104,8 +129,9 @@ func SeverityRank(severity string) int {
 // diagnostics and recorded as the observation's File.
 //
 // The frontmatter schema is closed for the known fields and open for growth:
-// a field outside the documented set is ignored, so the format can grow
-// without flag days. Validation enforces:
+// a field outside the documented set never breaks parsing. Such a field is
+// preserved on Fields and indexed, so the format can grow without flag days.
+// Validation enforces:
 //
 //   - slug: required, kebab-case
 //   - type: one of code_spec_misalignment | outdated_specs
@@ -123,6 +149,20 @@ func Parse(path, content string) (*Observation, error) {
 		return nil, fmt.Errorf("observation %s: %w", path, err)
 	}
 
+	// Custom fields come from the parser package rather than from the
+	// scanner above, so a spec, an assertion, and an observation split a
+	// multi-value key the same way and exclude a comment, a nested child,
+	// and a block scalar the same way. One rule, not one copy of it each.
+	//
+	// Both scanners fail on the same two conditions — no opening `---`, no
+	// closing one — so today this error cannot fire after the parse above
+	// succeeded. It stays because that agreement is not enforced anywhere,
+	// and a silent nil map would hide the day it ends.
+	fields, err := parser.CustomFields(content, knownKeys)
+	if err != nil {
+		return nil, fmt.Errorf("observation %s: %w", path, err)
+	}
+
 	o := &Observation{
 		Slug:      fm.scalars["slug"],
 		Type:      fm.scalars["type"],
@@ -135,6 +175,7 @@ func Parse(path, content string) (*Observation, error) {
 		Title:     extractTitle(body),
 		Body:      body,
 		File:      path,
+		Fields:    fields,
 	}
 
 	if o.Slug == "" {
@@ -184,8 +225,9 @@ type frontmatter struct {
 //	key:
 //	  - item
 //
-// which is the subset the observation schema needs. Unknown keys are kept
-// (and ignored by Parse), so unknown fields never break parsing.
+// which is the subset the observation schema needs. It reads the known keys
+// only. A key outside the known set is read by parser.CustomFields instead,
+// off the same content, so an unknown key never breaks parsing here.
 func parseFrontmatter(content string) (*frontmatter, string, error) {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	lines := strings.Split(content, "\n")

@@ -52,11 +52,15 @@ CREATE TABLE IF NOT EXISTS depends_on (
   assertion_id  TEXT REFERENCES assertions(id),
   depends_on_id TEXT REFERENCES assertions(id)
 );
--- Custom frontmatter fields (keys outside the known set) on specs and
--- assertions. Multi-value spellings ([a, b] / a, b) are split into one row
--- per value, so a query can filter and aggregate on any custom tag.
+-- Custom frontmatter fields (keys outside the known set of the owner's own
+-- format) on specs, assertions, and observations. Multi-value spellings
+-- ([a, b] / a, b) are split into one row per value, so a query can filter
+-- and aggregate on any custom tag. owner_id is the spec or assertion id, or
+-- the observation slug: an observation is keyed by (slug, ref) elsewhere,
+-- but a custom key is not a lifecycle field, so the rows are merged across
+-- refs and do not depend on how many branches carry the slug.
 CREATE TABLE IF NOT EXISTS frontmatter_fields (
-  owner_type TEXT,   -- 'spec' | 'assertion'
+  owner_type TEXT,   -- 'spec' | 'assertion' | 'observation'
   owner_id   TEXT,
   key        TEXT,
   value      TEXT
@@ -137,8 +141,12 @@ func dropAllTables(db *sql.DB) error {
 //
 // Version history: 1 = specs/assertions/depends_on; 2 adds the observation
 // tables (observations, observation_files, index_meta); 3 adds
-// frontmatter_fields.
-const schemaVersion = 3
+// frontmatter_fields; 4 adds observation rows to frontmatter_fields. Version
+// 4 changes no column — the bump is what makes an index that version 3 built
+// rebuild, instead of answering a custom-key query from rows that predate
+// the change. Bump on a change to the rows a build writes, not only on a
+// change to the shape it writes them into.
+const schemaVersion = 4
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
@@ -351,6 +359,11 @@ func indexObservations(tx *sql.Tx) (int, []string, error) {
 		}
 		warnings = u.Warnings
 
+		// Custom fields per slug, collected here and written after the
+		// loop, once per slug. See the frontmatter_fields comment above for
+		// why the rows are merged across refs.
+		fields := map[string]map[string][]string{}
+
 		for _, o := range u.Observations {
 			// announced must be SQL NULL when the frontmatter field is
 			// absent, never the empty string.
@@ -377,7 +390,24 @@ func indexObservations(tx *sql.Tx) (int, []string, error) {
 					return 0, nil, fmt.Errorf("cannot insert observation file for %q: %w", o.Slug, err)
 				}
 			}
+			if len(o.Fields) > 0 && fields[o.Slug] == nil {
+				fields[o.Slug] = map[string][]string{}
+			}
+			for key, values := range o.Fields {
+				fields[o.Slug][key] = append(fields[o.Slug][key], values...)
+			}
 			count++
+		}
+
+		slugs := make([]string, 0, len(fields))
+		for slug := range fields {
+			slugs = append(slugs, slug)
+		}
+		sort.Strings(slugs)
+		for _, slug := range slugs {
+			if err := insertFrontmatterFields(tx, "observation", slug, fields[slug]); err != nil {
+				return 0, nil, err
+			}
 		}
 	}
 

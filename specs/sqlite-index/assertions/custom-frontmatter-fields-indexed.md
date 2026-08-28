@@ -17,11 +17,13 @@ example `workflows: w5-billing-dispute-case` or
 The parser preserves every key outside the known set (`id`, `parent`,
 `created`, `priority`, `status`, `branch`, `depends-on`, `locked-by`) on the
 parsed `Spec`/`Assertion` (`Fields`), and `spekk index` stores them in a
-key-value table so `spekk query` can filter and aggregate on them:
+key-value table so `spekk query` can filter and aggregate on them. An
+observation shares the table under its own known set — see
+`specs/observation-index/assertions/observation-custom-fields-indexed.md`:
 
 ```sql
 CREATE TABLE frontmatter_fields (
-  owner_type TEXT,   -- 'spec' | 'assertion'
+  owner_type TEXT,   -- 'spec' | 'assertion' | 'observation'
   owner_id   TEXT,
   key        TEXT,
   value      TEXT

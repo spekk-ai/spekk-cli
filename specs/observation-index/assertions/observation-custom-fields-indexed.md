@@ -4,7 +4,7 @@ parent: observation-index
 created: 2026-08-28T20:00:00Z
 priority: 1
 branch: fix/observation-frontmatter-indexed
-status: not_started
+status: done
 depends-on: observation-tables-schema
 ---
 

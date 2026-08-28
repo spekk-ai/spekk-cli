@@ -276,3 +276,65 @@ func TestEnsureFreshRebuildsOnNewObserverBranch(t *testing.T) {
 		t.Fatalf("rebuild must pick up the new observation, got %v", got)
 	}
 }
+
+// TestObservationCustomFieldsIndexed pins the whole rule at once: a custom
+// key on an observation reaches frontmatter_fields under owner_type
+// 'observation', the multi-value spellings split as they do for a spec, a
+// lifecycle key contributes nothing, the rows do not multiply when the slug
+// is carried by more than one ref, and two refs that disagree on a value
+// contribute both values rather than the last one written.
+func TestObservationCustomFieldsIndexed(t *testing.T) {
+	dir, specsDir, dbPath := newIndexRepo(t)
+
+	body := strings.Replace(
+		observationContent("provenance-finding", "high", "open", ""),
+		"created: 2026-07-26T12:00:00Z\n",
+		"created: 2026-07-26T12:00:00Z\nskill: observer-prune\ntags: [provenance, indexing]\nruns:\n  - run-a\n  - run-a\n",
+		1)
+
+	gitRun(t, dir, "checkout", "-q", "-b", "observer/provenance-finding", "main")
+	must(t, os.MkdirAll(filepath.Join(dir, "observations"), 0o755))
+	must(t, os.WriteFile(filepath.Join(dir, "observations", "provenance-finding.md"), []byte(body), 0o644))
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "observer: add provenance-finding")
+
+	// The same slug on main, with one value changed. The union then carries
+	// the slug at two refs that agree on some keys and disagree on one.
+	onMain := strings.Replace(body, "skill: observer-prune", "skill: observer-coverage", 1)
+	gitRun(t, dir, "checkout", "-q", "main")
+	must(t, os.MkdirAll(filepath.Join(dir, "observations"), 0o755))
+	must(t, os.WriteFile(filepath.Join(dir, "observations", "provenance-finding.md"), []byte(onMain), 0o644))
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "merge provenance-finding")
+
+	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
+		t.Fatalf("BuildIndex: %v", err)
+	}
+	db := openDB(t, dbPath)
+
+	if refs := queryStrings(t, db, "SELECT ref FROM observations WHERE slug = 'provenance-finding'"); len(refs) != 2 {
+		t.Fatalf("test needs the slug at two refs, got %v", refs)
+	}
+
+	// One row per distinct value, whatever the ref count; a repeated block
+	// item inserts once.
+	got := queryStrings(t, db, `SELECT key || '=' || value FROM frontmatter_fields
+		WHERE owner_type = 'observation' AND owner_id = 'provenance-finding'
+		ORDER BY key, value`)
+	want := []string{
+		"runs=run-a",
+		"skill=observer-coverage", "skill=observer-prune",
+		"tags=indexing", "tags=provenance",
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("observation custom fields: got %v, want %v", got, want)
+	}
+
+	// Lifecycle keys never become custom fields.
+	got = queryStrings(t, db, `SELECT key FROM frontmatter_fields
+		WHERE owner_type = 'observation' AND key IN ('slug', 'type', 'severity', 'status', 'created', 'affected')`)
+	if len(got) != 0 {
+		t.Fatalf("lifecycle keys must not be indexed as custom fields, got %v", got)
+	}
+
+}
