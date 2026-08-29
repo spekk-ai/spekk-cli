@@ -3,7 +3,8 @@ id: cli-provider-dispatch
 parent: sandbox-provider-abstraction
 created: 2026-08-29T20:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-MacBook-Pro-17961-1788018079
 depends-on: digitalocean-provider
 branch: dev/headless-sandbox
 ---
