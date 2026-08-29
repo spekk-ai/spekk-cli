@@ -39,6 +39,8 @@ type CreateOptions struct {
 	Size    string
 	Project string
 	VPC     string
+	IP      string // manual provider: IP of existing machine
+	SSHKey  string // manual provider: path to SSH private key
 }
 
 // --- Create ---
@@ -76,6 +78,8 @@ func Create(p Provider, opts CreateOptions) error {
 		"vpc":        opts.VPC,
 		"project":    opts.Project,
 		"cloud_init": string(artifacts.CloudInit),
+		"ip":         opts.IP,
+		"ssh_key":    opts.SSHKey,
 	}
 
 	// Delegate VM creation to the provider.

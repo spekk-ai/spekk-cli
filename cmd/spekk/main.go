@@ -1022,7 +1022,16 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		p, err := sandbox.NewDOProvider()
+		meta, err := sandbox.GetSandbox(subArgs[0])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		if meta == nil {
+			fmt.Fprintf(os.Stderr, "Error: sandbox %q not found\n", subArgs[0])
+			os.Exit(1)
+		}
+		p, err := sandbox.ProviderFromMeta(meta)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
@@ -1062,7 +1071,16 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		p, err := sandbox.NewDOProvider()
+		meta, err := sandbox.GetSandbox(name)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		if meta == nil {
+			fmt.Fprintf(os.Stderr, "Error: sandbox %q not found\n", name)
+			os.Exit(1)
+		}
+		p, err := sandbox.ProviderFromMeta(meta)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
@@ -1093,27 +1111,37 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 
 func createSandbox(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
-		"name":    {Names: []string{"--name"}, Type: cli.StringFlag},
-		"region":  {Names: []string{"--region"}, Type: cli.StringFlag},
-		"size":    {Names: []string{"--size"}, Type: cli.StringFlag},
-		"project": {Names: []string{"--project"}, Type: cli.StringFlag},
-		"vpc":     {Names: []string{"--vpc"}, Type: cli.StringFlag},
-		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		"name":     {Names: []string{"--name"}, Type: cli.StringFlag},
+		"provider": {Names: []string{"--provider"}, Type: cli.StringFlag},
+		"region":   {Names: []string{"--region"}, Type: cli.StringFlag},
+		"size":     {Names: []string{"--size"}, Type: cli.StringFlag},
+		"project":  {Names: []string{"--project"}, Type: cli.StringFlag},
+		"vpc":      {Names: []string{"--vpc"}, Type: cli.StringFlag},
+		"ip":       {Names: []string{"--ip"}, Type: cli.StringFlag},
+		"ssh-key":  {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
+		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
 	if flags.Bool("help") {
 		fmt.Print(`
-spekk sandbox create - Create a new sandbox droplet
+spekk sandbox create - Create a new sandbox
 
 USAGE:
   spekk sandbox create --name <name> [options]
 
 OPTIONS:
-  --name <name>        Sandbox name (required)
-  --region <region>    DigitalOcean region (default: nyc1)
-  --size <size>        Droplet size slug (default: s-2vcpu-4gb)
-  --project <project>  Assign to a DigitalOcean project (name or UUID)
-  --vpc <uuid>         Place droplet in a specific DigitalOcean VPC
+  --name <name>          Sandbox name (required)
+  --provider <provider>  Provider: digitalocean, manual (auto-detected from flags)
+
+  DigitalOcean options:
+  --region <region>      DigitalOcean region (default: nyc1)
+  --size <size>          Droplet size slug (default: s-2vcpu-4gb)
+  --project <project>    Assign to a DigitalOcean project (name or UUID)
+  --vpc <uuid>           Place droplet in a specific DigitalOcean VPC
+
+  Manual options:
+  --ip <address>         IP address of existing machine
+  --ssh-key <path>       Path to SSH private key
 `)
 		return
 	}
@@ -1128,7 +1156,28 @@ OPTIONS:
 		os.Exit(1)
 	}
 
-	p, err := sandbox.NewDOProvider()
+	// Resolve provider (explicit or inferred from --ip).
+	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), flags.String("ip") != "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Validate provider-specific flags.
+	setFlags := map[string]bool{
+		"--region":  flags.String("region") != "",
+		"--size":    flags.String("size") != "",
+		"--vpc":     flags.String("vpc") != "",
+		"--project": flags.String("project") != "",
+		"--ip":      flags.String("ip") != "",
+		"--ssh-key": flags.String("ssh-key") != "",
+	}
+	if err := sandbox.ValidateProviderFlags(providerName, setFlags); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	p, err := sandbox.ProviderByName(providerName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
@@ -1139,6 +1188,8 @@ OPTIONS:
 		Size:    flags.String("size"),
 		Project: flags.String("project"),
 		VPC:     flags.String("vpc"),
+		IP:      flags.String("ip"),
+		SSHKey:  flags.String("ssh-key"),
 	}
 	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
