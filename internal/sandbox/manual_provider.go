@@ -1,6 +1,9 @@
 package sandbox
 
-import "fmt"
+import (
+	"fmt"
+	"path/filepath"
+)
 
 // ManualProvider implements Provider for pre-existing SSH-reachable machines.
 type ManualProvider struct{}
@@ -15,8 +18,14 @@ func (p *ManualProvider) Create(name string, opts CreateOptions, meta *SandboxMe
 	if opts.SSHKey == "" {
 		return fmt.Errorf("manual provider requires --ssh-key")
 	}
+	// Store an absolute path: every later command resolves it from a
+	// different working directory than the one create ran in.
+	key, err := filepath.Abs(opts.SSHKey)
+	if err != nil {
+		return fmt.Errorf("resolving --ssh-key %q: %w", opts.SSHKey, err)
+	}
 	meta.IP = opts.IP
-	meta.SSHKeyPath = opts.SSHKey
+	meta.SSHKeyPath = key
 	return nil
 }
 

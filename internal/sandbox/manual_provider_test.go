@@ -2,7 +2,10 @@ package sandbox
 
 import (
 	"encoding/base64"
+	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -80,4 +83,78 @@ func grepLine(script, prefix string) string {
 		}
 	}
 	return ""
+}
+
+// Destroy on a manual sandbox must never delete the operator's own key,
+// and must not remove the local record while the agent may still run.
+func TestManualDestroy(t *testing.T) {
+	// The operator's key lives outside spekk's directories.
+	operatorKey := func(t *testing.T) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "id_ed25519")
+		for _, p := range []string{path, path + ".pub"} {
+			if err := os.WriteFile(p, []byte("secret"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return path
+	}
+
+	t.Run("keeps the operator's key", func(t *testing.T) {
+		isolateConfig(t)
+		useTempStore(t)
+		key := operatorKey(t)
+		if err := SaveSandbox("box", &SandboxMeta{Provider: "manual", IP: "1.2.3.4", SSHKeyPath: key}); err != nil {
+			t.Fatal(err)
+		}
+		orig := stopAgent
+		stopAgent = func(meta *SandboxMeta, name string) error { return nil }
+		t.Cleanup(func() { stopAgent = orig })
+
+		if err := Destroy(&ManualProvider{}, "box", true); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(key); err != nil {
+			t.Errorf("destroy deleted the operator's private key: %v", err)
+		}
+		if _, err := os.Stat(key + ".pub"); err != nil {
+			t.Errorf("destroy deleted the operator's public key: %v", err)
+		}
+	})
+
+	t.Run("keeps the record when the agent cannot be stopped", func(t *testing.T) {
+		isolateConfig(t)
+		useTempStore(t)
+		if err := SaveSandbox("box", &SandboxMeta{Provider: "manual", IP: "1.2.3.4", SSHKeyPath: operatorKey(t)}); err != nil {
+			t.Fatal(err)
+		}
+		orig := stopAgent
+		stopAgent = func(meta *SandboxMeta, name string) error { return errors.New("host unreachable") }
+		t.Cleanup(func() { stopAgent = orig })
+
+		answerPrompt(t, "y\n")
+		if err := Destroy(&ManualProvider{}, "box", false); err == nil {
+			t.Fatal("destroy must fail when the agent cannot be stopped")
+		}
+		if got, _ := GetSandbox("box"); got == nil {
+			t.Error("the record must survive, or an agent keeps running with nothing pointing at it")
+		}
+	})
+}
+
+// answerPrompt feeds one answer to the confirmation prompt Destroy reads
+// from stdin.
+func answerPrompt(t *testing.T, answer string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.WriteString(answer); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	orig := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = orig; r.Close() })
 }

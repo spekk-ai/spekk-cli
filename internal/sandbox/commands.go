@@ -299,10 +299,18 @@ func Destroy(p Provider, name string, force bool) error {
 		}
 	}
 
-	// A manual machine survives destroy, so the agent has to be stopped
-	// on it. A cloud machine is about to be deleted whole.
+	// A manual machine survives destroy, so stopping the agent and
+	// removing its credentials is the whole of teardown. Failing to do it
+	// must stop the command: deleting the local record would leave an
+	// agent running with live credentials and nothing pointing at it.
+	// A cloud machine is about to be deleted whole, so this does not apply.
 	if sandbox.Provider == "manual" {
-		stopAgentService(sandbox, name)
+		if err := stopAgent(sandbox, name); err != nil {
+			if !force {
+				return fmt.Errorf("stopping the agent on %s: %w\nThe machine may still be running it. Use --force to remove the record anyway", machineRef(sandbox), err)
+			}
+			fmt.Fprintf(os.Stderr, "Warning: could not stop the agent on %s: %s; removing the local record anyway because --force was given.\n", machineRef(sandbox), err)
+		}
 	}
 
 	// Delegate remote resource cleanup to the provider. This is not

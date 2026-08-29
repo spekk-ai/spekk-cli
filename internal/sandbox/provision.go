@@ -192,21 +192,38 @@ func provisionViaSSH(ip, keyPath, name string) error {
 	return nil
 }
 
-// stopAgentService stops the spekk-agent systemd service on a sandbox via SSH.
-// Used by Destroy for manual sandboxes to cleanly stop the agent without
-// destroying the machine.
-func stopAgentService(sandbox *SandboxMeta, name string) {
-	fmt.Fprintln(os.Stderr, "Stopping agent service...")
+// stopAgentService stops the spekk-agent service on a manual sandbox and
+// removes the credentials spekk put there.
+//
+// For a manual machine this is the whole of teardown: the machine survives,
+// so anything left behind stays live. It returns an error rather than only
+// warning, because the caller must not delete the local record of a machine
+// that may still be running an agent with these credentials on it.
+func stopAgentService(sandbox *SandboxMeta, name string) error {
+	fmt.Fprintln(os.Stderr, "Stopping agent service and removing credentials...")
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10", "-o", "BatchMode=yes")
 	if sandbox.SSHKeyPath != "" {
 		args = append(args, "-i", sandbox.SSHKeyPath)
 	}
-	args = append(args, fmt.Sprintf("root@%s", sandbox.IP),
-		"systemctl stop spekk-agent 2>/dev/null; systemctl disable spekk-agent 2>/dev/null; echo ok")
+	args = append(args, fmt.Sprintf("root@%s", sandbox.IP), strings.Join([]string{
+		"set -e",
+		"systemctl stop spekk-agent",
+		"systemctl disable spekk-agent",
+		"rm -f /etc/spekk/agent.env",
+		"rm -f /home/agent/.git-credentials",
+		// is-active exits non-zero when the unit is stopped, which is
+		// what we want to see. Turn that into the success case.
+		"! systemctl is-active --quiet spekk-agent",
+	}, " && "))
 
 	cmd := exec.Command("ssh", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not stop agent service: %s\n%s\n", err, string(out))
+		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(out)))
 	}
+	return nil
 }
+
+// stopAgent is the seam Destroy stops through, so a test can drive the
+// paths around it without an SSH connection.
+var stopAgent = stopAgentService
