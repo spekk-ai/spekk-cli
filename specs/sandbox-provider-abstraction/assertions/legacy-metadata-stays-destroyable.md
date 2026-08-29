@@ -8,7 +8,7 @@ depends-on: provider-interface
 branch: feat/provider-interface
 ---
 
-# A sandbox created before the provider field stays destroyable
+# A Sandbox Created Before the Provider Field Stays Destroyable
 
 Live sandboxes have metadata written by a binary that predates every part of this work. Their entries carry `dropletId` and `sshKeyId` and no `provider`. Introducing the abstraction must not strand them, because the failure mode is silent and expensive: teardown is skipped, the local record is deleted anyway, and a droplet bills forever with nothing left on disk to identify it.
 
@@ -19,5 +19,6 @@ Live sandboxes have metadata written by a binary that predates every part of thi
 - Saving or removing any entry leaves every other entry's fields intact on disk. A rewrite that drops another sandbox's droplet id is unrecoverable.
 - `spekk sandbox status` shows the droplet id when there is one, and marks a status that came from the file rather than from the API, so a stale value cannot read as live.
 - The destroy prompt names the machine it is about to destroy, not only the sandbox name.
+- `--force` clears a record that names no machine, so an entry whose droplet was already removed by hand is not stuck forever. Without `--force` the refusal stands.
 
 **Tests:** internal/sandbox/provider_test.go

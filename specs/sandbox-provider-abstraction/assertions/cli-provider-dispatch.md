@@ -16,5 +16,4 @@ branch: dev/headless-sandbox
 - When `--provider` is omitted and `--ip` is set, provider defaults to `manual`
 - When `--provider` is omitted and `--ip` is not set, provider defaults to `digitalocean`
 - Provider-specific flags are validated: `--region`, `--size`, `--vpc`, `--project` are errors with `--provider manual`; `--ip`, `--ssh-key` are errors with `--provider digitalocean`
-- `spekk sandbox destroy`, `status`, `deploy`, and `ssh` read the provider from stored metadata and dispatch to the correct provider implementation — no `--provider` flag needed on these commands
 - Error messages for invalid flag combinations name the conflicting flags and the selected provider

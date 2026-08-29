@@ -2,6 +2,8 @@ package sandbox
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +12,19 @@ import (
 
 	"github.com/spekk-ai/spekk-cli/internal/config"
 )
+
+// isolateConfig points the config dir at a temp dir for one test.
+//
+// HOME has to move with XDG_CONFIG_HOME. GlobalConfigDir migrates an old
+// $HOME/.spekk into the new location by renaming it, so a test that moves
+// only XDG_CONFIG_HOME renames the developer's real config directory into
+// a t.TempDir() that is deleted when the test ends.
+func isolateConfig(t *testing.T) {
+	t.Helper()
+	config.ResetCacheForTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+}
 
 // useTempStore points the metadata file at a temp dir and returns its path.
 func useTempStore(t *testing.T) string {
@@ -40,6 +55,7 @@ const legacyStore = `{
 // metadata is removed anyway, and the droplet bills forever with no local
 // record of its id.
 func TestDestroyLegacyMetadataDeletesDroplet(t *testing.T) {
+	isolateConfig(t)
 	path := useTempStore(t)
 	if err := os.WriteFile(path, []byte(legacyStore), 0o600); err != nil {
 		t.Fatal(err)
@@ -85,6 +101,7 @@ func TestDestroyLegacyMetadataDeletesDroplet(t *testing.T) {
 // An entry with no provider field is DigitalOcean's, because that was the
 // only provider when such entries were written.
 func TestProviderFromMetaReadsEmptyAsDigitalOcean(t *testing.T) {
+	isolateConfig(t)
 	t.Setenv("DO_API_TOKEN", "tok")
 	p, err := ProviderFromMeta(&SandboxMeta{DropletID: 1})
 	if err != nil {
@@ -102,6 +119,7 @@ func TestProviderFromMetaReadsEmptyAsDigitalOcean(t *testing.T) {
 // their droplet ids. That loss is unrecoverable: it is the identifier a
 // later destroy needs.
 func TestSaveKeepsLegacyFieldsOfOtherEntries(t *testing.T) {
+	isolateConfig(t)
 	path := useTempStore(t)
 	if err := os.WriteFile(path, []byte(legacyStore), 0o600); err != nil {
 		t.Fatal(err)
@@ -130,24 +148,48 @@ func TestSaveKeepsLegacyFieldsOfOtherEntries(t *testing.T) {
 // Destroy must not delete a key it did not generate, and must stop rather
 // than remove the metadata that makes an orphan findable.
 func TestDestroyGuards(t *testing.T) {
-	t.Run("refuses when no droplet id is recorded", func(t *testing.T) {
+	t.Run("provider refuses when no machine is recorded", func(t *testing.T) {
+		p := &DOProvider{client: NewClientWithToken("tok", "http://127.0.0.1:1")}
+		err := p.Destroy(&SandboxMeta{IP: "1.2.3.4"})
+		if !errors.Is(err, ErrNoMachineRecorded) {
+			t.Fatalf("want ErrNoMachineRecorded, got %v", err)
+		}
+	})
+
+	t.Run("a failed teardown keeps the metadata", func(t *testing.T) {
+		isolateConfig(t)
 		useTempStore(t)
-		if err := SaveSandbox("no-id", &SandboxMeta{Provider: "digitalocean", IP: "1.2.3.4"}); err != nil {
+		if err := SaveSandbox("stuck", &SandboxMeta{Provider: "digitalocean", DropletID: 5}); err != nil {
 			t.Fatal(err)
 		}
-		p := &DOProvider{client: NewClientWithToken("tok", "http://127.0.0.1:1")}
-		if err := Destroy(p, "no-id", true); err == nil {
-			t.Fatal("destroy with no droplet id must fail loudly")
+		p := &recordingProvider{destroyErr: fmt.Errorf("DO API is down")}
+		// Even --force must not clear a record whose machine may live.
+		if err := Destroy(p, "stuck", true); err == nil {
+			t.Fatal("a failed teardown must fail the command")
 		}
-		if got, _ := GetSandbox("no-id"); got == nil {
-			t.Error("metadata must survive a failed destroy, or the machine becomes unfindable")
+		if got, _ := GetSandbox("stuck"); got == nil {
+			t.Error("metadata must survive, or the machine becomes unfindable")
+		}
+	})
+
+	t.Run("force clears a record that names no machine", func(t *testing.T) {
+		isolateConfig(t)
+		useTempStore(t)
+		if err := SaveSandbox("ghost", &SandboxMeta{Provider: "digitalocean", IP: "1.2.3.4"}); err != nil {
+			t.Fatal(err)
+		}
+		p := &recordingProvider{destroyErr: fmt.Errorf("%w: gone", ErrNoMachineRecorded)}
+		if err := Destroy(p, "ghost", true); err != nil {
+			t.Fatalf("--force must clear a record naming no machine: %v", err)
+		}
+		if got, _ := GetSandbox("ghost"); got != nil {
+			t.Error("the record should be gone")
 		}
 	})
 
 	t.Run("keeps a key it did not generate", func(t *testing.T) {
-		config.ResetCacheForTest(t)
-		home := t.TempDir()
-		t.Setenv("XDG_CONFIG_HOME", home)
+		isolateConfig(t)
+		home := os.Getenv("XDG_CONFIG_HOME")
 
 		operatorKey := filepath.Join(t.TempDir(), "id_ed25519")
 		for _, p := range []string{operatorKey, operatorKey + ".pub"} {
@@ -267,8 +309,7 @@ func TestDOProviderCreateFillsMetaWithResolvedValues(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	config.ResetCacheForTest(t)
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 
 	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
 	meta := &SandboxMeta{}
@@ -293,3 +334,85 @@ func TestDOProviderCreateFillsMetaWithResolvedValues(t *testing.T) {
 		t.Errorf("a generated key must be recognized as ours: %s", meta.SSHKeyPath)
 	}
 }
+
+// A missing API token must yield a nil Provider, not a nil *DOProvider
+// wrapped in a non-nil interface. Callers that degrade to the stored data
+// check for nil, and a typed nil walks straight past that check.
+func TestProviderFromMetaReturnsUntypedNilOnError(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	t.Setenv("DO_API_TOKEN", "")
+	t.Setenv("DIGITALOCEAN_TOKEN", "")
+
+	p, err := ProviderFromMeta(&SandboxMeta{DropletID: 1})
+	if err == nil {
+		t.Fatal("a missing token must be an error")
+	}
+	if p != nil {
+		t.Fatalf("provider must be nil, got a non-nil interface holding %T", p)
+	}
+	// The nil must survive the fallback path Status takes.
+	if err := Status(p, "anything"); err == nil {
+		t.Log("Status returned no error, which is fine; the point is that it did not panic")
+	}
+}
+
+// Create records the machine as soon as it exists. Without this, a failure
+// during provisioning leaves a running droplet that `destroy` cannot find.
+func TestCreateRecordsMachineBeforeProvisioning(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"} {
+		t.Setenv(v, "x")
+	}
+
+	p := &recordingProvider{ip: "9.9.9.9", dropletID: 4242}
+	// Fail at the first step after the machine exists — the case the
+	// metadata entry is there for.
+	origWait := waitReady
+	waitReady = func(ip, keyPath, name string) error { return fmt.Errorf("boom") }
+	t.Cleanup(func() { waitReady = origWait })
+
+	orig := fetchArtifacts
+	fetchArtifacts = func(tag string) (*releaseArtifacts, error) {
+		return &releaseArtifacts{Version: "test", CloudInit: []byte("#cloud-config")}, nil
+	}
+	t.Cleanup(func() { fetchArtifacts = orig })
+
+	if err := Create(p, CreateOptions{Name: "halfway"}); err == nil {
+		t.Fatal("expected create to fail after the machine was made")
+	}
+	got, err := GetSandbox("halfway")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("a machine was created but nothing was recorded; destroy cannot reach it")
+	}
+	if got.DropletID != 4242 || got.IP != "9.9.9.9" {
+		t.Errorf("recorded the wrong machine: %+v", got)
+	}
+	if got.Status != "provisioning" {
+		t.Errorf("status = %q, want provisioning", got.Status)
+	}
+}
+
+type recordingProvider struct {
+	ip         string
+	dropletID  int
+	destroyErr error
+}
+
+func (r *recordingProvider) Name() string { return "digitalocean" }
+
+func (r *recordingProvider) Create(name string, opts CreateOptions, meta *SandboxMeta) error {
+	meta.IP = r.ip
+	meta.DropletID = r.dropletID
+	meta.Region = "nyc1"
+	meta.Size = "s-2vcpu-4gb"
+	meta.SSHKeyPath = filepath.Join(generatedKeysDir(), name)
+	return nil
+}
+
+func (r *recordingProvider) Destroy(meta *SandboxMeta) error          { return r.destroyErr }
+func (r *recordingProvider) Status(meta *SandboxMeta) (string, error) { return "active", nil }

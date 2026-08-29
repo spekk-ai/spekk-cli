@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -67,7 +68,7 @@ func Create(p Provider, opts CreateOptions) error {
 
 	// Fetch release artifacts before creating billable resources.
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchReleaseArtifacts("latest")
+	artifacts, err := fetchArtifacts("latest")
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
@@ -81,35 +82,50 @@ func Create(p Provider, opts CreateOptions) error {
 	meta := &SandboxMeta{
 		Provider:  p.Name(),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		Status:    "active",
 	}
+	meta.Status = "provisioning"
 	if err := p.Create(opts.Name, opts, meta); err != nil {
 		return err
 	}
 
+	// Record the machine before provisioning it. Every step below can
+	// fail, and a machine with no metadata entry is one that `spekk
+	// sandbox destroy` cannot reach: the operator has to go to the
+	// provider's console to find it.
+	if err := SaveSandbox(opts.Name, meta); err != nil {
+		return fmt.Errorf("saving metadata for %s: %w", machineRef(meta), err)
+	}
+
 	// --- Generic provisioning (provider-agnostic) ---
 
-	if err := waitForProvisioning(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n%s -- not auto-destroyed, debug manually.\n", err, machineRef(meta))
-		return err
+	// A failure from here on leaves a real machine running. Say so, and
+	// say which one, every time.
+	fail := func(stage string, err error) error {
+		fmt.Fprintf(os.Stderr, "%s -- not auto-destroyed. Debug it, or run: spekk sandbox destroy %s\n", machineRef(meta), opts.Name)
+		return fmt.Errorf("%s: %w", stage, err)
+	}
+
+	if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
+		return fail("waiting for provisioning", err)
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
 
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
 	if err := injectCredentials(meta.IP, meta.SSHKeyPath, opts.Name, agentToken); err != nil {
-		return fmt.Errorf("injecting credentials: %w", err)
+		return fail("injecting credentials", err)
 	}
 
 	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
 	if err := configureGitCredentials(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
-		return fmt.Errorf("configuring git credentials: %w", err)
+		return fail("configuring git credentials", err)
 	}
 
 	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
 	if err := deployAgent(meta.IP, meta.SSHKeyPath, opts.Name, artifacts); err != nil {
-		return fmt.Errorf("deploying agent: %w", err)
+		return fail("deploying agent", err)
 	}
 
+	meta.Status = "active"
 	if err := SaveSandbox(opts.Name, meta); err != nil {
 		return fmt.Errorf("saving metadata: %w", err)
 	}
@@ -261,7 +277,13 @@ func Destroy(p Provider, name string, force bool) error {
 	// optional: if it fails, stop, because removing the metadata below is
 	// what makes an orphaned machine unfindable.
 	if err := p.Destroy(sandbox); err != nil {
-		return err
+		// A record that names no machine is normally a lost identifier,
+		// and removing it would hide a running machine. With --force the
+		// operator has said they checked; let them clear the entry.
+		if !errors.Is(err, ErrNoMachineRecorded) || !force {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Warning: %s; removing the local record anyway because --force was given.\n", err)
 	}
 
 	// Remove local SSH key files, but only the ones spekk generated. An
@@ -478,6 +500,10 @@ func waitForDroplet(client *Client, dropletID int) (string, error) {
 	}
 	return "", fmt.Errorf("droplet %d did not become active within 5 minutes", dropletID)
 }
+
+// waitReady is the seam Create waits through. It is a variable so a test
+// can reach the steps after machine creation without a ten-minute wait.
+var waitReady = waitForProvisioning
 
 func waitForProvisioning(ip, keyPath, name string) error {
 	deadline := time.Now().Add(10 * time.Minute)

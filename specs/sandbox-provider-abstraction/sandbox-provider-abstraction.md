@@ -14,7 +14,7 @@ This spec introduces a provider interface so sandboxes work with any infrastruct
 
 Two concerns, cleanly separated:
 
-- **Provider** — creates and destroys the VM (cloud API, or no-op for manual). Returns an IP. Provider-specific config (region, size, VPC) lives inside the provider, not in the generic sandbox layer.
+- **Provider** — creates and destroys the machine and reports its state. The create-time settings (region, size, VPC, project) travel in one typed `CreateOptions` struct that every provider receives and reads selectively. A string map was tried and rejected: it put each provider in charge of its own defaults with no way to return them, so omitting `--region` left the metadata blank.
 - **Sandbox** — provisions the OS, deploys the agent, injects credentials, manages SSH sessions. Takes an IP. Unchanged from today.
 
 `SandboxMeta` gains `Provider string`, which names the provider that owns the machine. The change is additive: an entry written before the field existed reads as DigitalOcean, so an existing fleet keeps working and keeps being destroyable.

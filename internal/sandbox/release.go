@@ -49,6 +49,10 @@ type githubRelease struct {
 // for the latest published release, or a specific tag. The binary is written
 // to a temp file whose path is returned in BinaryPath; callers should
 // os.Remove it when done.
+// fetchRelease is the seam Create fetches artifacts through. It is a
+// variable so a test can exercise Create without a network call.
+var fetchArtifacts = fetchReleaseArtifacts
+
 func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {

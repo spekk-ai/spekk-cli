@@ -7,7 +7,7 @@ status: done
 branch: feat/provider-interface
 ---
 
-# A Provider interface abstracts machine lifecycle from sandbox orchestration
+# A Provider Interface Abstracts Machine Lifecycle From Sandbox Orchestration
 
 A sandbox has two halves. One half is the machine: create it, tear it down, ask how it is. That half is the provider's. The other half — waiting for provisioning, injecting credentials, deploying the agent, writing metadata — is the same whoever made the machine, and stays in `commands.go`. The interface is the line between them.
 
@@ -20,6 +20,8 @@ A sandbox has two halves. One half is the machine: create it, tear it down, ask 
 - `Create`, `Destroy`, and `Status` in `commands.go` take a `Provider` rather than constructing a DigitalOcean client inline.
 - `Destroy` calls the provider unconditionally and returns its error. It never removes local metadata after a failed teardown, because that metadata is what makes an orphaned machine findable.
 - `Destroy` removes a local key pair only when spekk generated it, judged by whether the path is inside the generated keys directory.
-- `Status` accepts a nil provider and falls back to the stored state with a warning, so a missing API token degrades the command instead of failing it.
+- `Status` accepts a nil provider and falls back to the stored state with a warning, so a missing API token degrades the command instead of failing it. A provider that cannot be built must come back as an untyped nil, or that fallback is skipped and the nil is called.
+- `destroy` and `status` choose the provider by reading stored metadata. `deploy` and `ssh` need only an address and a key, so they stay provider-blind.
+- `Create` records the machine as soon as the provider reports it exists, before the provisioning that can fail. A machine with no metadata entry is one `spekk sandbox destroy` cannot reach.
 
 **Tests:** internal/sandbox/provider_test.go

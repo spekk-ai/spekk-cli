@@ -143,7 +143,7 @@ func (p *DOProvider) Create(name string, opts CreateOptions, meta *SandboxMeta) 
 // Destroy deletes the droplet and its SSH key from DigitalOcean.
 func (p *DOProvider) Destroy(meta *SandboxMeta) error {
 	if meta.DropletID == 0 {
-		return fmt.Errorf("no droplet id recorded for this sandbox; refusing to destroy, because a droplet may still be running and billing")
+		return fmt.Errorf("%w: a droplet may still be running and billing", ErrNoMachineRecorded)
 	}
 
 	if err := p.client.DeleteDroplet(meta.DropletID); err != nil {
