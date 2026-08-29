@@ -3,8 +3,7 @@ id: cli-provider-dispatch
 parent: sandbox-provider-abstraction
 created: 2026-08-29T20:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-MacBook-Pro-17961-1788018079
+status: done
 depends-on: digitalocean-provider
 branch: dev/headless-sandbox
 ---
@@ -18,3 +17,5 @@ branch: dev/headless-sandbox
 - When `--provider` is omitted and `--ip` is not set, provider defaults to `digitalocean`
 - Provider-specific flags are validated: `--region`, `--size`, `--vpc`, `--project` are errors with `--provider manual`; `--ip`, `--ssh-key` are errors with `--provider digitalocean`
 - Error messages for invalid flag combinations name the conflicting flags and the selected provider
+
+**Tests:** internal/sandbox/dispatch_test.go

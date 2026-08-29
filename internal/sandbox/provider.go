@@ -58,20 +58,11 @@ type Provider interface {
 // DigitalOcean is what lets `destroy` still delete the droplet of a sandbox
 // created by an older binary.
 func ProviderFromMeta(meta *SandboxMeta) (Provider, error) {
-	switch meta.Provider {
-	case "", "digitalocean":
-		// Unpack rather than returning the call directly. A nil
-		// *DOProvider returned into a Provider result is an interface
-		// that is not nil, and every caller that checks for nil would
-		// then call a method on it.
-		p, err := NewDOProvider()
-		if err != nil {
-			return nil, err
-		}
-		return p, nil
-	default:
-		return nil, fmt.Errorf("unknown provider %q", meta.Provider)
+	name := meta.Provider
+	if name == "" {
+		name = "digitalocean"
 	}
+	return ProviderByName(name)
 }
 
 // generatedKeysDir is the directory holding key pairs that spekk created.

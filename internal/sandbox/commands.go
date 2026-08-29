@@ -40,6 +40,8 @@ type CreateOptions struct {
 	Size    string
 	Project string
 	VPC     string
+	IP      string // manual provider: IP of an existing machine
+	SSHKey  string // manual provider: path to an SSH private key
 
 	// CloudInit is the provisioning payload from the release artifacts.
 	// Create fills it in; no flag sets it. A provider that does not use
