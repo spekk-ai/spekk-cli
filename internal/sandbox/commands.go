@@ -90,9 +90,18 @@ func Create(p Provider, opts CreateOptions) error {
 
 	// --- Generic provisioning (provider-agnostic) ---
 
-	if err := waitForProvisioning(result.IP, result.SSHKeyPath, opts.Name); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\nIP: %s -- not auto-destroyed, debug manually.\n", err, result.IP)
-		return err
+	if result.Provider == "manual" {
+		// Manual machines need active provisioning over SSH.
+		if err := provisionViaSSH(result.IP, result.SSHKeyPath, opts.Name); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\nIP: %s -- not auto-destroyed, debug manually.\n", err, result.IP)
+			return err
+		}
+	} else {
+		// Cloud providers use cloud-init — wait for it to finish.
+		if err := waitForProvisioning(result.IP, result.SSHKeyPath, opts.Name); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\nIP: %s -- not auto-destroyed, debug manually.\n", err, result.IP)
+			return err
+		}
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
 
@@ -264,6 +273,13 @@ func Destroy(p Provider, name string, force bool) error {
 			fmt.Println("Aborted.")
 			return nil
 		}
+	}
+
+	// For manual sandboxes: stop the agent service (the machine stays up).
+	// For cloud providers: the VM is about to be destroyed, so stopping first
+	// is unnecessary but Destroy handles it via the provider.
+	if sandbox.Provider == "manual" {
+		stopAgentService(sandbox, name)
 	}
 
 	// Delegate remote resource cleanup to the provider.

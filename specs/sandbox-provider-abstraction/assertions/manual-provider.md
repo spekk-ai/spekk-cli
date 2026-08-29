@@ -3,8 +3,7 @@ id: manual-provider
 parent: sandbox-provider-abstraction
 created: 2026-08-29T20:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-MacBook-Pro.local-27752-1788018534
+status: done
 depends-on: provider-interface
 branch: dev/headless-sandbox
 ---
@@ -22,3 +21,5 @@ The user supplies an IP address and SSH key. Spekk provisions the machine over S
 - `Destroy` with a manual sandbox stops the agent service and removes local metadata but does NOT destroy the machine
 - `Status` with a manual sandbox checks reachability and agent service status via SSH only — no cloud API calls
 - The provisioning script is idempotent — running it on an already-provisioned machine does not break it
+
+**Tests:** internal/sandbox/manual_provider_test.go

@@ -3,7 +3,6 @@ package sandbox
 import "fmt"
 
 // ManualProvider implements Provider for pre-existing SSH-reachable machines.
-// The full implementation is tracked by the manual-provider assertion.
 type ManualProvider struct{}
 
 func (p *ManualProvider) Create(name string, config map[string]string) (*CreateResult, error) {
@@ -12,6 +11,9 @@ func (p *ManualProvider) Create(name string, config map[string]string) (*CreateR
 		return nil, fmt.Errorf("manual provider requires --ip flag")
 	}
 	sshKey := config["ssh_key"]
+	if sshKey == "" {
+		return nil, fmt.Errorf("manual provider requires --ssh-key flag")
+	}
 
 	return &CreateResult{
 		IP:         ip,
@@ -23,6 +25,7 @@ func (p *ManualProvider) Create(name string, config map[string]string) (*CreateR
 
 func (p *ManualProvider) Destroy(instanceID string) error {
 	// Manual provider has no cloud resources to tear down.
+	// Agent service stop is handled by the generic Destroy flow.
 	return nil
 }
 
