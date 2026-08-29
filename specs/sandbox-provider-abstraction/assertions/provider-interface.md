@@ -3,7 +3,7 @@ id: provider-interface
 parent: sandbox-provider-abstraction
 created: 2026-08-29T20:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: dev/headless-sandbox
 ---
 
@@ -19,3 +19,5 @@ branch: dev/headless-sandbox
 - `SandboxMeta.InstanceID` is opaque to the generic layer — only the provider interprets it
 - Provider-specific teardown state (e.g., DO SSH key IDs) is the provider's responsibility to track, not stored in generic metadata
 - Sandbox lifecycle functions (`Create`, `Destroy`, `Status` in `commands.go`) accept a `Provider` rather than constructing a DO client inline
+
+**Tests:** internal/sandbox/provider_test.go

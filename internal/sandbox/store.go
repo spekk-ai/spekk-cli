@@ -12,14 +12,14 @@ import (
 
 // SandboxMeta holds local metadata for a sandbox.
 type SandboxMeta struct {
-	DropletID  int    `json:"dropletId"`
+	Provider   string `json:"provider"`
+	InstanceID string `json:"instanceId"`
 	IP         string `json:"ip"`
 	Region     string `json:"region"`
 	Size       string `json:"size"`
 	CreatedAt  string `json:"createdAt"`
 	Status     string `json:"status"`
 	Project    string `json:"project,omitempty"`
-	SSHKeyID   int    `json:"sshKeyId,omitempty"`
 	SSHKeyPath string `json:"sshKeyPath,omitempty"`
 }
 

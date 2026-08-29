@@ -1022,7 +1022,12 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Status(subArgs[0]); err != nil {
+		p, err := sandbox.NewDOProvider()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		if err := sandbox.Status(p, subArgs[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1057,7 +1062,12 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Destroy(name, force); err != nil {
+		p, err := sandbox.NewDOProvider()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		if err := sandbox.Destroy(p, name, force); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1118,6 +1128,11 @@ OPTIONS:
 		os.Exit(1)
 	}
 
+	p, err := sandbox.NewDOProvider()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 	opts := sandbox.CreateOptions{
 		Name:    flags.String("name"),
 		Region:  flags.String("region"),
@@ -1125,7 +1140,7 @@ OPTIONS:
 		Project: flags.String("project"),
 		VPC:     flags.String("vpc"),
 	}
-	if err := sandbox.Create(opts); err != nil {
+	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}

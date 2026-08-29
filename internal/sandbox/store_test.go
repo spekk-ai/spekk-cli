@@ -26,12 +26,13 @@ func TestStoreRoundTrip(t *testing.T) {
 
 	// Save a sandbox
 	meta := &SandboxMeta{
-		DropletID: 12345,
-		IP:        "1.2.3.4",
-		Region:    "nyc1",
-		Size:      "s-1vcpu-1gb",
-		CreatedAt: "2026-01-01T00:00:00Z",
-		Status:    "active",
+		Provider:   "digitalocean",
+		InstanceID: `{"droplet_id":12345,"ssh_key_id":99}`,
+		IP:         "1.2.3.4",
+		Region:     "nyc1",
+		Size:       "s-1vcpu-1gb",
+		CreatedAt:  "2026-01-01T00:00:00Z",
+		Status:     "active",
 	}
 	if err := SaveSandbox("test-sb", meta); err != nil {
 		t.Fatal(err)
@@ -45,8 +46,11 @@ func TestStoreRoundTrip(t *testing.T) {
 	if got == nil {
 		t.Fatal("expected sandbox, got nil")
 	}
-	if got.DropletID != 12345 {
-		t.Errorf("expected droplet ID 12345, got %d", got.DropletID)
+	if got.Provider != "digitalocean" {
+		t.Errorf("expected provider digitalocean, got %s", got.Provider)
+	}
+	if got.InstanceID != `{"droplet_id":12345,"ssh_key_id":99}` {
+		t.Errorf("expected instanceId, got %s", got.InstanceID)
 	}
 	if got.IP != "1.2.3.4" {
 		t.Errorf("expected IP 1.2.3.4, got %s", got.IP)
@@ -116,7 +120,7 @@ func TestSandboxesFileWrittenCorrectly(t *testing.T) {
 	}
 	defer func() { sandboxesFile = origFile }()
 
-	SaveSandbox("my-sb", &SandboxMeta{DropletID: 1, IP: "10.0.0.1"})
+	SaveSandbox("my-sb", &SandboxMeta{Provider: "digitalocean", InstanceID: "1", IP: "10.0.0.1"})
 
 	data, err := os.ReadFile(sandboxesFile())
 	if err != nil {

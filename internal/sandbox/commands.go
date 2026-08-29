@@ -43,18 +43,10 @@ type CreateOptions struct {
 
 // --- Create ---
 
-// Create creates a new sandbox droplet with cloud-init provisioning.
-func Create(opts CreateOptions) error {
-	if opts.Region == "" {
-		opts.Region = "nyc1"
-	}
-	if opts.Size == "" {
-		opts.Size = "s-2vcpu-4gb"
-	}
-
-	dropletName := "spekk-" + opts.Name
-
-	// Check required env vars
+// Create provisions a sandbox using the given Provider for VM lifecycle and
+// then runs generic provisioning (SSH wait, credential injection, agent deploy).
+func Create(p Provider, opts CreateOptions) error {
+	// Check required env vars (generic — needed regardless of provider).
 	requiredVars := []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"}
 	var missing []string
 	for _, v := range requiredVars {
@@ -66,143 +58,66 @@ func Create(opts CreateOptions) error {
 		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
 
-	client, err := NewClient()
-	if err != nil {
-		return err
-	}
-
-	// Generate agent token
 	agentToken := generateAgentToken()
 
-	// Resolve project if specified
-	var projectID, projectName string
-	if opts.Project != "" {
-		projectID, projectName, err = resolveProject(client, opts.Project)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate SSH key pair
-	fmt.Fprintln(os.Stderr, "Generating SSH key pair...")
-	keyPath, err := generateSSHKeyPair(opts.Name)
-	if err != nil {
-		return fmt.Errorf("generating SSH key: %w", err)
-	}
-
-	// Upload public key to DO
-	pubKeyData, err := os.ReadFile(keyPath + ".pub")
-	if err != nil {
-		return fmt.Errorf("reading public key: %w", err)
-	}
-	keyName := fmt.Sprintf("spekk-%s", opts.Name)
-	doKey, err := client.CreateSSHKey(keyName, strings.TrimSpace(string(pubKeyData)))
-	if err != nil {
-		return fmt.Errorf("uploading SSH key to DO: %w", err)
-	}
-	fmt.Fprintf(os.Stderr, "SSH key uploaded to DigitalOcean (ID: %d)\n", doKey.ID)
-
-	// Also fetch existing account keys so user can SSH in with their own keys
-	existingKeys, listErr := client.ListSSHKeys()
-	if listErr != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not list existing SSH keys (%s); only the generated key will be authorized\n", listErr)
-	}
-	sshKeyIDs := []int{doKey.ID}
-	for _, k := range existingKeys {
-		if k.ID != doKey.ID {
-			sshKeyIDs = append(sshKeyIDs, k.ID)
-		}
-	}
-
-	// Fetch the release artifacts (binary + cloud-init) before creating any
-	// billable resources, so a bad/missing release fails fast.
+	// Fetch release artifacts before creating billable resources.
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
 	artifacts, err := fetchReleaseArtifacts("latest")
 	if err != nil {
-		client.DeleteSSHKey(doKey.ID)
-		os.Remove(keyPath)
-		os.Remove(keyPath + ".pub")
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
 	defer os.Remove(artifacts.BinaryPath)
 	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
-	cloudInit := renderCloudInit(artifacts.CloudInit, strings.TrimSpace(string(pubKeyData)))
 
-	// Create droplet
-	fmt.Fprintf(os.Stderr, "Creating droplet %q in %s (%s)...\n", dropletName, opts.Region, opts.Size)
-	droplet, err := client.CreateDroplet(CreateDropletRequest{
-		Name:     dropletName,
-		Region:   opts.Region,
-		Size:     opts.Size,
-		SSHKeys:  sshKeyIDs,
-		VpcUUID:  opts.VPC,
-		UserData: cloudInit,
-	})
-	if err != nil {
-		// Roll back the SSH key we uploaded so it doesn't leak in the DO account
-		if delErr := client.DeleteSSHKey(doKey.ID); delErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not remove orphaned SSH key %d from DO: %s\n", doKey.ID, delErr)
-		}
-		os.Remove(keyPath)
-		os.Remove(keyPath + ".pub")
-		return fmt.Errorf("creating droplet: %w", err)
+	// Build provider-specific config.
+	config := map[string]string{
+		"region":     opts.Region,
+		"size":       opts.Size,
+		"vpc":        opts.VPC,
+		"project":    opts.Project,
+		"cloud_init": string(artifacts.CloudInit),
 	}
-	dropletID := droplet.ID
-	fmt.Fprintf(os.Stderr, "Droplet created (ID: %d). Waiting for it to become active...\n", dropletID)
 
-	// Wait for droplet to become active
-	ip, err := waitForDroplet(client, dropletID)
+	// Delegate VM creation to the provider.
+	result, err := p.Create(opts.Name, config)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\nDroplet ID: %d -- not auto-destroyed, debug manually.\n", err, dropletID)
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Droplet active at %s\n", ip)
 
-	// Wait for SSH and provisioning
-	if err := waitForProvisioning(ip, keyPath, opts.Name); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\nDroplet IP: %s (ID: %d) -- not auto-destroyed, debug manually.\n", err, ip, dropletID)
+	// --- Generic provisioning (provider-agnostic) ---
+
+	if err := waitForProvisioning(result.IP, result.SSHKeyPath, opts.Name); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\nIP: %s -- not auto-destroyed, debug manually.\n", err, result.IP)
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
 
-	// Inject credentials
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(ip, keyPath, opts.Name, agentToken); err != nil {
+	if err := injectCredentials(result.IP, result.SSHKeyPath, opts.Name, agentToken); err != nil {
 		return fmt.Errorf("injecting credentials: %w", err)
 	}
 
-	// Configure git credentials
 	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
-	if err := configureGitCredentials(ip, keyPath, opts.Name); err != nil {
+	if err := configureGitCredentials(result.IP, result.SSHKeyPath, opts.Name); err != nil {
 		return fmt.Errorf("configuring git credentials: %w", err)
 	}
 
-	// Deploy the agent binary and start its service
 	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
-	if err := deployAgent(ip, keyPath, opts.Name, artifacts); err != nil {
+	if err := deployAgent(result.IP, result.SSHKeyPath, opts.Name, artifacts); err != nil {
 		return fmt.Errorf("deploying agent: %w", err)
 	}
 
-	// Assign to project
-	if projectID != "" {
-		fmt.Fprintf(os.Stderr, "Assigning droplet to project %q...\n", projectName)
-		urn := fmt.Sprintf("do:droplet:%d", dropletID)
-		if err := client.AssignToProject(projectID, []string{urn}); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not assign to project: %s\n", err)
-		}
-	}
-
-	// Save metadata
+	// Save metadata.
 	meta := &SandboxMeta{
-		DropletID:  dropletID,
-		IP:         ip,
+		Provider:   result.Provider,
+		InstanceID: result.InstanceID,
+		IP:         result.IP,
 		Region:     opts.Region,
 		Size:       opts.Size,
 		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 		Status:     "active",
-		Project:    projectName,
-		SSHKeyID:   doKey.ID,
-		SSHKeyPath: keyPath,
+		Project:    opts.Project,
+		SSHKeyPath: result.SSHKeyPath,
 	}
 	if err := SaveSandbox(opts.Name, meta); err != nil {
 		return fmt.Errorf("saving metadata: %w", err)
@@ -220,7 +135,7 @@ Next: Register this agent on the control host admin at https://%s/
   - Name: %s
   - Sandbox ID: spekk-%s
   - Auth token: %s
-`, opts.Name, ip, agentToken, bareHost, opts.Name, opts.Name, agentToken)
+`, opts.Name, result.IP, agentToken, bareHost, opts.Name, opts.Name, agentToken)
 
 	return nil
 }
@@ -256,8 +171,9 @@ func List() error {
 
 // --- Status ---
 
-// Status shows detailed info for a named sandbox.
-func Status(name string) error {
+// Status shows detailed info for a named sandbox, using the Provider
+// to fetch live VM state.
+func Status(p Provider, name string) error {
 	sandbox, err := GetSandbox(name)
 	if err != nil {
 		return err
@@ -267,24 +183,23 @@ func Status(name string) error {
 	}
 
 	fmt.Printf("Sandbox: %s\n", name)
-	fmt.Printf("Droplet ID: %d\n", sandbox.DropletID)
+	fmt.Printf("Provider: %s\n", orUnknown(sandbox.Provider))
 	fmt.Printf("IP: %s\n", orUnknown(sandbox.IP))
 	fmt.Printf("Region: %s\n", orUnknown(sandbox.Region))
 	fmt.Printf("Size: %s\n", orUnknown(sandbox.Size))
 	fmt.Printf("Created: %s\n", orUnknown(sandbox.CreatedAt))
 
-	// Fetch live status from DO API
-	dropletStatus := orUnknown(sandbox.Status)
-	client, err := NewClient()
-	if err == nil {
-		droplet, err := client.GetDroplet(sandbox.DropletID)
+	// Fetch live status from the provider.
+	vmStatus := orUnknown(sandbox.Status)
+	if sandbox.InstanceID != "" {
+		live, err := p.Status(sandbox.InstanceID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Could not fetch live droplet data: %s\n", err)
-		} else if droplet != nil {
-			dropletStatus = droplet.Status
+			fmt.Fprintf(os.Stderr, "Warning: Could not fetch live VM status: %s\n", err)
+		} else if live != "" {
+			vmStatus = live
 		}
 	}
-	fmt.Printf("Droplet status: %s\n", dropletStatus)
+	fmt.Printf("VM status: %s\n", vmStatus)
 
 	// SSH checks
 	provisioned := sshCheck(sandbox, name, "test -f /opt/spekk/.provisioned && echo yes || echo no")
@@ -326,8 +241,9 @@ func SSH(name string, extraArgs []string) error {
 
 // --- Destroy ---
 
-// Destroy tears down a sandbox droplet and removes local metadata.
-func Destroy(name string, force bool) error {
+// Destroy tears down a sandbox using the Provider for remote resource cleanup
+// and then removes local files and metadata.
+func Destroy(p Provider, name string, force bool) error {
 	sandbox, err := GetSandbox(name)
 	if err != nil {
 		return err
@@ -337,7 +253,7 @@ func Destroy(name string, force bool) error {
 	}
 
 	if !force {
-		fmt.Fprintf(os.Stderr, "Destroy sandbox %q (droplet %d)? [y/N] ", name, sandbox.DropletID)
+		fmt.Fprintf(os.Stderr, "Destroy sandbox %q? [y/N] ", name)
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
 		if strings.TrimSpace(strings.ToLower(answer)) != "y" {
@@ -346,39 +262,20 @@ func Destroy(name string, force bool) error {
 		}
 	}
 
-	client, err := NewClient()
-	if err != nil {
-		return err
-	}
-
-	if err := client.DeleteDroplet(sandbox.DropletID); err != nil {
-		if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 404 {
-			fmt.Fprintf(os.Stderr, "Warning: Droplet %d was already deleted.\n", sandbox.DropletID)
-		} else {
-			return fmt.Errorf("deleting droplet: %w", err)
+	// Delegate remote resource cleanup to the provider.
+	if sandbox.InstanceID != "" {
+		if err := p.Destroy(sandbox.InstanceID); err != nil {
+			return err
 		}
 	}
 
-	// Remove SSH key from DO
-	if sandbox.SSHKeyID != 0 {
-		if err := client.DeleteSSHKey(sandbox.SSHKeyID); err != nil {
-			if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 404 {
-				fmt.Fprintf(os.Stderr, "Warning: SSH key %d was already deleted.\n", sandbox.SSHKeyID)
-			} else {
-				fmt.Fprintf(os.Stderr, "Warning: could not remove SSH key from DO: %s\n", err)
-			}
-		} else {
-			fmt.Fprintln(os.Stderr, "SSH key removed from DigitalOcean.")
-		}
-	}
-
-	// Remove local SSH key files
+	// Remove local SSH key files.
 	if sandbox.SSHKeyPath != "" {
 		os.Remove(sandbox.SSHKeyPath)
 		os.Remove(sandbox.SSHKeyPath + ".pub")
 	}
 
-	// Remove per-sandbox known_hosts file
+	// Remove per-sandbox known_hosts file.
 	os.Remove(KnownHostsFile(name))
 
 	if err := RemoveSandbox(name); err != nil {
