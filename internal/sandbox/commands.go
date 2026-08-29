@@ -64,6 +64,16 @@ func Create(p Provider, opts CreateOptions) error {
 		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
 
+	// A name that is already taken is nearly always a create that failed
+	// partway. Overwriting its entry would drop the identifier of the
+	// machine that failure left running.
+	if existing, err := GetSandbox(opts.Name); err != nil {
+		return err
+	} else if existing != nil {
+		return fmt.Errorf("sandbox %q already exists (%s); destroy it first: spekk sandbox destroy %s",
+			opts.Name, machineRef(existing), opts.Name)
+	}
+
 	agentToken := generateAgentToken()
 
 	// Fetch release artifacts before creating billable resources.
@@ -83,17 +93,25 @@ func Create(p Provider, opts CreateOptions) error {
 		Provider:  p.Name(),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
+	// Record the machine as soon as one exists, and record it even when
+	// the provider then fails. A machine with no metadata entry is one
+	// that `spekk sandbox destroy` cannot reach: the operator has to go
+	// to the provider's console and match it by name.
 	meta.Status = "provisioning"
-	if err := p.Create(opts.Name, opts, meta); err != nil {
-		return err
+	createErr := p.Create(opts.Name, opts, meta)
+	if namesMachine(meta) {
+		if err := SaveSandbox(opts.Name, meta); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not record %s: %s\n", machineRef(meta), err)
+			if createErr == nil {
+				return fmt.Errorf("saving metadata for %s: %w", machineRef(meta), err)
+			}
+		}
 	}
-
-	// Record the machine before provisioning it. Every step below can
-	// fail, and a machine with no metadata entry is one that `spekk
-	// sandbox destroy` cannot reach: the operator has to go to the
-	// provider's console to find it.
-	if err := SaveSandbox(opts.Name, meta); err != nil {
-		return fmt.Errorf("saving metadata for %s: %w", machineRef(meta), err)
+	if createErr != nil {
+		if namesMachine(meta) {
+			fmt.Fprintf(os.Stderr, "%s -- not auto-destroyed. Run: spekk sandbox destroy %s\n", machineRef(meta), opts.Name)
+		}
+		return createErr
 	}
 
 	// --- Generic provisioning (provider-agnostic) ---
@@ -311,6 +329,11 @@ func providerName(meta *SandboxMeta) string {
 		return "digitalocean"
 	}
 	return meta.Provider
+}
+
+// namesMachine reports whether meta identifies a machine that exists.
+func namesMachine(meta *SandboxMeta) bool {
+	return meta.DropletID != 0 || meta.IP != ""
 }
 
 // machineRef describes the machine a command is about to act on, so the

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spekk-ai/spekk-cli/internal/config"
@@ -24,6 +25,24 @@ func isolateConfig(t *testing.T) {
 	config.ResetCacheForTest(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+}
+
+// stubCreateEnv supplies the environment and release artifacts Create needs,
+// and short-circuits the ten-minute provisioning wait.
+func stubCreateEnv(t *testing.T) {
+	t.Helper()
+	for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"} {
+		t.Setenv(v, "x")
+	}
+	origArtifacts := fetchArtifacts
+	fetchArtifacts = func(tag string) (*releaseArtifacts, error) {
+		return &releaseArtifacts{Version: "test", CloudInit: []byte("#cloud-config")}, nil
+	}
+	t.Cleanup(func() { fetchArtifacts = origArtifacts })
+
+	origWait := waitReady
+	waitReady = func(ip, keyPath, name string) error { return fmt.Errorf("boom") }
+	t.Cleanup(func() { waitReady = origWait })
 }
 
 // useTempStore points the metadata file at a temp dir and returns its path.
@@ -362,23 +381,11 @@ func TestProviderFromMetaReturnsUntypedNilOnError(t *testing.T) {
 func TestCreateRecordsMachineBeforeProvisioning(t *testing.T) {
 	isolateConfig(t)
 	useTempStore(t)
-	for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"} {
-		t.Setenv(v, "x")
-	}
+	stubCreateEnv(t)
 
-	p := &recordingProvider{ip: "9.9.9.9", dropletID: 4242}
 	// Fail at the first step after the machine exists — the case the
 	// metadata entry is there for.
-	origWait := waitReady
-	waitReady = func(ip, keyPath, name string) error { return fmt.Errorf("boom") }
-	t.Cleanup(func() { waitReady = origWait })
-
-	orig := fetchArtifacts
-	fetchArtifacts = func(tag string) (*releaseArtifacts, error) {
-		return &releaseArtifacts{Version: "test", CloudInit: []byte("#cloud-config")}, nil
-	}
-	t.Cleanup(func() { fetchArtifacts = orig })
-
+	p := &recordingProvider{ip: "9.9.9.9", dropletID: 4242}
 	if err := Create(p, CreateOptions{Name: "halfway"}); err == nil {
 		t.Fatal("expected create to fail after the machine was made")
 	}
@@ -400,6 +407,7 @@ func TestCreateRecordsMachineBeforeProvisioning(t *testing.T) {
 type recordingProvider struct {
 	ip         string
 	dropletID  int
+	createErr  error
 	destroyErr error
 }
 
@@ -411,8 +419,51 @@ func (r *recordingProvider) Create(name string, opts CreateOptions, meta *Sandbo
 	meta.Region = "nyc1"
 	meta.Size = "s-2vcpu-4gb"
 	meta.SSHKeyPath = filepath.Join(generatedKeysDir(), name)
-	return nil
+	return r.createErr
 }
 
 func (r *recordingProvider) Destroy(meta *SandboxMeta) error          { return r.destroyErr }
 func (r *recordingProvider) Status(meta *SandboxMeta) (string, error) { return "active", nil }
+
+// A provider that makes a machine and then fails must still leave the
+// machine named on disk. Otherwise only stderr holds its identifier.
+func TestCreateRecordsMachineWhenTheProviderFails(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	stubCreateEnv(t)
+
+	p := &recordingProvider{ip: "9.9.9.9", dropletID: 777, createErr: fmt.Errorf("timed out waiting for an address")}
+	if err := Create(p, CreateOptions{Name: "halfmade"}); err == nil {
+		t.Fatal("expected the provider error to surface")
+	}
+	got, _ := GetSandbox("halfmade")
+	if got == nil {
+		t.Fatal("the machine the provider made is unrecorded, so destroy cannot reach it")
+	}
+	if got.DropletID != 777 {
+		t.Errorf("recorded %+v, want droplet 777", got)
+	}
+}
+
+// Re-running create after a failure must not overwrite the record of the
+// machine that failure left running.
+func TestCreateRefusesAnExistingName(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	stubCreateEnv(t)
+
+	if err := SaveSandbox("taken", &SandboxMeta{Provider: "digitalocean", DropletID: 100, IP: "1.2.3.4"}); err != nil {
+		t.Fatal(err)
+	}
+	err := Create(&recordingProvider{ip: "2.2.2.2", dropletID: 200}, CreateOptions{Name: "taken"})
+	if err == nil {
+		t.Fatal("create must refuse a name that is already recorded")
+	}
+	if !strings.Contains(err.Error(), "destroy") {
+		t.Errorf("the error should say how to clear it, got %q", err)
+	}
+	got, _ := GetSandbox("taken")
+	if got == nil || got.DropletID != 100 {
+		t.Errorf("the original record must survive, got %+v", got)
+	}
+}

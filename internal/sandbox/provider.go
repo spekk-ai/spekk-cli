@@ -15,6 +15,9 @@ import (
 // machine is still running.
 var ErrNoMachineRecorded = errors.New("no machine recorded for this sandbox")
 
+// ErrSandboxNotFound reports that no sandbox by that name is in the store.
+var ErrSandboxNotFound = errors.New("sandbox not found")
+
 // Provider owns the machine lifecycle for a sandbox: it creates the VM,
 // tears it down, and reports its live state. Everything after the machine
 // exists — waiting for provisioning, injecting credentials, deploying the
@@ -113,7 +116,7 @@ func ProviderForName(name string) (Provider, error) {
 		return nil, err
 	}
 	if meta == nil {
-		return nil, fmt.Errorf("sandbox %q not found", name)
+		return nil, fmt.Errorf("%w: %q", ErrSandboxNotFound, name)
 	}
 	return ProviderFromMeta(meta)
 }

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -1026,8 +1027,10 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 		// cannot build is a warning, not a failure. Before this command
 		// needed an API token at all, it still printed the stored fields
 		// and the SSH checks; it keeps doing that.
+		// Status reports a missing sandbox itself, so only a real
+		// provider problem is worth a warning here.
 		p, err := sandbox.ProviderForName(subArgs[0])
-		if err != nil {
+		if err != nil && !errors.Is(err, sandbox.ErrSandboxNotFound) {
 			fmt.Fprintf(os.Stderr, "Warning: %s\n", err)
 		}
 		if err := sandbox.Status(p, subArgs[0]); err != nil {

@@ -44,15 +44,15 @@ type githubRelease struct {
 	Assets  []githubAsset `json:"assets"`
 }
 
+// fetchArtifacts is the seam Create fetches through. It is a variable so a
+// test can exercise Create without a network call.
+var fetchArtifacts = fetchReleaseArtifacts
+
 // fetchReleaseArtifacts downloads the sandbox binary and cloud-init template
 // from the GitHub release named by releaseRepo. tag may be empty or "latest"
 // for the latest published release, or a specific tag. The binary is written
 // to a temp file whose path is returned in BinaryPath; callers should
 // os.Remove it when done.
-// fetchRelease is the seam Create fetches artifacts through. It is a
-// variable so a test can exercise Create without a network call.
-var fetchArtifacts = fetchReleaseArtifacts
-
 func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
