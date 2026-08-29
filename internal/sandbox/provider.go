@@ -34,8 +34,12 @@ type Provider interface {
 
 	// Create provisions a VM and fills the fields of meta that it owns:
 	// IP and SSHKeyPath always, plus its own identifiers and any setting
-	// it defaulted. On error meta may be partly filled; the caller saves
-	// it only on success.
+	// it defaulted.
+	//
+	// On error, fill in only what identifies a machine that really
+	// exists. The caller saves meta whenever it names one, on the error
+	// path as well as on success, so an address written before the
+	// machine is real becomes a record pointing at nothing.
 	Create(name string, opts CreateOptions, meta *SandboxMeta) error
 
 	// Destroy tears down every resource this provider created for the
