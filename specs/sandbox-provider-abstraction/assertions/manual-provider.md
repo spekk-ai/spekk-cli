@@ -3,7 +3,8 @@ id: manual-provider
 parent: sandbox-provider-abstraction
 created: 2026-08-29T20:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-MacBook-Pro.local-27752-1788018534
 depends-on: provider-interface
 branch: dev/headless-sandbox
 ---
