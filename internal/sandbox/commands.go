@@ -125,7 +125,13 @@ func Create(p Provider, opts CreateOptions) error {
 		return fmt.Errorf("%s: %w", stage, err)
 	}
 
-	if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
+	if meta.Provider == "manual" {
+		// A machine spekk did not create has no cloud-init to wait for,
+		// so it is provisioned over SSH instead.
+		if err := provisionViaSSH(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
+			return fail("provisioning over SSH", err)
+		}
+	} else if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
 		return fail("waiting for provisioning", err)
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
@@ -291,6 +297,12 @@ func Destroy(p Provider, name string, force bool) error {
 			fmt.Println("Aborted.")
 			return nil
 		}
+	}
+
+	// A manual machine survives destroy, so the agent has to be stopped
+	// on it. A cloud machine is about to be deleted whole.
+	if sandbox.Provider == "manual" {
+		stopAgentService(sandbox, name)
 	}
 
 	// Delegate remote resource cleanup to the provider. This is not
