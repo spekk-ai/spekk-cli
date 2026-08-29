@@ -1022,10 +1022,13 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		p, err := sandbox.NewDOProvider()
+		// Status reads more than the provider knows, so a provider it
+		// cannot build is a warning, not a failure. Before this command
+		// needed an API token at all, it still printed the stored fields
+		// and the SSH checks; it keeps doing that.
+		p, err := sandbox.ProviderForName(subArgs[0])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", err)
 		}
 		if err := sandbox.Status(p, subArgs[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -1062,7 +1065,7 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		p, err := sandbox.NewDOProvider()
+		p, err := sandbox.ProviderForName(name)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)

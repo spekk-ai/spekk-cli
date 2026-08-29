@@ -7,79 +7,166 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/spekk-ai/spekk-cli/internal/config"
 )
 
-// --- Provider interface conformance ---
+// useTempStore points the metadata file at a temp dir and returns its path.
+func useTempStore(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "sandboxes.json")
+	orig := sandboxesFile
+	sandboxesFile = func() string { return path }
+	t.Cleanup(func() { sandboxesFile = orig })
+	return path
+}
 
-// Verify DOProvider satisfies the Provider interface at compile time.
-var _ Provider = (*DOProvider)(nil)
+// legacyStore writes a sandboxes.json in the shape an older binary wrote:
+// a droplet id and an ssh key id, and no provider field at all.
+const legacyStore = `{
+  "old-box": {
+    "dropletId": 558093268,
+    "sshKeyId": 4433221,
+    "ip": "1.2.3.4",
+    "region": "nyc1",
+    "size": "s-2vcpu-4gb",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "status": "active"
+  }
+}`
 
-// --- SandboxMeta field tests ---
-
-func TestSandboxMetaHasProviderAndInstanceID(t *testing.T) {
-	tmpDir := t.TempDir()
-	origFile := sandboxesFile
-	sandboxesFile = func() string {
-		return filepath.Join(tmpDir, "sandboxes.json")
-	}
-	defer func() { sandboxesFile = origFile }()
-
-	meta := &SandboxMeta{
-		Provider:   "digitalocean",
-		InstanceID: `{"droplet_id":42,"ssh_key_id":7}`,
-		IP:         "10.0.0.1",
-		SSHKeyPath: "/tmp/key",
-	}
-	if err := SaveSandbox("test", meta); err != nil {
+// A sandbox created before the provider field existed must still be fully
+// destroyable. The failure this pins is silent: teardown is skipped, the
+// metadata is removed anyway, and the droplet bills forever with no local
+// record of its id.
+func TestDestroyLegacyMetadataDeletesDroplet(t *testing.T) {
+	path := useTempStore(t)
+	if err := os.WriteFile(path, []byte(legacyStore), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := GetSandbox("test")
-	if err != nil {
+	var dropletDeleted, keyDeleted bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/droplets/558093268":
+			dropletDeleted = true
+		case "/v2/account/keys/4433221":
+			keyDeleted = true
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(204)
+	}))
+	defer ts.Close()
+
+	meta, err := GetSandbox("old-box")
+	if err != nil || meta == nil {
+		t.Fatalf("legacy entry must load: %v", err)
+	}
+	if meta.DropletID != 558093268 {
+		t.Fatalf("legacy dropletId lost on load: %+v", meta)
+	}
+
+	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
+	if err := Destroy(p, "old-box", true); err != nil {
 		t.Fatal(err)
 	}
-	if got.Provider != "digitalocean" {
-		t.Errorf("Provider = %q, want %q", got.Provider, "digitalocean")
+	if !dropletDeleted {
+		t.Error("droplet was never deleted; it is orphaned and still billing")
 	}
-	if got.InstanceID != `{"droplet_id":42,"ssh_key_id":7}` {
-		t.Errorf("InstanceID = %q, want JSON with droplet_id/ssh_key_id", got.InstanceID)
+	if !keyDeleted {
+		t.Error("DO ssh key was never deleted")
+	}
+	if got, _ := GetSandbox("old-box"); got != nil {
+		t.Error("metadata should be gone after a successful destroy")
 	}
 }
 
-func TestSandboxMetaJSON(t *testing.T) {
-	meta := &SandboxMeta{
-		Provider:   "manual",
-		InstanceID: "my-box",
-		IP:         "192.168.1.1",
-	}
-	data, err := json.Marshal(meta)
+// An entry with no provider field is DigitalOcean's, because that was the
+// only provider when such entries were written.
+func TestProviderFromMetaReadsEmptyAsDigitalOcean(t *testing.T) {
+	t.Setenv("DO_API_TOKEN", "tok")
+	p, err := ProviderFromMeta(&SandboxMeta{DropletID: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var decoded map[string]interface{}
-	json.Unmarshal(data, &decoded)
-
-	if decoded["provider"] != "manual" {
-		t.Errorf("JSON provider = %v", decoded["provider"])
+	if p.Name() != "digitalocean" {
+		t.Errorf("Name = %q, want digitalocean", p.Name())
 	}
-	if decoded["instanceId"] != "my-box" {
-		t.Errorf("JSON instanceId = %v", decoded["instanceId"])
-	}
-	// Verify old fields are absent.
-	if _, ok := decoded["dropletId"]; ok {
-		t.Error("JSON should not contain dropletId")
-	}
-	if _, ok := decoded["sshKeyId"]; ok {
-		t.Error("JSON should not contain sshKeyId")
+	if _, err := ProviderFromMeta(&SandboxMeta{Provider: "nowhere"}); err == nil {
+		t.Error("an unknown provider must be an error, not a default")
 	}
 }
 
-// --- DOProvider tests ---
+// Writing any entry must not rewrite the others into a shape that has lost
+// their droplet ids. That loss is unrecoverable: it is the identifier a
+// later destroy needs.
+func TestSaveKeepsLegacyFieldsOfOtherEntries(t *testing.T) {
+	path := useTempStore(t)
+	if err := os.WriteFile(path, []byte(legacyStore), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SaveSandbox("new-box", &SandboxMeta{Provider: "digitalocean", DropletID: 7, IP: "5.6.7.8"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var raw map[string]map[string]any
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if raw["old-box"]["dropletId"] != float64(558093268) {
+		t.Errorf("dropletId of the untouched entry was lost: %v", raw["old-box"])
+	}
+	if raw["old-box"]["sshKeyId"] != float64(4433221) {
+		t.Errorf("sshKeyId of the untouched entry was lost: %v", raw["old-box"])
+	}
+}
+
+// Destroy must not delete a key it did not generate, and must stop rather
+// than remove the metadata that makes an orphan findable.
+func TestDestroyGuards(t *testing.T) {
+	t.Run("refuses when no droplet id is recorded", func(t *testing.T) {
+		useTempStore(t)
+		if err := SaveSandbox("no-id", &SandboxMeta{Provider: "digitalocean", IP: "1.2.3.4"}); err != nil {
+			t.Fatal(err)
+		}
+		p := &DOProvider{client: NewClientWithToken("tok", "http://127.0.0.1:1")}
+		if err := Destroy(p, "no-id", true); err == nil {
+			t.Fatal("destroy with no droplet id must fail loudly")
+		}
+		if got, _ := GetSandbox("no-id"); got == nil {
+			t.Error("metadata must survive a failed destroy, or the machine becomes unfindable")
+		}
+	})
+
+	t.Run("keeps a key it did not generate", func(t *testing.T) {
+		config.ResetCacheForTest(t)
+		home := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", home)
+
+		operatorKey := filepath.Join(t.TempDir(), "id_ed25519")
+		for _, p := range []string{operatorKey, operatorKey + ".pub"} {
+			if err := os.WriteFile(p, []byte("k"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if ownsKeyPair(operatorKey) {
+			t.Fatal("a key outside the generated keys dir is not ours to delete")
+		}
+		generated := filepath.Join(home, "spekk", "keys", "box")
+		if !ownsKeyPair(generated) {
+			t.Fatalf("a key under %s is ours", generatedKeysDir())
+		}
+	})
+}
 
 func TestDOProviderDestroy(t *testing.T) {
-	dropletDeleted := false
-	sshKeyDeleted := false
-
+	var dropletDeleted, sshKeyDeleted bool
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == "DELETE" && r.URL.Path == "/v2/droplets/100":
@@ -96,16 +183,26 @@ func TestDOProviderDestroy(t *testing.T) {
 	defer ts.Close()
 
 	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
-	instanceID := encodeInstanceState(doInstanceState{DropletID: 100, SSHKeyID: 200})
-
-	if err := p.Destroy(instanceID); err != nil {
+	if err := p.Destroy(&SandboxMeta{DropletID: 100, SSHKeyID: 200}); err != nil {
 		t.Fatal(err)
 	}
-	if !dropletDeleted {
-		t.Error("expected droplet DELETE")
+	if !dropletDeleted || !sshKeyDeleted {
+		t.Errorf("droplet deleted=%v, key deleted=%v", dropletDeleted, sshKeyDeleted)
 	}
-	if !sshKeyDeleted {
-		t.Error("expected SSH key DELETE")
+}
+
+// A droplet the console already removed is not an error worth failing on;
+// the local cleanup still has to run.
+func TestDOProviderDestroyHandles404(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+		json.NewEncoder(w).Encode(map[string]any{"message": "not found"})
+	}))
+	defer ts.Close()
+
+	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
+	if err := p.Destroy(&SandboxMeta{DropletID: 1, SSHKeyID: 2}); err != nil {
+		t.Fatalf("Destroy should handle 404 gracefully, got: %s", err)
 	}
 }
 
@@ -114,16 +211,14 @@ func TestDOProviderStatus(t *testing.T) {
 		if r.URL.Path != "/v2/droplets/555" {
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"droplet": map[string]interface{}{"id": 555, "status": "active"},
+		json.NewEncoder(w).Encode(map[string]any{
+			"droplet": map[string]any{"id": 555, "status": "active"},
 		})
 	}))
 	defer ts.Close()
 
 	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
-	instanceID := encodeInstanceState(doInstanceState{DropletID: 555})
-
-	status, err := p.Status(instanceID)
+	status, err := p.Status(&SandboxMeta{DropletID: 555})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,218 +227,69 @@ func TestDOProviderStatus(t *testing.T) {
 	}
 }
 
-func TestDOProviderDestroyHandles404(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(404)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"message": "not found",
-		})
-	}))
-	defer ts.Close()
-
-	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
-	instanceID := encodeInstanceState(doInstanceState{DropletID: 1, SSHKeyID: 2})
-
-	// 404s are handled gracefully, not returned as errors.
-	if err := p.Destroy(instanceID); err != nil {
-		t.Fatalf("Destroy should handle 404 gracefully, got: %s", err)
-	}
-}
-
-func TestInstanceIDIsOpaque(t *testing.T) {
-	// The generic layer stores InstanceID as a string without interpreting it.
-	tmpDir := t.TempDir()
-	origFile := sandboxesFile
-	sandboxesFile = func() string {
-		return filepath.Join(tmpDir, "sandboxes.json")
-	}
-	defer func() { sandboxesFile = origFile }()
-
-	opaqueID := `{"droplet_id":999,"ssh_key_id":888}`
-	meta := &SandboxMeta{
-		Provider:   "digitalocean",
-		InstanceID: opaqueID,
-		IP:         "1.2.3.4",
-	}
-	SaveSandbox("opaque-test", meta)
-
-	got, _ := GetSandbox("opaque-test")
-	if got.InstanceID != opaqueID {
-		t.Errorf("InstanceID should be preserved verbatim, got %q", got.InstanceID)
-	}
-
-	// Only the provider can decode it.
-	state, err := decodeInstanceState(got.InstanceID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if state.DropletID != 999 || state.SSHKeyID != 888 {
-		t.Errorf("decoded state = %+v, want {999 888}", state)
-	}
-}
-
-func TestCreateAcceptsProvider(t *testing.T) {
-	// Verify that Create, Destroy, and Status accept a Provider parameter.
-	// This is a compile-time check — the functions exist with the right signatures.
-	var p Provider = &stubProvider{}
-	_ = p
-
-	// These type assertions verify the function signatures at compile time.
-	var _ func(Provider, CreateOptions) error = Create
-	var _ func(Provider, string, bool) error = Destroy
-	var _ func(Provider, string) error = Status
-}
-
-// stubProvider is a no-op Provider for compile-time checks.
-type stubProvider struct{}
-
-func (s *stubProvider) Create(name string, config map[string]string) (*CreateResult, error) {
-	return &CreateResult{IP: "127.0.0.1", InstanceID: "stub", Provider: "stub"}, nil
-}
-func (s *stubProvider) Destroy(instanceID string) error     { return nil }
-func (s *stubProvider) Status(instanceID string) (string, error) { return "active", nil }
-
-func TestEncodeDecodeInstanceState(t *testing.T) {
-	original := doInstanceState{DropletID: 12345, SSHKeyID: 67890}
-	encoded := encodeInstanceState(original)
-	decoded, err := decodeInstanceState(encoded)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decoded.DropletID != 12345 || decoded.SSHKeyID != 67890 {
-		t.Errorf("round-trip failed: got %+v", decoded)
-	}
-}
-
-func TestDecodeInstanceStateInvalid(t *testing.T) {
-	_, err := decodeInstanceState("not-json")
-	if err == nil {
-		t.Error("expected error for invalid JSON")
-	}
-}
-
-func TestCreateResultProvider(t *testing.T) {
-	// Verify CreateResult carries provider name.
-	r := &CreateResult{
-		IP:         "10.0.0.1",
-		InstanceID: "abc",
-		SSHKeyPath: "/tmp/key",
-		Provider:   "digitalocean",
-	}
-	if r.Provider != "digitalocean" {
-		t.Errorf("Provider = %q", r.Provider)
-	}
-}
-
-func TestSandboxMetaNoDropletIDField(t *testing.T) {
-	// Serialize and verify DropletID / SSHKeyID fields don't exist.
-	meta := &SandboxMeta{Provider: "digitalocean", InstanceID: "x"}
-	data, _ := json.Marshal(meta)
-	var raw map[string]interface{}
-	json.Unmarshal(data, &raw)
-	for _, field := range []string{"dropletId", "sshKeyId"} {
-		if _, exists := raw[field]; exists {
-			t.Errorf("SandboxMeta JSON should not contain %q", field)
-		}
-	}
-	// Verify new fields are present.
-	if raw["provider"] != "digitalocean" {
-		t.Error("missing provider field")
-	}
-	if raw["instanceId"] != "x" {
-		t.Error("missing instanceId field")
-	}
-}
-
-func TestDOProviderCreateResult(t *testing.T) {
-	// Test that DOProvider.Create returns a CreateResult with correct fields.
-	// Uses a mock server that handles SSH key upload + droplet creation.
+// Create records what it resolved, not what the flags said. Omitting
+// --region and --size must still leave a region and a size in metadata.
+func TestDOProviderCreateFillsMetaWithResolvedValues(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == "POST" && r.URL.Path == "/v2/account/keys":
 			w.WriteHeader(201)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"ssh_key": map[string]interface{}{"id": 10, "name": "test", "fingerprint": "aa:bb"},
+			json.NewEncoder(w).Encode(map[string]any{
+				"ssh_key": map[string]any{"id": 10, "name": "test", "fingerprint": "aa:bb"},
 			})
 		case r.Method == "GET" && r.URL.Path == "/v2/account/keys":
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"ssh_keys": []map[string]interface{}{
-					{"id": 10, "name": "test"},
-				},
+			json.NewEncoder(w).Encode(map[string]any{
+				"ssh_keys": []map[string]any{{"id": 10, "name": "test"}},
 			})
 		case r.Method == "POST" && r.URL.Path == "/v2/droplets":
+			var req map[string]any
+			json.NewDecoder(r.Body).Decode(&req)
+			if req["region"] != "nyc1" || req["size"] != "s-2vcpu-4gb" {
+				t.Errorf("defaults not sent to the API: %v", req)
+			}
 			w.WriteHeader(201)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"droplet": map[string]interface{}{
-					"id": 42, "name": "spekk-test", "status": "active",
-					"networks": map[string]interface{}{
-						"v4": []map[string]interface{}{
-							{"ip_address": "5.6.7.8", "type": "public"},
-						},
-					},
-				},
+			json.NewEncoder(w).Encode(map[string]any{
+				"droplet": map[string]any{"id": 42, "name": "spekk-test", "status": "active"},
 			})
 		case r.Method == "GET" && r.URL.Path == "/v2/droplets/42":
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"droplet": map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
+				"droplet": map[string]any{
 					"id": 42, "status": "active",
-					"networks": map[string]interface{}{
-						"v4": []map[string]interface{}{
-							{"ip_address": "5.6.7.8", "type": "public"},
-						},
+					"networks": map[string]any{
+						"v4": []map[string]any{{"ip_address": "5.6.7.8", "type": "public"}},
 					},
 				},
 			})
 		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(404)
 		}
 	}))
 	defer ts.Close()
 
-	// Set up temp key directory so generateSSHKeyPair succeeds.
-	tmpDir := t.TempDir()
-	origKeysDir := os.Getenv("XDG_CONFIG_HOME")
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
-	defer func() {
-		if origKeysDir != "" {
-			os.Setenv("XDG_CONFIG_HOME", origKeysDir)
-		}
-	}()
+	config.ResetCacheForTest(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
-	result, err := p.Create("testbox", map[string]string{
-		"region": "nyc1",
-		"size":   "s-1vcpu-1gb",
-	})
-	if err != nil {
+	meta := &SandboxMeta{}
+	if err := p.Create("testbox", CreateOptions{Name: "testbox"}, meta); err != nil {
 		t.Fatal(err)
 	}
-	if result.Provider != "digitalocean" {
-		t.Errorf("Provider = %q, want digitalocean", result.Provider)
-	}
-	if result.IP != "5.6.7.8" {
-		t.Errorf("IP = %q, want 5.6.7.8", result.IP)
-	}
-	if result.InstanceID == "" {
-		t.Error("InstanceID should not be empty")
-	}
-	if result.SSHKeyPath == "" {
-		t.Error("SSHKeyPath should not be empty")
-	}
+	defer func() {
+		os.Remove(meta.SSHKeyPath)
+		os.Remove(meta.SSHKeyPath + ".pub")
+	}()
 
-	// Verify InstanceID encodes DO-specific state.
-	var state doInstanceState
-	if err := json.Unmarshal([]byte(result.InstanceID), &state); err != nil {
-		t.Fatalf("InstanceID should be valid JSON: %s", err)
+	if meta.Region != "nyc1" || meta.Size != "s-2vcpu-4gb" {
+		t.Errorf("resolved defaults not recorded: region=%q size=%q", meta.Region, meta.Size)
 	}
-	if state.DropletID != 42 {
-		t.Errorf("DropletID = %d, want 42", state.DropletID)
+	if meta.DropletID != 42 || meta.SSHKeyID != 10 {
+		t.Errorf("identifiers not recorded: %+v", meta)
 	}
-	if state.SSHKeyID != 10 {
-		t.Errorf("SSHKeyID = %d, want 10", state.SSHKeyID)
+	if meta.IP != "5.6.7.8" || meta.SSHKeyPath == "" {
+		t.Errorf("connection details not recorded: %+v", meta)
 	}
-
-	// Cleanup generated key files.
-	os.Remove(result.SSHKeyPath)
-	os.Remove(result.SSHKeyPath + ".pub")
+	if !ownsKeyPair(meta.SSHKeyPath) {
+		t.Errorf("a generated key must be recognized as ours: %s", meta.SSHKeyPath)
+	}
 }

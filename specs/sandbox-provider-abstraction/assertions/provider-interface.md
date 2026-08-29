@@ -4,20 +4,22 @@ parent: sandbox-provider-abstraction
 created: 2026-08-29T20:00:00Z
 priority: 1
 status: done
-branch: dev/headless-sandbox
+branch: feat/provider-interface
 ---
 
-# A Provider interface abstracts VM lifecycle from sandbox orchestration
+# A Provider interface abstracts machine lifecycle from sandbox orchestration
+
+A sandbox has two halves. One half is the machine: create it, tear it down, ask how it is. That half is the provider's. The other half — waiting for provisioning, injecting credentials, deploying the agent, writing metadata — is the same whoever made the machine, and stays in `commands.go`. The interface is the line between them.
 
 ## Success Criteria
 
-- A `Provider` interface in `internal/sandbox/` defines `Create`, `Destroy`, and `Status` methods
-- `Create` accepts provider-specific config and returns the VM's public IP (or error)
-- `Destroy` accepts an instance ID and tears down all provider-managed resources (VM, SSH keys, etc.)
-- `Status` accepts an instance ID and returns live VM state from the provider
-- `SandboxMeta` stores `Provider string` and `InstanceID string` instead of `DropletID int` and `SSHKeyID int`
-- `SandboxMeta.InstanceID` is opaque to the generic layer — only the provider interprets it
-- Provider-specific teardown state (e.g., DO SSH key IDs) is the provider's responsibility to track, not stored in generic metadata
-- Sandbox lifecycle functions (`Create`, `Destroy`, `Status` in `commands.go`) accept a `Provider` rather than constructing a DO client inline
+- A `Provider` interface in `internal/sandbox/` defines `Name`, `Create`, `Destroy`, and `Status`.
+- Each method takes the sandbox's `*SandboxMeta`. `Create` fills the fields it owns — IP and SSH key path always, plus its own identifiers and any value it defaulted. `Destroy` and `Status` read them.
+- `SandboxMeta` gains `Provider string` and keeps every field it already had, under the same JSON names. The change is additive: a metadata file written by an earlier binary loads with no loss.
+- A provider's own identifiers live in named `SandboxMeta` fields, not in an opaque encoded handle. This is deliberate while one cloud provider exists: it keeps the file legible, it needs no encode step, and it keeps "this sandbox has no machine" distinguishable from "the identifier did not survive the load". A second cloud provider adds its own fields.
+- `Create`, `Destroy`, and `Status` in `commands.go` take a `Provider` rather than constructing a DigitalOcean client inline.
+- `Destroy` calls the provider unconditionally and returns its error. It never removes local metadata after a failed teardown, because that metadata is what makes an orphaned machine findable.
+- `Destroy` removes a local key pair only when spekk generated it, judged by whether the path is inside the generated keys directory.
+- `Status` accepts a nil provider and falls back to the stored state with a warning, so a missing API token degrades the command instead of failing it.
 
 **Tests:** internal/sandbox/provider_test.go

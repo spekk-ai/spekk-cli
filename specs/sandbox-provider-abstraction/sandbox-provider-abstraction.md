@@ -17,14 +17,17 @@ Two concerns, cleanly separated:
 - **Provider** — creates and destroys the VM (cloud API, or no-op for manual). Returns an IP. Provider-specific config (region, size, VPC) lives inside the provider, not in the generic sandbox layer.
 - **Sandbox** — provisions the OS, deploys the agent, injects credentials, manages SSH sessions. Takes an IP. Unchanged from today.
 
-`SandboxMeta` becomes provider-agnostic: `Provider string` identifies which provider manages the VM, `InstanceID string` is an opaque provider-scoped identifier (DO droplet ID as string, empty for manual). Provider-specific teardown (e.g., deleting DO SSH keys) happens inside the provider's Destroy, not in generic sandbox code.
+`SandboxMeta` gains `Provider string`, which names the provider that owns the machine. The change is additive: an entry written before the field existed reads as DigitalOcean, so an existing fleet keeps working and keeps being destroyable.
+
+A provider's own identifiers stay in named fields — `dropletId`, `sshKeyId` — rather than in one opaque encoded handle. An opaque handle was tried first and rejected: it forced a breaking rename of fields that live in every operator's `sandboxes.json`, and its empty value could not distinguish "no machine to destroy" from "the identifier did not survive the load". That ambiguity is the difference between a clean teardown and a droplet that bills forever. Concrete fields cost one leaked name per provider; the second cloud provider adds its own, and the generic layer still reads none of them. Provider-specific teardown happens inside the provider's Destroy, not in generic sandbox code.
 
 ## Provider interface shape (informational)
 
 The interface needs at minimum:
-- `Create` — provision a VM, return its public IP
-- `Destroy` — tear down the VM (no-op for manual)
-- `Status` — fetch live VM status from the provider (SSH-only for manual)
+- `Name` — the provider name recorded in metadata
+- `Create` — provision a VM and record its address and identifiers
+- `Destroy` — tear down the VM
+- `Status` — fetch live VM status from the provider
 
 SSH key management is provider-internal. DO uploads keys to its API; manual expects the user's key is already authorized.
 
@@ -32,4 +35,8 @@ SSH key management is provider-internal. DO uploads keys to its API; manual expe
 
 `spekk sandbox create --provider <name>` selects the provider. Provider-specific flags (region, size, VPC, project) are scoped to their provider — passing `--region` to the manual provider is an error.
 
-`spekk sandbox destroy`, `status`, `deploy`, `ssh` read the provider from stored metadata and dispatch accordingly.
+`spekk sandbox destroy` and `status` read the provider from stored metadata and dispatch accordingly. `deploy` and `ssh` need only an IP and a key, so they stay provider-blind.
+
+## Open question: is "manual" a provider?
+
+A manual machine has no lifecycle to own. Modeling it as a `Provider` gives it a `Create` that registers, a `Destroy` that cannot destroy, and a `Status` with no API to ask — three methods that describe an absence. It may fit better as a provisioning mode on `create`, with `provider: none` in metadata, leaving `Provider` to mean "the cloud that owns this machine". A manual sandbox is a full member of the registry either way; the question is only which type models it. This is unresolved, and the manual assertions stay `not_started` until it is.

@@ -39,6 +39,11 @@ type CreateOptions struct {
 	Size    string
 	Project string
 	VPC     string
+
+	// CloudInit is the provisioning payload from the release artifacts.
+	// Create fills it in; no flag sets it. A provider that does not use
+	// cloud-init ignores it.
+	CloudInit []byte
 }
 
 // --- Create ---
@@ -69,56 +74,42 @@ func Create(p Provider, opts CreateOptions) error {
 	defer os.Remove(artifacts.BinaryPath)
 	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
 
-	// Build provider-specific config.
-	config := map[string]string{
-		"region":     opts.Region,
-		"size":       opts.Size,
-		"vpc":        opts.VPC,
-		"project":    opts.Project,
-		"cloud_init": string(artifacts.CloudInit),
-	}
+	opts.CloudInit = artifacts.CloudInit
 
-	// Delegate VM creation to the provider.
-	result, err := p.Create(opts.Name, config)
-	if err != nil {
+	// Delegate machine creation to the provider, which fills in the fields
+	// of meta that it owns.
+	meta := &SandboxMeta{
+		Provider:  p.Name(),
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Status:    "active",
+	}
+	if err := p.Create(opts.Name, opts, meta); err != nil {
 		return err
 	}
 
 	// --- Generic provisioning (provider-agnostic) ---
 
-	if err := waitForProvisioning(result.IP, result.SSHKeyPath, opts.Name); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\nIP: %s -- not auto-destroyed, debug manually.\n", err, result.IP)
+	if err := waitForProvisioning(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n%s -- not auto-destroyed, debug manually.\n", err, machineRef(meta))
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
 
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(result.IP, result.SSHKeyPath, opts.Name, agentToken); err != nil {
+	if err := injectCredentials(meta.IP, meta.SSHKeyPath, opts.Name, agentToken); err != nil {
 		return fmt.Errorf("injecting credentials: %w", err)
 	}
 
 	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
-	if err := configureGitCredentials(result.IP, result.SSHKeyPath, opts.Name); err != nil {
+	if err := configureGitCredentials(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
 		return fmt.Errorf("configuring git credentials: %w", err)
 	}
 
 	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
-	if err := deployAgent(result.IP, result.SSHKeyPath, opts.Name, artifacts); err != nil {
+	if err := deployAgent(meta.IP, meta.SSHKeyPath, opts.Name, artifacts); err != nil {
 		return fmt.Errorf("deploying agent: %w", err)
 	}
 
-	// Save metadata.
-	meta := &SandboxMeta{
-		Provider:   result.Provider,
-		InstanceID: result.InstanceID,
-		IP:         result.IP,
-		Region:     opts.Region,
-		Size:       opts.Size,
-		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
-		Status:     "active",
-		Project:    opts.Project,
-		SSHKeyPath: result.SSHKeyPath,
-	}
 	if err := SaveSandbox(opts.Name, meta); err != nil {
 		return fmt.Errorf("saving metadata: %w", err)
 	}
@@ -135,7 +126,7 @@ Next: Register this agent on the control host admin at https://%s/
   - Name: %s
   - Sandbox ID: spekk-%s
   - Auth token: %s
-`, opts.Name, result.IP, agentToken, bareHost, opts.Name, opts.Name, agentToken)
+`, opts.Name, meta.IP, agentToken, bareHost, opts.Name, opts.Name, agentToken)
 
 	return nil
 }
@@ -183,21 +174,25 @@ func Status(p Provider, name string) error {
 	}
 
 	fmt.Printf("Sandbox: %s\n", name)
-	fmt.Printf("Provider: %s\n", orUnknown(sandbox.Provider))
+	fmt.Printf("Provider: %s\n", orUnknown(providerName(sandbox)))
+	if sandbox.DropletID != 0 {
+		fmt.Printf("Droplet ID: %d\n", sandbox.DropletID)
+	}
 	fmt.Printf("IP: %s\n", orUnknown(sandbox.IP))
 	fmt.Printf("Region: %s\n", orUnknown(sandbox.Region))
 	fmt.Printf("Size: %s\n", orUnknown(sandbox.Size))
 	fmt.Printf("Created: %s\n", orUnknown(sandbox.CreatedAt))
 
-	// Fetch live status from the provider.
-	vmStatus := orUnknown(sandbox.Status)
-	if sandbox.InstanceID != "" {
-		live, err := p.Status(sandbox.InstanceID)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Could not fetch live VM status: %s\n", err)
-		} else if live != "" {
-			vmStatus = live
-		}
+	// Fetch live status from the provider. A nil provider means the caller
+	// could not build one — most often no API token — which is a reason to
+	// fall back to the stored value, not to refuse to print anything.
+	vmStatus := orUnknown(sandbox.Status) + " (stored)"
+	if p == nil {
+		fmt.Fprintln(os.Stderr, "Warning: no provider available; showing the stored status.")
+	} else if live, err := p.Status(sandbox); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Could not fetch live VM status: %s\n", err)
+	} else if live != "" {
+		vmStatus = live
 	}
 	fmt.Printf("VM status: %s\n", vmStatus)
 
@@ -253,7 +248,7 @@ func Destroy(p Provider, name string, force bool) error {
 	}
 
 	if !force {
-		fmt.Fprintf(os.Stderr, "Destroy sandbox %q? [y/N] ", name)
+		fmt.Fprintf(os.Stderr, "Destroy sandbox %q (%s)? [y/N] ", name, machineRef(sandbox))
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
 		if strings.TrimSpace(strings.ToLower(answer)) != "y" {
@@ -262,15 +257,16 @@ func Destroy(p Provider, name string, force bool) error {
 		}
 	}
 
-	// Delegate remote resource cleanup to the provider.
-	if sandbox.InstanceID != "" {
-		if err := p.Destroy(sandbox.InstanceID); err != nil {
-			return err
-		}
+	// Delegate remote resource cleanup to the provider. This is not
+	// optional: if it fails, stop, because removing the metadata below is
+	// what makes an orphaned machine unfindable.
+	if err := p.Destroy(sandbox); err != nil {
+		return err
 	}
 
-	// Remove local SSH key files.
-	if sandbox.SSHKeyPath != "" {
+	// Remove local SSH key files, but only the ones spekk generated. An
+	// operator-supplied key belongs to the operator.
+	if ownsKeyPair(sandbox.SSHKeyPath) {
 		os.Remove(sandbox.SSHKeyPath)
 		os.Remove(sandbox.SSHKeyPath + ".pub")
 	}
@@ -284,6 +280,25 @@ func Destroy(p Provider, name string, force bool) error {
 
 	fmt.Fprintf(os.Stderr, "Sandbox %q destroyed.\n", name)
 	return nil
+}
+
+// providerName reports the provider that owns a sandbox, reading an entry
+// written before the field existed as DigitalOcean.
+func providerName(meta *SandboxMeta) string {
+	if meta.Provider == "" {
+		return "digitalocean"
+	}
+	return meta.Provider
+}
+
+// machineRef describes the machine a command is about to act on, so the
+// operator can check it against the provider's console before saying yes.
+func machineRef(meta *SandboxMeta) string {
+	ref := "IP " + orUnknown(meta.IP)
+	if meta.DropletID != 0 {
+		ref += fmt.Sprintf(", droplet %d", meta.DropletID)
+	}
+	return ref
 }
 
 // --- Deploy ---
