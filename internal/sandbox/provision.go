@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,12 @@ import (
 //
 // sshPubKey is the SSH public key to authorize for the agent user.
 func provisionScript(sshPubKey string) string {
+	// The key is carried base64-encoded. Go's %q is not bash quoting: it
+	// emits a double-quoted string, and bash expands $(...) inside those,
+	// so an SSH key whose free-form comment held a command substitution
+	// would run it as root. Base64 has no character bash acts on. This is
+	// the same defense buildInjectScript already uses.
+	encoded := base64.StdEncoding.EncodeToString([]byte(sshPubKey))
 	return fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 
@@ -40,7 +47,7 @@ usermod -aG docker,sudo,systemd-journal agent
 AGENT_HOME=$(eval echo ~agent)
 mkdir -p "${AGENT_HOME}/.ssh"
 AUTHORIZED_KEYS="${AGENT_HOME}/.ssh/authorized_keys"
-PUB_KEY=%q
+PUB_KEY=$(printf %%s %s | base64 -d)
 if ! grep -qF "${PUB_KEY}" "${AUTHORIZED_KEYS}" 2>/dev/null; then
   echo "${PUB_KEY}" >> "${AUTHORIZED_KEYS}"
   echo "Added SSH key for agent user"
@@ -153,7 +160,7 @@ su - agent -c 'git config --global init.defaultBranch main'
 # --- Mark provisioning complete ---
 touch /opt/spekk/.provisioned
 echo "=== Provisioning complete ==="
-`, sshPubKey)
+`, encoded)
 }
 
 // provisionViaSSH runs the provisioning script on a remote machine over SSH.

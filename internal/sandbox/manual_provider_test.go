@@ -1,6 +1,8 @@
 package sandbox
 
 import (
+	"encoding/base64"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -45,11 +47,37 @@ func TestManualProviderCreate(t *testing.T) {
 // line by line: that pins wording rather than behavior, and the real check is
 // running it on a machine.
 func TestProvisionScriptIsValidShell(t *testing.T) {
-	script := provisionScript("ssh-ed25519 AAAAC3Nza test@host")
-	if !strings.Contains(script, "ssh-ed25519 AAAAC3Nza test@host") {
-		t.Error("the authorized key must reach the script")
+	// A key whose comment holds a command substitution. Carried as text it
+	// would run as root; carried base64-encoded it cannot.
+	key := "ssh-ed25519 AAAAC3Nza $(touch /tmp/spekk-should-not-exist) test@host"
+	script := provisionScript(key)
+
+	if strings.Contains(script, "$(touch") {
+		t.Error("the key reached the script as shell text, so its comment can run as root")
+	}
+	if !strings.Contains(script, base64.StdEncoding.EncodeToString([]byte(key))) {
+		t.Error("the encoded key must reach the script")
 	}
 	if _, err := runShellCheck(t, script); err != nil {
 		t.Errorf("generated script is not valid shell: %v", err)
 	}
+
+	// The script must still hand bash the original key, byte for byte.
+	out, err := exec.Command("bash", "-c", grepLine(script, "PUB_KEY=")+"\nprintf %s \"$PUB_KEY\"").Output()
+	if err != nil {
+		t.Fatalf("decoding the key in bash failed: %v", err)
+	}
+	if string(out) != key {
+		t.Errorf("key round trip: got %q, want %q", out, key)
+	}
+}
+
+// grepLine returns the first line of script with the given prefix.
+func grepLine(script, prefix string) string {
+	for _, line := range strings.Split(script, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return line
+		}
+	}
+	return ""
 }
