@@ -44,6 +44,10 @@ type githubRelease struct {
 	Assets  []githubAsset `json:"assets"`
 }
 
+// fetchArtifacts is the seam Create fetches through. It is a variable so a
+// test can exercise Create without a network call.
+var fetchArtifacts = fetchReleaseArtifacts
+
 // fetchReleaseArtifacts downloads the sandbox binary and cloud-init template
 // from the GitHub release named by releaseRepo. tag may be empty or "latest"
 // for the latest published release, or a specific tag. The binary is written
