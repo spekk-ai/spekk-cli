@@ -42,6 +42,7 @@ type CreateOptions struct {
 	VPC     string
 	IP      string // address of a machine that already exists
 	SSHKey  string // private key that reaches that machine as root
+	Auth    AuthMode
 
 	// CloudInit is the provisioning payload from the release artifacts.
 	// Create fills it in; no flag sets it. A provider that does not use
@@ -54,11 +55,12 @@ type CreateOptions struct {
 // Create provisions a sandbox using the given Provider for VM lifecycle and
 // then runs generic provisioning (SSH wait, credential injection, agent deploy).
 func Create(p Provider, opts CreateOptions) error {
-	// Check required env vars (generic — needed regardless of provider).
-	requiredVars := []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"}
+	// Check the credentials this sandbox's auth mode actually needs, so a
+	// subscription sandbox is not blocked by AWS keys it will never use.
+	requiredVars := requiredEnvVars(opts.Auth)
 	var missing []string
 	for _, v := range requiredVars {
-		if os.Getenv(v) == "" {
+		if strings.TrimSpace(os.Getenv(v)) == "" {
 			missing = append(missing, v)
 		}
 	}
@@ -146,7 +148,7 @@ func Create(p Provider, opts CreateOptions) error {
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
 
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(meta.IP, meta.SSHKeyPath, opts.Name, agentToken); err != nil {
+	if err := injectCredentials(meta.IP, meta.SSHKeyPath, opts.Name, agentToken, opts.Auth); err != nil {
 		return fail("injecting credentials", err)
 	}
 
@@ -652,16 +654,17 @@ func sshCheck(sandbox *SandboxMeta, name, command string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func injectCredentials(ip, keyPath, name, agentToken string) error {
+func injectCredentials(ip, keyPath, name, agentToken string, mode AuthMode) error {
 	envVars := map[string]string{
 		"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
 		"AWS_SECRET_ACCESS_KEY": os.Getenv("AWS_SECRET_ACCESS_KEY"),
 		"AWS_DEFAULT_REGION":    os.Getenv("AWS_DEFAULT_REGION"),
 		"GITHUB_TOKEN":          os.Getenv("GITHUB_TOKEN"),
+		oauthTokenVar:           os.Getenv(oauthTokenVar),
 	}
 	spekkHost := os.Getenv("SPEKK_HOST")
 
-	envContent := buildEnvContent(envVars, name, agentToken, spekkHost)
+	envContent := buildEnvContent(mode, envVars, name, agentToken, spekkHost)
 	script := buildInjectScript(envContent)
 
 	args := sshHostKeyOpts(name)
@@ -678,21 +681,18 @@ func injectCredentials(ip, keyPath, name, agentToken string) error {
 }
 
 // buildEnvContent constructs the env file content for credential injection.
-// Exported for testing.
-func buildEnvContent(envVars map[string]string, name, agentToken, spekkHost string) string {
+// The model credential comes from the auth mode; everything after it is the
+// same whatever the sandbox pays with. Exported for testing.
+func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken, spekkHost string) string {
 	bareHost := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(spekkHost, "https://"), "http://"), "/")
 
-	envLines := []string{
-		"AWS_ACCESS_KEY_ID=" + envVars["AWS_ACCESS_KEY_ID"],
-		"AWS_SECRET_ACCESS_KEY=" + envVars["AWS_SECRET_ACCESS_KEY"],
-		"AWS_DEFAULT_REGION=" + envVars["AWS_DEFAULT_REGION"],
-		"GITHUB_TOKEN=" + envVars["GITHUB_TOKEN"],
-		"SPEKK_HOST=" + bareHost,
-		"SPEKK_AGENT_TOKEN=" + agentToken,
-		"CLAUDE_CODE_USE_BEDROCK=1",
+	envLines := append(authLines(mode, envVars),
+		"GITHUB_TOKEN="+envVars["GITHUB_TOKEN"],
+		"SPEKK_HOST="+bareHost,
+		"SPEKK_AGENT_TOKEN="+agentToken,
 		"WORKSPACE=/opt/spekk/workspace",
-		"SPEKK_AGENT_NAME=spekk-" + name,
-	}
+		"SPEKK_AGENT_NAME=spekk-"+name,
+	)
 	return strings.Join(envLines, "\n") + "\n"
 }
 

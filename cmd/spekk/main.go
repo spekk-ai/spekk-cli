@@ -1107,6 +1107,7 @@ func createSandbox(args []string) {
 		"vpc":      {Names: []string{"--vpc"}, Type: cli.StringFlag},
 		"ip":       {Names: []string{"--ip"}, Type: cli.StringFlag},
 		"ssh-key":  {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
+		"auth":     {Names: []string{"--auth"}, Type: cli.StringFlag},
 		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -1132,6 +1133,12 @@ OPTIONS:
   --ip <address>         Address of the machine
   --ssh-key <path>       Private key that reaches it as root
 
+  Model credential:
+  --auth <mode>          How the agent authenticates Claude: bedrock (default,
+                         bills through the AWS Bedrock API) or subscription
+                         (uses CLAUDE_CODE_OAUTH_TOKEN from your environment,
+                         minted by "claude setup-token")
+
   spekk does not provision a machine it did not create. The machine must
   already carry /opt/spekk/.provisioned; spekk then injects credentials
   and deploys the agent onto it.
@@ -1145,6 +1152,12 @@ OPTIONS:
 	}
 
 	if err := sandbox.ValidateSandboxName(flags.String("name")); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	auth, err := sandbox.ParseAuthMode(flags.String("auth"))
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -1183,6 +1196,7 @@ OPTIONS:
 		VPC:     flags.String("vpc"),
 		IP:      flags.String("ip"),
 		SSHKey:  flags.String("ssh-key"),
+		Auth:    auth,
 	}
 	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
