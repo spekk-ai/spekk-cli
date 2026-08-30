@@ -40,6 +40,8 @@ type CreateOptions struct {
 	Size    string
 	Project string
 	VPC     string
+	IP      string // address of a machine that already exists
+	SSHKey  string // private key that reaches that machine as root
 
 	// CloudInit is the provisioning payload from the release artifacts.
 	// Create fills it in; no flag sets it. A provider that does not use
@@ -88,17 +90,26 @@ func Create(p Provider, opts CreateOptions) error {
 	opts.CloudInit = artifacts.CloudInit
 
 	// Delegate machine creation to the provider, which fills in the fields
-	// of meta that it owns.
+	// of meta that it owns. A nil provider means no cloud owns this
+	// machine: it already exists, and spekk only registers and equips it.
 	meta := &SandboxMeta{
-		Provider:  p.Name(),
+		Provider:  ProviderNone,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	if p != nil {
+		meta.Provider = p.Name()
 	}
 	// Record the machine as soon as one exists, and record it even when
 	// the provider then fails. A machine with no metadata entry is one
 	// that `spekk sandbox destroy` cannot reach: the operator has to go
 	// to the provider's console and match it by name.
 	meta.Status = "provisioning"
-	createErr := p.Create(opts.Name, opts, meta)
+	var createErr error
+	if p == nil {
+		createErr = registerMachine(opts, meta)
+	} else {
+		createErr = p.Create(opts.Name, opts, meta)
+	}
 	if namesMachine(meta) {
 		if err := SaveSandbox(opts.Name, meta); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not record %s: %s\n", machineRef(meta), err)
@@ -123,7 +134,13 @@ func Create(p Provider, opts CreateOptions) error {
 		return fmt.Errorf("%s: %w", stage, err)
 	}
 
-	if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
+	if p == nil {
+		// Nothing to wait for: the operator provisioned this machine.
+		// Confirm that before spending credentials on it.
+		if err := checkReady(meta, opts.Name); err != nil {
+			return fail("checking the machine", err)
+		}
+	} else if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
 		return fail("waiting for provisioning", err)
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
@@ -217,12 +234,15 @@ func Status(p Provider, name string) error {
 	fmt.Printf("Size: %s\n", orUnknown(sandbox.Size))
 	fmt.Printf("Created: %s\n", orUnknown(sandbox.CreatedAt))
 
-	// Fetch live status from the provider. A nil provider means the caller
-	// could not build one — most often no API token — which is a reason to
-	// fall back to the stored value, not to refuse to print anything.
+	// Fetch live status from the provider. A nil provider has two causes:
+	// no cloud owns this machine, which is normal and silent, or one could
+	// not be built — most often no API token — which is worth saying. Both
+	// fall back to the stored value rather than refusing to print.
 	vmStatus := orUnknown(sandbox.Status) + " (stored)"
 	if p == nil {
-		fmt.Fprintln(os.Stderr, "Warning: no provider available; showing the stored status.")
+		if sandbox.Provider != ProviderNone {
+			fmt.Fprintln(os.Stderr, "Warning: no provider available; showing the stored status.")
+		}
 	} else if live, err := p.Status(sandbox); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Could not fetch live VM status: %s\n", err)
 	} else if live != "" {
@@ -291,10 +311,25 @@ func Destroy(p Provider, name string, force bool) error {
 		}
 	}
 
+	// A manual machine survives destroy, so stopping the agent and
+	// removing its credentials is the whole of teardown. Failing to do it
+	// must stop the command: deleting the local record would leave an
+	// agent running with live credentials and nothing pointing at it.
+	// A cloud machine is about to be deleted whole, so this does not apply.
+	if sandbox.Provider == ProviderNone {
+		if err := stopAgent(sandbox, name); err != nil {
+			if !force {
+				return fmt.Errorf("stopping the agent on %s: %w\nThe machine may still be running it. Use --force to remove the record anyway", machineRef(sandbox), err)
+			}
+			fmt.Fprintf(os.Stderr, "Warning: could not stop the agent on %s: %s; removing the local record anyway because --force was given.\n", machineRef(sandbox), err)
+		}
+	}
+
 	// Delegate remote resource cleanup to the provider. This is not
 	// optional: if it fails, stop, because removing the metadata below is
-	// what makes an orphaned machine unfindable.
-	if err := p.Destroy(sandbox); err != nil {
+	// what makes an orphaned machine unfindable. A nil provider means no
+	// cloud owns the machine, so there is nothing of its to tear down.
+	if err := destroyMachine(p, sandbox); err != nil {
 		// A record that names no machine is normally a lost identifier,
 		// and removing it would hide a running machine. With --force the
 		// operator has said they checked; let them clear the entry.
@@ -329,6 +364,14 @@ func providerName(meta *SandboxMeta) string {
 		return "digitalocean"
 	}
 	return meta.Provider
+}
+
+// destroyMachine tears down the provider's resources, if a provider owns any.
+func destroyMachine(p Provider, meta *SandboxMeta) error {
+	if p == nil {
+		return nil
+	}
+	return p.Destroy(meta)
 }
 
 // namesMachine reports whether meta identifies a machine that exists.
@@ -588,14 +631,20 @@ func runSSHCombined(ip, keyPath, name, command string) (string, error) {
 	return string(out), err
 }
 
-func sshCheck(sandbox *SandboxMeta, name, command string) string {
+// sshBatchArgs builds the ssh arguments for a non-interactive command on a
+// sandbox: host-key options, a connect timeout, no prompting, the sandbox key
+// if there is one, and the root account.
+func sshBatchArgs(sandbox *SandboxMeta, name string) []string {
 	args := sshHostKeyOpts(name)
-	args = append(args, "-o", "ConnectTimeout=5", "-o", "BatchMode=yes")
+	args = append(args, "-o", "ConnectTimeout=10", "-o", "BatchMode=yes")
 	if sandbox.SSHKeyPath != "" {
 		args = append(args, "-i", sandbox.SSHKeyPath)
 	}
-	args = append(args, fmt.Sprintf("root@%s", sandbox.IP), command)
-	cmd := exec.Command("ssh", args...)
+	return append(args, fmt.Sprintf("root@%s", sandbox.IP))
+}
+
+func sshCheck(sandbox *SandboxMeta, name, command string) string {
+	cmd := exec.Command("ssh", append(sshBatchArgs(sandbox, name), command)...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "unknown"

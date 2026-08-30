@@ -988,11 +988,11 @@ USAGE:
   spekk sandbox <subcommand> [options]
 
 SUBCOMMANDS:
-  create      Create a new sandbox droplet
-  list        List all sandbox droplets
+  create      Create a sandbox, or register a machine you already have
+  list        List all sandboxes
   status      Show status of a sandbox
   ssh         SSH into a sandbox
-  destroy     Destroy a sandbox droplet
+  destroy     Destroy a sandbox, or deregister a machine you own
   deploy      Deploy agent client to a sandbox
 
 OPTIONS:
@@ -1099,27 +1099,42 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 
 func createSandbox(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
-		"name":    {Names: []string{"--name"}, Type: cli.StringFlag},
-		"region":  {Names: []string{"--region"}, Type: cli.StringFlag},
-		"size":    {Names: []string{"--size"}, Type: cli.StringFlag},
-		"project": {Names: []string{"--project"}, Type: cli.StringFlag},
-		"vpc":     {Names: []string{"--vpc"}, Type: cli.StringFlag},
-		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		"name":     {Names: []string{"--name"}, Type: cli.StringFlag},
+		"provider": {Names: []string{"--provider"}, Type: cli.StringFlag},
+		"region":   {Names: []string{"--region"}, Type: cli.StringFlag},
+		"size":     {Names: []string{"--size"}, Type: cli.StringFlag},
+		"project":  {Names: []string{"--project"}, Type: cli.StringFlag},
+		"vpc":      {Names: []string{"--vpc"}, Type: cli.StringFlag},
+		"ip":       {Names: []string{"--ip"}, Type: cli.StringFlag},
+		"ssh-key":  {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
+		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
 	if flags.Bool("help") {
 		fmt.Print(`
-spekk sandbox create - Create a new sandbox droplet
+spekk sandbox create - Create a new sandbox
 
 USAGE:
   spekk sandbox create --name <name> [options]
 
 OPTIONS:
-  --name <name>        Sandbox name (required)
-  --region <region>    DigitalOcean region (default: nyc1)
-  --size <size>        Droplet size slug (default: s-2vcpu-4gb)
-  --project <project>  Assign to a DigitalOcean project (name or UUID)
-  --vpc <uuid>         Place droplet in a specific DigitalOcean VPC
+  --name <name>          Sandbox name (required)
+  --provider <provider>  digitalocean, or none for a machine you already
+                         have (inferred from --ip / --ssh-key)
+
+  DigitalOcean options:
+  --region <region>      DigitalOcean region (default: nyc1)
+  --size <size>          Droplet size slug (default: s-2vcpu-4gb)
+  --project <project>    Assign to a DigitalOcean project (name or UUID)
+  --vpc <uuid>           Place droplet in a specific DigitalOcean VPC
+
+  Options for a machine you already have:
+  --ip <address>         Address of the machine
+  --ssh-key <path>       Private key that reaches it as root
+
+  spekk does not provision a machine it did not create. The machine must
+  already carry /opt/spekk/.provisioned; spekk then injects credentials
+  and deploys the agent onto it.
 `)
 		return
 	}
@@ -1134,7 +1149,28 @@ OPTIONS:
 		os.Exit(1)
 	}
 
-	p, err := sandbox.NewDOProvider()
+	// Naming an existing machine is what says there is nothing to create.
+	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), flags.String("ip") != "" || flags.String("ssh-key") != "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Validate provider-specific flags.
+	setFlags := map[string]bool{
+		"--region":  flags.String("region") != "",
+		"--size":    flags.String("size") != "",
+		"--vpc":     flags.String("vpc") != "",
+		"--project": flags.String("project") != "",
+		"--ip":      flags.String("ip") != "",
+		"--ssh-key": flags.String("ssh-key") != "",
+	}
+	if err := sandbox.ValidateProviderFlags(providerName, setFlags); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	p, err := sandbox.ProviderByName(providerName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
@@ -1145,6 +1181,8 @@ OPTIONS:
 		Size:    flags.String("size"),
 		Project: flags.String("project"),
 		VPC:     flags.String("vpc"),
+		IP:      flags.String("ip"),
+		SSHKey:  flags.String("ssh-key"),
 	}
 	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
