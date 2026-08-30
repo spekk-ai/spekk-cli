@@ -36,7 +36,11 @@ jobs:
           GOOS=darwin  GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/spekk-darwin-arm64         ./cmd/spekk
           GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/spekk-windows-amd64.exe    ./cmd/spekk
           GOOS=windows GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/spekk-windows-arm64.exe    ./cmd/spekk
-          GOOS=linux   GOARCH=amd64 go build -o dist/sandbox-linux-amd64        ./cmd/sandbox
+          # The agent gets the same stamp as the CLI. Without it every
+          # deployed agent reports "dev", so a fleet cannot be asked which
+          # release it is running -- and a release build is indistinguishable
+          # from one somebody copied up by hand.
+          GOOS=linux   GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/sandbox-linux-amd64 ./cmd/sandbox
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
