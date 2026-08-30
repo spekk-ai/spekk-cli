@@ -15,13 +15,15 @@ var DOOnlyFlags = []string{"--region", "--size", "--vpc", "--project"}
 var ManualOnlyFlags = []string{"--ip", "--ssh-key"}
 
 // ResolveProviderName infers the provider name from the --provider flag value
-// and whether --ip was supplied. Returns the resolved provider name or an error.
+// and whether any manual-only flag was supplied. Returns the resolved provider
+// name or an error.
 //
 // Rules:
 //   - Explicit --provider value is used as-is (validated against ValidProviders)
-//   - If --provider is omitted and --ip is set, defaults to "manual"
-//   - If --provider is omitted and --ip is not set, defaults to "digitalocean"
-func ResolveProviderName(providerFlag string, ipSet bool) (string, error) {
+//   - If --provider is omitted and a manual-only flag is set, defaults to
+//     "manual". Naming a machine is what says the machine already exists.
+//   - Otherwise it defaults to "digitalocean"
+func ResolveProviderName(providerFlag string, manualFlagSet bool) (string, error) {
 	if providerFlag != "" {
 		for _, v := range ValidProviders {
 			if providerFlag == v {
@@ -30,7 +32,7 @@ func ResolveProviderName(providerFlag string, ipSet bool) (string, error) {
 		}
 		return "", fmt.Errorf("invalid provider %q: valid values are %s", providerFlag, strings.Join(ValidProviders, ", "))
 	}
-	if ipSet {
+	if manualFlagSet {
 		return "manual", nil
 	}
 	return "digitalocean", nil

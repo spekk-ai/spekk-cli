@@ -1145,7 +1145,7 @@ OPTIONS:
 	}
 
 	// Resolve provider (explicit or inferred from --ip).
-	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), flags.String("ip") != "")
+	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), flags.String("ip") != "" || flags.String("ssh-key") != "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)

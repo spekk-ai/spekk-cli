@@ -183,10 +183,11 @@ func provisionViaSSH(ip, keyPath, name string) error {
 		return fmt.Errorf("provisioning failed: %w\n%s", err, out)
 	}
 
-	// Verify the provisioned marker was created.
-	check := runSSH(ip, keyPath, name, "test -f /opt/spekk/.provisioned && echo ok")
-	if strings.TrimSpace(check) != "ok" {
-		return fmt.Errorf("provisioning script completed but /opt/spekk/.provisioned marker not found")
+	// Verify the provisioned marker was created. runSSH returns "" for a
+	// failed connection as well as for a missing file, so say only what
+	// is certain rather than naming the wrong cause.
+	if strings.TrimSpace(runSSH(ip, keyPath, name, "test -f /opt/spekk/.provisioned && echo ok")) != "ok" {
+		return fmt.Errorf("provisioning script finished, but could not confirm /opt/spekk/.provisioned on %s: the file is missing, or the check could not connect", ip)
 	}
 
 	return nil
@@ -212,6 +213,9 @@ func stopAgentService(sandbox *SandboxMeta, name string) error {
 		"systemctl disable spekk-agent",
 		"rm -f /etc/spekk/agent.env",
 		"rm -f /home/agent/.git-credentials",
+		// gh auth login writes the same token here, so removing only
+		// the two files above leaves it live on a surviving machine.
+		"rm -rf /home/agent/.config/gh",
 		// is-active exits non-zero when the unit is stopped, which is
 		// what we want to see. Turn that into the success case.
 		"! systemctl is-active --quiet spekk-agent",

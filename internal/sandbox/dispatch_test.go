@@ -1,27 +1,28 @@
 package sandbox
 
 import (
+	"strings"
 	"testing"
 )
 
 func TestResolveProviderName(t *testing.T) {
 	tests := []struct {
-		name     string
-		provider string
-		ipSet    bool
-		want     string
-		wantErr  bool
+		name      string
+		provider  string
+		manualSet bool
+		want      string
+		wantErr   bool
 	}{
 		{"explicit digitalocean", "digitalocean", false, "digitalocean", false},
 		{"explicit manual", "manual", false, "manual", false},
-		{"explicit manual with ip", "manual", true, "manual", false},
+		{"explicit manual with a manual flag", "manual", true, "manual", false},
 		{"invalid provider", "aws", false, "", true},
-		{"omitted with ip defaults to manual", "", true, "manual", false},
-		{"omitted without ip defaults to digitalocean", "", false, "digitalocean", false},
+		{"omitted with a manual flag defaults to manual", "", true, "manual", false},
+		{"omitted with no manual flag defaults to digitalocean", "", false, "digitalocean", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ResolveProviderName(tt.provider, tt.ipSet)
+			got, err := ResolveProviderName(tt.provider, tt.manualSet)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -96,7 +97,7 @@ func TestValidateProviderFlags(t *testing.T) {
 				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr && tt.errMsg != "" {
-				if msg := err.Error(); !contains(msg, tt.errMsg) {
+				if msg := err.Error(); !strings.Contains(msg, tt.errMsg) {
 					t.Errorf("error %q should contain %q", msg, tt.errMsg)
 				}
 			}
@@ -131,17 +132,4 @@ func TestProviderFromMeta(t *testing.T) {
 	if _, ok := p.(*ManualProvider); !ok {
 		t.Error("expected *ManualProvider")
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
-}
-
-func containsSubstr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
