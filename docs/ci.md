@@ -19,7 +19,7 @@ Add this to `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/spekk-ai/spekk-cli
-    rev: v1.22.0
+    rev: v1.25.0
     hooks:
       - id: spekk-validate
 ```
@@ -64,7 +64,7 @@ jobs:
       - name: Install spekk
         if: steps.check.outputs.found == 'true'
         env:
-          SPEKK_VERSION: v1.22.0
+          SPEKK_VERSION: v1.25.0
         run: curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 
       - name: Validate specs
@@ -73,6 +73,8 @@ jobs:
 ```
 
 Pin `SPEKK_VERSION` to a release tag. Without it the install takes the latest release, and a stricter validator in a future version would turn the repository red with no change on its side. Raise the pin when you choose to.
+
+Raising it is a small deliberate step, not a chore to skip: a pin left behind means the validator that guards your specs is older than the one your team runs locally, so a rule tightened since is enforced nowhere. Raise both pins together — the hook `rev` and `SPEKK_VERSION` — and confirm `spekk validate` still exits 0 at the new version before you merge the bump.
 
 ## What passes and what fails
 
