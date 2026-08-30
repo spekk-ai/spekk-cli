@@ -251,3 +251,47 @@ func TestAgentSecretsInventory(t *testing.T) {
 		t.Errorf("agentSecrets = %v, want %v", agentSecrets, want)
 	}
 }
+
+// Create with no provider registers the machine and confirms it is
+// provisioned before spending any credentials on it. These are the two
+// behaviors this path exists for, so both are pinned here.
+func TestCreateRegistersAndChecksBeforeInjecting(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	stubCreateEnv(t)
+
+	key := filepath.Join(t.TempDir(), "id_ed25519")
+	if err := os.WriteFile(key, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	checked := false
+	origCheck := checkReady
+	checkReady = func(meta *SandboxMeta, name string) error {
+		checked = true
+		return errors.New("not provisioned")
+	}
+	t.Cleanup(func() { checkReady = origCheck })
+
+	err := Create(nil, CreateOptions{Name: "borrowed", IP: "9.9.9.9", SSHKey: key})
+	if err == nil {
+		t.Fatal("expected the provisioned check to stop the create")
+	}
+	if !checked {
+		t.Error("credentials must not be injected before the machine is confirmed provisioned")
+	}
+
+	got, _ := GetSandbox("borrowed")
+	if got == nil {
+		t.Fatal("the machine was registered but nothing was recorded")
+	}
+	if got.Provider != ProviderNone {
+		t.Errorf("Provider = %q, want %q", got.Provider, ProviderNone)
+	}
+	if got.IP != "9.9.9.9" || got.SSHKeyPath != key {
+		t.Errorf("recorded the wrong machine: %+v", got)
+	}
+	if got.DropletID != 0 {
+		t.Errorf("no cloud owns this machine, so it has no droplet: %+v", got)
+	}
+}
