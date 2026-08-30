@@ -134,6 +134,8 @@ These variables are used by `spekk sandbox create` and other provisioning comman
 | `AWS_DEFAULT_REGION` | bedrock | AWS region (e.g. `us-east-1`) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | subscription | Claude subscription token. Mint it with `claude setup-token`, which needs a Claude subscription. |
 
+**A model pin belongs to its mode.** `ANTHROPIC_MODEL` names a model for whichever API the sandbox authenticates against, and the names differ: a Bedrock sandbox pins an inference profile such as `us.anthropic.claude-sonnet-5`, which a subscription rejects outright. Moving a sandbox between modes therefore drops any pin it had, reports what it dropped, and writes a replacement only if you supply one for the mode you are moving to.
+
 `spekk sandbox create` refuses to start when a variable its mode needs is missing, and it names every missing one at once. It checks before it creates anything billable.
 
 #### Minting a subscription token

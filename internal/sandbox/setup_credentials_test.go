@@ -264,3 +264,59 @@ func TestSetupCredentialsCarriesForwardUnknownVariables(t *testing.T) {
 		}
 	}
 }
+
+// A model pin belongs to the mode whose API knows the name, so a switch cannot
+// carry one over. It can still honor a pin the operator supplies for the mode
+// they are switching to, which is what lets them move it in one step.
+func TestSetupCredentialsWritesAnOperatorSuppliedModelPin(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "agent.env")
+	seeded := "CLAUDE_CODE_USE_BEDROCK=1\n" +
+		"ANTHROPIC_MODEL=us.anthropic.claude-sonnet-5\n" +
+		"GITHUB_TOKEN=gh\nSPEKK_HOST=h\nSPEKK_AGENT_TOKEN=t\n"
+	if err := os.WriteFile(envFile, []byte(seeded), 0o600); err != nil {
+		t.Fatalf("seeding env file: %s", err)
+	}
+
+	base := []string{
+		"SPEKK_AUTH_MODE=subscription",
+		"CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-new",
+		"AGENT_ENV_FILE=" + envFile,
+	}
+
+	// Without a pin from the operator, the old one is gone.
+	if out, err := runScript(t, base, "source "+setupCredentialsScript+"; load_existing; render_agent_env"); err != nil {
+		t.Fatalf("render failed: %s\n%s", err, out)
+	} else if strings.Contains(out, "ANTHROPIC_MODEL") {
+		t.Errorf("the previous mode's pin must not survive:\n%s", out)
+	}
+
+	// With one, it is written.
+	withPin := append(append([]string{}, base...), "ANTHROPIC_MODEL=claude-sonnet-5")
+	out, err := runScript(t, withPin, "source "+setupCredentialsScript+"; load_existing; render_agent_env")
+	if err != nil {
+		t.Fatalf("render failed: %s\n%s", err, out)
+	}
+	if !strings.Contains(out, "ANTHROPIC_MODEL=claude-sonnet-5") {
+		t.Errorf("an operator-supplied pin should be written:\n%s", out)
+	}
+	if strings.Contains(out, "us.anthropic") {
+		t.Errorf("the old pin leaked through:\n%s", out)
+	}
+}
+
+// Dropping a pin without saying so leaves a sandbox that answers differently
+// tomorrow for no visible reason.
+func TestSetupCredentialsReportsADroppedModelPin(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "agent.env")
+	if err := os.WriteFile(envFile, []byte("ANTHROPIC_MODEL=us.anthropic.claude-sonnet-5\n"), 0o600); err != nil {
+		t.Fatalf("seeding env file: %s", err)
+	}
+	out, err := runScript(t, []string{"SPEKK_AUTH_MODE=subscription", "AGENT_ENV_FILE=" + envFile},
+		"source "+setupCredentialsScript+"; load_existing; echo \"dropped=$DROPPED_MODEL\"")
+	if err != nil {
+		t.Fatalf("load failed: %s\n%s", err, out)
+	}
+	if !strings.Contains(out, "dropped=us.anthropic.claude-sonnet-5") {
+		t.Errorf("the dropped pin should be remembered so it can be reported:\n%s", out)
+	}
+}

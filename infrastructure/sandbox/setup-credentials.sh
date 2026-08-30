@@ -95,6 +95,10 @@ render_agent_env() {
     # agent's workspace and its git identity.
     echo "WORKSPACE=${WORKSPACE:-/opt/spekk/workspace}"
     echo "SPEKK_AGENT_NAME=${SPEKK_AGENT_NAME:-$(hostname)}"
+    # A pin is written only when the operator asked for one in this run. The
+    # previous mode's pin is never reused, because its value belongs to that
+    # mode's API.
+    [ -z "${ANTHROPIC_MODEL:-}" ] || echo "ANTHROPIC_MODEL=${ANTHROPIC_MODEL}"
     # Whatever else the droplet already had, unchanged.
     [ -z "$EXTRA_LINES" ] || printf '%s' "$EXTRA_LINES"
 }
@@ -107,8 +111,12 @@ render_agent_env() {
 # "us.anthropic.claude-sonnet-5", and that name means nothing to the
 # subscription API: Claude Code answers "There's an issue with the selected
 # model ... It may not exist or you may not have access to it" and the turn
-# fails. Dropping it lets the new mode use its own default. An operator who
-# wants a pin under the new mode sets one afterwards.
+# fails.
+#
+# So it is not carried across a switch. It is not silently discarded either:
+# the old value is reported, and an ANTHROPIC_MODEL supplied in the
+# environment is written, so an operator can move the pin in the same step
+# rather than discover later that the sandbox quietly changed model.
 MODE_VARS="AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_MODEL"
 
 # KNOWN_VARS are the ones this script renders itself, in a fixed order.
@@ -116,6 +124,10 @@ KNOWN_VARS="GITHUB_TOKEN SPEKK_HOST SPEKK_AGENT_TOKEN WORKSPACE SPEKK_AGENT_NAME
 
 # EXTRA_LINES holds every other line the existing file had.
 EXTRA_LINES=""
+
+# DROPPED_MODEL remembers a model pin the switch is leaving behind, so the
+# operator hears about it.
+DROPPED_MODEL=""
 
 # load_existing reads the env file already on the droplet, so a mode switch
 # keeps everything the mode does not decide. Without it the whole-file rewrite
@@ -138,7 +150,10 @@ load_existing() {
         esac
         # The mode decides these; never carry them across a switch.
         case " $MODE_VARS " in
-            *" $key "*) continue ;;
+            *" $key "*)
+                [ "$key" = "ANTHROPIC_MODEL" ] && DROPPED_MODEL="$value"
+                continue
+                ;;
         esac
         if [ -n "$value" ]; then
             case " $KNOWN_VARS " in
@@ -257,6 +272,15 @@ main() {
     #
     # try-restart is a no-op on a droplet where the unit is not running yet,
     # which is the first-time-setup case.
+    # Say what the switch left behind. A model pin that vanishes silently is
+    # a sandbox that answers differently tomorrow for no visible reason.
+    if [ -n "$DROPPED_MODEL" ] && [ -z "${ANTHROPIC_MODEL:-}" ]; then
+        echo "==> NOTE: dropped the previous model pin (ANTHROPIC_MODEL=${DROPPED_MODEL})"
+        echo "    It names a model of the mode you switched away from, so it cannot carry over."
+        echo "    This sandbox now uses the new mode's default. To pin one, re-run with"
+        echo "    ANTHROPIC_MODEL set to a model the new mode knows."
+    fi
+
     echo "==> Restarting the agent so the new credential takes effect"
     systemctl try-restart spekk-agent || true
 
