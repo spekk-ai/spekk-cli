@@ -40,8 +40,8 @@ type CreateOptions struct {
 	Size    string
 	Project string
 	VPC     string
-	IP      string // manual provider: IP of an existing machine
-	SSHKey  string // manual provider: path to an SSH private key
+	IP      string // address of a machine that already exists
+	SSHKey  string // private key that reaches that machine as root
 
 	// CloudInit is the provisioning payload from the release artifacts.
 	// Create fills it in; no flag sets it. A provider that does not use
@@ -104,8 +104,10 @@ func Create(p Provider, opts CreateOptions) error {
 	// that `spekk sandbox destroy` cannot reach: the operator has to go
 	// to the provider's console and match it by name.
 	meta.Status = "provisioning"
-	createErr := registerMachine(opts, meta)
-	if p != nil {
+	var createErr error
+	if p == nil {
+		createErr = registerMachine(opts, meta)
+	} else {
 		createErr = p.Create(opts.Name, opts, meta)
 	}
 	if namesMachine(meta) {
@@ -135,7 +137,7 @@ func Create(p Provider, opts CreateOptions) error {
 	if p == nil {
 		// Nothing to wait for: the operator provisioned this machine.
 		// Confirm that before spending credentials on it.
-		if err := checkProvisioned(meta, opts.Name); err != nil {
+		if err := checkReady(meta, opts.Name); err != nil {
 			return fail("checking the machine", err)
 		}
 	} else if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
@@ -232,12 +234,15 @@ func Status(p Provider, name string) error {
 	fmt.Printf("Size: %s\n", orUnknown(sandbox.Size))
 	fmt.Printf("Created: %s\n", orUnknown(sandbox.CreatedAt))
 
-	// Fetch live status from the provider. A nil provider means the caller
-	// could not build one — most often no API token — which is a reason to
-	// fall back to the stored value, not to refuse to print anything.
+	// Fetch live status from the provider. A nil provider has two causes:
+	// no cloud owns this machine, which is normal and silent, or one could
+	// not be built — most often no API token — which is worth saying. Both
+	// fall back to the stored value rather than refusing to print.
 	vmStatus := orUnknown(sandbox.Status) + " (stored)"
 	if p == nil {
-		fmt.Fprintln(os.Stderr, "Warning: no provider available; showing the stored status.")
+		if sandbox.Provider != ProviderNone {
+			fmt.Fprintln(os.Stderr, "Warning: no provider available; showing the stored status.")
+		}
 	} else if live, err := p.Status(sandbox); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Could not fetch live VM status: %s\n", err)
 	} else if live != "" {

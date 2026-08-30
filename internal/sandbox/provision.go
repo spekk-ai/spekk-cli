@@ -45,6 +45,10 @@ func registerMachine(opts CreateOptions, meta *SandboxMeta) error {
 	return nil
 }
 
+// checkReady is the seam Create checks through, so a test can drive the
+// paths around it without an SSH connection.
+var checkReady = checkProvisioned
+
 // checkProvisioned reports whether a machine already carries the marker that
 // says it has the packages, the agent user, and the directories a sandbox
 // needs.
@@ -88,8 +92,14 @@ func stopAgentService(sandbox *SandboxMeta, name string) error {
 // the only way out — --force — would leave a GitHub token and AWS keys on
 // somebody's server for good.
 func teardownCommand() string {
+	// Separated by ";", not "&&", on purpose. Each removal must run
+	// whatever the steps before it did, and a chain of "&&" with a "|| true"
+	// somewhere in it only works by operator precedence, which is too
+	// quiet a thing to rest a credential on. The last line is the exit
+	// status: it is the one condition that decides success.
 	return strings.Join([]string{
-		"if systemctl cat spekk-agent >/dev/null 2>&1; then systemctl stop spekk-agent && systemctl disable spekk-agent; fi",
+		"systemctl stop spekk-agent 2>/dev/null || true",
+		"systemctl disable spekk-agent 2>/dev/null || true",
 		"rm -f /etc/spekk/agent.env",
 		"rm -f /home/agent/.git-credentials",
 		// gh auth login writes the same token here.
@@ -97,7 +107,7 @@ func teardownCommand() string {
 		// is-active exits non-zero when the unit is stopped, which is
 		// the outcome we want. Turn that into the success case.
 		"! systemctl is-active --quiet spekk-agent",
-	}, " && ")
+	}, "; ")
 }
 
 // stopAgent is the seam Destroy stops through, so a test can drive the paths

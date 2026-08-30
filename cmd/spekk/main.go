@@ -988,11 +988,11 @@ USAGE:
   spekk sandbox <subcommand> [options]
 
 SUBCOMMANDS:
-  create      Create a new sandbox droplet
-  list        List all sandbox droplets
+  create      Create a sandbox, or register a machine you already have
+  list        List all sandboxes
   status      Show status of a sandbox
   ssh         SSH into a sandbox
-  destroy     Destroy a sandbox droplet
+  destroy     Destroy a sandbox, or deregister a machine you own
   deploy      Deploy agent client to a sandbox
 
 OPTIONS:
