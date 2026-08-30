@@ -156,7 +156,17 @@ Send the code and the Enter as **separate** writes. A carriage return in the sam
 
 Restarting the command generates a fresh challenge, which invalidates any code you were issued for the previous run.
 
-**Give the terminal room, and check the length of what you captured.** The command prints the token to a terminal, so a narrow one wraps it and leaves an escape sequence in the middle. A pattern that stops at the wrap yields a token that is correctly formed, correctly prefixed, and silently short — it fails only at first use, with `401 OAuth access token is invalid`, long after the step that produced it. Set a wide window on the pty, and validate the length rather than trusting the prefix.
+**Do not scrape the token out of the terminal. Verify it before you deploy it.** The command prints the token through a redrawing interface, so the byte stream is not the text on screen: it contains cursor movements that overwrite what came before. Stripping escape sequences does not reconstruct the result, because a character that was drawn and then overwritten is still in the stream. Replaying the stream through a terminal emulator does; a regular expression over it does not, however careful the pattern.
+
+The failure this produces is quiet. A token missing a single character is still 100-odd characters long, still carries the right prefix, and still looks exactly like a token — and it fails only at first use, with `401 OAuth access token is invalid`, far from the step that produced it. Widening the terminal helps but does not make scraping correct.
+
+So verify the captured value by using it, before it reaches a sandbox:
+
+```bash
+CLAUDE_CODE_OAUTH_TOKEN="$(cat path/to/token)" claude -p 'reply with OK'
+```
+
+A token that authenticates locally will authenticate on the sandbox. One that does not has been captured wrong, and no amount of inspecting it will show that.
 
 Keep the token off command lines and out of shell history. Write it to a file only you can read, and let the environment pick it up from there:
 
