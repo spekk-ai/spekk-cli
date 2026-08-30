@@ -60,7 +60,7 @@ func Create(p Provider, opts CreateOptions) error {
 	requiredVars := requiredEnvVars(opts.Auth)
 	var missing []string
 	for _, v := range requiredVars {
-		if os.Getenv(v) == "" {
+		if strings.TrimSpace(os.Getenv(v)) == "" {
 			missing = append(missing, v)
 		}
 	}

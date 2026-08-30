@@ -72,6 +72,10 @@ var agentSecrets = []string{
 	"/home/agent/.git-credentials",
 	// gh auth login writes the same token here.
 	"/home/agent/.config/gh",
+	// An older setup-credentials.sh exported ANTHROPIC_API_KEY into the
+	// agent's login shell. Nothing writes it now, but a machine
+	// credentialed before then still carries it.
+	"/home/agent/.bashrc.d/spekk.sh",
 }
 
 // stopAgentService stops the spekk-agent service on an unmanaged machine and

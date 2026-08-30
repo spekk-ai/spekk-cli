@@ -14,6 +14,19 @@
 # command, inside the quotes, as above: an assignment on the local side applies
 # to ssh itself, and ssh does not forward it.
 #
+# Pass NON-SECRETS that way -- SPEKK_AUTH_MODE, SPEKK_HOST, AWS_DEFAULT_REGION.
+# A secret on a command line is in the local shell history and in both machines'
+# process lists, which is the exposure the non-echoing prompts exist to avoid.
+# For an unattended run, feed secrets through a root-only file on the droplet
+# and source it:
+#
+#   ssh -t root@DROPLET_IP 'set -a; . /root/creds; set +a; SPEKK_AUTH_MODE=subscription bash /tmp/setup-credentials.sh; shred -u /root/creds'
+#
+# Switching a live sandbox rewrites the env file whole, so every value it does
+# not prompt for is carried over from the file already there. The one thing
+# that cannot be recovered if lost is SPEKK_AGENT_TOKEN: the control host holds
+# only its hash, so a blanked one means re-registering the agent.
+#
 # SPEKK_AUTH_MODE selects which credential the agent authenticates Claude with:
 #
 #   bedrock       (default) bills through the AWS Bedrock API
@@ -39,18 +52,23 @@ esac
 # visible prompt stays in the operator's terminal scrollback.
 prompt_secret() {
     local var="$1" label="$2"
-    if [ -z "${!var:-}" ]; then
+    while [ -z "${!var:-}" ]; do
         read -rsp "${label}: " "${var?}"
         echo
-    fi
+        # An empty value here would be written as an empty credential, and on
+        # a switch the file holding the old one has already been read. Ask
+        # again rather than brick the sandbox.
+        [ -n "${!var:-}" ] || echo "    (required)" >&2
+    done
 }
 
 # prompt_plain reads a value that is not a secret.
 prompt_plain() {
     local var="$1" label="$2"
-    if [ -z "${!var:-}" ]; then
+    while [ -z "${!var:-}" ]; do
         read -rp "${label}: " "${var?}"
-    fi
+        [ -n "${!var:-}" ] || echo "    (required)" >&2
+    done
 }
 
 # render_agent_env prints the agent env file.
@@ -72,6 +90,52 @@ render_agent_env() {
     echo "GITHUB_TOKEN=${GITHUB_TOKEN:-}"
     echo "SPEKK_HOST=${SPEKK_HOST:-}"
     echo "SPEKK_AGENT_TOKEN=${SPEKK_AGENT_TOKEN:-}"
+    # These two are not credentials, but the Go path writes them and the file
+    # is rewritten whole. Omitting them would make a switch quietly change the
+    # agent's workspace and its git identity.
+    echo "WORKSPACE=${WORKSPACE:-/opt/spekk/workspace}"
+    echo "SPEKK_AGENT_NAME=${SPEKK_AGENT_NAME:-$(hostname)}"
+}
+
+# load_existing seeds the variables from the env file already on the droplet,
+# so a mode switch keeps everything the mode does not decide. Without it the
+# whole-file rewrite that makes a switch a switch would also discard the agent
+# token, the host, and the workspace settings.
+#
+# Only known keys are read, and only when the environment has not already
+# supplied one. Values are taken literally: no eval, no sourcing, so a value
+# containing shell metacharacters cannot run.
+load_existing() {
+    [ -r "$AGENT_ENV_FILE" ] || return 0
+    local key value
+    while IFS='=' read -r key value; do
+        case "$key" in
+            SPEKK_AGENT_TOKEN | SPEKK_HOST | GITHUB_TOKEN | WORKSPACE | SPEKK_AGENT_NAME | \
+                AWS_ACCESS_KEY_ID | AWS_SECRET_ACCESS_KEY | AWS_DEFAULT_REGION | CLAUDE_CODE_OAUTH_TOKEN) ;;
+            *) continue ;;
+        esac
+        [ -n "$value" ] || continue
+        [ -n "${!key:-}" ] || printf -v "$key" '%s' "$value"
+    done < "$AGENT_ENV_FILE"
+}
+
+# write_agent_env carries forward what the current file holds, asks for what is
+# still missing, and replaces the file.
+#
+# The order is the point, so it lives in one function that a test can drive:
+# reading before writing is what stops the whole-file rewrite from discarding
+# the agent token, and prompting after reading is what stops it asking for
+# values the droplet already has.
+write_agent_env() {
+    load_existing
+    collect_credentials
+
+    # The file is rewritten whole, never appended to. That is what makes a mode
+    # switch a switch: the previous mode's variables are gone, not shadowed.
+    echo "==> Writing ${AGENT_ENV_FILE}"
+    render_agent_env > "$AGENT_ENV_FILE"
+    chmod 600 "$AGENT_ENV_FILE"
+    echo "    Done."
 }
 
 collect_credentials() {
@@ -90,6 +154,10 @@ collect_credentials() {
 }
 
 main() {
+    # Every file this writes holds a credential. Set the mask before creating
+    # any of them, so none exists even briefly at the default 0644.
+    umask 077
+
     echo "==> Spekk Sandbox Credential Setup (auth mode: ${SPEKK_AUTH_MODE})"
 
     # Wait for cloud-init to finish if it's still running
@@ -106,14 +174,7 @@ main() {
         exit 1
     fi
 
-    collect_credentials
-
-    # The file is rewritten whole, never appended to. That is what makes a mode
-    # switch a switch: the previous mode's variables are gone, not shadowed.
-    echo "==> Writing ${AGENT_ENV_FILE}"
-    render_agent_env > "$AGENT_ENV_FILE"
-    chmod 600 "$AGENT_ENV_FILE"
-    echo "    Done."
+    write_agent_env
 
     # Configure git credentials for agent user
     echo "==> Configuring git credentials for agent user"
@@ -142,6 +203,26 @@ main() {
     # Configure gh CLI for agent user
     echo "==> Configuring gh CLI"
     su - agent -c "echo '${GITHUB_TOKEN}' | gh auth login --with-token" 2>/dev/null || true
+
+    # An older version of this script exported ANTHROPIC_API_KEY into the
+    # agent's login shell. It stopped writing that file, but a droplet
+    # credentialed before then still carries it -- a live key in every agent
+    # shell, outside the env file, and outside what `spekk sandbox destroy`
+    # knows to remove. Switching auth mode is exactly when it must go.
+    if [ -e /home/agent/.bashrc.d/spekk.sh ]; then
+        echo "==> Removing the legacy shell-profile credential"
+        rm -f /home/agent/.bashrc.d/spekk.sh
+    fi
+
+    # systemd reads EnvironmentFile only when the unit starts, and a running
+    # agent hands its own environment to every claude child. Without this, a
+    # switch writes the new credential and the sandbox keeps billing the old
+    # one, with nothing to show that it did not take.
+    #
+    # try-restart is a no-op on a droplet where the unit is not running yet,
+    # which is the first-time-setup case.
+    echo "==> Restarting the agent so the new credential takes effect"
+    systemctl try-restart spekk-agent || true
 
     echo "==> Credential setup complete."
     echo ""

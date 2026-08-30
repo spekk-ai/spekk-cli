@@ -246,6 +246,10 @@ func TestAgentSecretsInventory(t *testing.T) {
 		"/home/agent/.git-credentials",
 		// ...and once here, through gh auth login --with-token.
 		"/home/agent/.config/gh",
+		// An older setup-credentials.sh exported ANTHROPIC_API_KEY into
+		// the agent's login shell. Nothing writes it now, but a machine
+		// credentialed before then still carries a live key there.
+		"/home/agent/.bashrc.d/spekk.sh",
 	}
 	if !slices.Equal(agentSecrets, want) {
 		t.Errorf("agentSecrets = %v, want %v", agentSecrets, want)

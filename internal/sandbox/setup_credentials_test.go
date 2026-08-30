@@ -151,3 +151,72 @@ func TestSetupCredentialsPromptsNothingWhenTheEnvironmentIsComplete(t *testing.T
 		}
 	}
 }
+
+// A switch rewrites the env file whole, which is what makes it a switch. That
+// same property would discard every value the new mode does not decide, so the
+// script reads the file before replacing it. The agent token is the one that
+// cannot be recovered: the control host stores only its hash, so losing it
+// means re-registering the agent.
+func TestSetupCredentialsSwitchCarriesForwardWhatItDoesNotDecide(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "agent.env")
+	seeded := "AWS_ACCESS_KEY_ID=AKIAOLD\n" +
+		"AWS_SECRET_ACCESS_KEY=oldsecret\n" +
+		"AWS_DEFAULT_REGION=us-east-1\n" +
+		"CLAUDE_CODE_USE_BEDROCK=1\n" +
+		"GITHUB_TOKEN=ghp_existing\n" +
+		"SPEKK_HOST=app.example\n" +
+		"SPEKK_AGENT_TOKEN=agenttoken-that-must-survive\n" +
+		"WORKSPACE=/opt/spekk/workspace\n" +
+		"SPEKK_AGENT_NAME=spekk-box\n"
+	if err := os.WriteFile(envFile, []byte(seeded), 0o600); err != nil {
+		t.Fatalf("seeding env file: %s", err)
+	}
+
+	// Only the new mode's own credential is supplied, as an operator running
+	// the switch would supply it.
+	env := []string{
+		"SPEKK_AUTH_MODE=subscription",
+		"CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-new",
+		"AGENT_ENV_FILE=" + envFile,
+	}
+	// Drive the whole write path, not just the pieces, so a version that
+	// forgets to read the file before replacing it fails here.
+	if out, err := runScript(t, env, "source "+setupCredentialsScript+"; write_agent_env"); err != nil {
+		t.Fatalf("write failed: %s\n%s", err, out)
+	}
+	written, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatalf("reading env file: %s", err)
+	}
+	out := string(written)
+
+	for _, want := range []string{
+		"CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-new",
+		"SPEKK_AGENT_TOKEN=agenttoken-that-must-survive",
+		"GITHUB_TOKEN=ghp_existing",
+		"SPEKK_HOST=app.example",
+		"WORKSPACE=/opt/spekk/workspace",
+		"SPEKK_AGENT_NAME=spekk-box",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("switch lost %q:\n%s", want, out)
+		}
+	}
+	for _, unwanted := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "CLAUDE_CODE_USE_BEDROCK", "ANTHROPIC_API_KEY"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("switch kept %q from the old mode:\n%s", unwanted, out)
+		}
+	}
+}
+
+// An empty answer at a credential prompt must not become an empty credential.
+func TestSetupCredentialsRejectsAnEmptySecret(t *testing.T) {
+	out, err := runScript(t, nil,
+		"source "+setupCredentialsScript+"; printf '\\n\\nvalue\\n' | { prompt_secret TESTVAR 'token'; echo \"got=$TESTVAR\"; }")
+	if err != nil {
+		t.Fatalf("prompt failed: %s\n%s", err, out)
+	}
+	if !strings.Contains(out, "got=value") {
+		t.Errorf("prompt should have kept asking until a value arrived:\n%s", out)
+	}
+}
