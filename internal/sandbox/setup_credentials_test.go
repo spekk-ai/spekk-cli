@@ -220,3 +220,47 @@ func TestSetupCredentialsRejectsAnEmptySecret(t *testing.T) {
 		t.Errorf("prompt should have kept asking until a value arrived:\n%s", out)
 	}
 }
+
+// A real sandbox turned out to carry ANTHROPIC_MODEL, which no list in the
+// script anticipated. Carrying forward by name would have dropped it and
+// quietly changed which model the agent runs, so the script keeps everything
+// that is not the mode's own credential, known to it or not.
+func TestSetupCredentialsCarriesForwardUnknownVariables(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "agent.env")
+	seeded := "AWS_ACCESS_KEY_ID=AKIAOLD\n" +
+		"CLAUDE_CODE_USE_BEDROCK=1\n" +
+		"GITHUB_TOKEN=ghp_existing\n" +
+		"SPEKK_HOST=app.example\n" +
+		"SPEKK_AGENT_TOKEN=agenttok\n" +
+		"ANTHROPIC_MODEL=us.anthropic.claude-sonnet-5\n" +
+		"SOME_FUTURE_SETTING=keepme\n"
+	if err := os.WriteFile(envFile, []byte(seeded), 0o600); err != nil {
+		t.Fatalf("seeding env file: %s", err)
+	}
+
+	env := []string{
+		"SPEKK_AUTH_MODE=subscription",
+		"CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-new",
+		"AGENT_ENV_FILE=" + envFile,
+	}
+	if out, err := runScript(t, env, "source "+setupCredentialsScript+"; write_agent_env"); err != nil {
+		t.Fatalf("write failed: %s\n%s", err, out)
+	}
+	written, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatalf("reading env file: %s", err)
+	}
+	got := string(written)
+
+	if !strings.Contains(got, "SOME_FUTURE_SETTING=keepme") {
+		t.Errorf("switch dropped a setting the mode does not decide:\n%s", got)
+	}
+	// ANTHROPIC_MODEL is not a credential, but its value is mode-specific: a
+	// Bedrock inference profile is not a model the subscription API knows, and
+	// carrying it over makes every turn fail on the selected model.
+	for _, unwanted := range []string{"ANTHROPIC_MODEL", "AWS_ACCESS_KEY_ID", "CLAUDE_CODE_USE_BEDROCK"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("switch kept %q from the old mode:\n%s", unwanted, got)
+		}
+	}
+}

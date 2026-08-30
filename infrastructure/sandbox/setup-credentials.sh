@@ -95,27 +95,63 @@ render_agent_env() {
     # agent's workspace and its git identity.
     echo "WORKSPACE=${WORKSPACE:-/opt/spekk/workspace}"
     echo "SPEKK_AGENT_NAME=${SPEKK_AGENT_NAME:-$(hostname)}"
+    # Whatever else the droplet already had, unchanged.
+    [ -z "$EXTRA_LINES" ] || printf '%s' "$EXTRA_LINES"
 }
 
-# load_existing seeds the variables from the env file already on the droplet,
-# so a mode switch keeps everything the mode does not decide. Without it the
-# whole-file rewrite that makes a switch a switch would also discard the agent
-# token, the host, and the workspace settings.
+# MODE_VARS are the variables the auth mode decides. They are the only ones a
+# switch may drop; everything else in the file is carried over untouched.
 #
-# Only known keys are read, and only when the environment has not already
-# supplied one. Values are taken literally: no eval, no sourcing, so a value
-# containing shell metacharacters cannot run.
+# ANTHROPIC_MODEL is here even though it is not a credential, because its value
+# is mode-specific. A Bedrock sandbox pins an inference profile such as
+# "us.anthropic.claude-sonnet-5", and that name means nothing to the
+# subscription API: Claude Code answers "There's an issue with the selected
+# model ... It may not exist or you may not have access to it" and the turn
+# fails. Dropping it lets the new mode use its own default. An operator who
+# wants a pin under the new mode sets one afterwards.
+MODE_VARS="AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_MODEL"
+
+# KNOWN_VARS are the ones this script renders itself, in a fixed order.
+KNOWN_VARS="GITHUB_TOKEN SPEKK_HOST SPEKK_AGENT_TOKEN WORKSPACE SPEKK_AGENT_NAME"
+
+# EXTRA_LINES holds every other line the existing file had.
+EXTRA_LINES=""
+
+# load_existing reads the env file already on the droplet, so a mode switch
+# keeps everything the mode does not decide. Without it the whole-file rewrite
+# that makes a switch a switch would also be a wipe.
+#
+# It carries forward by exclusion, not by a list of names. An allowlist keeps
+# only what someone thought of: a real sandbox turned out to carry
+# ANTHROPIC_MODEL, which no list here anticipated, and dropping it would have
+# quietly changed which model the agent runs. Anything that is not the mode's
+# own credential survives, known to this script or not.
+#
+# Values are taken literally: no eval, no sourcing, so a value containing shell
+# metacharacters cannot run.
 load_existing() {
     [ -r "$AGENT_ENV_FILE" ] || return 0
     local key value
     while IFS='=' read -r key value; do
         case "$key" in
-            SPEKK_AGENT_TOKEN | SPEKK_HOST | GITHUB_TOKEN | WORKSPACE | SPEKK_AGENT_NAME | \
-                AWS_ACCESS_KEY_ID | AWS_SECRET_ACCESS_KEY | AWS_DEFAULT_REGION | CLAUDE_CODE_OAUTH_TOKEN) ;;
-            *) continue ;;
+            '' | '#'*) continue ;;
         esac
-        [ -n "$value" ] || continue
-        [ -n "${!key:-}" ] || printf -v "$key" '%s' "$value"
+        # The mode decides these; never carry them across a switch.
+        case " $MODE_VARS " in
+            *" $key "*) continue ;;
+        esac
+        if [ -n "$value" ]; then
+            case " $KNOWN_VARS " in
+                *" $key "*)
+                    # Rendered explicitly below; seed it unless the caller set one.
+                    [ -n "${!key:-}" ] || printf -v "$key" '%s' "$value"
+                    continue
+                    ;;
+            esac
+            # Anything else is passed through untouched.
+            EXTRA_LINES="${EXTRA_LINES}${key}=${value}
+"
+        fi
     done < "$AGENT_ENV_FILE"
 }
 
