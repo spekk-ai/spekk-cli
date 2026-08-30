@@ -140,39 +140,45 @@ func answerPrompt(t *testing.T, answer string) {
 // The teardown shell decides whether spekk may forget a machine it does not
 // own, so its exit status has to mean exactly one thing: every credential is
 // off the machine, and the agent is stopped.
+//
+// The secret paths are pointed at real temp files, so the check that the
+// files are gone is exercised against the filesystem rather than simulated.
 func TestTeardownCommand(t *testing.T) {
-	// run stubs systemctl and rm on PATH, runs the real command, and
-	// reports what rm was asked to remove and whether it succeeded.
-	// failOn names a path whose removal fails; empty means all succeed.
-	run := func(t *testing.T, systemctl, failOn string) (asked []string, ok bool) {
+	// run creates the secrets, stubs systemctl and rm on PATH, and runs
+	// the real command. rmBody is the body of the stub rm.
+	run := func(t *testing.T, systemctl, rmBody string) (leftBehind []string, ok bool) {
 		t.Helper()
 		dir := t.TempDir()
-		rm := `rc=0
-for a in "$@"; do
-  case "$a" in -*) continue ;; esac
-  echo "$a" >> "` + dir + `/asked"
-  [ -n "` + failOn + `" ] && [ "$a" = "` + failOn + `" ] && rc=1
-done
-exit $rc`
-		for name, body := range map[string]string{"systemctl": systemctl, "rm": rm} {
-			if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/bash\n"+body+"\n"), 0o755); err != nil {
+
+		var secrets []string
+		for _, name := range []string{"agent.env", "git-credentials", "gh"} {
+			path := filepath.Join(dir, name)
+			if err := os.WriteFile(path, []byte("secret"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			secrets = append(secrets, path)
+		}
+		orig := agentSecrets
+		agentSecrets = secrets
+		t.Cleanup(func() { agentSecrets = orig })
+
+		bin := t.TempDir()
+		for name, body := range map[string]string{"systemctl": systemctl, "rm": rmBody} {
+			if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/bash\n"+body+"\n"), 0o755); err != nil {
 				t.Fatal(err)
 			}
 		}
 		cmd := exec.Command("bash", "-c", teardownCommand())
-		cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"))
+		cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 		err := cmd.Run()
 
-		log, _ := os.ReadFile(filepath.Join(dir, "asked"))
-		for _, line := range strings.Split(strings.TrimSpace(string(log)), "\n") {
-			if line != "" {
-				asked = append(asked, line)
+		for _, path := range secrets {
+			if _, statErr := os.Stat(path); statErr == nil {
+				leftBehind = append(leftBehind, filepath.Base(path))
 			}
 		}
-		return asked, err == nil
+		return leftBehind, err == nil
 	}
-
-	secrets := []string{"/etc/spekk/agent.env", "/home/agent/.git-credentials", "/home/agent/.config/gh"}
 
 	// A unit that was never installed is the state any create that died
 	// before deployAgent leaves behind. The credentials are already on the
@@ -181,33 +187,67 @@ exit $rc`
 	unitStopped := `[ "$1" = "is-active" ] && exit 3; exit 0`
 	agentRunning := `exit 0`
 
+	realRm := `command /bin/rm "$@"`
+	// An rm that reports success and removes nothing. Trusting its exit
+	// status would report a clean teardown over live credentials.
+	lyingRm := `exit 0`
+	failingRm := `exit 1`
+
 	t.Run("removes every secret when the unit was never installed", func(t *testing.T) {
-		asked, ok := run(t, unitAbsent, "")
+		leftBehind, ok := run(t, unitAbsent, realRm)
 		if !ok {
 			t.Error("teardown must succeed when the unit was never installed")
 		}
-		for _, path := range secrets {
-			if !slices.Contains(asked, path) {
-				t.Errorf("teardown left %s on the machine (asked: %v)", path, asked)
-			}
+		if len(leftBehind) > 0 {
+			t.Errorf("left on the machine: %v", leftBehind)
 		}
 	})
 
-	// Each secret carries its own guard, so each is checked on its own.
-	// Reporting success for any of them would let Destroy delete the local
-	// record while that credential stays on a machine spekk no longer
+	// Reporting success for any of these would let Destroy delete the
+	// local record while a credential stays on a machine spekk no longer
 	// knows about.
-	for _, secret := range secrets {
-		t.Run("fails when "+secret+" cannot be removed", func(t *testing.T) {
-			if _, ok := run(t, unitStopped, secret); ok {
-				t.Errorf("teardown reported success although %s is still on the machine", secret)
-			}
-		})
-	}
+	t.Run("fails when rm reports success but removes nothing", func(t *testing.T) {
+		if _, ok := run(t, unitStopped, lyingRm); ok {
+			t.Error("teardown trusted rm instead of checking the files were gone")
+		}
+	})
+
+	t.Run("fails when rm cannot remove", func(t *testing.T) {
+		if _, ok := run(t, unitStopped, failingRm); ok {
+			t.Error("teardown reported success although a credential is still on the machine")
+		}
+	})
+
+	t.Run("fails when rm removes the file but reports failure", func(t *testing.T) {
+		// The outcome check cannot see this: a path whose parent is
+		// unreadable looks absent. rm's own status is the only signal
+		// left, so both guards are needed.
+		if _, ok := run(t, unitStopped, `command /bin/rm "$@"; exit 1`); ok {
+			t.Error("teardown ignored rm's failure")
+		}
+	})
 
 	t.Run("fails while the agent is still running", func(t *testing.T) {
-		if _, ok := run(t, agentRunning, ""); ok {
+		if _, ok := run(t, agentRunning, realRm); ok {
 			t.Error("teardown reported success although the agent is still active")
 		}
 	})
+}
+
+// agentSecrets is an inventory of every place spekk writes a credential on a
+// sandbox. It is asserted explicitly because the cost of quietly losing an
+// entry is a live token left on a machine spekk has forgotten, and because
+// nothing else in the tests would notice a shorter list.
+func TestAgentSecretsInventory(t *testing.T) {
+	want := []string{
+		// injectCredentials writes AWS keys, GITHUB_TOKEN, agent token.
+		"/etc/spekk/agent.env",
+		// configureGitCredentials writes the token twice: once here...
+		"/home/agent/.git-credentials",
+		// ...and once here, through gh auth login --with-token.
+		"/home/agent/.config/gh",
+	}
+	if !slices.Equal(agentSecrets, want) {
+		t.Errorf("agentSecrets = %v, want %v", agentSecrets, want)
+	}
 }

@@ -65,6 +65,15 @@ func checkProvisioned(meta *SandboxMeta, name string) error {
 		provisionedMarker, meta.IP)
 }
 
+// agentSecrets are the files spekk puts on a sandbox. On a machine that
+// survives destroy, anything left here stays live.
+var agentSecrets = []string{
+	"/etc/spekk/agent.env",
+	"/home/agent/.git-credentials",
+	// gh auth login writes the same token here.
+	"/home/agent/.config/gh",
+}
+
 // stopAgentService stops the spekk-agent service on an unmanaged machine and
 // removes the credentials spekk put there.
 //
@@ -92,27 +101,34 @@ func stopAgentService(sandbox *SandboxMeta, name string) error {
 // the only way out — --force — would leave a GitHub token and AWS keys on
 // somebody's server for good.
 func teardownCommand() string {
-	// Every removal is attempted, and any failure fails the command.
+	// Every removal is attempted, and the command succeeds only if the
+	// agent is stopped and none of the secrets is still there.
 	//
 	// "&&" would stop at the first failure, so a machine whose unit was
 	// never installed would keep its credentials. ";" alone would run
-	// them all but report the exit status of the last one, so a
-	// read-only /etc would drop the local record and leave the secrets
-	// behind. Neither is acceptable, so the status is accumulated.
-	return strings.Join([]string{
+	// them all but report only the last one, so a read-only /etc would
+	// remove nothing and still report success. So the status is
+	// accumulated, and then the outcome is checked rather than trusted:
+	// what matters is that the file is gone, not that rm said so.
+	steps := []string{
 		"rc=0",
 		// Best effort: the unit may never have been installed, and the
-		// check at the end is what decides whether the agent stopped.
+		// check below is what decides whether the agent stopped.
 		"systemctl stop spekk-agent 2>/dev/null || true",
 		"systemctl disable spekk-agent 2>/dev/null || true",
-		"rm -f /etc/spekk/agent.env || rc=1",
-		"rm -f /home/agent/.git-credentials || rc=1",
-		// gh auth login writes the same token here.
-		"rm -rf /home/agent/.config/gh || rc=1",
+	}
+	for _, path := range agentSecrets {
+		steps = append(steps, fmt.Sprintf("rm -rf %s || rc=1", path))
+	}
+	for _, path := range agentSecrets {
+		steps = append(steps, fmt.Sprintf("test -e %s && rc=1", path))
+	}
+	steps = append(steps,
 		// is-active exits 0 while the agent runs, which is a failure.
 		"systemctl is-active --quiet spekk-agent && rc=1",
 		"exit $rc",
-	}, "; ")
+	)
+	return strings.Join(steps, "; ")
 }
 
 // stopAgent is the seam Destroy stops through, so a test can drive the paths
