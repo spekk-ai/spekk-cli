@@ -14,7 +14,7 @@ This spec introduces a provider interface so sandboxes work with any infrastruct
 
 Two concerns, cleanly separated:
 
-- **Provider** — creates and destroys the machine and reports its state. The create-time settings (region, size, VPC, project) travel in one typed `CreateOptions` struct that every provider receives and reads selectively. A string map was tried and rejected: it put each provider in charge of its own defaults with no way to return them, so omitting `--region` left the metadata blank.
+- **Provider** — creates and destroys the machine and reports its state. Nil when no cloud owns it. The create-time settings (region, size, VPC, project) travel in one typed `CreateOptions` struct that every provider receives and reads selectively. A string map was tried and rejected: it put each provider in charge of its own defaults with no way to return them, so omitting `--region` left the metadata blank.
 - **Sandbox** — provisions the OS, deploys the agent, injects credentials, manages SSH sessions. Takes an IP. Unchanged from today.
 
 `SandboxMeta` gains `Provider string`, which names the provider that owns the machine. The change is additive: an entry written before the field existed reads as DigitalOcean, so an existing fleet keeps working and keeps being destroyable.
@@ -37,6 +37,8 @@ SSH key management is provider-internal. DO uploads keys to its API; manual expe
 
 `spekk sandbox destroy` and `status` read the provider from stored metadata and dispatch accordingly. `deploy` and `ssh` need only an IP and a key, so they stay provider-blind.
 
-## Open question: is "manual" a provider?
+## A machine nobody owns is not a provider
 
-A manual machine has no lifecycle to own. Modeling it as a `Provider` gives it a `Create` that registers, a `Destroy` that cannot destroy, and a `Status` with no API to ask — three methods that describe an absence. It may fit better as a provisioning mode on `create`, with `provider: none` in metadata, leaving `Provider` to mean "the cloud that owns this machine". A manual sandbox is a full member of the registry either way; the question is only which type models it. This is unresolved, and the manual assertions stay `not_started` until it is.
+"Manual" was modeled as a `Provider` first, and the type never fitted. Its `Create` only copied two flags into metadata, its `Destroy` could not destroy, and its `Status` had no API to ask, so it returned nothing. Three methods describing an absence. The generic layer gave it away: it string-matched `provider == "manual"` around every lifecycle event, which is the shape polymorphism is supposed to remove.
+
+So `Provider` means "the cloud that owns this machine", and a machine no cloud owns records `provider: none` and has no `Provider` at all. `Create` takes a nil provider and registers instead of creating; `Destroy` and `Status` treat nil as "nothing of a cloud's to act on". A registered machine is a full member of the sandbox registry either way — the registry lists machines spekk talks to, which is a different question from who made them.

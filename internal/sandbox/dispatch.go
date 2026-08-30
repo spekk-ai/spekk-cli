@@ -5,25 +5,27 @@ import (
 	"strings"
 )
 
-// ValidProviders lists the provider names accepted by --provider.
-var ValidProviders = []string{"digitalocean", "manual"}
+// ProviderNone is the SandboxMeta.Provider value for a machine no cloud
+// owns: one the operator already had, which spekk registers and equips but
+// never creates or destroys.
+const ProviderNone = "none"
 
-// DOOnlyFlags are flags that only make sense with --provider digitalocean.
-var DOOnlyFlags = []string{"--region", "--size", "--vpc", "--project"}
+// ValidProviders lists the values accepted by --provider.
+var ValidProviders = []string{"digitalocean", ProviderNone}
 
-// ManualOnlyFlags are flags that only make sense with --provider manual.
-var ManualOnlyFlags = []string{"--ip", "--ssh-key"}
+// existingMachineFlags name a machine that already exists. Any one of them
+// says the operator is not asking for a new one.
+var existingMachineFlags = []string{"--ip", "--ssh-key"}
 
-// ResolveProviderName infers the provider name from the --provider flag value
-// and whether any manual-only flag was supplied. Returns the resolved provider
-// name or an error.
+// cloudFlags configure a machine spekk creates, so they are meaningless for
+// one it does not.
+var cloudFlags = []string{"--region", "--size", "--vpc", "--project"}
+
+// ResolveProviderName decides which provider a create is for.
 //
-// Rules:
-//   - Explicit --provider value is used as-is (validated against ValidProviders)
-//   - If --provider is omitted and a manual-only flag is set, defaults to
-//     "manual". Naming a machine is what says the machine already exists.
-//   - Otherwise it defaults to "digitalocean"
-func ResolveProviderName(providerFlag string, manualFlagSet bool) (string, error) {
+// An explicit --provider wins. Otherwise, naming an existing machine is what
+// says there is nothing to create; anything else asks for a new droplet.
+func ResolveProviderName(providerFlag string, existingMachine bool) (string, error) {
 	if providerFlag != "" {
 		for _, v := range ValidProviders {
 			if providerFlag == v {
@@ -32,45 +34,38 @@ func ResolveProviderName(providerFlag string, manualFlagSet bool) (string, error
 		}
 		return "", fmt.Errorf("invalid provider %q: valid values are %s", providerFlag, strings.Join(ValidProviders, ", "))
 	}
-	if manualFlagSet {
-		return "manual", nil
+	if existingMachine {
+		return ProviderNone, nil
 	}
 	return "digitalocean", nil
 }
 
-// ValidateProviderFlags checks that no provider-incompatible flags are set.
-// setFlags maps flag names (e.g. "--region") to whether they were provided.
+// ValidateProviderFlags rejects a create that asks for both a new machine and
+// an existing one. Silently ignoring either half would bill a droplet the
+// operator did not want, or ignore the machine they named.
 func ValidateProviderFlags(provider string, setFlags map[string]bool) error {
-	switch provider {
-	case "manual":
-		var bad []string
-		for _, f := range DOOnlyFlags {
-			if setFlags[f] {
-				bad = append(bad, f)
-			}
+	wrong, forProvider := cloudFlags, ProviderNone
+	if provider != ProviderNone {
+		wrong, forProvider = existingMachineFlags, provider
+	}
+	var bad []string
+	for _, f := range wrong {
+		if setFlags[f] {
+			bad = append(bad, f)
 		}
-		if len(bad) > 0 {
-			return fmt.Errorf("flags %s cannot be used with --provider manual", strings.Join(bad, ", "))
-		}
-	case "digitalocean":
-		var bad []string
-		for _, f := range ManualOnlyFlags {
-			if setFlags[f] {
-				bad = append(bad, f)
-			}
-		}
-		if len(bad) > 0 {
-			return fmt.Errorf("flags %s cannot be used with --provider digitalocean", strings.Join(bad, ", "))
-		}
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("flags %s cannot be used with --provider %s", strings.Join(bad, ", "), forProvider)
 	}
 	return nil
 }
 
-// ProviderByName returns a Provider implementation for the given name.
-// For "digitalocean" it creates a DOProvider (requires API token env var).
-// For "manual" it returns a ManualProvider.
+// ProviderByName returns the Provider for a name, or a nil Provider when no
+// cloud owns the machine.
 func ProviderByName(name string) (Provider, error) {
 	switch name {
+	case ProviderNone:
+		return nil, nil
 	case "digitalocean":
 		// Unpack rather than returning the call directly: a nil
 		// *DOProvider returned into a Provider result is an interface
@@ -80,8 +75,6 @@ func ProviderByName(name string) (Provider, error) {
 			return nil, err
 		}
 		return p, nil
-	case "manual":
-		return &ManualProvider{}, nil
 	default:
 		return nil, fmt.Errorf("unknown provider %q", name)
 	}

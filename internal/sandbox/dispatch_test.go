@@ -7,22 +7,24 @@ import (
 
 func TestResolveProviderName(t *testing.T) {
 	tests := []struct {
-		name      string
-		provider  string
-		manualSet bool
-		want      string
-		wantErr   bool
+		name            string
+		provider        string
+		existingMachine bool
+		want            string
+		wantErr         bool
 	}{
 		{"explicit digitalocean", "digitalocean", false, "digitalocean", false},
-		{"explicit manual", "manual", false, "manual", false},
-		{"explicit manual with a manual flag", "manual", true, "manual", false},
+		{"explicit none", ProviderNone, false, ProviderNone, false},
+		{"explicit none naming a machine", ProviderNone, true, ProviderNone, false},
 		{"invalid provider", "aws", false, "", true},
-		{"omitted with a manual flag defaults to manual", "", true, "manual", false},
-		{"omitted with no manual flag defaults to digitalocean", "", false, "digitalocean", false},
+		// Naming a machine is what says there is nothing to create, and
+		// --ssh-key names one as surely as --ip does.
+		{"a named machine means none", "", true, ProviderNone, false},
+		{"no named machine means digitalocean", "", false, "digitalocean", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ResolveProviderName(tt.provider, tt.manualSet)
+			got, err := ResolveProviderName(tt.provider, tt.existingMachine)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -33,103 +35,55 @@ func TestResolveProviderName(t *testing.T) {
 	}
 }
 
+// Asking for a new machine and naming an existing one at the same time is a
+// contradiction. Ignoring either half bills a droplet nobody wanted, or
+// ignores the machine the operator named.
 func TestValidateProviderFlags(t *testing.T) {
 	tests := []struct {
 		name     string
 		provider string
-		flags    map[string]bool
-		wantErr  bool
-		errMsg   string
+		set      []string
+		wantErr  string
 	}{
-		{
-			"manual with no DO flags is ok",
-			"manual",
-			map[string]bool{"--ip": true, "--ssh-key": true},
-			false, "",
-		},
-		{
-			"manual with --region errors",
-			"manual",
-			map[string]bool{"--region": true},
-			true, "--region",
-		},
-		{
-			"manual with multiple DO flags errors and names them",
-			"manual",
-			map[string]bool{"--region": true, "--size": true},
-			true, "--region",
-		},
-		{
-			"digitalocean with no manual flags is ok",
-			"digitalocean",
-			map[string]bool{"--region": true, "--size": true},
-			false, "",
-		},
-		{
-			"digitalocean with --ip errors",
-			"digitalocean",
-			map[string]bool{"--ip": true},
-			true, "--ip",
-		},
-		{
-			"digitalocean with --ssh-key errors",
-			"digitalocean",
-			map[string]bool{"--ssh-key": true},
-			true, "--ssh-key",
-		},
-		{
-			"error messages name the provider",
-			"digitalocean",
-			map[string]bool{"--ip": true},
-			true, "digitalocean",
-		},
-		{
-			"error messages name the provider for manual",
-			"manual",
-			map[string]bool{"--vpc": true},
-			true, "manual",
-		},
+		{"cloud flags with a machine you already have", ProviderNone, []string{"--region"}, "--region"},
+		{"machine flags with digitalocean", "digitalocean", []string{"--ip", "--ssh-key"}, "--ip, --ssh-key"},
+		{"cloud flags with digitalocean", "digitalocean", []string{"--region", "--size"}, ""},
+		{"machine flags with none", ProviderNone, []string{"--ip", "--ssh-key"}, ""},
+		{"nothing set", "digitalocean", nil, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateProviderFlags(tt.provider, tt.flags)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+			set := map[string]bool{}
+			for _, f := range tt.set {
+				set[f] = true
 			}
-			if tt.wantErr && tt.errMsg != "" {
-				if msg := err.Error(); !strings.Contains(msg, tt.errMsg) {
-					t.Errorf("error %q should contain %q", msg, tt.errMsg)
+			err := ValidateProviderFlags(tt.provider, set)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
 				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected an error naming %s", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) || !strings.Contains(err.Error(), tt.provider) {
+				t.Errorf("error %q should name both %s and the provider", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestProviderByName(t *testing.T) {
-	// ManualProvider can be instantiated without env vars.
-	p, err := ProviderByName("manual")
+// A machine no cloud owns has no provider to build.
+func TestProviderByNameNoneIsNil(t *testing.T) {
+	p, err := ProviderByName(ProviderNone)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if _, ok := p.(*ManualProvider); !ok {
-		t.Error("expected *ManualProvider")
+	if p != nil {
+		t.Errorf("want a nil Provider, got %T", p)
 	}
-
-	// Unknown provider returns error.
-	_, err = ProviderByName("gcp")
-	if err == nil {
-		t.Error("expected error for unknown provider")
-	}
-}
-
-func TestProviderFromMeta(t *testing.T) {
-	// Empty provider field defaults to DO (which needs env var — just test manual).
-	meta := &SandboxMeta{Provider: "manual"}
-	p, err := ProviderFromMeta(meta)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if _, ok := p.(*ManualProvider); !ok {
-		t.Error("expected *ManualProvider")
+	if p, err := ProviderFromMeta(&SandboxMeta{Provider: ProviderNone}); err != nil || p != nil {
+		t.Errorf("ProviderFromMeta = %v, %v; want nil, nil", p, err)
 	}
 }

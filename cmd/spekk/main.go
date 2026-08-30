@@ -1119,7 +1119,8 @@ USAGE:
 
 OPTIONS:
   --name <name>          Sandbox name (required)
-  --provider <provider>  Provider: digitalocean, manual (auto-detected from flags)
+  --provider <provider>  digitalocean, or none for a machine you already
+                         have (inferred from --ip / --ssh-key)
 
   DigitalOcean options:
   --region <region>      DigitalOcean region (default: nyc1)
@@ -1127,9 +1128,13 @@ OPTIONS:
   --project <project>    Assign to a DigitalOcean project (name or UUID)
   --vpc <uuid>           Place droplet in a specific DigitalOcean VPC
 
-  Manual options:
-  --ip <address>         IP address of existing machine
-  --ssh-key <path>       Path to SSH private key
+  Options for a machine you already have:
+  --ip <address>         Address of the machine
+  --ssh-key <path>       Private key that reaches it as root
+
+  spekk does not provision a machine it did not create. The machine must
+  already carry /opt/spekk/.provisioned; spekk then injects credentials
+  and deploys the agent onto it.
 `)
 		return
 	}
@@ -1144,7 +1149,7 @@ OPTIONS:
 		os.Exit(1)
 	}
 
-	// Resolve provider (explicit or inferred from --ip).
+	// Naming an existing machine is what says there is nothing to create.
 	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), flags.String("ip") != "" || flags.String("ssh-key") != "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
