@@ -19,6 +19,8 @@ The two auth modes, and the credential each one needs, are documented where an o
 - The `CLAUDE_CODE_OAUTH_TOKEN` row says the value comes from `claude setup-token` and needs a Claude subscription, so a reader knows how to obtain one.
 - Its agent-runtime table gains the model-credential variables the agent actually reads, marked as set by whichever mode provisioned the sandbox.
 - The `agent.env.example` block in `internal/sandbox/cloud-init.yaml` shows both modes' credentials as alternatives, each with a comment saying which mode writes it. Its `ANTHROPIC_API_KEY` line is removed, because after this change no provisioning path writes that variable.
+- The documentation says how to obtain the token when no browser is available at the terminal: the command prints a URL and waits for a code, the URL may be opened on any device, and the code is pasted back. It records the two facts that are invisible until they bite — a carriage return sent in the same write as the pasted code is swallowed by the paste handler and does not submit, and restarting the command invalidates any code already issued.
+- The documentation says where to keep the token: a file only the operator can read, never a command line, because an inline secret reaches shell history and both machines' process lists.
 - The documentation warns that a subscription seat's rate limit is shared across every session using it, so several sandboxes on one seat contend with each other and with the operator's own use. This is the fact that decides how many sandboxes belong on a subscription, and it is invisible from the flag alone.
 - No real sandbox name, host, or account appears in any of it. This repository is public; the examples are placeholders.
 

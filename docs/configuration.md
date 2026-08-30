@@ -136,6 +136,31 @@ These variables are used by `spekk sandbox create` and other provisioning comman
 
 `spekk sandbox create` refuses to start when a variable its mode needs is missing, and it names every missing one at once. It checks before it creates anything billable.
 
+#### Minting a subscription token
+
+`claude setup-token` mints the long-lived token and needs a Claude subscription. It runs on any machine with the Claude Code CLI; the sandbox itself is never involved, and the token is the only thing that reaches it.
+
+The command opens a browser. When it cannot — a headless box, an SSH session, a terminal you are driving from a phone — it prints a URL and waits:
+
+```
+Browser didn't open? Use the url below to sign in
+https://claude.com/cai/oauth/authorize?...
+Paste code here if prompted >
+```
+
+Open that URL on any device, authorize, and paste the code it returns back at the prompt. The URL carries a PKCE challenge rather than a secret, so relaying it is safe; the code is single-use and short-lived. The token it produces is neither, and is the value to protect.
+
+Two things to know if you automate the prompt rather than type at it. Send the code and the Enter as **separate** writes: a carriage return in the same write as the pasted code is treated as part of the paste and never submits. And restarting the command generates a fresh challenge, which invalidates any code you were issued for the previous run.
+
+Keep the token off command lines and out of shell history. Write it to a file only you can read, and let the environment pick it up from there:
+
+```bash
+umask 077 && printf '%s' 'TOKEN' > ~/.config/spekk/oauth-token
+export CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/spekk/oauth-token)"
+```
+
+An assignment on the local side of an `ssh` command is not forwarded, and a secret written inline is visible in both machines' process lists. To credential a remote sandbox unattended, put the value in a root-only file on that machine and source it there — `infrastructure/sandbox/setup-credentials.sh` documents the form.
+
 > **A subscription's rate limit is shared, and it runs out for everyone at once.** Every session authenticated with the same subscription draws on one quota: each sandbox using that token, and the interactive sessions of the person whose subscription it is. Several busy sandboxes contend with each other, and when the quota is spent they all stall together until the window resets. Bedrock bills per token and has no such ceiling. Weigh that before you move a sandbox whose work has to finish on demand, and remember that a subscription is one person's seat rather than a team credential.
 
 ### Agent runtime
