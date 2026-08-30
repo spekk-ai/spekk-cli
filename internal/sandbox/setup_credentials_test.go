@@ -320,3 +320,52 @@ func TestSetupCredentialsReportsADroppedModelPin(t *testing.T) {
 		t.Errorf("the dropped pin should be remembered so it can be reported:\n%s", out)
 	}
 }
+
+// Re-running in the mode the droplet is already in is not a switch. Rotating
+// a GitHub token must not silently drop a valid model pin, nor demand back a
+// credential the file already holds.
+func TestSetupCredentialsSameModeRerunKeepsTheModesOwnValues(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "agent.env")
+	seeded := "CLAUDE_CODE_OAUTH_TOKEN=existing-tok\n" +
+		"ANTHROPIC_MODEL=opus\n" +
+		"GITHUB_TOKEN=old-gh\nSPEKK_HOST=h\nSPEKK_AGENT_TOKEN=at\n"
+	if err := os.WriteFile(envFile, []byte(seeded), 0o600); err != nil {
+		t.Fatalf("seeding env file: %s", err)
+	}
+
+	// Only the value being rotated is supplied.
+	env := []string{"SPEKK_AUTH_MODE=subscription", "GITHUB_TOKEN=new-gh", "AGENT_ENV_FILE=" + envFile}
+	out, err := runScript(t, env, "source "+setupCredentialsScript+"; load_existing; render_agent_env")
+	if err != nil {
+		t.Fatalf("render failed: %s\n%s", err, out)
+	}
+	for _, want := range []string{
+		"CLAUDE_CODE_OAUTH_TOKEN=existing-tok", // not re-prompted for
+		"ANTHROPIC_MODEL=opus",                 // valid for this mode, so kept
+		"GITHUB_TOKEN=new-gh",                  // the one thing that changed
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("same-mode re-run lost %q:\n%s", want, out)
+		}
+	}
+}
+
+// A hand-edited file whose last line has no trailing newline must not lose
+// that line. If it holds SPEKK_AGENT_TOKEN, the droplet holds the only copy —
+// the control host stores just its hash.
+func TestSetupCredentialsReadsAnUnterminatedLastLine(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "agent.env")
+	seeded := "CLAUDE_CODE_USE_BEDROCK=1\nGITHUB_TOKEN=gh\nSPEKK_AGENT_TOKEN=must-survive"
+	if err := os.WriteFile(envFile, []byte(seeded), 0o600); err != nil {
+		t.Fatalf("seeding env file: %s", err)
+	}
+
+	env := []string{"SPEKK_AUTH_MODE=subscription", "CLAUDE_CODE_OAUTH_TOKEN=tok", "AGENT_ENV_FILE=" + envFile}
+	out, err := runScript(t, env, "source "+setupCredentialsScript+"; load_existing; render_agent_env")
+	if err != nil {
+		t.Fatalf("render failed: %s\n%s", err, out)
+	}
+	if !strings.Contains(out, "SPEKK_AGENT_TOKEN=must-survive") {
+		t.Errorf("the unterminated last line was dropped:\n%s", out)
+	}
+}

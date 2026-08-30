@@ -125,6 +125,11 @@ KNOWN_VARS="GITHUB_TOKEN SPEKK_HOST SPEKK_AGENT_TOKEN WORKSPACE SPEKK_AGENT_NAME
 # EXTRA_LINES holds every other line the existing file had.
 EXTRA_LINES=""
 
+# EXISTING_MODE is the mode the file on the droplet is already in, decided by
+# which model credential it carries. Empty when there is no file, or when it
+# carries neither.
+EXISTING_MODE=""
+
 # DROPPED_MODEL remembers a model pin the switch is leaving behind, so the
 # operator hears about it.
 DROPPED_MODEL=""
@@ -141,17 +146,46 @@ DROPPED_MODEL=""
 #
 # Values are taken literally: no eval, no sourcing, so a value containing shell
 # metacharacters cannot run.
+# detect_existing_mode reads which credential the current file holds, so a
+# re-run in the mode the droplet is already in is not treated as a switch.
+detect_existing_mode() {
+    [ -r "$AGENT_ENV_FILE" ] || return 0
+    if grep -q "^CLAUDE_CODE_OAUTH_TOKEN=." "$AGENT_ENV_FILE"; then
+        EXISTING_MODE="subscription"
+    elif grep -q "^CLAUDE_CODE_USE_BEDROCK=." "$AGENT_ENV_FILE"; then
+        EXISTING_MODE="bedrock"
+    fi
+}
+
 load_existing() {
     [ -r "$AGENT_ENV_FILE" ] || return 0
+    detect_existing_mode
+
+    # A re-run in the mode the droplet is already in is not a switch, so the
+    # mode's own variables are carried like any other. Rotating a GitHub token
+    # should not silently drop a valid model pin, or demand the subscription
+    # token back when the file already holds it.
+    local same_mode=""
+    [ "$EXISTING_MODE" = "$SPEKK_AUTH_MODE" ] && same_mode=1
+
     local key value
-    while IFS='=' read -r key value; do
+    # `read` returns non-zero on a final line with no trailing newline, but
+    # has still filled key and value. Without the guard that line is dropped,
+    # and if it held SPEKK_AGENT_TOKEN the droplet loses the only copy of a
+    # credential the control host stores as a hash.
+    while IFS='=' read -r key value || [ -n "$key" ]; do
         case "$key" in
             '' | '#'*) continue ;;
         esac
-        # The mode decides these; never carry them across a switch.
+        # The mode decides these, so a switch drops them. A re-run in the
+        # same mode keeps them.
         case " $MODE_VARS " in
             *" $key "*)
-                [ "$key" = "ANTHROPIC_MODEL" ] && DROPPED_MODEL="$value"
+                if [ -z "$same_mode" ]; then
+                    [ "$key" = "ANTHROPIC_MODEL" ] && DROPPED_MODEL="$value"
+                    continue
+                fi
+                [ -n "$value" ] && [ -z "${!key:-}" ] && printf -v "$key" '%s' "$value"
                 continue
                 ;;
         esac
