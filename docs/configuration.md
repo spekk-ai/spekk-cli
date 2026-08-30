@@ -150,7 +150,13 @@ Paste code here if prompted >
 
 Open that URL on any device, authorize, and paste the code it returns back at the prompt. The URL carries a PKCE challenge rather than a secret, so relaying it is safe; the code is single-use and short-lived. The token it produces is neither, and is the value to protect.
 
-Two things to know if you automate the prompt rather than type at it. Send the code and the Enter as **separate** writes: a carriage return in the same write as the pasted code is treated as part of the paste and never submits. And restarting the command generates a fresh challenge, which invalidates any code you were issued for the previous run.
+Three things to know if you automate the prompt rather than type at it.
+
+Send the code and the Enter as **separate** writes. A carriage return in the same write as the pasted code is treated as part of the paste and never submits.
+
+Restarting the command generates a fresh challenge, which invalidates any code you were issued for the previous run.
+
+**Give the terminal room, and check the length of what you captured.** The command prints the token to a terminal, so a narrow one wraps it and leaves an escape sequence in the middle. A pattern that stops at the wrap yields a token that is correctly formed, correctly prefixed, and silently short — it fails only at first use, with `401 OAuth access token is invalid`, long after the step that produced it. Set a wide window on the pty, and validate the length rather than trusting the prefix.
 
 Keep the token off command lines and out of shell history. Write it to a file only you can read, and let the environment pick it up from there:
 
