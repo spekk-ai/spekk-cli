@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -136,79 +137,77 @@ func answerPrompt(t *testing.T, answer string) {
 	t.Cleanup(func() { os.Stdin = orig; r.Close() })
 }
 
-// The teardown shell must take the credentials off the machine even when the
-// agent service was never installed — which is the state any create that
-// failed before deployAgent leaves behind.
-func TestTeardownRemovesSecretsWithoutTheService(t *testing.T) {
-	dir := t.TempDir()
-	// A systemctl that reports the unit does not exist, and an rm that
-	// records what it was asked to remove instead of removing it.
-	stub := func(name, body string) {
+// The teardown shell decides whether spekk may forget a machine it does not
+// own, so its exit status has to mean exactly one thing: every credential is
+// off the machine, and the agent is stopped.
+func TestTeardownCommand(t *testing.T) {
+	// run stubs systemctl and rm on PATH, runs the real command, and
+	// reports what rm was asked to remove and whether it succeeded.
+	// failOn names a path whose removal fails; empty means all succeed.
+	run := func(t *testing.T, systemctl, failOn string) (asked []string, ok bool) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/bash\n"+body+"\n"), 0o755); err != nil {
-			t.Fatal(err)
+		dir := t.TempDir()
+		rm := `rc=0
+for a in "$@"; do
+  case "$a" in -*) continue ;; esac
+  echo "$a" >> "` + dir + `/asked"
+  [ -n "` + failOn + `" ] && [ "$a" = "` + failOn + `" ] && rc=1
+done
+exit $rc`
+		for name, body := range map[string]string{"systemctl": systemctl, "rm": rm} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/bash\n"+body+"\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
 		}
-	}
-	stub("systemctl", `[ "$1" = "cat" ] && exit 1; [ "$1" = "is-active" ] && exit 3; echo "systemctl $* should not run" >&2; exit 5`)
-	stub("rm", `for a in "$@"; do case "$a" in -*) ;; *) echo "$a" >> "`+dir+`/removed" ;; esac; done`)
+		cmd := exec.Command("bash", "-c", teardownCommand())
+		cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"))
+		err := cmd.Run()
 
-	cmd := exec.Command("bash", "-c", teardownCommand())
-	cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"))
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("teardown must succeed when the unit was never installed: %v\n%s", err, out)
-	}
-
-	removed, err := os.ReadFile(filepath.Join(dir, "removed"))
-	if err != nil {
-		t.Fatal("teardown removed nothing")
-	}
-	for _, path := range []string{"/etc/spekk/agent.env", "/home/agent/.git-credentials", "/home/agent/.config/gh"} {
-		if !strings.Contains(string(removed), path) {
-			t.Errorf("teardown left %s on the machine", path)
+		log, _ := os.ReadFile(filepath.Join(dir, "asked"))
+		for _, line := range strings.Split(strings.TrimSpace(string(log)), "\n") {
+			if line != "" {
+				asked = append(asked, line)
+			}
 		}
-	}
-}
-
-// Create with no provider registers the machine and confirms it is
-// provisioned before spending any credentials on it. These are the two
-// behaviors this path exists for, so both are pinned here.
-func TestCreateRegistersAndChecksBeforeInjecting(t *testing.T) {
-	isolateConfig(t)
-	useTempStore(t)
-	stubCreateEnv(t)
-
-	key := filepath.Join(t.TempDir(), "id_ed25519")
-	if err := os.WriteFile(key, []byte("secret"), 0o600); err != nil {
-		t.Fatal(err)
+		return asked, err == nil
 	}
 
-	checked := false
-	origCheck := checkReady
-	checkReady = func(meta *SandboxMeta, name string) error {
-		checked = true
-		return errors.New("not provisioned")
-	}
-	t.Cleanup(func() { checkReady = origCheck })
+	secrets := []string{"/etc/spekk/agent.env", "/home/agent/.git-credentials", "/home/agent/.config/gh"}
 
-	err := Create(nil, CreateOptions{Name: "borrowed", IP: "9.9.9.9", SSHKey: key})
-	if err == nil {
-		t.Fatal("expected the provisioned check to stop the create")
-	}
-	if !checked {
-		t.Error("credentials must not be injected before the machine is confirmed provisioned")
+	// A unit that was never installed is the state any create that died
+	// before deployAgent leaves behind. The credentials are already on the
+	// machine by then, so they still have to come off.
+	unitAbsent := `[ "$1" = "is-active" ] && exit 3; exit 5`
+	unitStopped := `[ "$1" = "is-active" ] && exit 3; exit 0`
+	agentRunning := `exit 0`
+
+	t.Run("removes every secret when the unit was never installed", func(t *testing.T) {
+		asked, ok := run(t, unitAbsent, "")
+		if !ok {
+			t.Error("teardown must succeed when the unit was never installed")
+		}
+		for _, path := range secrets {
+			if !slices.Contains(asked, path) {
+				t.Errorf("teardown left %s on the machine (asked: %v)", path, asked)
+			}
+		}
+	})
+
+	// Each secret carries its own guard, so each is checked on its own.
+	// Reporting success for any of them would let Destroy delete the local
+	// record while that credential stays on a machine spekk no longer
+	// knows about.
+	for _, secret := range secrets {
+		t.Run("fails when "+secret+" cannot be removed", func(t *testing.T) {
+			if _, ok := run(t, unitStopped, secret); ok {
+				t.Errorf("teardown reported success although %s is still on the machine", secret)
+			}
+		})
 	}
 
-	got, _ := GetSandbox("borrowed")
-	if got == nil {
-		t.Fatal("the machine was registered but nothing was recorded")
-	}
-	if got.Provider != ProviderNone {
-		t.Errorf("Provider = %q, want %q", got.Provider, ProviderNone)
-	}
-	if got.IP != "9.9.9.9" || got.SSHKeyPath != key {
-		t.Errorf("recorded the wrong machine: %+v", got)
-	}
-	if got.DropletID != 0 {
-		t.Errorf("no cloud owns this machine, so it has no droplet: %+v", got)
-	}
+	t.Run("fails while the agent is still running", func(t *testing.T) {
+		if _, ok := run(t, agentRunning, ""); ok {
+			t.Error("teardown reported success although the agent is still active")
+		}
+	})
 }

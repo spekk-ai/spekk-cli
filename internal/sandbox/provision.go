@@ -92,21 +92,26 @@ func stopAgentService(sandbox *SandboxMeta, name string) error {
 // the only way out — --force — would leave a GitHub token and AWS keys on
 // somebody's server for good.
 func teardownCommand() string {
-	// Separated by ";", not "&&", on purpose. Each removal must run
-	// whatever the steps before it did, and a chain of "&&" with a "|| true"
-	// somewhere in it only works by operator precedence, which is too
-	// quiet a thing to rest a credential on. The last line is the exit
-	// status: it is the one condition that decides success.
+	// Every removal is attempted, and any failure fails the command.
+	//
+	// "&&" would stop at the first failure, so a machine whose unit was
+	// never installed would keep its credentials. ";" alone would run
+	// them all but report the exit status of the last one, so a
+	// read-only /etc would drop the local record and leave the secrets
+	// behind. Neither is acceptable, so the status is accumulated.
 	return strings.Join([]string{
+		"rc=0",
+		// Best effort: the unit may never have been installed, and the
+		// check at the end is what decides whether the agent stopped.
 		"systemctl stop spekk-agent 2>/dev/null || true",
 		"systemctl disable spekk-agent 2>/dev/null || true",
-		"rm -f /etc/spekk/agent.env",
-		"rm -f /home/agent/.git-credentials",
+		"rm -f /etc/spekk/agent.env || rc=1",
+		"rm -f /home/agent/.git-credentials || rc=1",
 		// gh auth login writes the same token here.
-		"rm -rf /home/agent/.config/gh",
-		// is-active exits non-zero when the unit is stopped, which is
-		// the outcome we want. Turn that into the success case.
-		"! systemctl is-active --quiet spekk-agent",
+		"rm -rf /home/agent/.config/gh || rc=1",
+		// is-active exits 0 while the agent runs, which is a failure.
+		"systemctl is-active --quiet spekk-agent && rc=1",
+		"exit $rc",
 	}, "; ")
 }
 
