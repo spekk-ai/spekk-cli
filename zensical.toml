@@ -57,6 +57,7 @@ nav = [
     "advanced/index.md",
     { "Sandbox Agent Architecture" = "advanced/sandbox-architecture.md" },
   ] },
+  { "Cutting a Release" = "releasing.md" },
   { "Release Notes" = [
     "release-notes/index.md",
     { "1.25.0 — Four Silent Failures" = "release-notes/RELEASE-NOTES-1.25.0.md" },
