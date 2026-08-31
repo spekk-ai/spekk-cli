@@ -38,7 +38,7 @@ func TestDialOptionsSendBothHeaders(t *testing.T) {
 func TestWelcomeFrameIsNotUnknown(t *testing.T) {
 	c := &AgentClient{}
 	buf := captureLog(t)
-	c.handleInbound(t.Context(), nil, Message{Type: MessageTypeWelcome, Protocol: ProtocolVersion})
+	c.handleInbound(t.Context(), Message{Type: MessageTypeWelcome, Protocol: ProtocolVersion})
 	out := buf.String()
 	if strings.Contains(out, "Unknown message type") {
 		t.Fatalf("welcome treated as unknown:\n%s", out)

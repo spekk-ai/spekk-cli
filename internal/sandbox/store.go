@@ -11,8 +11,22 @@ import (
 )
 
 // SandboxMeta holds local metadata for a sandbox.
+//
+// Provider names which implementation owns the machine's lifecycle. It is
+// additive: an entry written before the field existed reads back empty, and
+// ProviderFromMeta treats empty as "digitalocean", because that was the only
+// provider at the time. Every other field keeps the name and meaning it has
+// always had, so an old sandboxes.json stays readable and, more importantly,
+// stays destroyable.
+//
+// DropletID and SSHKeyID are DigitalOcean's. The generic layer never reads
+// them; only DOProvider does. Holding them as concrete fields rather than an
+// opaque blob is deliberate while there is one cloud provider: it keeps the
+// on-disk format unchanged and it keeps "no droplet" distinguishable from
+// "droplet id not loaded". A second cloud provider adds its own fields.
 type SandboxMeta struct {
-	DropletID  int    `json:"dropletId"`
+	Provider   string `json:"provider,omitempty"`
+	DropletID  int    `json:"dropletId,omitempty"`
 	IP         string `json:"ip"`
 	Region     string `json:"region"`
 	Size       string `json:"size"`

@@ -1479,6 +1479,150 @@ func TestCustomFields_CommentsInvisible(t *testing.T) {
 	fieldsEq(t, a.Fields, "tags", []string{"alpha", "beta"})
 }
 
+func TestCustomFields_InlineCommentsStripped(t *testing.T) {
+	// A comment on a key that opens a block list must not turn the key into
+	// a scalar — that spelling discarded every item under it and indexed the
+	// comment text as the value.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\n" +
+		"tags: # my tags\n- # placeholder\n- alpha # the first\n- beta\n" +
+		"skill: observer-prune # found by run 3\n" +
+		"note: \"a # b\"\n" +
+		"esc: \"a \\\" # b\"\n" +
+		"apos: it's fine # a comment\n" +
+		"link: https://example.com/x#frag\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// An item that holds only a comment is an empty item, and the items
+	// after it survive. Reading the bare `-` as a plain line would close
+	// the list and drop them.
+	fieldsEq(t, a.Fields, "tags", []string{"alpha", "beta"})
+	fieldsEq(t, a.Fields, "skill", []string{"observer-prune"})
+	// A hash inside quotes, and a hash with no space before it, are data.
+	fieldsEq(t, a.Fields, "note", []string{"a # b"})
+	fieldsEq(t, a.Fields, "esc", []string{"a \\\" # b"})
+	// A quote opens a scalar only where a value starts, so an apostrophe in
+	// plain text does not protect what follows it.
+	fieldsEq(t, a.Fields, "apos", []string{"it's fine"})
+	fieldsEq(t, a.Fields, "link", []string{"https://example.com/x#frag"})
+}
+
+func TestFrontmatter_BlockScalarHeaderWithIndicator(t *testing.T) {
+	// `|2` is a block-scalar header too. Matching only the six unadorned
+	// spellings left its body reading as top-level keys, so a priority
+	// written in prose became the assertion's priority.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 2\n" +
+		"desc: |2\n  priority: 9\n  note: hello\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Priority != 2 {
+		t.Fatalf("block-scalar body set priority: got %d, want 2", a.Priority)
+	}
+	for _, k := range []string{"desc", "note", "priority"} {
+		if v, ok := a.Fields[k]; ok {
+			t.Errorf("key %q must have no values, got %v", k, v)
+		}
+	}
+}
+
+func TestFrontmatter_ListSurvivesAMappingItem(t *testing.T) {
+	// `run: make` continues the item above it. Reading it as the end of the
+	// list dropped every later item, so `deploy` vanished in silence.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\n" +
+		"steps:\n  - name: build\n    run: make\n  - deploy\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fieldsEq(t, a.Fields, "steps", []string{"name: build", "deploy"})
+}
+
+func TestFrontmatter_StrayIndentIsStillATopLevelKey(t *testing.T) {
+	// One leading space, and no key above that opened a region for it. The
+	// depth-alone rule swallowed the key, so a file that says done reported
+	// not_started and said nothing about the indentation.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\n" +
+		" status: done\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Status != "done" {
+		t.Fatalf("status: got %q, want done", a.Status)
+	}
+
+	// The same rule applied to a block whose shallowest line is a stray one:
+	// the base drops to that line, and every real key must still parse.
+	content = "---\n  id: a2\n  parent: s1\n  created: 2026-08-06T00:00:00Z\n" +
+		"  priority: 1\nstatus: done\n---\n# A2\n"
+	a, err = parseAssertion("specs/s1/assertions/a2.md", content)
+	if err != nil {
+		t.Fatalf("a stray shallow line must not disqualify the block: %v", err)
+	}
+	if a.ID != "a2" || a.Status != "done" {
+		t.Fatalf("id %q, status %q", a.ID, a.Status)
+	}
+}
+
+func TestCustomFields_NestedListNeverJoinsTopLevelKey(t *testing.T) {
+	// The items belong to env.matrix and to meta.desc, not to env and meta.
+	// While a nested key left the list open, they were indexed as values of
+	// the nearest top-level key.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\n" +
+		"env:\n  matrix:\n    - linux\n    - mac\n" +
+		"meta:\n  desc: |\n    - not an item\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, k := range []string{"env", "meta", "matrix", "desc"} {
+		if v, ok := a.Fields[k]; ok {
+			t.Errorf("key %q must have no values, got %v", k, v)
+		}
+	}
+}
+
+func TestFrontmatter_IndentedBlockStillParses(t *testing.T) {
+	// A root mapping may be indented, as long as it is indented together.
+	// Reading column zero as the only top level rejected the whole file.
+	// The leading comment sits shallower than the keys. Measuring the base
+	// before comments are dropped put it below them, and every key then
+	// read as a nested child.
+	content := "---\n# generated by a spec tool\n  id: a1\n  parent: s1\n  created: 2026-08-06T00:00:00Z\n" +
+		"  priority: 1\n  tags: [alpha, beta]\n  meta:\n    owner: bob\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("an indented frontmatter block must parse: %v", err)
+	}
+	if a.ID != "a1" || a.Priority != 1 {
+		t.Fatalf("id %q, priority %d", a.ID, a.Priority)
+	}
+	fieldsEq(t, a.Fields, "tags", []string{"alpha", "beta"})
+	// Deeper than the block's own column is still a nested child.
+	if _, ok := a.Fields["owner"]; ok {
+		t.Errorf("nested child leaked into Fields: %v", a.Fields)
+	}
+}
+
+func TestFrontmatter_NestedChildNeverSetsTopLevelKey(t *testing.T) {
+	// A block-scalar body that names a known key must not become that key.
+	// It used to, and a comment on the nested line turned a loud parse
+	// failure into a silently wrong priority and status.
+	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\n" +
+		"priority: 1\nstatus: not_started\n" +
+		"notes: |\n  priority: 2 # high\n  status: done # was blocked\n---\n# A1\n"
+	a, err := parseAssertion("specs/s1/assertions/a1.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Priority != 1 || a.Status != "not_started" {
+		t.Fatalf("nested child overwrote a top-level key: priority %d, status %q", a.Priority, a.Status)
+	}
+}
+
 func TestCustomFields_NestedChildrenExcluded(t *testing.T) {
 	content := "---\nid: a1\nparent: s1\ncreated: 2026-08-06T00:00:00Z\npriority: 1\nmeta:\n  owner: bob\n  link: https://example.com/x\n---\n# A1\n"
 	a, err := parseAssertion("specs/s1/assertions/a1.md", content)

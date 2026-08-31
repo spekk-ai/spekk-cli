@@ -91,8 +91,11 @@ Human convention (stated here and in every observer-generated PR body):
 
 Dedup at scan time uses the cross-branch union machinery
 (`internal/crossbranch`, the same mechanism as `spekk show`'s merge-preview
-mode): a scan must not re-flag drift already covered by an observation on any
-visible branch, whatever its state.
+mode): a scan must not re-flag drift a **live claim** already covers — the
+observation read from the branch named after it, whose slug has not reached
+main. An inherited copy is not a claim, because every branch is cut from
+main and carries a copy of everything already merged. See
+`specs/only-a-live-claim-covers/`.
 
 ### Announce marker and idempotent retry
 

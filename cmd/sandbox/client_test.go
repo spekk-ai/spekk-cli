@@ -68,7 +68,7 @@ func TestDialFailureLogOmitsToken(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	err := c.connect(ctx)
+	_, err := c.connect(ctx)
 	if err == nil {
 		t.Fatal("expected the dial to fail against an unroutable port")
 	}
@@ -112,7 +112,7 @@ func TestHandleInboundErrorFrameConversationOpenCode(t *testing.T) {
 			c := &AgentClient{}
 
 			msg := Message{Type: MessageTypeError, Error: code, Detail: "no channel bound to session"}
-			c.handleInbound(context.Background(), nil, msg)
+			c.handleInbound(context.Background(), msg)
 
 			got := buf.String()
 			if !strings.Contains(got, code) {
@@ -136,7 +136,7 @@ func TestHandleInboundErrorFrameUnknownCode(t *testing.T) {
 	c := &AgentClient{}
 
 	msg := Message{Type: MessageTypeError, Error: "some_future_code", Detail: "something else went wrong"}
-	c.handleInbound(context.Background(), nil, msg)
+	c.handleInbound(context.Background(), msg)
 
 	got := buf.String()
 	if !strings.Contains(got, "some_future_code") {
@@ -156,7 +156,7 @@ func TestHandleInboundNonErrorFramesUnaffected(t *testing.T) {
 		buf := captureLog(t)
 		c := &AgentClient{}
 
-		c.handleInbound(context.Background(), nil, Message{Type: MessageTypeHeartbeatAck})
+		c.handleInbound(context.Background(), Message{Type: MessageTypeHeartbeatAck})
 
 		if got := buf.String(); got != "" {
 			t.Errorf("expected no log output for heartbeat_ack, got %q", got)
@@ -167,7 +167,7 @@ func TestHandleInboundNonErrorFramesUnaffected(t *testing.T) {
 		buf := captureLog(t)
 		c := &AgentClient{}
 
-		c.handleInbound(context.Background(), nil, Message{Type: "something_new"})
+		c.handleInbound(context.Background(), Message{Type: "something_new"})
 
 		got := buf.String()
 		if !strings.Contains(got, "Unknown message type: something_new") {

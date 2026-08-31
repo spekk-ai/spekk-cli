@@ -21,9 +21,12 @@ maintenance of a summary file.
 - No part of the observer workflow (prompt, skills, Go subcommands) writes or
   requires a committed `observations/DIGEST.md`. The observer prompt and the
   consolidate skill contain no instruction to maintain a digest file.
-- The digest is defined as a rendered view with these exact semantics: all
-  observations with `status: open` across the visible branch union, ranked by
-  severity (`high` > `medium` > `low`), capped at 5 entries.
+- The digest is defined as a rendered view with these exact semantics: every
+  live claim with `status: open`, ranked by severity (`high` > `medium` >
+  `low`), capped at 5 entries. A live claim is the observation read from the
+  branch named after it, whose slug has not reached main — see
+  `specs/only-a-live-claim-covers/`. The copies other branches inherited are
+  not claims, and a slug on main is resolved.
 - The consolidate skill's curation actions are expressed as observation
   frontmatter edits — e.g. flipping `status: open` → `dismissed` on the
   observation's own branch — never as edits to a summary artifact.

@@ -139,16 +139,38 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 	// top-level `key:` line with an empty value.
 	pendingListKey := ""
 
-	for _, line := range yamlLines {
+	// Which column counts as top level. A root mapping is allowed to be
+	// indented, as long as it is indented consistently, so "top level"
+	// means the shallowest line in this block and not column zero.
+	base := baseIndent(yamlLines)
+
+	// Whether the open block list has produced an item yet. A mapping item
+	// continues on deeper lines, and those lines must not end the list.
+	sawListItem := false
+
+	// The top-level key that opened an indented region: one whose value is
+	// empty (a nested map or a block list) or a block-scalar indicator. It
+	// is "" when the last top-level key carried a plain value, and a deeper
+	// line is then a stray indent rather than a child of anything.
+	nestedOwner := ""
+
+	for _, rawLine := range yamlLines {
+		// A trailing ` # ...` is a comment, and it is cut before anything
+		// else reads the line. Without this an inline comment becomes part
+		// of the value, and a comment on a key that opens a block list
+		// (`tags: # my tags`) makes the key look like a scalar, which
+		// discards every item under it.
+		line := stripInlineComment(rawLine)
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
 		// A YAML block-list item. Collect it under the key that opened the
 		// list. The item is kept whole — commas inside an item never split.
-		if strings.HasPrefix(trimmed, "- ") {
+		if strings.HasPrefix(trimmed, "- ") || trimmed == "-" {
 			if pendingListKey != "" {
-				item := stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+				sawListItem = true
+				item := stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "-")))
 				if item != "" {
 					fm.lists[pendingListKey] = append(fm.lists[pendingListKey], item)
 				}
@@ -160,15 +182,35 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 			continue
 		}
 
-		// An indented line is a nested child (nested map, block-scalar
-		// body). It must not become a top-level custom field or close an
-		// open block list. The fields map still records it for byte-for-byte
-		// compatibility with the known-key scanner.
-		indented := line[0] == ' ' || line[0] == '\t'
+		// A line is a nested child only when it is deeper than the base
+		// column AND a key above it opened a region for it. Depth alone is
+		// not enough: a top-level key written with one stray leading space
+		// has no parent, and treating it as a child swallowed it in
+		// silence, so an assertion that says `status: done` reported
+		// not_started.
+		nested := leadingWidth(line) > base && nestedOwner != ""
 
 		colonIdx := strings.Index(line, ":")
 		if colonIdx == -1 {
-			if !indented {
+			if !nested {
+				pendingListKey = ""
+				sawListItem = false
+			}
+			continue
+		}
+
+		// A nested `key: value` sets nothing. A child that reaches fields
+		// overwrites the top-level key of the same name, so a `priority:`
+		// written inside a prose block became the assertion's priority.
+		//
+		// Before the list has an item, such a key also closes the list: its
+		// own children belong to it, and leaving the list open gave them to
+		// the key above instead, so `env:` / `matrix:` / `- linux` indexed
+		// linux as a value of env. After the list has an item, the same
+		// line is that item's own continuation (`- name: build` / `run:
+		// make`), and closing the list there dropped every later item.
+		if nested {
+			if !sawListItem {
 				pendingListKey = ""
 			}
 			continue
@@ -177,15 +219,22 @@ func parseFrontmatter(content string) (*frontmatter, string, error) {
 		key := strings.TrimSpace(line[:colonIdx])
 		value := strings.TrimSpace(line[colonIdx+1:])
 
-		if !indented {
-			if value == "" {
-				pendingListKey = key
+		sawListItem = false
+		if value == "" {
+			pendingListKey = key
+			nestedOwner = key
+		} else {
+			pendingListKey = ""
+			// A block scalar opens a region too, although its value is not
+			// empty. Its body lines are prose and must set nothing.
+			if isBlockScalar(value) {
+				nestedOwner = key
 			} else {
-				pendingListKey = ""
+				nestedOwner = ""
 			}
-			if key != "" {
-				fm.raw[key] = value
-			}
+		}
+		if key != "" {
+			fm.raw[key] = value
 		}
 
 		// Strip surrounding quotes if present.
@@ -210,6 +259,90 @@ func CustomFields(content string, known map[string]bool) (map[string][]string, e
 		return nil, err
 	}
 	return customFields(fm, known), nil
+}
+
+// baseIndent returns the column the frontmatter's own keys sit at: the
+// smallest indentation among the lines that carry data. Reading column zero
+// as the only top level would reject a whole block that is indented
+// together, which is valid YAML and which parsed before this rule existed.
+//
+// It must measure the same lines the scanner keeps, so it drops a comment
+// and a blank first. A comment shallower than an indented block would
+// otherwise set the base below the block's own keys, and every key would
+// then read as a nested child and set nothing.
+func baseIndent(lines []string) int {
+	base := -1
+	for _, line := range lines {
+		line = stripInlineComment(line)
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if w := leadingWidth(line); base == -1 || w < base {
+			base = w
+		}
+	}
+	if base == -1 {
+		return 0
+	}
+	return base
+}
+
+// leadingWidth counts the spaces and tabs a line starts with.
+func leadingWidth(line string) int {
+	for i := 0; i < len(line); i++ {
+		if line[i] != ' ' && line[i] != '\t' {
+			return i
+		}
+	}
+	return len(line)
+}
+
+// stripInlineComment cuts a trailing YAML comment from a frontmatter line.
+// The comment opens at a `#` that follows whitespace and sits outside a
+// quoted scalar, so `url: https://x#frag` keeps its fragment and
+// `note: "a # b"` keeps its hash. Leading whitespace survives, because the
+// caller reads it to tell a top-level key from a nested child.
+func stripInlineComment(line string) string {
+	var quote byte
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case quote == '"' && c == '\\':
+			i++ // a backslash escapes the next byte, `\"` included
+		case quote == '\'' && c == '\'' && i+1 < len(line) && line[i+1] == '\'':
+			i++ // '' is one literal quote, and it does not close the scalar
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case (c == '"' || c == '\'') && opensQuotedScalar(line, i):
+			quote = c
+		case c == '#' && i > 0 && (line[i-1] == ' ' || line[i-1] == '\t'):
+			return strings.TrimRight(line[:i], " \t")
+		}
+	}
+	return line
+}
+
+// opensQuotedScalar reports whether the quote byte at i starts a quoted
+// scalar. A quote opens one only where a value or an item starts. Anywhere
+// else it is a character in a plain scalar, so `it's fine # note` loses its
+// comment and `height: 5'9"` keeps its marks.
+//
+// The test is the byte before, so an apostrophe that follows a hyphen or a
+// comma still reads as an opening quote, and a comment after it survives
+// (`note: re-'do it # test`). A line scanner cannot tell that case from a
+// real quoted scalar without parsing the value.
+func opensQuotedScalar(line string, i int) bool {
+	if i == 0 {
+		return true
+	}
+	switch line[i-1] {
+	case ' ', '\t', ':', ',', '[', '{', '-':
+		return true
+	}
+	return false
 }
 
 // stripQuotes removes one matching pair of surrounding double or single
@@ -251,12 +384,32 @@ func customFields(fm *frontmatter, known map[string]bool) map[string][]string {
 	return out
 }
 
-// blockScalarIndicators are scalar values that announce a YAML block scalar
-// (`key: |`). The line scanner cannot read the indented body, so the value
-// carries no data — customFields drops the key instead of indexing "|".
-var blockScalarIndicators = map[string]bool{
-	"|": true, "|-": true, "|+": true,
-	">": true, ">-": true, ">+": true,
+// isBlockScalar reports whether a frontmatter value announces a YAML block
+// scalar. The header is `|` or `>`, and it may carry an indentation digit
+// and a chomping sign in either order — `|`, `>-`, `|2`, `|+1`, `>2-`. An
+// exact-match list of the six unadorned spellings missed every header with
+// an indicator, so its body was read as top-level keys and a `priority:`
+// written in prose overwrote the real one.
+//
+// The line scanner cannot read the indented body, so the value carries no
+// data: customFields drops the key instead of indexing "|", and the key
+// owns the indented region below it.
+func isBlockScalar(v string) bool {
+	if v == "" || (v[0] != '|' && v[0] != '>') {
+		return false
+	}
+	digits, signs := 0, 0
+	for i := 1; i < len(v); i++ {
+		switch c := v[i]; {
+		case c >= '0' && c <= '9':
+			digits++
+		case c == '-' || c == '+':
+			signs++
+		default:
+			return false
+		}
+	}
+	return digits <= 1 && signs <= 1
 }
 
 // splitFieldValues splits a custom frontmatter scalar into its items. A
@@ -266,7 +419,7 @@ var blockScalarIndicators = map[string]bool{
 // per item. An empty value or a block-scalar indicator yields nil.
 func splitFieldValues(value string) []string {
 	v := strings.TrimSpace(value)
-	if v == "" || blockScalarIndicators[v] {
+	if v == "" || isBlockScalar(v) {
 		return nil
 	}
 	if isOneQuotedScalar(v) {

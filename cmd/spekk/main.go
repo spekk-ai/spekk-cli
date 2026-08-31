@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -999,11 +1000,11 @@ USAGE:
   spekk sandbox <subcommand> [options]
 
 SUBCOMMANDS:
-  create      Create a new sandbox droplet
-  list        List all sandbox droplets
+  create      Create a sandbox, or register a machine you already have
+  list        List all sandboxes
   status      Show status of a sandbox
   ssh         SSH into a sandbox
-  destroy     Destroy a sandbox droplet
+  destroy     Destroy a sandbox, or deregister a machine you own
   deploy      Deploy agent client to a sandbox
 
 OPTIONS:
@@ -1034,7 +1035,17 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Status(subArgs[0]); err != nil {
+		// Status reads more than the provider knows, so a provider it
+		// cannot build is a warning, not a failure. Before this command
+		// needed an API token at all, it still printed the stored fields
+		// and the SSH checks; it keeps doing that.
+		// Status reports a missing sandbox itself, so only a real
+		// provider problem is worth a warning here.
+		p, err := sandbox.ProviderForName(subArgs[0])
+		if err != nil && !errors.Is(err, sandbox.ErrSandboxNotFound) {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", err)
+		}
+		if err := sandbox.Status(p, subArgs[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1069,7 +1080,12 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Destroy(name, force); err != nil {
+		p, err := sandbox.ProviderForName(name)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		if err := sandbox.Destroy(p, name, force); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1095,27 +1111,49 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 
 func createSandbox(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
-		"name":    {Names: []string{"--name"}, Type: cli.StringFlag},
-		"region":  {Names: []string{"--region"}, Type: cli.StringFlag},
-		"size":    {Names: []string{"--size"}, Type: cli.StringFlag},
-		"project": {Names: []string{"--project"}, Type: cli.StringFlag},
-		"vpc":     {Names: []string{"--vpc"}, Type: cli.StringFlag},
-		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		"name":     {Names: []string{"--name"}, Type: cli.StringFlag},
+		"provider": {Names: []string{"--provider"}, Type: cli.StringFlag},
+		"region":   {Names: []string{"--region"}, Type: cli.StringFlag},
+		"size":     {Names: []string{"--size"}, Type: cli.StringFlag},
+		"project":  {Names: []string{"--project"}, Type: cli.StringFlag},
+		"vpc":      {Names: []string{"--vpc"}, Type: cli.StringFlag},
+		"ip":       {Names: []string{"--ip"}, Type: cli.StringFlag},
+		"ssh-key":  {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
+		"auth":     {Names: []string{"--auth"}, Type: cli.StringFlag},
+		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
 	if flags.Bool("help") {
 		fmt.Print(`
-spekk sandbox create - Create a new sandbox droplet
+spekk sandbox create - Create a new sandbox
 
 USAGE:
   spekk sandbox create --name <name> [options]
 
 OPTIONS:
-  --name <name>        Sandbox name (required)
-  --region <region>    DigitalOcean region (default: nyc1)
-  --size <size>        Droplet size slug (default: s-2vcpu-4gb)
-  --project <project>  Assign to a DigitalOcean project (name or UUID)
-  --vpc <uuid>         Place droplet in a specific DigitalOcean VPC
+  --name <name>          Sandbox name (required)
+  --provider <provider>  digitalocean, or none for a machine you already
+                         have (inferred from --ip / --ssh-key)
+
+  DigitalOcean options:
+  --region <region>      DigitalOcean region (default: nyc1)
+  --size <size>          Droplet size slug (default: s-2vcpu-4gb)
+  --project <project>    Assign to a DigitalOcean project (name or UUID)
+  --vpc <uuid>           Place droplet in a specific DigitalOcean VPC
+
+  Options for a machine you already have:
+  --ip <address>         Address of the machine
+  --ssh-key <path>       Private key that reaches it as root
+
+  Model credential:
+  --auth <mode>          How the agent authenticates Claude: bedrock (default,
+                         bills through the AWS Bedrock API) or subscription
+                         (uses CLAUDE_CODE_OAUTH_TOKEN from your environment,
+                         minted by "claude setup-token")
+
+  spekk does not provision a machine it did not create. The machine must
+  already carry /opt/spekk/.provisioned; spekk then injects credentials
+  and deploys the agent onto it.
 `)
 		return
 	}
@@ -1130,14 +1168,49 @@ OPTIONS:
 		os.Exit(1)
 	}
 
+	auth, err := sandbox.ParseAuthMode(flags.String("auth"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Naming an existing machine is what says there is nothing to create.
+	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), flags.String("ip") != "" || flags.String("ssh-key") != "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Validate provider-specific flags.
+	setFlags := map[string]bool{
+		"--region":  flags.String("region") != "",
+		"--size":    flags.String("size") != "",
+		"--vpc":     flags.String("vpc") != "",
+		"--project": flags.String("project") != "",
+		"--ip":      flags.String("ip") != "",
+		"--ssh-key": flags.String("ssh-key") != "",
+	}
+	if err := sandbox.ValidateProviderFlags(providerName, setFlags); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	p, err := sandbox.ProviderByName(providerName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 	opts := sandbox.CreateOptions{
 		Name:    flags.String("name"),
 		Region:  flags.String("region"),
 		Size:    flags.String("size"),
 		Project: flags.String("project"),
 		VPC:     flags.String("vpc"),
+		IP:      flags.String("ip"),
+		SSHKey:  flags.String("ssh-key"),
+		Auth:    auth,
 	}
-	if err := sandbox.Create(opts); err != nil {
+	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
