@@ -6,15 +6,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"sync/atomic"
 	"time"
 )
 
-// launchClaudeWithPTY on Windows falls back to a simple exec without PTY support.
-// Idle timeout is not supported on Windows.
+// launchClaudeWithPTY on Windows runs Claude with inherited stdio.
+// Idle timeout is not supported on Windows (requires PTY for activity tracking).
 func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, bool, error) {
+	if idleTimeout > 0 {
+		colorLog(colorYellow, "Idle timeout not supported on Windows (requires PTY). Running without timeout.")
+	}
+
 	cmd := exec.Command("claude", claudeArgs...)
-	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -27,34 +29,7 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 		return false, false, fmt.Errorf("error launching Claude: %w", err)
 	}
 
-	// Idle timeout monitor (no PTY output tracking, uses wall-clock only)
-	var timeoutFired atomic.Bool
-	done := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		start := time.Now()
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-				if time.Since(start) >= idleTimeout {
-					timeoutFired.Store(true)
-					colorLog(colorYellow, fmt.Sprintf("\nBuilder idle for %ds. Force-stopping...", int(idleTimeout.Seconds())))
-					cmd.Process.Kill()
-					return
-				}
-			}
-		}
-	}()
-
 	waitErr := cmd.Wait()
-	close(done)
-
-	if timeoutFired.Load() {
-		return false, true, nil
-	}
 
 	if waitErr != nil {
 		if exitErr, ok := waitErr.(*exec.ExitError); ok {

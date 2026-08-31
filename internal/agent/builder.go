@@ -408,7 +408,7 @@ func RunBuilder(args []string, installDir string) {
 				continue
 			}
 			// Default: exit on complete
-			colorLog(colorGreen, "No assertions to work on.")
+			colorLog(colorGreen, "All assertions completed.")
 			os.Exit(0)
 		}
 

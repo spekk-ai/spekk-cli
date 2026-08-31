@@ -262,7 +262,7 @@ func TestCompletionMessage(t *testing.T) {
 		want  string
 	}{
 		{0, "No assertions to work on."},
-		{1, "Builder loop complete. 1 assertions completed."},
+		{1, "Builder loop complete. 1 assertion completed."},
 		{5, "Builder loop complete. 5 assertions completed."},
 	}
 	for _, tt := range tests {
@@ -270,5 +270,44 @@ func TestCompletionMessage(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("completionMessage(%d) = %q, want %q", tt.count, got, tt.want)
 		}
+	}
+}
+
+func TestResetAssertionStatus_FrontmatterOnly(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test-assertion.md")
+
+	content := `---
+id: test-assertion
+status: in_progress
+locked-by: builder-macbook-12345
+---
+
+# Test Assertion
+
+status: in_progress
+locked-by: should-remain
+`
+	os.WriteFile(filePath, []byte(content), 0o644)
+
+	err := resetAssertionStatus(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(filePath)
+	result := string(data)
+
+	// Frontmatter status should be reset
+	if !strings.Contains(result, "status: not_started") {
+		t.Error("expected frontmatter status to be not_started")
+	}
+	// Body "status: in_progress" should be untouched
+	if !strings.Contains(result, "status: in_progress") {
+		t.Error("expected body 'status: in_progress' to be preserved")
+	}
+	// Body "locked-by:" should be untouched
+	if !strings.Contains(result, "locked-by: should-remain") {
+		t.Error("expected body 'locked-by: should-remain' to be preserved")
 	}
 }

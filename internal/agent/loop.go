@@ -70,7 +70,11 @@ func completionMessage(count int64) string {
 	if count == 0 {
 		return "No assertions to work on."
 	}
-	return fmt.Sprintf("Builder loop complete. %d assertions completed.", count)
+	noun := "assertions"
+	if count == 1 {
+		noun = "assertion"
+	}
+	return fmt.Sprintf("Builder loop complete. %d %s completed.", count, noun)
 }
 
 // LoopFlags defines the flag set for the loop builder CLI.
@@ -401,10 +405,9 @@ func getNextAssertionForLoop(spekkBin string) (*AssertionResult, error) {
 	return &result, nil
 }
 
-
 // resetAssertionStatus resets an assertion file's status from in_progress to
-// not_started and removes the locked-by field. Used when a builder is killed
-// by idle timeout so the next iteration can pick it up again.
+// not_started and removes the locked-by field. Only modifies lines inside the
+// YAML frontmatter (between the opening and closing --- delimiters).
 func resetAssertionStatus(filePath string) error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -413,12 +416,19 @@ func resetAssertionStatus(filePath string) error {
 
 	lines := strings.Split(string(data), "\n")
 	var result []string
+	delimCount := 0
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "status:") && strings.Contains(trimmed, "in_progress") {
+		if trimmed == "---" {
+			delimCount++
+			result = append(result, line)
+			continue
+		}
+		inFrontmatter := delimCount == 1
+		if inFrontmatter && strings.HasPrefix(trimmed, "status:") && strings.Contains(trimmed, "in_progress") {
 			line = strings.Replace(line, "in_progress", "not_started", 1)
 		}
-		if strings.HasPrefix(trimmed, "locked-by:") {
+		if inFrontmatter && strings.HasPrefix(trimmed, "locked-by:") {
 			continue
 		}
 		result = append(result, line)

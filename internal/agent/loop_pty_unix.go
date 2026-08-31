@@ -24,6 +24,17 @@ const (
 	doneMarkerGrace = 5 * time.Second
 )
 
+// sigkillAfter waits 5 seconds after SIGTERM, then sends SIGKILL if the
+// process is still alive. Aborts if done is closed first.
+func sigkillAfter(proc *os.Process, done <-chan struct{}) {
+	select {
+	case <-done:
+		return
+	case <-time.After(5 * time.Second):
+		proc.Signal(syscall.SIGKILL)
+	}
+}
+
 // launchClaudeWithPTY spawns claude inside a pseudo-terminal for idle timeout detection.
 // Returns (success, timedOut, error). When timedOut is true, the process was killed
 // due to inactivity and the caller should reset the assertion status.
@@ -65,27 +76,44 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 
 	// Copy PTY output to stdout, tracking activity on each read.
 	// Also detect the done marker so we can force-stop a hung process.
+	// A rolling tail buffer handles the marker being split across reads.
 	go func() {
 		buf := make([]byte, 4096)
 		markerSeen := false
+		markerBytes := []byte(doneMarker)
+		tail := make([]byte, 0, len(markerBytes))
 		for {
 			n, readErr := ptmx.Read(buf)
 			if n > 0 {
 				lastActivity.Store(time.Now().UnixNano())
 				os.Stdout.Write(buf[:n])
 
-				if !markerSeen && bytes.Contains(buf[:n], []byte(doneMarker)) {
-					markerSeen = true
-					markerDetected.Store(true)
-					go func() {
-						select {
-						case <-done:
-							return
-						case <-time.After(doneMarkerGrace):
-							colorLog(colorYellow, "\nDone marker seen but process still running. Force-stopping...")
-							cmd.Process.Signal(syscall.SIGTERM)
+				if !markerSeen {
+					// Check combined tail+current for marker spanning reads
+					combined := append(tail, buf[:n]...)
+					if bytes.Contains(combined, markerBytes) {
+						markerSeen = true
+						markerDetected.Store(true)
+						go func() {
+							select {
+							case <-done:
+								return
+							case <-time.After(doneMarkerGrace):
+								colorLog(colorYellow, "\nDone marker seen but process still running. Force-stopping...")
+								cmd.Process.Signal(syscall.SIGTERM)
+								sigkillAfter(cmd.Process, done)
+							}
+						}()
+					}
+					// Keep last len(markerBytes)-1 bytes as tail for next read
+					if n >= len(markerBytes) {
+						tail = append(tail[:0], buf[n-len(markerBytes)+1:n]...)
+					} else {
+						tail = append(tail, buf[:n]...)
+						if len(tail) > len(markerBytes)-1 {
+							tail = tail[len(tail)-len(markerBytes)+1:]
 						}
-					}()
+					}
 				}
 			}
 			if readErr != nil {
@@ -113,6 +141,7 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 					timeoutFired.Store(true)
 					colorLog(colorYellow, fmt.Sprintf("\nBuilder idle for %ds. Force-stopping...", int(idleTimeout.Seconds())))
 					cmd.Process.Signal(syscall.SIGTERM)
+					sigkillAfter(cmd.Process, done)
 					return
 				}
 			}
