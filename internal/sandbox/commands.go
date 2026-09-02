@@ -460,7 +460,7 @@ func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) er
 		scp = append(scp, "-i", keyPath)
 	}
 	scp = append(scp, artifacts.BinaryPath, scpTarget(user, ip))
-	if out, err := exec.Command("scp", scp...).CombinedOutput(); err != nil {
+	if out, err := scpExec(scp); err != nil {
 		return fmt.Errorf("copying binary: %s\n%s", err, string(out))
 	}
 
@@ -494,6 +494,13 @@ const stagedBinary = "agent-client.staged"
 // privileged steps actually send, with no machine to send it to.
 var sshExec = func(args []string) ([]byte, error) {
 	return exec.Command("ssh", args...).CombinedOutput()
+}
+
+// scpExec copies a file with scp. It is a seam for the same reason sshExec
+// is: the deploy decides where a non-root login stages the agent binary, and
+// that decision is worth a test.
+var scpExec = func(args []string) ([]byte, error) {
+	return exec.Command("scp", args...).CombinedOutput()
 }
 
 // privilegedScript returns the remote command that runs script as root. A
@@ -697,7 +704,7 @@ func runSSHCombined(ip, keyPath, name, user, command string) (string, error) {
 		args = append(args, "-i", keyPath)
 	}
 	args = append(args, fmt.Sprintf("%s@%s", user, ip), command)
-	out, err := exec.Command("ssh", args...).CombinedOutput()
+	out, err := sshExec(args)
 	return string(out), err
 }
 
