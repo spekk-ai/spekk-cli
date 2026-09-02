@@ -131,8 +131,12 @@ func Create(p Provider, opts CreateOptions) error {
 
 	// --- Generic provisioning (provider-agnostic) ---
 
+<<<<<<< HEAD
 	// The login user for every SSH step below. root on a machine spekk
 	// created; whatever the operator gave for one they already had.
+=======
+	// Login user for the SSH steps below; root for a machine spekk created.
+>>>>>>> a211cf1 (Add --ssh-user for a non-root sandbox login)
 	user := sshUser(meta)
 
 	// A failure from here on leaves a real machine running. Say so, and
@@ -451,7 +455,7 @@ WantedBy=multi-user.target
 // systemd unit, and (re)starts the service. Shared by Create and Deploy.
 func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) error {
 	// Copy the binary up via scp. A non-root user cannot write /opt/spekk,
-	// so it lands in /tmp and the install script moves it up under sudo.
+	// so it stages in /tmp and the install script moves it up under sudo.
 	scp := sshHostKeyOpts(name)
 	scp = append(scp, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
@@ -481,8 +485,6 @@ systemctl daemon-reload
 systemctl enable spekk-agent
 systemctl restart spekk-agent`, spekkAgentUnit)
 
-	// A non-root user runs the whole thing under sudo, moving the staged
-	// binary into place first.
 	if user != "root" {
 		script = "sudo mv /tmp/agent-client /opt/spekk/agent-client && " + sudoWrap(script)
 	}
@@ -493,18 +495,15 @@ systemctl restart spekk-agent`, spekkAgentUnit)
 	return nil
 }
 
-// sudoWrap re-encodes a script as base64 and pipes it through `sudo bash`, so
-// a non-root login user runs it with the privileges the provisioning steps
-// need. base64 sidesteps every quoting problem the heredocs and nested quotes
-// would otherwise pose. The user must have passwordless sudo.
+// sudoWrap base64-encodes a script and pipes it through `sudo bash`, running
+// it as root without the quoting problems heredocs and nested quotes pose.
+// The login user must have passwordless sudo.
 func sudoWrap(script string) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(script))
 	return fmt.Sprintf("echo '%s' | base64 -d | sudo bash", encoded)
 }
 
-// sshUser returns the login user for a sandbox, defaulting to root. A machine
-// spekk created is always reached as root; one the operator already had may
-// name a different user.
+// sshUser returns the login user for a sandbox, defaulting to root.
 func sshUser(meta *SandboxMeta) string {
 	if meta.SSHUser != "" {
 		return meta.SSHUser

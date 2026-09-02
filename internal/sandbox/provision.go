@@ -89,8 +89,8 @@ var agentSecrets = []string{
 // GitHub token on somebody's server.
 func stopAgentService(sandbox *SandboxMeta, name string) error {
 	fmt.Fprintln(os.Stderr, "Stopping agent service and removing credentials...")
-	// The teardown touches root-owned units and files, so a non-root login
-	// user runs the whole of it under sudo.
+	// Teardown touches root-owned units and files, so a non-root user
+	// runs it under sudo.
 	command := teardownCommand()
 	if sshUser(sandbox) != "root" {
 		command = sudoWrap(command)
