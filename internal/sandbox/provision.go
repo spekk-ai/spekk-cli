@@ -54,15 +54,16 @@ var checkReady = checkProvisioned
 // needs.
 func checkProvisioned(meta *SandboxMeta, name string) error {
 	fmt.Fprintln(os.Stderr, "Checking the machine is provisioned...")
-	out := strings.TrimSpace(runSSH(meta.IP, meta.SSHKeyPath, name, "test -f "+provisionedMarker+" && echo ok"))
+	user := sshUser(meta)
+	out := strings.TrimSpace(runSSH(meta.IP, meta.SSHKeyPath, name, user, "test -f "+provisionedMarker+" && echo ok"))
 	if out == "ok" {
 		return nil
 	}
 	// runSSH returns "" for a failed connection as well as for a missing
 	// file, so name both rather than guess.
-	return fmt.Errorf("could not confirm %s on %s as root: the machine is not provisioned, or the connection failed.\n"+
+	return fmt.Errorf("could not confirm %s on %s as %s: the machine is not provisioned, or the connection failed.\n"+
 		"spekk does not provision a machine it did not create. Prepare it first, then re-run this command",
-		provisionedMarker, meta.IP)
+		provisionedMarker, meta.IP, user)
 }
 
 // agentSecrets are the files spekk puts on a sandbox. On a machine that
@@ -88,7 +89,13 @@ var agentSecrets = []string{
 // GitHub token on somebody's server.
 func stopAgentService(sandbox *SandboxMeta, name string) error {
 	fmt.Fprintln(os.Stderr, "Stopping agent service and removing credentials...")
-	args := append(sshBatchArgs(sandbox, name), teardownCommand())
+	// The teardown touches root-owned units and files, so a non-root login
+	// user runs the whole of it under sudo.
+	command := teardownCommand()
+	if sshUser(sandbox) != "root" {
+		command = sudoWrap(command)
+	}
+	args := append(sshBatchArgs(sandbox, name), command)
 	if out, err := exec.Command("ssh", args...).CombinedOutput(); err != nil {
 		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(out)))
 	}

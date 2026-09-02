@@ -18,6 +18,8 @@ So a provider reads and writes named fields on the metadata it is given. The on-
 
 `spekk sandbox create --ip <address> --ssh-key <path>` registers a machine that already exists — bare metal, another cloud, a container on a box under a desk. `--provider` gains `none`, and naming a machine with either flag infers it.
 
+A machine spekk creates is reached as root; one you already have may not admit root. `--ssh-user <user>` logs in as that user instead (an AWS Ubuntu AMI admits `ubuntu`), and spekk escalates the privileged steps — credential injection, agent deploy, teardown — with `sudo`, so the user needs passwordless sudo, as those AMIs grant by default.
+
 **Spekk does not provision a machine it did not create.** The first design generated a shell script replicating cloud-init and ran it as root over SSH. On a droplet spekk just made, that is housekeeping. On somebody else's server it is an outage: it upgraded every package, and it rewrote the firewall to allow only port 22, which locks out an operator whose sshd listens elsewhere and cuts off whatever else that machine was serving. It was also a second copy of the provisioning steps, and copies drift.
 
 The operator prepares the machine, spekk confirms `/opt/spekk/.provisioned`, and then does the part that is genuinely spekk's: inject credentials, deploy the agent, start it. `destroy` never destroys such a machine. It stops the agent, removes the credentials spekk put there, and drops the local record — and if any of that fails it keeps the record, because deleting it would leave an agent running with live credentials and nothing pointing at it.

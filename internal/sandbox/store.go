@@ -35,6 +35,11 @@ type SandboxMeta struct {
 	Project    string `json:"project,omitempty"`
 	SSHKeyID   int    `json:"sshKeyId,omitempty"`
 	SSHKeyPath string `json:"sshKeyPath,omitempty"`
+	// SSHUser is the login user for an unmanaged machine, empty meaning
+	// root. A machine spekk creates is always reached as root; one the
+	// operator already has may only admit a non-root user (an AWS Ubuntu
+	// AMI admits "ubuntu"), in which case spekk escalates with sudo.
+	SSHUser string `json:"sshUser,omitempty"`
 }
 
 // sandboxesFile returns the path to the sandboxes metadata file.

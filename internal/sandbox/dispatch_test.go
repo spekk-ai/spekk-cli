@@ -49,6 +49,8 @@ func TestValidateProviderFlags(t *testing.T) {
 		{"machine flags with digitalocean", "digitalocean", []string{"--ip", "--ssh-key"}, "--ip, --ssh-key"},
 		{"cloud flags with digitalocean", "digitalocean", []string{"--region", "--size"}, ""},
 		{"machine flags with none", ProviderNone, []string{"--ip", "--ssh-key"}, ""},
+		{"ssh-user with none", ProviderNone, []string{"--ip", "--ssh-key", "--ssh-user"}, ""},
+		{"ssh-user with digitalocean", "digitalocean", []string{"--ssh-user"}, "--ssh-user"},
 		{"nothing set", "digitalocean", nil, ""},
 	}
 	for _, tt := range tests {

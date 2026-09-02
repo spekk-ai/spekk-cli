@@ -15,7 +15,7 @@ var ValidProviders = []string{"digitalocean", ProviderNone}
 
 // existingMachineFlags name a machine that already exists. Any one of them
 // says the operator is not asking for a new one.
-var existingMachineFlags = []string{"--ip", "--ssh-key"}
+var existingMachineFlags = []string{"--ip", "--ssh-key", "--ssh-user"}
 
 // cloudFlags configure a machine spekk creates, so they are meaningless for
 // one it does not.
