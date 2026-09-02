@@ -490,6 +490,12 @@ systemctl restart spekk-agent`, spekkAgentUnit)
 // user's home directory, which only that user and root can write.
 const stagedBinary = "agent-client.staged"
 
+// sshExec runs an ssh command. It is a variable so a test can read what the
+// privileged steps actually send, with no machine to send it to.
+var sshExec = func(args []string) ([]byte, error) {
+	return exec.Command("ssh", args...).CombinedOutput()
+}
+
 // privilegedScript returns the remote command that runs script as root. A
 // root login runs it as it is; any other login user escalates. Every
 // privileged step goes through here, so the rule lives in one place rather
@@ -735,8 +741,7 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 		args = append(args, "-i", keyPath)
 	}
 	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
-	cmd := exec.Command("ssh", args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := sshExec(args); err != nil {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
 	}
 	return nil
@@ -779,8 +784,7 @@ func configureGitCredentials(ip, keyPath, name, user string) error {
 		args = append(args, "-i", keyPath)
 	}
 	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
-	cmd := exec.Command("ssh", args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := sshExec(args); err != nil {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
 	}
 	return nil

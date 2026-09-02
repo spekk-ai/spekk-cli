@@ -10,7 +10,7 @@ What's new in each version of Spekk CLI.
 
 ## [1.27.0 -- A Sandbox That Does Not Admit Root](RELEASE-NOTES-1.27.0.md)
 
-1.26.0 let a sandbox be a machine you already have, and assumed that machine lets you log in as root. Many do not: an AWS Ubuntu AMI gives you `ubuntu` and disables root over SSH. `--ssh-user <user>` logs in as that user and escalates the three steps that need root with `sudo`. A sandbox recorded before this release reads as root, so nothing changes for one that already exists.
+1.26.0 let a sandbox be a machine you already have, and assumed that machine lets you log in as root. Many do not: an AWS Ubuntu AMI gives you `ubuntu` and disables root over SSH. `--ssh-user <user>` logs in as that user and escalates the four steps that need root with `sudo`. A sandbox recorded before this release reads as root, so nothing changes for one that already exists.
 
 ## [1.26.0 -- A Sandbox Stops Being a Droplet](RELEASE-NOTES-1.26.0.md)
 

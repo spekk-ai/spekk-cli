@@ -3,7 +3,6 @@ package sandbox
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -50,7 +49,7 @@ func registerMachine(opts CreateOptions, meta *SandboxMeta) error {
 	return nil
 }
 
-var sshUserRe = regexp.MustCompile(`^[a-z_][a-z0-9._-]*$`)
+var sshUserRe = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9._-]*$`)
 
 // validateSSHUser checks the login user before it reaches an ssh argument.
 // A value that starts with "-" is read by ssh as an option rather than as
@@ -63,7 +62,7 @@ func validateSSHUser(user string) error {
 		return nil
 	}
 	if !sshUserRe.MatchString(user) {
-		return fmt.Errorf("invalid --ssh-user %q: must match [a-z_][a-z0-9._-]* (a POSIX login name)", user)
+		return fmt.Errorf("invalid --ssh-user %q: must match [a-zA-Z0-9_][a-zA-Z0-9._-]* (a login name)", user)
 	}
 	return nil
 }
@@ -115,7 +114,7 @@ func stopAgentService(sandbox *SandboxMeta, name string) error {
 	// Teardown touches root-owned units and files, so a non-root user
 	// runs it under sudo.
 	args := append(sshBatchArgs(sandbox, name), privilegedScript(sshUser(sandbox), teardownCommand()))
-	if out, err := exec.Command("ssh", args...).CombinedOutput(); err != nil {
+	if out, err := sshExec(args); err != nil {
 		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(out)))
 	}
 	return nil

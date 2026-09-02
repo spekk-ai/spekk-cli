@@ -92,12 +92,12 @@ func TestNonRootDeployStagesInTheLoginUsersHome(t *testing.T) {
 // every later command, so a value ssh reads as an option has to be refused
 // before anything is recorded.
 func TestValidateSSHUserRejectsAnSSHOption(t *testing.T) {
-	for _, user := range []string{"", "root", "ubuntu", "ec2-user", "_spekk"} {
+	for _, user := range []string{"", "root", "ubuntu", "ec2-user", "_spekk", "Administrator"} {
 		if err := validateSSHUser(user); err != nil {
 			t.Errorf("validateSSHUser(%q) = %v, want a valid login name", user, err)
 		}
 	}
-	for _, user := range []string{"-oProxyCommand=touch /tmp/pwned;", "-l root", "ubuntu@elsewhere", "root me", "Ubuntu"} {
+	for _, user := range []string{"-oProxyCommand=touch /tmp/pwned;", "-l root", "ubuntu@elsewhere", "root me", "-"} {
 		if err := validateSSHUser(user); err == nil {
 			t.Errorf("validateSSHUser(%q) = nil, want a rejection", user)
 		}
@@ -144,5 +144,54 @@ func TestCreateRecordsTheLoginUser(t *testing.T) {
 	}
 	if got, _ := GetSandbox("hostile"); got != nil {
 		t.Errorf("an invalid --ssh-user was recorded anyway: %+v", got)
+	}
+}
+
+// Each privileged step builds its own remote command, so each is checked
+// here. A call site that drops privilegedScript still compiles, and the unit
+// tests above would still pass, but the step would then run unprivileged and
+// fail on somebody's machine rather than in CI.
+func TestEveryPrivilegedStepEscalatesForANonRootLogin(t *testing.T) {
+	var sent []string
+	origExec := sshExec
+	sshExec = func(args []string) ([]byte, error) {
+		sent = append(sent, args[len(args)-1])
+		return nil, nil
+	}
+	t.Cleanup(func() { sshExec = origExec })
+
+	steps := map[string]func(user string) error{
+		"inject credentials": func(user string) error {
+			return injectCredentials("9.9.9.9", "", "sb", user, "agent-token", AuthBedrock)
+		},
+		"git credentials": func(user string) error {
+			return configureGitCredentials("9.9.9.9", "", "sb", user)
+		},
+		"teardown": func(user string) error {
+			return stopAgentService(&SandboxMeta{IP: "9.9.9.9", SSHUser: user}, "sb")
+		},
+	}
+	for name, step := range steps {
+		t.Run(name, func(t *testing.T) {
+			sent = nil
+			if err := step("ubuntu"); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			if len(sent) != 1 {
+				t.Fatalf("%s sent %d commands, want 1", name, len(sent))
+			}
+			if !strings.Contains(sent[0], "| sudo bash") {
+				t.Errorf("%s does not escalate for a non-root login: %q", name, sent[0])
+			}
+
+			// A root login must be untouched by any of this.
+			sent = nil
+			if err := step("root"); err != nil {
+				t.Fatalf("%s as root: %v", name, err)
+			}
+			if strings.Contains(sent[0], "sudo") {
+				t.Errorf("%s escalates for root, which already is root: %q", name, sent[0])
+			}
+		})
 	}
 }
