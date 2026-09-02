@@ -98,7 +98,6 @@ func Create(p Provider, opts CreateOptions) error {
 	meta := &SandboxMeta{
 		Provider:  ProviderNone,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		SSHUser:   opts.SSHUser,
 	}
 	if p != nil {
 		meta.Provider = p.Name()
@@ -451,17 +450,16 @@ WantedBy=multi-user.target
 // systemd unit, and (re)starts the service. Shared by Create and Deploy.
 func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) error {
 	// Copy the binary up via scp. A non-root user cannot write /opt/spekk,
-	// so it stages in /tmp and the install script moves it up under sudo.
+	// so it stages in that user's home directory and the install script
+	// moves it up under sudo. Not /tmp: a fixed name in a directory every
+	// local user can write is a file another user can put there first, and
+	// what root then moves into place is what systemd runs.
 	scp := sshHostKeyOpts(name)
 	scp = append(scp, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		scp = append(scp, "-i", keyPath)
 	}
-	if user == "root" {
-		scp = append(scp, artifacts.BinaryPath, fmt.Sprintf("root@%s:/opt/spekk/agent-client", ip))
-	} else {
-		scp = append(scp, artifacts.BinaryPath, fmt.Sprintf("%s@%s:/tmp/agent-client", user, ip))
-	}
+	scp = append(scp, artifacts.BinaryPath, scpTarget(user, ip))
 	if out, err := exec.Command("scp", scp...).CombinedOutput(); err != nil {
 		return fmt.Errorf("copying binary: %s\n%s", err, string(out))
 	}
@@ -481,14 +479,45 @@ systemctl daemon-reload
 systemctl enable spekk-agent
 systemctl restart spekk-agent`, spekkAgentUnit)
 
-	if user != "root" {
-		script = "sudo mv /tmp/agent-client /opt/spekk/agent-client && " + sudoWrap(script)
-	}
-
-	if out, err := runSSHCombined(ip, keyPath, name, user, script); err != nil {
+	if out, err := runSSHCombined(ip, keyPath, name, user, installCommand(user, script)); err != nil {
 		return fmt.Errorf("installing service: %s\n%s", err, out)
 	}
 	return nil
+}
+
+// stagedBinary is where a non-root deploy puts the agent binary before root
+// moves it into /opt/spekk. scp resolves a relative path against the login
+// user's home directory, which only that user and root can write.
+const stagedBinary = "agent-client.staged"
+
+// privilegedScript returns the remote command that runs script as root. A
+// root login runs it as it is; any other login user escalates. Every
+// privileged step goes through here, so the rule lives in one place rather
+// than in a repeated conditional at each call site.
+func privilegedScript(user, script string) string {
+	if user == "root" {
+		return script
+	}
+	return sudoWrap(script)
+}
+
+// scpTarget is where deployAgent copies the agent binary. root writes
+// /opt/spekk directly; anybody else stages in their own home directory.
+func scpTarget(user, ip string) string {
+	if user == "root" {
+		return fmt.Sprintf("root@%s:/opt/spekk/agent-client", ip)
+	}
+	return fmt.Sprintf("%s@%s:%s", user, ip, stagedBinary)
+}
+
+// installCommand is the remote command that installs and starts the agent.
+// A non-root deploy first moves the staged binary into place, because only
+// root can write /opt/spekk.
+func installCommand(user, script string) string {
+	if user == "root" {
+		return script
+	}
+	return fmt.Sprintf(`sudo mv "$HOME/%s" /opt/spekk/agent-client && `, stagedBinary) + privilegedScript(user, script)
 }
 
 // sudoWrap base64-encodes a script and pipes it through `sudo bash`, running
@@ -698,10 +727,7 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 	spekkHost := os.Getenv("SPEKK_HOST")
 
 	envContent := buildEnvContent(mode, envVars, name, agentToken, spekkHost)
-	script := buildInjectScript(envContent)
-	if user != "root" {
-		script = sudoWrap(script)
-	}
+	script := privilegedScript(user, buildInjectScript(envContent))
 
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")
@@ -745,10 +771,7 @@ func buildInjectScript(envContent string) string {
 func configureGitCredentials(ip, keyPath, name, user string) error {
 	ghToken := os.Getenv("GITHUB_TOKEN")
 
-	script := buildGitCredentialScript(ghToken)
-	if user != "root" {
-		script = sudoWrap(script)
-	}
+	script := privilegedScript(user, buildGitCredentialScript(ghToken))
 
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")

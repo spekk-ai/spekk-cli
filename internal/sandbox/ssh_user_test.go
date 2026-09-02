@@ -2,6 +2,10 @@ package sandbox
 
 import (
 	"encoding/base64"
+	"errors"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -41,5 +45,104 @@ func TestSudoWrapRunsTheScriptUnderSudo(t *testing.T) {
 	}
 	if string(decoded) != script {
 		t.Errorf("decoded payload = %q, want %q", decoded, script)
+	}
+}
+
+// Every privileged step escalates through one helper, so the rule is checked
+// once here rather than at each call site.
+func TestPrivilegedScriptEscalatesOnlyForANonRootUser(t *testing.T) {
+	script := "systemctl restart spekk-agent"
+	if got := privilegedScript("root", script); got != script {
+		t.Errorf("root: got %q, want the script unchanged", got)
+	}
+	got := privilegedScript("ubuntu", script)
+	if !strings.Contains(got, "| sudo bash") {
+		t.Errorf("ubuntu: %q does not escalate", got)
+	}
+}
+
+// A non-root deploy must not stage the binary at a fixed name in /tmp. Every
+// local user can write that directory, and what root moves into place is what
+// systemd then runs as the agent.
+func TestNonRootDeployStagesInTheLoginUsersHome(t *testing.T) {
+	target := scpTarget("ubuntu", "9.9.9.9")
+	if target != "ubuntu@9.9.9.9:"+stagedBinary {
+		t.Errorf("scp target = %q, want the staged name in the login user's home", target)
+	}
+	if strings.Contains(target, "/tmp/") {
+		t.Errorf("scp target stages in a world-writable directory: %q", target)
+	}
+	if got := scpTarget("root", "9.9.9.9"); got != "root@9.9.9.9:/opt/spekk/agent-client" {
+		t.Errorf("root scp target = %q, want /opt/spekk/agent-client", got)
+	}
+
+	cmd := installCommand("ubuntu", "chmod +x /opt/spekk/agent-client")
+	if !strings.HasPrefix(cmd, `sudo mv "$HOME/`+stagedBinary+`" /opt/spekk/agent-client && `) {
+		t.Errorf("install command does not move the staged binary first: %q", cmd)
+	}
+	if !strings.Contains(cmd, "| sudo bash") {
+		t.Errorf("install command does not escalate the install script: %q", cmd)
+	}
+	if got := installCommand("root", "chmod +x /opt/spekk/agent-client"); got != "chmod +x /opt/spekk/agent-client" {
+		t.Errorf("root install command = %q, want the script unchanged", got)
+	}
+}
+
+// The login user is stored and then interpolated into an ssh argument on
+// every later command, so a value ssh reads as an option has to be refused
+// before anything is recorded.
+func TestValidateSSHUserRejectsAnSSHOption(t *testing.T) {
+	for _, user := range []string{"", "root", "ubuntu", "ec2-user", "_spekk"} {
+		if err := validateSSHUser(user); err != nil {
+			t.Errorf("validateSSHUser(%q) = %v, want a valid login name", user, err)
+		}
+	}
+	for _, user := range []string{"-oProxyCommand=touch /tmp/pwned;", "-l root", "ubuntu@elsewhere", "root me", "Ubuntu"} {
+		if err := validateSSHUser(user); err == nil {
+			t.Errorf("validateSSHUser(%q) = nil, want a rejection", user)
+		}
+	}
+}
+
+// The login user survives create, because destroy and deploy read it back
+// from the store and would otherwise fall back to root on a machine that
+// refuses root.
+func TestCreateRecordsTheLoginUser(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	stubCreateEnv(t)
+
+	key := filepath.Join(t.TempDir(), "id_ed25519")
+	if err := os.WriteFile(key, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	origCheck := checkReady
+	checkReady = func(meta *SandboxMeta, name string) error { return errors.New("not provisioned") }
+	t.Cleanup(func() { checkReady = origCheck })
+
+	if err := Create(nil, CreateOptions{Name: "borrowed", IP: "9.9.9.9", SSHKey: key, SSHUser: "ubuntu"}); err == nil {
+		t.Fatal("expected the provisioned check to stop the create")
+	}
+	got, _ := GetSandbox("borrowed")
+	if got == nil {
+		t.Fatal("the machine was registered but nothing was recorded")
+	}
+	if got.SSHUser != "ubuntu" {
+		t.Errorf("SSHUser = %q, want ubuntu", got.SSHUser)
+	}
+	if user := sshArgs(got, "borrowed"); !slices.Contains(user, "ubuntu@9.9.9.9") {
+		t.Errorf("ssh destination = %v, want ubuntu@9.9.9.9", user)
+	}
+	if user := sshBatchArgs(got, "borrowed"); !slices.Contains(user, "ubuntu@9.9.9.9") {
+		t.Errorf("batch ssh destination = %v, want ubuntu@9.9.9.9", user)
+	}
+
+	// A login user ssh would read as an option costs no metadata entry.
+	if err := Create(nil, CreateOptions{Name: "hostile", IP: "9.9.9.9", SSHKey: key, SSHUser: "-oProxyCommand=id"}); err == nil {
+		t.Fatal("expected an invalid --ssh-user to stop the create")
+	}
+	if got, _ := GetSandbox("hostile"); got != nil {
+		t.Errorf("an invalid --ssh-user was recorded anyway: %+v", got)
 	}
 }

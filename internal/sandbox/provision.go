@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -26,6 +27,9 @@ func registerMachine(opts CreateOptions, meta *SandboxMeta) error {
 	if opts.SSHKey == "" {
 		return fmt.Errorf("an existing machine needs --ssh-key")
 	}
+	if err := validateSSHUser(opts.SSHUser); err != nil {
+		return err
+	}
 
 	// Resolve to an absolute path: every later command runs from a
 	// different working directory than create did.
@@ -42,6 +46,25 @@ func registerMachine(opts CreateOptions, meta *SandboxMeta) error {
 
 	meta.IP = opts.IP
 	meta.SSHKeyPath = key
+	meta.SSHUser = opts.SSHUser
+	return nil
+}
+
+var sshUserRe = regexp.MustCompile(`^[a-z_][a-z0-9._-]*$`)
+
+// validateSSHUser checks the login user before it reaches an ssh argument.
+// A value that starts with "-" is read by ssh as an option rather than as
+// part of the destination, so "-oProxyCommand=..." would run a command on
+// the operator's own machine, and it would run again on every later status,
+// ssh, deploy and destroy, because the value is stored. An empty user is
+// valid and means root.
+func validateSSHUser(user string) error {
+	if user == "" {
+		return nil
+	}
+	if !sshUserRe.MatchString(user) {
+		return fmt.Errorf("invalid --ssh-user %q: must match [a-z_][a-z0-9._-]* (a POSIX login name)", user)
+	}
 	return nil
 }
 
@@ -91,11 +114,7 @@ func stopAgentService(sandbox *SandboxMeta, name string) error {
 	fmt.Fprintln(os.Stderr, "Stopping agent service and removing credentials...")
 	// Teardown touches root-owned units and files, so a non-root user
 	// runs it under sudo.
-	command := teardownCommand()
-	if sshUser(sandbox) != "root" {
-		command = sudoWrap(command)
-	}
-	args := append(sshBatchArgs(sandbox, name), command)
+	args := append(sshBatchArgs(sandbox, name), privilegedScript(sshUser(sandbox), teardownCommand()))
 	if out, err := exec.Command("ssh", args...).CombinedOutput(); err != nil {
 		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(out)))
 	}

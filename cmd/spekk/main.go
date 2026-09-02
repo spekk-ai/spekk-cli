@@ -1165,14 +1165,6 @@ OPTIONS:
 		os.Exit(1)
 	}
 
-	// Naming an existing machine is what says there is nothing to create.
-	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), flags.String("ip") != "" || flags.String("ssh-key") != "")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
-	}
-
-	// Validate provider-specific flags.
 	setFlags := map[string]bool{
 		"--region":   flags.String("region") != "",
 		"--size":     flags.String("size") != "",
@@ -1182,6 +1174,15 @@ OPTIONS:
 		"--ssh-key":  flags.String("ssh-key") != "",
 		"--ssh-user": flags.String("ssh-user") != "",
 	}
+
+	// Naming an existing machine is what says there is nothing to create.
+	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), sandbox.NamesExistingMachine(setFlags))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Validate provider-specific flags.
 	if err := sandbox.ValidateProviderFlags(providerName, setFlags); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
