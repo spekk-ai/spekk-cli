@@ -131,12 +131,8 @@ func Create(p Provider, opts CreateOptions) error {
 
 	// --- Generic provisioning (provider-agnostic) ---
 
-<<<<<<< HEAD
 	// The login user for every SSH step below. root on a machine spekk
 	// created; whatever the operator gave for one they already had.
-=======
-	// Login user for the SSH steps below; root for a machine spekk created.
->>>>>>> a211cf1 (Add --ssh-user for a non-root sandbox login)
 	user := sshUser(meta)
 
 	// A failure from here on leaves a real machine running. Say so, and
