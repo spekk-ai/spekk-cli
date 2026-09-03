@@ -80,6 +80,7 @@ spekk builder --spec authentication # Only this spec's assertions
 spekk builder --assertion login     # Build specific assertion
 spekk builder --confirm             # Ask before each build
 spekk builder --interactive         # Collaborate with the builder
+spekk builder review                # Review what was built, in a fresh session
 ```
 
 **Flags:**

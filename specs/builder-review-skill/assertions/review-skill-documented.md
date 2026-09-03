@@ -3,7 +3,7 @@ id: review-skill-documented
 parent: builder-review-skill
 created: 2026-09-03T19:44:00Z
 priority: 2
-status: not_started
+status: done
 branch: feature/builder-review-skill
 depends-on: review-skill-discoverable
 ---

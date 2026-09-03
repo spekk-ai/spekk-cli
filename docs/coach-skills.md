@@ -193,6 +193,31 @@ Recommendations:
 
 ---
 
+## Built-in builder skills
+
+### Review
+
+Review what was just built against the assertions marked `done`. The review fixes what it finds, and the push waits for it.
+
+**CLI:** `spekk builder review` (a fresh session) or `spekk skill show builder review` (adopt it in the current session)
+
+**Alias:** `review` → `review-skill`
+
+**Scope:** the assertions marked `done` on the current branch since it left its base branch, plus the diff from that base to `HEAD`. On the base branch itself, you name the commit range.
+
+**Lenses, in order, each with a remedy:**
+
+1. Every success criterion of every in-scope assertion is checked against the real code. An unmet one is fixed, or the assertion is set to `failed`.
+2. Every test earns its place. A test that passes when its behavior is broken, restates the implementation, duplicates another test, or exercises a mock is deleted.
+3. Nothing beyond what the assertions ask for. Unrequested generality, configuration, and abstraction are removed. A hunk no assertion accounts for is reverted or explained.
+4. Errors are loud. A dropped, defaulted, or broadly caught error is fixed.
+5. The spec tree is sound: `spekk validate` and `spekk next` succeed, no stale lock, every `**Tests:**` link resolves.
+6. The diff is fit to publish: no secret, no private name, no reference to another repository.
+
+The review writes no observation file. Its output is the fixes in the working tree and a short report in the session: each assertion with a verdict, what was fixed, what was deleted, and what stays open.
+
+The `spekk-dev-loop` skill loads this skill in its verify phase.
+
 ## Creating custom skills
 
 Create a markdown file in your local or global skills directory:
