@@ -3,7 +3,7 @@ id: review-skill-embedded
 parent: builder-review-skill
 created: 2026-09-03T19:41:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/builder-review-skill
 depends-on: review-skill-markdown-exists
 ---
