@@ -190,6 +190,38 @@ Recommendations:
 
 See [`spekk observer`](cli-reference.md#spekk-observer) for the details.
 
+### Property tests
+
+Decide whether a promise deserves a property-based test, then write it for the right layer and prove it reached the state it guards.
+
+**CLI:** `spekk coach property-tests [assertion-id]`
+
+**Aliases:** `properties` → `property-tests-skill`
+
+**Triggers:** "property test", "add a property", "cover this assertion with a property", "false positive in the sweep"
+
+#### How it works
+
+1. Finds the `done` assertions a property could restate, with `spekk status` and `spekk query`
+2. Applies a value gate before any code: the promise is `done`, needs search, would matter if broken, has evidence, costs less than it is worth, and keeps the portfolio balanced
+3. Studies the code through fixed lenses for both layers, a browser explorer and a backend property library
+4. Writes the catalog entry, chooses the form, implements in the project's house pattern using only the installed tool version's API
+5. Runs the property clean against seeded data, proves the run reached the state, and files one issue per surviving violation with a strict expected failure that names it
+
+#### Example
+
+```
+Property catalog entry
+
+Name: Next visit implies an open case
+Invariant: a non-empty Next Visit cell means Open Cases is at least 1
+Assertion: patient-list-enriched-columns (done)
+Value 4 / Cost 1
+Form: always(...) over an extractor that returns the rows as JSON
+```
+
+---
+
 ## Creating custom skills
 
 Write a markdown file in a local or global skills directory:

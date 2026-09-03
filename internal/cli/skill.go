@@ -17,6 +17,7 @@ var legacyAliases = map[string]map[string]string{
 		"meeting":    "meeting-notes-to-specs-skill",
 		"coordinate": "coordinator-skill",
 		"validate":   "business-model-validator-skill",
+		"properties": "property-tests-skill",
 	},
 	"builder": {},
 	"observer": {
