@@ -3,8 +3,8 @@ package sandbox
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -26,6 +26,9 @@ func registerMachine(opts CreateOptions, meta *SandboxMeta) error {
 	if opts.SSHKey == "" {
 		return fmt.Errorf("an existing machine needs --ssh-key")
 	}
+	if err := validateSSHUser(opts.SSHUser); err != nil {
+		return err
+	}
 
 	// Resolve to an absolute path: every later command runs from a
 	// different working directory than create did.
@@ -42,6 +45,25 @@ func registerMachine(opts CreateOptions, meta *SandboxMeta) error {
 
 	meta.IP = opts.IP
 	meta.SSHKeyPath = key
+	meta.SSHUser = opts.SSHUser
+	return nil
+}
+
+var sshUserRe = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9._-]*$`)
+
+// validateSSHUser checks the login user before it reaches an ssh argument.
+// A value that starts with "-" is read by ssh as an option rather than as
+// part of the destination, so "-oProxyCommand=..." would run a command on
+// the operator's own machine, and it would run again on every later status,
+// ssh, deploy and destroy, because the value is stored. An empty user is
+// valid and means root.
+func validateSSHUser(user string) error {
+	if user == "" {
+		return nil
+	}
+	if !sshUserRe.MatchString(user) {
+		return fmt.Errorf("invalid --ssh-user %q: must match [a-zA-Z0-9_][a-zA-Z0-9._-]* (a login name)", user)
+	}
 	return nil
 }
 
@@ -54,15 +76,16 @@ var checkReady = checkProvisioned
 // needs.
 func checkProvisioned(meta *SandboxMeta, name string) error {
 	fmt.Fprintln(os.Stderr, "Checking the machine is provisioned...")
-	out := strings.TrimSpace(runSSH(meta.IP, meta.SSHKeyPath, name, "test -f "+provisionedMarker+" && echo ok"))
+	user := sshUser(meta)
+	out := strings.TrimSpace(runSSH(meta.IP, meta.SSHKeyPath, name, user, "test -f "+provisionedMarker+" && echo ok"))
 	if out == "ok" {
 		return nil
 	}
 	// runSSH returns "" for a failed connection as well as for a missing
 	// file, so name both rather than guess.
-	return fmt.Errorf("could not confirm %s on %s as root: the machine is not provisioned, or the connection failed.\n"+
+	return fmt.Errorf("could not confirm %s on %s as %s: the machine is not provisioned, or the connection failed.\n"+
 		"spekk does not provision a machine it did not create. Prepare it first, then re-run this command",
-		provisionedMarker, meta.IP)
+		provisionedMarker, meta.IP, user)
 }
 
 // agentSecrets are the files spekk puts on a sandbox. On a machine that
@@ -88,8 +111,10 @@ var agentSecrets = []string{
 // GitHub token on somebody's server.
 func stopAgentService(sandbox *SandboxMeta, name string) error {
 	fmt.Fprintln(os.Stderr, "Stopping agent service and removing credentials...")
-	args := append(sshBatchArgs(sandbox, name), teardownCommand())
-	if out, err := exec.Command("ssh", args...).CombinedOutput(); err != nil {
+	// Teardown touches root-owned units and files, so a non-root user
+	// runs it under sudo.
+	args := append(sshBatchArgs(sandbox, name), privilegedScript(sshUser(sandbox), teardownCommand()))
+	if out, err := sshExec(args); err != nil {
 		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(out)))
 	}
 	return nil

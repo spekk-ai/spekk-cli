@@ -15,7 +15,8 @@ There are only two answers, and the flags already imply which one the operator w
 ## Success Criteria
 
 - `spekk sandbox create` accepts `--provider`, whose values are `digitalocean` and `none`. An unknown value is an error that lists the valid ones.
-- With `--provider` omitted, naming an existing machine with `--ip` or `--ssh-key` resolves to `none`; anything else resolves to `digitalocean`.
-- The cloud flags (`--region`, `--size`, `--vpc`, `--project`) and the existing-machine flags (`--ip`, `--ssh-key`) cannot be mixed. The error names the offending flags and the provider in force, including when that provider was inferred rather than typed.
+- With `--provider` omitted, naming an existing machine with `--ip`, `--ssh-key` or `--ssh-user` resolves to `none`; anything else resolves to `digitalocean`.
+- The cloud flags (`--region`, `--size`, `--vpc`, `--project`) and the existing-machine flags (`--ip`, `--ssh-key`, `--ssh-user`) cannot be mixed. The error names the offending flags and the provider in force, including when that provider was inferred rather than typed.
+- The inference and the validation read the same list of existing-machine flags. A flag in only one of the two lists makes create reject a flag the operator never typed, instead of naming the one they left out.
 - `ProviderByName` returns a nil `Provider` for `none`, and never a nil pointer inside a live interface for any value.
 - `destroy` and `status` read the provider from stored metadata. A nil provider means no cloud owns the machine, so there is nothing of its to tear down and no live state to fetch; both commands fall back to what they can do over SSH.

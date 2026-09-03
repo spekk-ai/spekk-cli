@@ -41,7 +41,8 @@ type CreateOptions struct {
 	Project string
 	VPC     string
 	IP      string // address of a machine that already exists
-	SSHKey  string // private key that reaches that machine as root
+	SSHKey  string // private key that reaches that machine as the login user
+	SSHUser string // login user for an existing machine (default: root)
 	Auth    AuthMode
 
 	// CloudInit is the provisioning payload from the release artifacts.
@@ -129,6 +130,10 @@ func Create(p Provider, opts CreateOptions) error {
 
 	// --- Generic provisioning (provider-agnostic) ---
 
+	// The login user for every SSH step below. root on a machine spekk
+	// created; whatever the operator gave for one they already had.
+	user := sshUser(meta)
+
 	// A failure from here on leaves a real machine running. Say so, and
 	// say which one, every time.
 	fail := func(stage string, err error) error {
@@ -148,17 +153,17 @@ func Create(p Provider, opts CreateOptions) error {
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
 
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(meta.IP, meta.SSHKeyPath, opts.Name, agentToken, opts.Auth); err != nil {
+	if err := injectCredentials(meta.IP, meta.SSHKeyPath, opts.Name, user, agentToken, opts.Auth); err != nil {
 		return fail("injecting credentials", err)
 	}
 
 	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
-	if err := configureGitCredentials(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
+	if err := configureGitCredentials(meta.IP, meta.SSHKeyPath, opts.Name, user); err != nil {
 		return fail("configuring git credentials", err)
 	}
 
 	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
-	if err := deployAgent(meta.IP, meta.SSHKeyPath, opts.Name, artifacts); err != nil {
+	if err := deployAgent(meta.IP, meta.SSHKeyPath, opts.Name, user, artifacts); err != nil {
 		return fail("deploying agent", err)
 	}
 
@@ -411,7 +416,7 @@ func Deploy(name string) error {
 	}
 	defer os.Remove(artifacts.BinaryPath)
 
-	if err := deployAgent(sandbox.IP, sandbox.SSHKeyPath, name, artifacts); err != nil {
+	if err := deployAgent(sandbox.IP, sandbox.SSHKeyPath, name, sshUser(sandbox), artifacts); err != nil {
 		return fmt.Errorf("deploy failed: %w", err)
 	}
 
@@ -443,15 +448,19 @@ WantedBy=multi-user.target
 
 // deployAgent copies the agent binary to /opt/spekk/agent-client, installs the
 // systemd unit, and (re)starts the service. Shared by Create and Deploy.
-func deployAgent(ip, keyPath, name string, artifacts *releaseArtifacts) error {
-	// Copy the binary up via scp.
+func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) error {
+	// Copy the binary up via scp. A non-root user cannot write /opt/spekk,
+	// so it stages in that user's home directory and the install script
+	// moves it up under sudo. Not /tmp: a fixed name in a directory every
+	// local user can write is a file another user can put there first, and
+	// what root then moves into place is what systemd runs.
 	scp := sshHostKeyOpts(name)
 	scp = append(scp, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		scp = append(scp, "-i", keyPath)
 	}
-	scp = append(scp, artifacts.BinaryPath, fmt.Sprintf("root@%s:/opt/spekk/agent-client", ip))
-	if out, err := exec.Command("scp", scp...).CombinedOutput(); err != nil {
+	scp = append(scp, artifacts.BinaryPath, scpTarget(user, ip))
+	if out, err := scpExec(scp); err != nil {
 		return fmt.Errorf("copying binary: %s\n%s", err, string(out))
 	}
 
@@ -470,10 +479,74 @@ systemctl daemon-reload
 systemctl enable spekk-agent
 systemctl restart spekk-agent`, spekkAgentUnit)
 
-	if out, err := runSSHCombined(ip, keyPath, name, script); err != nil {
+	if out, err := runSSHCombined(ip, keyPath, name, user, installCommand(user, script)); err != nil {
 		return fmt.Errorf("installing service: %s\n%s", err, out)
 	}
 	return nil
+}
+
+// stagedBinary is where a non-root deploy puts the agent binary before root
+// moves it into /opt/spekk. scp resolves a relative path against the login
+// user's home directory, which only that user and root can write.
+const stagedBinary = "agent-client.staged"
+
+// sshExec runs an ssh command. It is a variable so a test can read what the
+// privileged steps actually send, with no machine to send it to.
+var sshExec = func(args []string) ([]byte, error) {
+	return exec.Command("ssh", args...).CombinedOutput()
+}
+
+// scpExec copies a file with scp. It is a seam for the same reason sshExec
+// is: the deploy decides where a non-root login stages the agent binary, and
+// that decision is worth a test.
+var scpExec = func(args []string) ([]byte, error) {
+	return exec.Command("scp", args...).CombinedOutput()
+}
+
+// privilegedScript returns the remote command that runs script as root. A
+// root login runs it as it is; any other login user escalates. Every
+// privileged step goes through here, so the rule lives in one place rather
+// than in a repeated conditional at each call site.
+func privilegedScript(user, script string) string {
+	if user == "root" {
+		return script
+	}
+	return sudoWrap(script)
+}
+
+// scpTarget is where deployAgent copies the agent binary. root writes
+// /opt/spekk directly; anybody else stages in their own home directory.
+func scpTarget(user, ip string) string {
+	if user == "root" {
+		return fmt.Sprintf("root@%s:/opt/spekk/agent-client", ip)
+	}
+	return fmt.Sprintf("%s@%s:%s", user, ip, stagedBinary)
+}
+
+// installCommand is the remote command that installs and starts the agent.
+// A non-root deploy first moves the staged binary into place, because only
+// root can write /opt/spekk.
+func installCommand(user, script string) string {
+	if user == "root" {
+		return script
+	}
+	return fmt.Sprintf(`sudo mv "$HOME/%s" /opt/spekk/agent-client && `, stagedBinary) + privilegedScript(user, script)
+}
+
+// sudoWrap base64-encodes a script and pipes it through `sudo bash`, running
+// it as root without the quoting problems heredocs and nested quotes pose.
+// The login user must have passwordless sudo.
+func sudoWrap(script string) string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(script))
+	return fmt.Sprintf("echo '%s' | base64 -d | sudo bash", encoded)
+}
+
+// sshUser returns the login user for a sandbox, defaulting to root.
+func sshUser(meta *SandboxMeta) string {
+	if meta.SSHUser != "" {
+		return meta.SSHUser
+	}
+	return "root"
 }
 
 // --- Helpers ---
@@ -515,7 +588,7 @@ func sshArgs(sandbox *SandboxMeta, name string) []string {
 	if sandbox.SSHKeyPath != "" {
 		args = append(args, "-i", sandbox.SSHKeyPath)
 	}
-	args = append(args, fmt.Sprintf("root@%s", sandbox.IP))
+	args = append(args, fmt.Sprintf("%s@%s", sshUser(sandbox), sandbox.IP))
 	return args
 }
 
@@ -588,7 +661,7 @@ func waitForProvisioning(ip, keyPath, name string) error {
 	// Wait for provisioning marker
 	fmt.Fprintln(os.Stderr, "Waiting for cloud-init provisioning to complete...")
 	for time.Now().Before(deadline) {
-		out := runSSH(ip, keyPath, name, "test -f /opt/spekk/.provisioned && echo ok")
+		out := runSSH(ip, keyPath, name, "root", "test -f /opt/spekk/.provisioned && echo ok")
 		if strings.TrimSpace(out) == "ok" {
 			return nil
 		}
@@ -606,14 +679,15 @@ func checkTCPPort(ip string, port int) bool {
 	return true
 }
 
-// runSSH runs command on the host and returns trimmed stdout, or "" on error.
-func runSSH(ip, keyPath, name, command string) string {
+// runSSH runs command on the host as user and returns trimmed stdout, or ""
+// on error.
+func runSSH(ip, keyPath, name, user, command string) string {
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
-	args = append(args, fmt.Sprintf("root@%s", ip), command)
+	args = append(args, fmt.Sprintf("%s@%s", user, ip), command)
 	out, err := exec.Command("ssh", args...).Output()
 	if err != nil {
 		return ""
@@ -621,28 +695,29 @@ func runSSH(ip, keyPath, name, command string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// runSSHCombined runs command on the host, returning combined output and any error.
-func runSSHCombined(ip, keyPath, name, command string) (string, error) {
+// runSSHCombined runs command on the host as user, returning combined output
+// and any error.
+func runSSHCombined(ip, keyPath, name, user, command string) (string, error) {
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
-	args = append(args, fmt.Sprintf("root@%s", ip), command)
-	out, err := exec.Command("ssh", args...).CombinedOutput()
+	args = append(args, fmt.Sprintf("%s@%s", user, ip), command)
+	out, err := sshExec(args)
 	return string(out), err
 }
 
 // sshBatchArgs builds the ssh arguments for a non-interactive command on a
 // sandbox: host-key options, a connect timeout, no prompting, the sandbox key
-// if there is one, and the root account.
+// if there is one, and the login user.
 func sshBatchArgs(sandbox *SandboxMeta, name string) []string {
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10", "-o", "BatchMode=yes")
 	if sandbox.SSHKeyPath != "" {
 		args = append(args, "-i", sandbox.SSHKeyPath)
 	}
-	return append(args, fmt.Sprintf("root@%s", sandbox.IP))
+	return append(args, fmt.Sprintf("%s@%s", sshUser(sandbox), sandbox.IP))
 }
 
 func sshCheck(sandbox *SandboxMeta, name, command string) string {
@@ -654,7 +729,7 @@ func sshCheck(sandbox *SandboxMeta, name, command string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func injectCredentials(ip, keyPath, name, agentToken string, mode AuthMode) error {
+func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode) error {
 	envVars := map[string]string{
 		"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
 		"AWS_SECRET_ACCESS_KEY": os.Getenv("AWS_SECRET_ACCESS_KEY"),
@@ -665,16 +740,15 @@ func injectCredentials(ip, keyPath, name, agentToken string, mode AuthMode) erro
 	spekkHost := os.Getenv("SPEKK_HOST")
 
 	envContent := buildEnvContent(mode, envVars, name, agentToken, spekkHost)
-	script := buildInjectScript(envContent)
+	script := privilegedScript(user, buildInjectScript(envContent))
 
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
-	args = append(args, fmt.Sprintf("root@%s", ip), script)
-	cmd := exec.Command("ssh", args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
+	if out, err := sshExec(args); err != nil {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
 	}
 	return nil
@@ -706,19 +780,18 @@ func buildInjectScript(envContent string) string {
 	)
 }
 
-func configureGitCredentials(ip, keyPath, name string) error {
+func configureGitCredentials(ip, keyPath, name, user string) error {
 	ghToken := os.Getenv("GITHUB_TOKEN")
 
-	script := buildGitCredentialScript(ghToken)
+	script := privilegedScript(user, buildGitCredentialScript(ghToken))
 
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
 		args = append(args, "-i", keyPath)
 	}
-	args = append(args, fmt.Sprintf("root@%s", ip), script)
-	cmd := exec.Command("ssh", args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
+	if out, err := sshExec(args); err != nil {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
 	}
 	return nil

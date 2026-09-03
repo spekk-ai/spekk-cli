@@ -49,6 +49,8 @@ func TestValidateProviderFlags(t *testing.T) {
 		{"machine flags with digitalocean", "digitalocean", []string{"--ip", "--ssh-key"}, "--ip, --ssh-key"},
 		{"cloud flags with digitalocean", "digitalocean", []string{"--region", "--size"}, ""},
 		{"machine flags with none", ProviderNone, []string{"--ip", "--ssh-key"}, ""},
+		{"ssh-user with none", ProviderNone, []string{"--ip", "--ssh-key", "--ssh-user"}, ""},
+		{"ssh-user with digitalocean", "digitalocean", []string{"--ssh-user"}, "--ssh-user"},
 		{"nothing set", "digitalocean", nil, ""},
 	}
 	for _, tt := range tests {
@@ -85,5 +87,34 @@ func TestProviderByNameNoneIsNil(t *testing.T) {
 	}
 	if p, err := ProviderFromMeta(&SandboxMeta{Provider: ProviderNone}); err != nil || p != nil {
 		t.Errorf("ProviderFromMeta = %v, %v; want nil, nil", p, err)
+	}
+}
+
+// The inference and the validation must read one list. When they differed,
+// `create --name x --ssh-user ubuntu` resolved to digitalocean and then
+// refused --ssh-user, naming a provider the operator never asked for instead
+// of the --ip they forgot.
+func TestNamesExistingMachine(t *testing.T) {
+	tests := []struct {
+		name string
+		set  []string
+		want bool
+	}{
+		{"nothing set", nil, false},
+		{"ip alone", []string{"--ip"}, true},
+		{"ssh-key alone", []string{"--ssh-key"}, true},
+		{"ssh-user alone", []string{"--ssh-user"}, true},
+		{"cloud flags only", []string{"--region", "--size"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setFlags := map[string]bool{}
+			for _, f := range tt.set {
+				setFlags[f] = true
+			}
+			if got := NamesExistingMachine(setFlags); got != tt.want {
+				t.Errorf("NamesExistingMachine(%v) = %v, want %v", tt.set, got, tt.want)
+			}
+		})
 	}
 }

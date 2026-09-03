@@ -1107,6 +1107,7 @@ func createSandbox(args []string) {
 		"vpc":      {Names: []string{"--vpc"}, Type: cli.StringFlag},
 		"ip":       {Names: []string{"--ip"}, Type: cli.StringFlag},
 		"ssh-key":  {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
+		"ssh-user": {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
 		"auth":     {Names: []string{"--auth"}, Type: cli.StringFlag},
 		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
@@ -1131,7 +1132,9 @@ OPTIONS:
 
   Options for a machine you already have:
   --ip <address>         Address of the machine
-  --ssh-key <path>       Private key that reaches it as root
+  --ssh-key <path>       Private key that reaches it as the login user
+  --ssh-user <user>      SSH login user (default: root); a non-root user must
+                         have passwordless sudo, as AWS Ubuntu AMIs do
 
   Model credential:
   --auth <mode>          How the agent authenticates Claude: bedrock (default,
@@ -1162,22 +1165,24 @@ OPTIONS:
 		os.Exit(1)
 	}
 
+	setFlags := map[string]bool{
+		"--region":   flags.String("region") != "",
+		"--size":     flags.String("size") != "",
+		"--vpc":      flags.String("vpc") != "",
+		"--project":  flags.String("project") != "",
+		"--ip":       flags.String("ip") != "",
+		"--ssh-key":  flags.String("ssh-key") != "",
+		"--ssh-user": flags.String("ssh-user") != "",
+	}
+
 	// Naming an existing machine is what says there is nothing to create.
-	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), flags.String("ip") != "" || flags.String("ssh-key") != "")
+	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), sandbox.NamesExistingMachine(setFlags))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
 
 	// Validate provider-specific flags.
-	setFlags := map[string]bool{
-		"--region":  flags.String("region") != "",
-		"--size":    flags.String("size") != "",
-		"--vpc":     flags.String("vpc") != "",
-		"--project": flags.String("project") != "",
-		"--ip":      flags.String("ip") != "",
-		"--ssh-key": flags.String("ssh-key") != "",
-	}
 	if err := sandbox.ValidateProviderFlags(providerName, setFlags); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
@@ -1196,6 +1201,7 @@ OPTIONS:
 		VPC:     flags.String("vpc"),
 		IP:      flags.String("ip"),
 		SSHKey:  flags.String("ssh-key"),
+		SSHUser: flags.String("ssh-user"),
 		Auth:    auth,
 	}
 	if err := sandbox.Create(p, opts); err != nil {

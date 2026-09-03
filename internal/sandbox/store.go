@@ -35,6 +35,8 @@ type SandboxMeta struct {
 	Project    string `json:"project,omitempty"`
 	SSHKeyID   int    `json:"sshKeyId,omitempty"`
 	SSHKeyPath string `json:"sshKeyPath,omitempty"`
+	// SSHUser is the login user for an existing machine; empty means root.
+	SSHUser string `json:"sshUser,omitempty"`
 }
 
 // sandboxesFile returns the path to the sandboxes metadata file.
