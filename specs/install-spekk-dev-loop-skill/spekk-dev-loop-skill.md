@@ -47,19 +47,11 @@ order (`spekk next`), in this same session.
 
 ## Phase 3 — Verify
 
-Re-read the built code with an adversarial eye. Build, vet, and test it
-yourself — do not trust a self-report. Apply the standing test bar, every time:
+Run `spekk skill show builder review` and follow it in this session. It reviews the assertions this session marked `done` against the real code, applies six lenses with a remedy each, and fixes what it finds. Tests must be lean and high value: delete a low-value or redundant test rather than keep it.
 
-> **Tests must be LEAN and HIGH VALUE only.** Delete low-value or redundant
-> tests rather than keep them — see `code-quality-principles`, "Lean,
-> high-value tests only".
+A self-review reuses the context that the build made. That is what makes it cheap, and it is also what it loses: independence. For a high-stakes or large change, run `spekk builder review` instead, so a fresh session reads the code with no memory of writing it. That is the exception, not the default.
 
-Flag or fix: tests that restate the implementation instead of pinning real
-behavior, duplicate coverage, and tests that do not exercise the real code path.
-
-Loop Phases 2–3 until the queue is empty. Commit as you go. Push only after your
-own verification — that is also where you catch a judgment call you disagree
-with, before it is live.
+Loop Phases 2–3 until the queue is empty. Commit as you go. Push only after the review reports. That is also where you catch a judgment call you disagree with, before it is live.
 
 ## Escalation — when one session is not enough
 

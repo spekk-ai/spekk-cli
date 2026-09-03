@@ -19,8 +19,14 @@ func TestEmbeddedFS_SpekkDevLoopSkill(t *testing.T) {
 	}
 
 	content := string(data)
-	if !strings.Contains(content, "name: spekk-dev-loop") {
-		t.Errorf("embedded spekk-dev-loop skill missing \"name: spekk-dev-loop\" in frontmatter")
+	for _, want := range []string{
+		"name: spekk-dev-loop",
+		"spekk skill show builder review",
+		"spekk builder review",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("embedded spekk-dev-loop skill missing %q", want)
+		}
 	}
 }
 
