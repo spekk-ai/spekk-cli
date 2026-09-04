@@ -22,6 +22,8 @@ git push origin v1.26.0
 
 `v*` publishes a stable release; `exp-*` publishes a prerelease, and its version string has the `exp-` prefix stripped. A tag is the only trigger that stamps a real version — a `workflow_dispatch` run falls back to `git describe`.
 
+Cut an experimental build with an `exp-*` tag on the feature branch that holds the work. Every release the workflow creates lists `main` as its target, whatever branch the tag sits on. The tag's commit is the truth. Deleting an `exp-*` tag leaves its release behind as a draft, so delete the release as well.
+
 ## After the tag
 
 3. **Raise the pins.** Both examples in [`ci.md`](ci.md) — the pre-commit hook `rev` and `SPEKK_VERSION` — and the same two pins in every downstream project that validates specs in CI. They deliberately do not float, so nothing raises them but a person. Confirm `spekk validate` exits 0 at the new version against that project's tree **before** merging its bump, not after.
