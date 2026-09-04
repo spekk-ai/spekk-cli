@@ -15,11 +15,24 @@ var ValidProviders = []string{"digitalocean", ProviderNone}
 
 // existingMachineFlags name a machine that already exists. Any one of them
 // says the operator is not asking for a new one.
-var existingMachineFlags = []string{"--ip", "--ssh-key"}
+var existingMachineFlags = []string{"--ip", "--ssh-key", "--ssh-user"}
 
 // cloudFlags configure a machine spekk creates, so they are meaningless for
 // one it does not.
 var cloudFlags = []string{"--region", "--size", "--vpc", "--project"}
+
+// NamesExistingMachine reports whether the flags name a machine that already
+// exists. The inference and the validation read the same list here, so they
+// cannot disagree about which flags name a machine: a flag that is only in
+// one of the two lists makes create reject a flag the operator never typed.
+func NamesExistingMachine(setFlags map[string]bool) bool {
+	for _, f := range existingMachineFlags {
+		if setFlags[f] {
+			return true
+		}
+	}
+	return false
+}
 
 // ResolveProviderName decides which provider a create is for.
 //
