@@ -3,7 +3,8 @@ id: harness-profile-abstraction
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 2
-status: not_started
+status: in_progress
+locked-by: builder-MacBook-Pro-70971-1788563515
 branch: feature/configurable-harness
 ---
 
