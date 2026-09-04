@@ -109,6 +109,53 @@ func TestDefaultProfile_ResolvedArgv(t *testing.T) {
 	}
 }
 
+// The opencode profile's resolved argv must follow opencode's own CLI
+// conventions in both interactive and headless modes — not a copy of the claude
+// flags. Interactive seeds the TUI with --prompt (a bare positional there is the
+// project dir); headless uses the `run` subcommand with the message as a bare
+// positional; --auto is opencode's skip-permissions flag.
+func TestOpencodeProfile_ResolvedArgv(t *testing.T) {
+	p, err := ResolveProfile("opencode")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"opencode\") errored: %v", err)
+	}
+	const msg = "activation message"
+
+	cases := []struct {
+		name string
+		got  []string
+		want []string
+	}{
+		{"interactive", p.InteractiveArgs(msg), []string{"--auto", "--prompt", msg}},
+		{"system-prompt", p.SystemPromptArgs(msg), []string{"--auto", "--prompt", msg}},
+		{"headless", p.HeadlessArgs(msg), []string{"run", "--auto", msg}},
+	}
+	for _, tc := range cases {
+		if !equalArgs(tc.got, tc.want) {
+			t.Errorf("%s argv = %v, want %v", tc.name, tc.got, tc.want)
+		}
+	}
+}
+
+// The opencode profile's not-found guidance must name opencode and point at
+// opencode's install instructions — never Claude's.
+func TestOpencodeProfile_NotFoundNamesOpencode(t *testing.T) {
+	p, err := ResolveProfile("opencode")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"opencode\") errored: %v", err)
+	}
+	l1, l2 := p.notFoundLines()
+	if !strings.Contains(l1, "opencode") {
+		t.Errorf("first not-found line does not name opencode: %q", l1)
+	}
+	if !strings.Contains(l2, p.InstallURL) || !strings.Contains(l2, "opencode.ai") {
+		t.Errorf("second not-found line does not point at opencode's install URL: %q", l2)
+	}
+	if strings.Contains(l1+l2, "Claude") || strings.Contains(l1+l2, "claude.ai") {
+		t.Errorf("opencode guidance mentions Claude: %q / %q", l1, l2)
+	}
+}
+
 // The not-found guidance must come from the profile and name that harness, so a
 // non-claude harness never tells the user to install Claude Code.
 func TestProfile_NotFoundNamesHarness(t *testing.T) {

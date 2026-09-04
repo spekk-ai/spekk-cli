@@ -3,8 +3,7 @@ id: opencode-harness-profile
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 2
-status: in_progress
-locked-by: builder-MacBook-Pro-local-14179-1788564556
+status: done
 depends-on: harness-profile-abstraction
 branch: feature/configurable-harness
 ---
@@ -29,3 +28,5 @@ opencode CLI instead of `claude`, with opencode's own flag conventions.
   and headless modes.
 - Selecting opencode changes only the launch harness; the prompts, skills, and
   spec workflow are unchanged.
+
+**Tests:** internal/agent/harness_test.go

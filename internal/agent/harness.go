@@ -23,8 +23,11 @@ type Profile struct {
 	// InstallURL points at the harness's install instructions, shown when the
 	// binary is missing.
 	InstallURL string
-	// PromptFlags precede the prompt argument. Nil means the prompt is passed as
-	// a bare trailing positional argument.
+	// PromptFlags precede the prompt argument in interactive mode. Nil means the
+	// prompt is passed as a bare trailing positional argument. (Headless mode
+	// always passes the prompt as a bare positional after the headless flags —
+	// see HeadlessArgs — because both supported harnesses take it that way:
+	// claude's -p and opencode's `run` each consume a positional message.)
 	PromptFlags []string
 	// SkipPermissionsFlags skip the harness's interactive permission prompts.
 	SkipPermissionsFlags []string
@@ -49,18 +52,27 @@ var claudeCodeProfile = Profile{
 }
 
 // opencodeProfile launches the coach, builder, and observer through the
-// opencode CLI. Its flags follow opencode's own conventions (the
-// opencode-harness-profile assertion confirms and refines them); it is
-// deliberately not a copy of the claude flags.
+// opencode CLI. Its flags follow opencode's own conventions (confirmed against
+// `opencode --help` / `opencode run --help`, v1.18.x); it is deliberately not a
+// copy of the claude flags:
+//
+//   - Interactive TUI: an initial prompt is passed with `--prompt <msg>` (a bare
+//     positional there is read as the project directory, not a prompt).
+//   - Headless: the `run` subcommand takes the message as a bare positional.
+//   - Permissions: `--auto` auto-approves permissions not explicitly denied,
+//     opencode's equivalent of claude's --dangerously-skip-permissions.
+//
+// opencode has no separate system-prompt flag, so the interactive builder reuses
+// `--prompt` (SystemPromptFlags) to seed the session.
 var opencodeProfile = Profile{
 	Name:                 "opencode",
 	Binary:               "opencode",
 	DisplayName:          "opencode",
-	InstallURL:           "https://opencode.ai",
-	PromptFlags:          nil,
-	SkipPermissionsFlags: nil,
+	InstallURL:           "https://opencode.ai/docs/",
+	PromptFlags:          []string{"--prompt"},
+	SkipPermissionsFlags: []string{"--auto"},
 	HeadlessFlags:        []string{"run"},
-	SystemPromptFlags:    nil,
+	SystemPromptFlags:    []string{"--prompt"},
 }
 
 const defaultHarness = "claude-code"
@@ -163,11 +175,13 @@ func (p Profile) SystemPromptArgs(prompt string) []string {
 }
 
 // HeadlessArgs returns the argv (excluding the binary) to run the harness in
-// non-interactive/headless mode with prompt.
+// non-interactive/headless mode with prompt. The prompt is a bare positional
+// following the headless flags: claude's -p and opencode's `run` each take the
+// message that way, so PromptFlags (an interactive-only concern) does not apply.
 func (p Profile) HeadlessArgs(prompt string) []string {
 	args := append([]string{}, p.HeadlessFlags...)
 	args = append(args, p.SkipPermissionsFlags...)
-	return append(args, p.promptArgs(prompt)...)
+	return append(args, prompt)
 }
 
 // notFoundLines returns the two guidance lines shown when the harness binary is
