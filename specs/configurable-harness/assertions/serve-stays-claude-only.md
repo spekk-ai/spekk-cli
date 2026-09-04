@@ -3,7 +3,8 @@ id: serve-stays-claude-only
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 3
-status: not_started
+status: in_progress
+locked-by: builder-MacBook-Pro.local-23128-1788564840
 depends-on: harness-selection-config
 branch: feature/configurable-harness
 ---
