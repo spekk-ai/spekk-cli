@@ -949,6 +949,7 @@ func launchServe(args []string) {
 		"port":    {Names: []string{"--port", "-p"}, Type: cli.StringFlag},
 		"host":    {Names: []string{"--host"}, Type: cli.StringFlag},
 		"verbose": {Names: []string{"--verbose", "-v"}, Type: cli.BoolFlag},
+		"harness": {Names: []string{"--harness"}, Type: cli.StringFlag},
 		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -963,13 +964,23 @@ OPTIONS:
   --port, -p <port>   Port to listen on (default: 3118)
   --host <host>       Host to bind to (default: localhost)
   --verbose, -v       Enable debug logging for WebSocket messages
+  --harness <name>    Agent harness (only claude-code is supported by serve)
   --help, -h          Show this help message
 `)
 		return
 	}
 
+	// Resolve the harness (--harness flag > SPEKK_HARNESS env > default) so an
+	// unknown name fails fast; serve.Run then refuses any valid non-claude one.
+	profile, err := agent.ResolveHarness(flags.String("harness"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
 	opts := serve.Options{
 		Verbose: flags.Bool("verbose"),
+		Harness: profile,
 	}
 
 	if p := flags.String("port"); p != "" {

@@ -3,8 +3,7 @@ id: serve-stays-claude-only
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 3
-status: in_progress
-locked-by: builder-MacBook-Pro.local-23128-1788564840
+status: done
 depends-on: harness-selection-config
 branch: feature/configurable-harness
 ---
@@ -24,3 +23,5 @@ clear message rather than spawning a binary that cannot speak that protocol.
 - `serve` does not spawn the non-claude binary and does not fall back to
   spawning `claude` silently — it refuses explicitly.
 - A test asserts the refusal path for a non-claude harness selection.
+
+**Tests:** internal/serve/serve_test.go
