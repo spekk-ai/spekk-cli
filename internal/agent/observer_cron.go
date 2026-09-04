@@ -276,13 +276,14 @@ func doInstallCron(args []string) error {
 		return err
 	}
 
-	// Resolve claude's absolute path at install time. Cron runs with a minimal
-	// PATH that typically does not include claude's install location, so a bare
-	// "claude" lookup would fail silently. Baking the absolute path into the
-	// cron line ensures the entry is functional.
-	claudePath, err := exec.LookPath("claude")
+	// Resolve the harness binary's absolute path at install time. Cron runs with
+	// a minimal PATH that typically does not include the harness's install
+	// location, so a bare name lookup would fail silently. Baking the absolute
+	// path into the cron line ensures the entry is functional.
+	profile := DefaultProfile()
+	harnessPath, err := exec.LookPath(profile.Binary)
 	if err != nil {
-		return fmt.Errorf("cannot find 'claude' binary: %w\nInstall Claude Code first: https://claude.ai/code", err)
+		return fmt.Errorf("cannot find %q binary: %w\nInstall %s first: %s", profile.Binary, err, profile.DisplayName, profile.InstallURL)
 	}
 
 	projectDir, err := os.Getwd()
@@ -298,7 +299,7 @@ func doInstallCron(args []string) error {
 	}
 
 	binary := spekkBinaryPath()
-	loopLine, consolidateLine := buildCronLines(binary, claudePath, projectDir, cfg)
+	loopLine, consolidateLine := buildCronLines(binary, harnessPath, projectDir, cfg)
 
 	existing, err := readCrontab()
 	if err != nil {

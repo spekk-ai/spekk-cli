@@ -85,21 +85,22 @@ func BuildSkillMessage(installDir, agent, subcommand string, args []string) (str
 	return sb.String(), nil
 }
 
-// Launch spawns the `claude` CLI with the given message and inherited stdio.
+// Launch spawns the harness binary with the given message and inherited stdio.
 // It forwards SIGINT and preserves the exit code.
-func Launch(message string) error {
-	cmd := exec.Command("claude", "--dangerously-skip-permissions", message)
+func Launch(profile Profile, message string) error {
+	cmd := exec.Command(profile.Binary, profile.InteractiveArgs(message)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		if isNotFound(err) {
-			fmt.Fprintln(os.Stderr, "Error: Claude Code CLI not found. Please install Claude Code first.")
-			fmt.Fprintln(os.Stderr, "Visit: https://claude.ai/code for installation instructions.")
+			l1, l2 := profile.notFoundLines()
+			fmt.Fprintln(os.Stderr, "Error: "+l1)
+			fmt.Fprintln(os.Stderr, l2)
 			os.Exit(1)
 		}
-		return fmt.Errorf("Error launching Claude Code: %w", err)
+		return fmt.Errorf("Error launching %s: %w", profile.DisplayName, err)
 	}
 
 	// Forward SIGINT to child process

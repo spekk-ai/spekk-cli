@@ -3,8 +3,7 @@ id: harness-profile-abstraction
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 2
-status: in_progress
-locked-by: builder-MacBook-Pro-70971-1788563515
+status: done
 branch: feature/configurable-harness
 ---
 
@@ -13,6 +12,8 @@ branch: feature/configurable-harness
 Every place spekk spawns an interactive or headless agent reads its binary name
 and flags from a harness profile value. `serve` is excluded (see
 `serve-stays-claude-only`).
+
+**Tests:** internal/agent/harness_test.go
 
 ## Success Criteria
 

@@ -122,6 +122,8 @@ func RunObserver(args []string, installDir string) {
 		os.Exit(1)
 	}
 
+	profile := DefaultProfile()
+
 	// Skill subcommand: check the first positional arg against the observer skill resolver
 	// before parsing flags as monitoring options.
 	skillName := ExtractSkillArgFromFlagSet(args, ObserverFlags)
@@ -159,12 +161,12 @@ func RunObserver(args []string, installDir string) {
 			if cfg.Headless {
 				wd, _ := os.Getwd()
 				lockFile := ObserverLockFile(wd, skill.Name)
-				if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
+				if err := LaunchHeadless(profile, cfg.ClaudePath, lockFile, message); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 					os.Exit(1)
 				}
 			} else {
-				if err := Launch(message); err != nil {
+				if err := Launch(profile, message); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 					os.Exit(1)
 				}
@@ -199,12 +201,12 @@ func RunObserver(args []string, installDir string) {
 	if cfg.Headless {
 		wd, _ := os.Getwd()
 		lockFile := ObserverLockFile(wd, "")
-		if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
+		if err := LaunchHeadless(profile, cfg.ClaudePath, lockFile, message); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 	} else {
-		if err := Launch(message); err != nil {
+		if err := Launch(profile, message); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}

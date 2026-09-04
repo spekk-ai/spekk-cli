@@ -829,7 +829,7 @@ func launchCoachAgent(args []string) {
 		os.Exit(1)
 	}
 
-	if err := agent.Launch(message); err != nil {
+	if err := agent.Launch(agent.DefaultProfile(), message); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
