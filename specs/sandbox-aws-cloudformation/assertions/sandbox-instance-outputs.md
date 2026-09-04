@@ -3,7 +3,8 @@ id: sandbox-instance-outputs
 parent: sandbox-aws-cloudformation
 created: 2026-08-29T21:00:00Z
 priority: 1
-status: not_started
+status: done
+branch: feature/sandbox-aws-cloudformation
 ---
 
 # Template launches a prepared Ubuntu instance and outputs a ready-to-use IP

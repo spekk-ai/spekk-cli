@@ -3,7 +3,8 @@ id: sandbox-network-isolation
 parent: sandbox-aws-cloudformation
 created: 2026-08-29T21:00:00Z
 priority: 1
-status: not_started
+status: done
+branch: feature/sandbox-aws-cloudformation
 ---
 
 # Sandbox instance lives in an isolated VPC with SSH-only ingress
