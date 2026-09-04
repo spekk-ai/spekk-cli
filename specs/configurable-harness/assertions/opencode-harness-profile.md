@@ -3,7 +3,8 @@ id: opencode-harness-profile
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 2
-status: not_started
+status: in_progress
+locked-by: builder-MacBook-Pro-local-14179-1788564556
 depends-on: harness-profile-abstraction
 branch: feature/configurable-harness
 ---
