@@ -209,22 +209,33 @@ Some content here.
 
 func TestExtractAllPositionalArgs(t *testing.T) {
 	tests := []struct {
-		args []string
-		want []string
+		args    []string
+		want    []string
+		wantErr bool
 	}{
-		{nil, nil},
-		{[]string{}, nil},
-		{[]string{"skill1"}, []string{"skill1"}},
-		{[]string{"skill1", "skill2"}, []string{"skill1", "skill2"}},
-		{[]string{"--watch", "skill1"}, []string{"skill1"}},
-		{[]string{"skill1", "--watch"}, []string{"skill1"}},
-		{[]string{"--idle-timeout", "60", "skill1", "skill2"}, []string{"skill1", "skill2"}},
-		{[]string{"--watch", "--idle-timeout", "300", "s1", "s2", "s3"}, []string{"s1", "s2", "s3"}},
-		{[]string{"-w"}, nil},
-		{[]string{"--unknown-flag", "skill1"}, []string{"skill1"}},
+		{nil, nil, false},
+		{[]string{}, nil, false},
+		{[]string{"skill1"}, []string{"skill1"}, false},
+		{[]string{"skill1", "skill2"}, []string{"skill1", "skill2"}, false},
+		{[]string{"--watch", "skill1"}, []string{"skill1"}, false},
+		{[]string{"skill1", "--watch"}, []string{"skill1"}, false},
+		{[]string{"--idle-timeout", "60", "skill1", "skill2"}, []string{"skill1", "skill2"}, false},
+		{[]string{"--watch", "--idle-timeout", "300", "s1", "s2", "s3"}, []string{"s1", "s2", "s3"}, false},
+		{[]string{"-w"}, nil, false},
+		// Unknown flags are rejected so a typo'd flag (or its value) is never
+		// silently treated as a skill name.
+		{[]string{"--unknown-flag", "skill1"}, nil, true},
+		{[]string{"--idle-timout", "60"}, nil, true},
 	}
 	for _, tt := range tests {
-		got := extractAllPositionalArgs(tt.args, LoopFlags)
+		got, err := extractAllPositionalArgs(tt.args, LoopFlags)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("extractAllPositionalArgs(%v) err = %v, wantErr %v", tt.args, err, tt.wantErr)
+			continue
+		}
+		if tt.wantErr {
+			continue
+		}
 		if len(got) != len(tt.want) {
 			t.Errorf("extractAllPositionalArgs(%v) = %v, want %v", tt.args, got, tt.want)
 			continue

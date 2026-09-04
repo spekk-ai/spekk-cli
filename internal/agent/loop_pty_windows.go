@@ -9,9 +9,20 @@ import (
 	"time"
 )
 
+// terminateChild stops the builder child on Ctrl+C. On Windows the child shares
+// the console (no PTY/session), so a plain Kill is sufficient.
+func terminateChild(p *os.Process) {
+	if p == nil {
+		return
+	}
+	_ = p.Kill()
+}
+
 // launchClaudeWithPTY on Windows runs Claude with inherited stdio.
 // Idle timeout is not supported on Windows (requires PTY for activity tracking).
-func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, bool, error) {
+// The started process is registered in holder (if non-nil) so the caller's
+// signal handler can stop it on Ctrl+C.
+func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration, holder *processHolder) (bool, bool, error) {
 	if idleTimeout > 0 {
 		colorLog(colorYellow, "Idle timeout not supported on Windows (requires PTY). Running without timeout.")
 	}
@@ -27,6 +38,11 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 			os.Exit(1)
 		}
 		return false, false, fmt.Errorf("error launching Claude: %w", err)
+	}
+
+	if holder != nil {
+		holder.set(cmd.Process)
+		defer holder.set(nil)
 	}
 
 	waitErr := cmd.Wait()

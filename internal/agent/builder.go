@@ -239,6 +239,12 @@ func (ph *processHolder) isSet() bool {
 	return ph.process != nil
 }
 
+func (ph *processHolder) get() *os.Process {
+	ph.mu.Lock()
+	defer ph.mu.Unlock()
+	return ph.process
+}
+
 // launchClaude spawns the claude CLI with the given args and inherited stdio.
 // Returns true if claude exited successfully.
 // holder receives the started process for SIGINT forwarding.

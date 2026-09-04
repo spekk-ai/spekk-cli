@@ -83,9 +83,11 @@ var LoopFlags = cli.FlagSet{
 	"idleTimeout": {Names: []string{"--idle-timeout"}, Type: cli.StringFlag},
 }
 
-// extractAllPositionalArgs returns all positional (non-flag) arguments
-// from the args list, skipping known flags and their values.
-func extractAllPositionalArgs(args []string, flags cli.FlagSet) []string {
+// extractAllPositionalArgs returns all positional (non-flag) arguments from the
+// args list, skipping known flags and their values. Any unrecognized flag
+// (a "-"-prefixed token that is not in flags) is an error, so a typo'd flag or
+// its value is never silently treated as a skill name.
+func extractAllPositionalArgs(args []string, flags cli.FlagSet) ([]string, error) {
 	flagStrings := make(map[string]bool)
 	stringFlags := make(map[string]bool)
 
@@ -108,11 +110,11 @@ func extractAllPositionalArgs(args []string, flags cli.FlagSet) []string {
 			continue
 		}
 		if strings.HasPrefix(arg, "-") {
-			continue
+			return nil, fmt.Errorf("unknown flag: %s", arg)
 		}
 		positional = append(positional, arg)
 	}
-	return positional
+	return positional, nil
 }
 
 // skillsSummary returns the post-build skills summary line.
@@ -124,7 +126,12 @@ func skillsSummary(succeeded, total int) string {
 func RunBuilderLoop(args []string, installDir string) {
 	parsed := cli.ParseFlags(args, LoopFlags)
 	watch := parsed.Bool("watch")
-	skills := extractAllPositionalArgs(args, LoopFlags)
+	skills, err := extractAllPositionalArgs(args, LoopFlags)
+	if err != nil {
+		colorLog(colorRed, "Error: "+err.Error())
+		colorLog(colorBlue, `Run "spekk loop help" for usage.`)
+		os.Exit(1)
+	}
 
 	idleTimeout := 120
 	if s := parsed.String("idleTimeout"); s != "" {
@@ -149,10 +156,19 @@ func RunBuilderLoop(args []string, installDir string) {
 
 	var completed int64
 
+	// active holds the currently-running builder child so Ctrl+C can stop it
+	// before we exit. Without this, the PTY child runs in its own session and
+	// never sees the terminal's SIGINT, so exiting would orphan it.
+	active := &processHolder{}
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
+		if p := active.get(); p != nil {
+			colorLog(colorYellow, "\nInterrupting current build...")
+			terminateChild(p)
+		}
 		count := atomic.LoadInt64(&completed)
 		colorLog(colorGreen, "\n"+completionMessage(count))
 		os.Exit(0)
@@ -213,6 +229,7 @@ func RunBuilderLoop(args []string, installDir string) {
 		success, timedOut, launchErr := launchClaudeWithPTY(
 			[]string{"--dangerously-skip-permissions", message},
 			time.Duration(idleTimeout)*time.Second,
+			active,
 		)
 
 		if launchErr != nil {
@@ -252,13 +269,13 @@ func RunBuilderLoop(args []string, installDir string) {
 	// Post-build skills pipeline
 	count := atomic.LoadInt64(&completed)
 	if len(skills) > 0 && count > 0 {
-		runPostBuildSkills(skills, installDir, idleTimeout)
+		runPostBuildSkills(skills, installDir, idleTimeout, active)
 	}
 }
 
 // runPostBuildSkills launches each skill as a separate builder agent invocation
 // after all assertions have been completed.
-func runPostBuildSkills(skills []string, installDir string, idleTimeout int) {
+func runPostBuildSkills(skills []string, installDir string, idleTimeout int, active *processHolder) {
 	colorLog(colorCyan, "\n--- Post-Build Skills Pipeline ---")
 
 	done := make(map[string]bool)
@@ -305,6 +322,7 @@ func runPostBuildSkills(skills []string, installDir string, idleTimeout int) {
 		success, timedOut, launchErr := launchClaudeWithPTY(
 			[]string{"--dangerously-skip-permissions", message},
 			time.Duration(idleTimeout)*time.Second,
+			active,
 		)
 
 		done[skill] = true

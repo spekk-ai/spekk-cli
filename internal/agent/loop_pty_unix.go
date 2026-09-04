@@ -35,10 +35,50 @@ func sigkillAfter(proc *os.Process, done <-chan struct{}) {
 	}
 }
 
+// terminateChild stops a builder child (started under its own session via the
+// PTY) and everything it spawned. It signals the whole process group so no
+// subprocess is orphaned, escalating from SIGTERM to SIGKILL after a grace
+// period. Called from the loop's Ctrl+C handler before the process exits.
+func terminateChild(p *os.Process) {
+	if p == nil {
+		return
+	}
+	// pty.Start puts the child in a new session, so its PGID equals its PID;
+	// a negative PID targets the whole group.
+	syscall.Kill(-p.Pid, syscall.SIGTERM)
+	time.Sleep(2 * time.Second)
+	syscall.Kill(-p.Pid, syscall.SIGKILL)
+}
+
+// markerAtLineStart reports whether marker appears at the start of a line in
+// data — preceded by a newline, or at the very start of the stream. Requiring a
+// line boundary avoids false completions when the marker string shows up inline
+// within other builder output (e.g. echoed file contents).
+func markerAtLineStart(data, marker []byte, atStreamStart bool) bool {
+	from := 0
+	for {
+		rel := bytes.Index(data[from:], marker)
+		if rel < 0 {
+			return false
+		}
+		pos := from + rel
+		if pos == 0 {
+			if atStreamStart {
+				return true
+			}
+		} else if data[pos-1] == '\n' {
+			return true
+		}
+		from = pos + 1
+	}
+}
+
 // launchClaudeWithPTY spawns claude inside a pseudo-terminal for idle timeout detection.
 // Returns (success, timedOut, error). When timedOut is true, the process was killed
-// due to inactivity and the caller should reset the assertion status.
-func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, bool, error) {
+// due to inactivity and the caller should reset the assertion status. The started
+// process is registered in holder (if non-nil) so the caller's signal handler can
+// stop it on Ctrl+C.
+func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration, holder *processHolder) (bool, bool, error) {
 	cmd := exec.Command("claude", claudeArgs...)
 
 	ptmx, err := pty.Start(cmd)
@@ -51,6 +91,11 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 		return false, false, fmt.Errorf("error launching Claude with PTY: %w", err)
 	}
 	defer ptmx.Close()
+
+	if holder != nil {
+		holder.set(cmd.Process)
+		defer holder.set(nil)
+	}
 
 	// Propagate terminal size from parent terminal to PTY
 	_ = pty.InheritSize(os.Stdin, ptmx)
@@ -81,7 +126,10 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 		buf := make([]byte, 4096)
 		markerSeen := false
 		markerBytes := []byte(doneMarker)
+		// Retain the last len(markerBytes) bytes so a marker — and the newline
+		// that must precede it — can be detected even when split across reads.
 		tail := make([]byte, 0, len(markerBytes))
+		firstRead := true
 		for {
 			n, readErr := ptmx.Read(buf)
 			if n > 0 {
@@ -89,9 +137,11 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 				os.Stdout.Write(buf[:n])
 
 				if !markerSeen {
-					// Check combined tail+current for marker spanning reads
-					combined := append(tail, buf[:n]...)
-					if bytes.Contains(combined, markerBytes) {
+					// Check combined tail+current for a marker spanning reads.
+					combined := make([]byte, 0, len(tail)+n)
+					combined = append(combined, tail...)
+					combined = append(combined, buf[:n]...)
+					if markerAtLineStart(combined, markerBytes, firstRead) {
 						markerSeen = true
 						markerDetected.Store(true)
 						go func() {
@@ -105,16 +155,14 @@ func launchClaudeWithPTY(claudeArgs []string, idleTimeout time.Duration) (bool, 
 							}
 						}()
 					}
-					// Keep last len(markerBytes)-1 bytes as tail for next read
-					if n >= len(markerBytes) {
-						tail = append(tail[:0], buf[n-len(markerBytes)+1:n]...)
+					// Keep the last len(markerBytes) bytes as tail for next read.
+					if len(combined) > len(markerBytes) {
+						tail = append(tail[:0], combined[len(combined)-len(markerBytes):]...)
 					} else {
-						tail = append(tail, buf[:n]...)
-						if len(tail) > len(markerBytes)-1 {
-							tail = tail[len(tail)-len(markerBytes)+1:]
-						}
+						tail = append(tail[:0], combined...)
 					}
 				}
+				firstRead = false
 			}
 			if readErr != nil {
 				return
