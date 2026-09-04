@@ -280,7 +280,10 @@ func doInstallCron(args []string) error {
 	// a minimal PATH that typically does not include the harness's install
 	// location, so a bare name lookup would fail silently. Baking the absolute
 	// path into the cron line ensures the entry is functional.
-	profile := DefaultProfile()
+	profile, err := ResolveHarness("")
+	if err != nil {
+		return err
+	}
 	harnessPath, err := exec.LookPath(profile.Binary)
 	if err != nil {
 		return fmt.Errorf("cannot find %q binary: %w\nInstall %s first: %s", profile.Binary, err, profile.DisplayName, profile.InstallURL)

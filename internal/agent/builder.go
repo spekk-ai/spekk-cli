@@ -56,6 +56,7 @@ var BuilderFlags = cli.FlagSet{
 	"interactive": {Names: []string{"--interactive", "-i"}, Type: cli.BoolFlag},
 	"spec":        {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
 	"assertion":   {Names: []string{"--assertion"}, Type: cli.StringFlag},
+	"harness":     {Names: []string{"--harness"}, Type: cli.StringFlag},
 	"help":        {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
@@ -67,6 +68,7 @@ type BuilderConfig struct {
 	Interactive bool
 	Spec        string
 	Assertion   string
+	Harness     string
 	InstallDir  string
 }
 
@@ -80,6 +82,7 @@ func ParseBuilderFlags(args []string) BuilderConfig {
 		Interactive: parsed.Bool("interactive"),
 		Spec:        parsed.String("spec"),
 		Assertion:   parsed.String("assertion"),
+		Harness:     parsed.String("harness"),
 	}
 }
 
@@ -281,7 +284,7 @@ func RunBuilder(args []string, installDir string) {
 	cfg := ParseBuilderFlags(args)
 	cfg.InstallDir = installDir
 
-	profile := DefaultProfile()
+	profile := resolveHarnessOrExit(cfg.Harness)
 
 	// Validate spec/assertion flags before any interpolation
 	if err := ValidateSpecOrAssertionID("--spec", cfg.Spec); err != nil {
@@ -528,7 +531,7 @@ func launchInteractiveBuilder(cfg BuilderConfig) {
 
 	// Interactive mode: pass the prompt as a system prompt so the harness
 	// waits for user input.
-	profile := DefaultProfile()
+	profile := resolveHarnessOrExit(cfg.Harness)
 	success, launchErr := launchHarness(
 		profile,
 		profile.SystemPromptArgs(message),

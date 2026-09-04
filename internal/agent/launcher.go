@@ -13,6 +13,13 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
+// CoachFlags defines the flag set for the coach CLI. The coach takes an
+// optional skill as a positional argument plus the shared --harness selector.
+var CoachFlags = cli.FlagSet{
+	"harness": {Names: []string{"--harness"}, Type: cli.StringFlag},
+	"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+}
+
 // LaunchOptions configures agent launching behavior.
 type LaunchOptions struct {
 	Agent      string

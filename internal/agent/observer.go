@@ -37,6 +37,7 @@ var ObserverFlags = cli.FlagSet{
 	"quiet":      {Names: []string{"--quiet"}, Type: cli.BoolFlag},
 	"headless":   {Names: []string{"--headless"}, Type: cli.BoolFlag},
 	"claudePath": {Names: []string{"--claude-path"}, Type: cli.StringFlag},
+	"harness":    {Names: []string{"--harness"}, Type: cli.StringFlag},
 	"help":       {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
@@ -45,6 +46,7 @@ type ObserverConfig struct {
 	Quiet      bool
 	Headless   bool
 	ClaudePath string
+	Harness    string
 	InstallDir string
 }
 
@@ -82,6 +84,7 @@ func ParseObserverFlags(args []string) ObserverConfig {
 		Quiet:      parsed.Bool("quiet"),
 		Headless:   parsed.Bool("headless"),
 		ClaudePath: parsed.String("claudePath"),
+		Harness:    parsed.String("harness"),
 	}
 }
 
@@ -122,7 +125,7 @@ func RunObserver(args []string, installDir string) {
 		os.Exit(1)
 	}
 
-	profile := DefaultProfile()
+	profile := resolveHarnessOrExit(ParseObserverFlags(args).Harness)
 
 	// Skill subcommand: check the first positional arg against the observer skill resolver
 	// before parsing flags as monitoring options.

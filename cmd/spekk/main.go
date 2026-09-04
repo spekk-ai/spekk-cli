@@ -801,6 +801,15 @@ func launchCoachAgent(args []string) {
 		return
 	}
 
+	// Resolve the harness (--harness flag > SPEKK_HARNESS env > default) before
+	// building the message, so an unknown name fails fast without spawning.
+	harnessFlag := cli.ParseFlags(args, agent.CoachFlags).String("harness")
+	profile, err := agent.ResolveHarness(harnessFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
 	// Build activation message
 	opts := agent.LaunchOptions{
 		Agent:      "coach",
@@ -829,7 +838,7 @@ func launchCoachAgent(args []string) {
 		os.Exit(1)
 	}
 
-	if err := agent.Launch(agent.DefaultProfile(), message); err != nil {
+	if err := agent.Launch(profile, message); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}

@@ -27,6 +27,65 @@ func TestResolveProfile_UnknownFailsFast(t *testing.T) {
 	}
 }
 
+// The opencode alias resolves to the opencode profile (not claude-code), so a
+// user can select opencode by name in both --harness and SPEKK_HARNESS.
+func TestResolveProfile_Opencode(t *testing.T) {
+	p, err := ResolveProfile("opencode")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"opencode\") errored: %v", err)
+	}
+	if p.Name != "opencode" || p.Binary != "opencode" {
+		t.Fatalf("ResolveProfile(\"opencode\") = %s/%s, want opencode/opencode", p.Name, p.Binary)
+	}
+}
+
+// Harness selection follows the precedence --harness flag > SPEKK_HARNESS env >
+// default claude-code, and an explicit flag overrides a conflicting env var.
+func TestResolveHarness_Precedence(t *testing.T) {
+	t.Setenv(HarnessEnvVar, "") // start from a clean env for the default case
+
+	// 1. Default: no flag, no env -> claude-code.
+	if p, err := ResolveHarness(""); err != nil || p.Name != "claude-code" {
+		t.Fatalf("default: got %s/%v, want claude-code/nil", p.Name, err)
+	}
+
+	// 2. Env only: SPEKK_HARNESS selects the harness when no flag is given.
+	t.Setenv(HarnessEnvVar, "opencode")
+	if p, err := ResolveHarness(""); err != nil || p.Name != "opencode" {
+		t.Fatalf("env: got %s/%v, want opencode/nil", p.Name, err)
+	}
+
+	// 3. Flag overrides env: --harness=claude wins over SPEKK_HARNESS=opencode.
+	if p, err := ResolveHarness("claude"); err != nil || p.Name != "claude-code" {
+		t.Fatalf("flag-over-env: got %s/%v, want claude-code/nil", p.Name, err)
+	}
+}
+
+// An unknown harness must fail fast with the identical error whether the name
+// came from the flag or the env var — neither may reach a spawn.
+func TestResolveHarness_UnknownIdenticalError(t *testing.T) {
+	fromFlag, flagErr := ResolveHarness("bogus")
+	if flagErr == nil {
+		t.Fatal("unknown flag harness should error")
+	}
+
+	t.Setenv(HarnessEnvVar, "bogus")
+	fromEnv, envErr := ResolveHarness("")
+	if envErr == nil {
+		t.Fatal("unknown env harness should error")
+	}
+
+	if flagErr.Error() != envErr.Error() {
+		t.Fatalf("errors differ by source:\n flag: %q\n env:  %q", flagErr.Error(), envErr.Error())
+	}
+	if !strings.Contains(flagErr.Error(), "opencode") || !strings.Contains(flagErr.Error(), "claude-code") {
+		t.Fatalf("error should list valid harness names, got %q", flagErr.Error())
+	}
+	if fromFlag.Binary != "" || fromEnv.Binary != "" {
+		t.Fatal("a failed resolution must return the zero profile, not a spawnable one")
+	}
+}
+
 // The argv the default profile produces at each launch site must be
 // byte-for-byte what the launch sites hardcoded before harnesses were
 // selectable: interactive, the interactive-builder system prompt, and headless.

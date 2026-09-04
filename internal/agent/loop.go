@@ -75,7 +75,7 @@ func RunBuilderLoop(installDir string) {
 		os.Exit(0)
 	}()
 
-	profile := DefaultProfile()
+	profile := resolveHarnessOrExit("")
 	spekkBin := findSpekkBin()
 	iteration := 0
 
@@ -173,7 +173,7 @@ func RunCoachLoop(installDir string) {
 		os.Exit(0)
 	}()
 
-	profile := DefaultProfile()
+	profile := resolveHarnessOrExit("")
 	session := 0
 
 	for {

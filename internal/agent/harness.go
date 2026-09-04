@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 )
@@ -47,11 +48,31 @@ var claudeCodeProfile = Profile{
 	SystemPromptFlags:    []string{"--system-prompt"},
 }
 
+// opencodeProfile launches the coach, builder, and observer through the
+// opencode CLI. Its flags follow opencode's own conventions (the
+// opencode-harness-profile assertion confirms and refines them); it is
+// deliberately not a copy of the claude flags.
+var opencodeProfile = Profile{
+	Name:                 "opencode",
+	Binary:               "opencode",
+	DisplayName:          "opencode",
+	InstallURL:           "https://opencode.ai",
+	PromptFlags:          nil,
+	SkipPermissionsFlags: nil,
+	HeadlessFlags:        []string{"run"},
+	SystemPromptFlags:    nil,
+}
+
 const defaultHarness = "claude-code"
+
+// HarnessEnvVar is the environment variable that selects the harness when no
+// --harness flag is given.
+const HarnessEnvVar = "SPEKK_HARNESS"
 
 // harnessProfiles maps canonical harness names to their profiles.
 var harnessProfiles = map[string]Profile{
 	claudeCodeProfile.Name: claudeCodeProfile,
+	opencodeProfile.Name:   opencodeProfile,
 }
 
 // harnessAliases maps alternative names to their canonical harness name.
@@ -80,6 +101,31 @@ func ResolveProfile(name string) (Profile, error) {
 		return Profile{}, fmt.Errorf("unknown harness %q; valid harnesses are: %s", name, strings.Join(knownHarnessNames(), ", "))
 	}
 	return p, nil
+}
+
+// ResolveHarness resolves the active harness profile using the selection
+// precedence: the --harness flag value, then the SPEKK_HARNESS environment
+// variable, then the built-in default (claude-code). An unknown name from
+// either source fails fast with an identical error, because both are funneled
+// through ResolveProfile with the same name string.
+func ResolveHarness(flag string) (Profile, error) {
+	name := flag
+	if name == "" {
+		name = os.Getenv(HarnessEnvVar)
+	}
+	return ResolveProfile(name)
+}
+
+// resolveHarnessOrExit resolves the harness from the given flag value (env and
+// default fill in per ResolveHarness), printing the error and exiting on an
+// unknown name rather than spawning a nonexistent binary.
+func resolveHarnessOrExit(flag string) Profile {
+	p, err := ResolveHarness(flag)
+	if err != nil {
+		colorLog(colorRed, "Error: "+err.Error())
+		os.Exit(1)
+	}
+	return p
 }
 
 // knownHarnessNames returns the canonical harness names plus aliases, sorted,
