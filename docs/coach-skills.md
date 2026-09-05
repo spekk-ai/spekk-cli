@@ -180,6 +180,38 @@ Recommendations:
 2. Validate pricing model...
 ```
 
+### Property tests
+
+Decide whether a promise deserves a property-based test, then write it for the right layer and prove that the run reached the state it guards.
+
+**Command:** `spekk coach property-tests`
+
+**Alias:** `property-tests` maps to `property-tests-skill`
+
+**Triggers:** "property test", "add a property", "cover this assertion with a property", "false positive in the sweep"
+
+The coach applies a value gate before any code. A property must restate a `done` assertion, need search that a fixed-input test cannot supply, guard a failure that would matter, have evidence behind it, cost less than it is worth, and keep the portfolio balanced across risk areas. It refuses two anti-patterns: exhaustive enumeration of a trivial finite space, and a property that duplicates a fixture test.
+
+#### Workflow
+
+1. Finds the `done` assertions a property could restate, with `spekk status` and `spekk query`.
+2. Applies the value gate, and stops when it fails.
+3. Studies the code through fixed lenses for both layers, a browser explorer and a backend property library.
+4. Writes the catalog entry, chooses the form, and implements it in the project's house pattern with the installed tool version's API only.
+5. Runs the property clean against seeded data, proves that the run reached the state, and files one issue per surviving violation with a strict expected failure that names it.
+
+#### Example output
+
+```
+Property catalog entry
+
+Name: Next visit implies an open case
+Invariant: a non-empty Next Visit cell means Open Cases is at least 1
+Assertion: patient-list-enriched-columns (done)
+Value 4 / Cost 1
+Form: always(...) over an extractor that returns the rows as JSON
+```
+
 ## Built-in observer skills
 
 | Skill | Command | What it does |

@@ -97,3 +97,28 @@ func TestPruneCandidateType_RegisteredInBothContractDocs(t *testing.T) {
 		}
 	}
 }
+
+// TestEmbeddedFS_CoachPropertyTestsSkill verifies the property-tests coach
+// skill ships with the binary via the embedded FS, and that it declares the
+// id and the sections the assertion requires.
+func TestEmbeddedFS_CoachPropertyTestsSkill(t *testing.T) {
+	const path = "specs/coach-skills-system/property-tests-skill.md"
+
+	data, err := fs.ReadFile(EmbeddedFS, path)
+	if err != nil {
+		t.Fatalf("expected %s in embedded FS: %v", path, err)
+	}
+
+	content := string(data)
+	for _, want := range []string{
+		"id: property-tests",
+		"## Triggers",
+		"## Workflow",
+		"## Validation",
+		"value gate",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("embedded property-tests skill missing %q", want)
+		}
+	}
+}
