@@ -141,7 +141,7 @@ spekk validate --specs-dir ./my-specs
 - No duplicate spec or assertion ids.
 - Lock state: only `in_progress` may carry a `locked-by`, and it need not carry one.
 - Parent specs carry no rolled-up `status` field. The field is absent, or it is the literal `draft`.
-- A spec directory that has assertion files but no main spec file. The parser drops the whole directory, so each assertion in it is out of the queue.
+- A spec directory that has assertion files but no main spec file. The parser drops that directory and every assertion in it, so they are out of the queue.
 - A path with the name `assertions` that is not a directory, or an `assertions/` directory that spekk cannot read. Each one drops the assertions of that spec with no message.
 
 A spec directory with no `assertions/` directory is not a fault. It is a spec with no assertions, and it parses correctly.
@@ -160,7 +160,7 @@ A spec directory with no `assertions/` directory is not a fault. It is a spec wi
 | Warnings only | 0 | Warnings on stderr; the check passes |
 | Any violation | 1 | One failure line per violation (file and problem), sorted by file then message |
 
-A malformed field fails the parse of the whole tree, not only its own file. One bad line on the default branch stops every command that rebuilds the index. Run `spekk validate` before you commit an edit to `specs/`. See [Validation in CI and pre-commit](ci.md).
+A malformed field fails the parse of every file in the tree, not its own file alone. One bad line on the default branch stops every command that rebuilds the index. Run `spekk validate` before you commit an edit to `specs/`. See [Validation in CI and pre-commit](ci.md).
 
 ### Skipped files
 

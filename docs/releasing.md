@@ -12,7 +12,7 @@ The steps after the tag are the ones that get forgotten, because the release loo
 
 1. **`main` is green.** `go build ./...`, `go vet ./...`, `gofmt -l .` clean, `go test ./... -count=1`, and `spekk validate`. CI runs all of these, so a green `main` is the check.
 2. **Write the release notes.** Add `docs/release-notes/RELEASE-NOTES-<version>.md`, link it from `docs/release-notes/index.md`, and add it to the `Release Notes` section of the nav in `zensical.toml`. The nav entry carries the title, so it must say what the release is for, not repeat the number. `scripts/check-docs-nav.sh` fails when a release note is not in the nav, and CI runs it.
-3. **Review the docs.** A flag, a command, or a default that the release changed must be in `docs/cli-reference.md` and `docs/configuration.md`, not only in the release notes.
+3. **Review the docs.** A flag, a command, or a default that the release changed must be in `docs/cli-reference.md` and `docs/configuration.md` as well as in the release notes.
 
 ## The tag
 

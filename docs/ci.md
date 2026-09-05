@@ -8,7 +8,7 @@ icon: lucide/shield-check
 
 ## Why both
 
-One malformed frontmatter field fails the parse of the whole tree, not only its own file. When that lands on the default branch, every command that rebuilds the index stops working (`spekk next`, `spekk observer announce`, `spekk query`), for every branch and every user, until a person fixes the line. Scheduled agents keep running and keep reporting nothing.
+One malformed frontmatter field fails the parse of every file in the tree, not its own file alone. When that lands on the default branch, every command that rebuilds the index stops working (`spekk next`, `spekk observer announce`, `spekk query`), for every branch and every user, until a person fixes the line. Scheduled agents keep running and keep reporting nothing.
 
 The hook is the fast feedback. `spekk validate` takes less than 10 ms, so the author hears about the fault before the commit exists. The hook is not enough on its own. It is inactive in a fresh clone until somebody runs `pre-commit install`, and `git commit --no-verify` bypasses it. CI is the check that nobody can skip.
 
