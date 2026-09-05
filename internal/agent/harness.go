@@ -147,6 +147,38 @@ var hermesProfile = Profile{
 	HeadlessArgv:     []string{"--yolo", "--cli", "-z"},
 }
 
+// codexProfile launches the coach, builder, and observer through the codex CLI
+// (OpenAI Codex). Its argv follows codex's own conventions — verified against
+// the installed `codex --help` / `codex exec --help` (codex-cli v0.153.x) — and
+// is deliberately not a copy of the claude/opencode flags:
+//
+//   - Interactive: bare `codex <prompt>` — codex with no subcommand forwards to
+//     the interactive TUI and takes the prompt as its trailing positional
+//     ("Optional user prompt to start the session"), so it seeds the prompt and
+//     waits for input. There is no interactive flag to add; "bare" means bare,
+//     exactly as aider starts interactive with no flags.
+//   - Headless: `codex exec --dangerously-bypass-approvals-and-sandbox <prompt>`
+//     — the `exec` subcommand runs Codex non-interactively with the prompt as a
+//     one-off task, and `--dangerously-bypass-approvals-and-sandbox` skips all
+//     confirmation prompts, codex's equivalent of claude's
+//     --dangerously-skip-permissions for a no-TTY cron run with no human to
+//     confirm.
+//
+// codex has no separate system-prompt flag, so the interactive builder reuses
+// the bare interactive form and seeds the session with the prompt. The
+// permission-skip flag is intentionally absent from the interactive/system-prompt
+// modes: a human is present to answer approval prompts there, exactly as
+// opencode omits `--auto`, aider omits `--yes-always`, and hermes omits `--yolo`.
+var codexProfile = Profile{
+	Name:             "codex",
+	Binary:           "codex",
+	DisplayName:      "Codex",
+	InstallURL:       "https://github.com/openai/codex",
+	InteractiveArgv:  []string{},
+	SystemPromptArgv: []string{},
+	HeadlessArgv:     []string{"exec", "--dangerously-bypass-approvals-and-sandbox"},
+}
+
 const defaultHarness = "claude-code"
 
 // HarnessEnvVar is the environment variable that selects the harness when no
@@ -159,6 +191,7 @@ var harnessProfiles = map[string]Profile{
 	opencodeProfile.Name:   opencodeProfile,
 	aiderProfile.Name:      aiderProfile,
 	hermesProfile.Name:     hermesProfile,
+	codexProfile.Name:      codexProfile,
 }
 
 // harnessAliases maps alternative names to their canonical harness name.

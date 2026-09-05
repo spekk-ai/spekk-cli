@@ -170,6 +170,84 @@ func TestHermesProfile_NotFoundNamesHermes(t *testing.T) {
 	}
 }
 
+// The codex name resolves to the codex profile (not claude-code), so a user
+// can select codex by name in both --harness and SPEKK_HARNESS.
+func TestResolveProfile_Codex(t *testing.T) {
+	p, err := ResolveProfile("codex")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"codex\") errored: %v", err)
+	}
+	if p.Name != "codex" || p.Binary != "codex" {
+		t.Fatalf("ResolveProfile(\"codex\") = %s/%s, want codex/codex", p.Name, p.Binary)
+	}
+}
+
+// The codex profile's resolved argv must follow codex's own CLI conventions —
+// not a copy of the claude flags. Interactive and the interactive builder launch
+// bare codex (the prompt is the session's initial-prompt positional and codex
+// stays interactive); headless uses `exec --dangerously-bypass-approvals-and-sandbox`
+// so codex runs the single prompt non-interactively and skips approval prompts.
+// The permission-skip flag is codex's real --dangerously-bypass-approvals-and-sandbox
+// and appears only in headless.
+func TestCodexProfile_ResolvedArgv(t *testing.T) {
+	p, err := ResolveProfile("codex")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"codex\") errored: %v", err)
+	}
+	const msg = "activation message"
+
+	cases := []struct {
+		name string
+		got  []string
+		want []string
+	}{
+		{"interactive", p.InteractiveArgs(msg), []string{msg}},
+		{"system-prompt", p.SystemPromptArgs(msg), []string{msg}},
+		{"headless", p.HeadlessArgs(msg), []string{"exec", "--dangerously-bypass-approvals-and-sandbox", msg}},
+	}
+	for _, tc := range cases {
+		if !equalArgs(tc.got, tc.want) {
+			t.Errorf("%s argv = %v, want %v", tc.name, tc.got, tc.want)
+		}
+	}
+
+	// The permission-skip flag must be codex's real
+	// --dangerously-bypass-approvals-and-sandbox, never a claude/opencode/aider/
+	// hermes flag copied across, and must be absent interactively (a human is
+	// present to approve there).
+	head := strings.Join(p.HeadlessArgs(msg), " ")
+	if !strings.Contains(head, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Errorf("headless argv missing codex's --dangerously-bypass-approvals-and-sandbox: %q", head)
+	}
+	for _, foreign := range []string{"--dangerously-skip-permissions", "--auto", "--yes-always", "--yolo"} {
+		if strings.Contains(head, foreign) {
+			t.Errorf("codex headless argv copied a foreign permission flag %q: %q", foreign, head)
+		}
+	}
+	if inter := strings.Join(p.InteractiveArgs(msg), " "); strings.Contains(inter, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Errorf("codex interactive argv must not carry the permission-skip flag: %q", inter)
+	}
+}
+
+// The codex profile's not-found guidance must name Codex and point at codex's
+// install docs — never Claude's.
+func TestCodexProfile_NotFoundNamesCodex(t *testing.T) {
+	p, err := ResolveProfile("codex")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"codex\") errored: %v", err)
+	}
+	l1, l2 := p.notFoundLines()
+	if !strings.Contains(l1, "Codex") {
+		t.Errorf("first not-found line does not name Codex: %q", l1)
+	}
+	if !strings.Contains(l2, p.InstallURL) || !strings.Contains(l2, "github.com/openai/codex") {
+		t.Errorf("second not-found line does not point at codex's install docs: %q", l2)
+	}
+	if strings.Contains(l1+l2, "Claude") || strings.Contains(l1+l2, "claude.ai") {
+		t.Errorf("codex guidance mentions Claude: %q / %q", l1, l2)
+	}
+}
+
 // Harness selection follows the precedence --harness flag > SPEKK_HARNESS env >
 // default claude-code, and an explicit flag overrides a conflicting env var.
 func TestResolveHarness_Precedence(t *testing.T) {
