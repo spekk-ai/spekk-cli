@@ -2,8 +2,6 @@ package sandbox
 
 import (
 	"errors"
-	"io"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -135,16 +133,16 @@ func TestWaitForMarkerReportsProgress(t *testing.T) {
 	quietWait(t)
 	provisionReportInterval = 0
 
-	out := captureStderr(t, func() {
-		calls := 0
-		err := waitForMarker(time.Now().Add(time.Hour), func() provisionProbe {
-			calls++
-			return provisionProbe{marker: calls >= 2, cloudInit: "running", lastLog: "Unpacking docker-ce"}
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
+	stderr := captureStderr(t)
+	calls := 0
+	err := waitForMarker(time.Now().Add(time.Hour), func() provisionProbe {
+		calls++
+		return provisionProbe{marker: calls >= 2, cloudInit: "running", lastLog: "Unpacking docker-ce"}
 	})
+	out := stderr()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(out, "Still provisioning after") || !strings.Contains(out, "Unpacking docker-ce") {
 		t.Errorf("progress line should say how long and what cloud-init logged, got %q", out)
 	}
@@ -179,26 +177,4 @@ func quietWait(t *testing.T) {
 	origPoll, origReport := provisionPollInterval, provisionReportInterval
 	provisionPollInterval = 0
 	t.Cleanup(func() { provisionPollInterval, provisionReportInterval = origPoll, origReport })
-}
-
-// captureStderr runs fn and returns what it wrote to os.Stderr.
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	orig := os.Stderr
-	os.Stderr = w
-	done := make(chan string)
-	go func() {
-		b, _ := io.ReadAll(r)
-		done <- string(b)
-	}()
-	fn()
-	os.Stderr = orig
-	w.Close()
-	out := <-done
-	r.Close()
-	return out
 }
