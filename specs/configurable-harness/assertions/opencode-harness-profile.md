@@ -3,9 +3,10 @@ id: opencode-harness-profile
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 2
-status: not_started
+status: in_progress
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
+locked-by: builder-MacBook-Pro-35863-1788638306
 ---
 
 # The opencode profile drives coach/builder/observer with opencode's real flags
