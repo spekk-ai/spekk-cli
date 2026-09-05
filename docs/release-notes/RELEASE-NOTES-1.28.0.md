@@ -13,3 +13,7 @@ A record that `create` left at `provisioning` can now be finished. `spekk sandbo
 It refuses a record whose status is not `provisioning`; `--force` provisions one anyway. The record now carries the auth mode `create` chose, so `provision` asks for that mode's credentials without being told; `--auth` overrides it. A record written before this release has no mode recorded and reads as `bedrock`, which is what it was created with.
 
 The message `create` prints when the wait runs out now names `spekk sandbox provision <name>` as the way to finish, and offers `destroy` second.
+
+## Destroy keeps a key it did not generate
+
+`spekk sandbox destroy` deletes the sandbox's local SSH key pair only when the private key is a file inside spekk's own `keys` directory under its config dir. The recorded path is cleaned and made absolute first, then symlinks are followed on both sides and the resolved paths are compared, so a link inside the keys directory that points out of it, or a link outside that points in, is kept. A key anywhere else, such as one you passed with `--ssh-key`, is kept too, and destroy prints one line to stderr that names the path it left alone. A record for a machine spekk did not create (`--provider none`) makes no DigitalOcean call and needs no API token.
