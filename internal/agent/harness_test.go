@@ -248,6 +248,84 @@ func TestCodexProfile_NotFoundNamesCodex(t *testing.T) {
 	}
 }
 
+// The gemini name resolves to the gemini profile (not claude-code), so a user
+// can select gemini by name in both --harness and SPEKK_HARNESS.
+func TestResolveProfile_Gemini(t *testing.T) {
+	p, err := ResolveProfile("gemini")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"gemini\") errored: %v", err)
+	}
+	if p.Name != "gemini" || p.Binary != "gemini" {
+		t.Fatalf("ResolveProfile(\"gemini\") = %s/%s, want gemini/gemini", p.Name, p.Binary)
+	}
+}
+
+// The gemini profile's resolved argv must follow gemini's own CLI conventions —
+// not a copy of the claude flags. Interactive and the interactive builder launch
+// `gemini -i <prompt>` (`-i/--prompt-interactive` seeds the prompt and stays
+// interactive); headless uses `--yolo -p <prompt>` so gemini runs the single
+// prompt non-interactively (`-p/--prompt`) and skips approval prompts
+// (`-y/--yolo`). The permission-skip flag is gemini's real --yolo and appears
+// only in headless.
+func TestGeminiProfile_ResolvedArgv(t *testing.T) {
+	p, err := ResolveProfile("gemini")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"gemini\") errored: %v", err)
+	}
+	const msg = "activation message"
+
+	cases := []struct {
+		name string
+		got  []string
+		want []string
+	}{
+		{"interactive", p.InteractiveArgs(msg), []string{"-i", msg}},
+		{"system-prompt", p.SystemPromptArgs(msg), []string{"-i", msg}},
+		{"headless", p.HeadlessArgs(msg), []string{"--yolo", "-p", msg}},
+	}
+	for _, tc := range cases {
+		if !equalArgs(tc.got, tc.want) {
+			t.Errorf("%s argv = %v, want %v", tc.name, tc.got, tc.want)
+		}
+	}
+
+	// The permission-skip flag must be gemini's real --yolo, never a
+	// claude/opencode/aider/codex flag copied across, and must be absent
+	// interactively (a human is present to approve there). --yolo is gemini's
+	// own flag, so it is not in the foreign list.
+	head := strings.Join(p.HeadlessArgs(msg), " ")
+	if !strings.Contains(head, "--yolo") {
+		t.Errorf("headless argv missing gemini's --yolo: %q", head)
+	}
+	for _, foreign := range []string{"--dangerously-skip-permissions", "--auto", "--yes-always", "--dangerously-bypass-approvals-and-sandbox"} {
+		if strings.Contains(head, foreign) {
+			t.Errorf("gemini headless argv copied a foreign permission flag %q: %q", foreign, head)
+		}
+	}
+	if inter := strings.Join(p.InteractiveArgs(msg), " "); strings.Contains(inter, "--yolo") {
+		t.Errorf("gemini interactive argv must not carry the permission-skip flag: %q", inter)
+	}
+}
+
+// The gemini profile's not-found guidance must name the Gemini CLI and point at
+// its install docs — never Claude's.
+func TestGeminiProfile_NotFoundNamesGemini(t *testing.T) {
+	p, err := ResolveProfile("gemini")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"gemini\") errored: %v", err)
+	}
+	l1, l2 := p.notFoundLines()
+	if !strings.Contains(l1, "Gemini CLI") {
+		t.Errorf("first not-found line does not name the Gemini CLI: %q", l1)
+	}
+	if !strings.Contains(l2, p.InstallURL) || !strings.Contains(l2, "github.com/google-gemini/gemini-cli") {
+		t.Errorf("second not-found line does not point at gemini's install docs: %q", l2)
+	}
+	if strings.Contains(l1+l2, "Claude") || strings.Contains(l1+l2, "claude.ai") {
+		t.Errorf("gemini guidance mentions Claude: %q / %q", l1, l2)
+	}
+}
+
 // Harness selection follows the precedence --harness flag > SPEKK_HARNESS env >
 // default claude-code, and an explicit flag overrides a conflicting env var.
 func TestResolveHarness_Precedence(t *testing.T) {

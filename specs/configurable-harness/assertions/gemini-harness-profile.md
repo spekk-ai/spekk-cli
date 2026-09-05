@@ -3,13 +3,14 @@ id: gemini-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 3
-status: in_progress
+status: done
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
-locked-by: builder-MacBook-Pro.local-46175-1788643616
 ---
 
 # A gemini-cli profile drives coach/builder/observer through the Gemini CLI
+
+**Tests:** internal/agent/harness_test.go, internal/agent/harness_cliverify_test.go
 
 Selecting the gemini harness runs the agents through the Gemini CLI. The gemini
 binary is not installed in the working environment, so the builder must install

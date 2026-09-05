@@ -179,6 +179,37 @@ var codexProfile = Profile{
 	HeadlessArgv:     []string{"exec", "--dangerously-bypass-approvals-and-sandbox"},
 }
 
+// geminiProfile launches the coach, builder, and observer through the Gemini CLI
+// (Google). Its argv follows gemini's own conventions — verified against the
+// installed `gemini --help` (v0.58.x) — and is deliberately not a copy of the
+// claude/opencode flags:
+//
+//   - Interactive: `gemini -i <prompt>` — `-i/--prompt-interactive` "Execute the
+//     provided prompt and continue in interactive mode", so gemini seeds the
+//     prompt and stays interactive. The bare `query` positional also starts
+//     interactive, but `-i` is the flag whose stated purpose is exactly "carry a
+//     prompt and keep the session interactive", so the profile uses it.
+//   - Headless: `gemini --yolo -p <prompt>` — `-p/--prompt` "Run in
+//     non-interactive (headless) mode with the given prompt", and `-y/--yolo`
+//     "Automatically accept all actions" bypasses every approval, gemini's
+//     equivalent of claude's --dangerously-skip-permissions for a no-TTY cron run
+//     with no human to confirm.
+//
+// gemini has no separate system-prompt flag, so the interactive builder reuses
+// the interactive `-i` form and seeds the session with the prompt. `--yolo` is
+// intentionally absent from the interactive/system-prompt modes: a human is
+// present to answer approval prompts there, exactly as opencode omits `--auto`,
+// aider omits `--yes-always`, hermes omits `--yolo`, and codex omits its bypass.
+var geminiProfile = Profile{
+	Name:             "gemini",
+	Binary:           "gemini",
+	DisplayName:      "Gemini CLI",
+	InstallURL:       "https://github.com/google-gemini/gemini-cli",
+	InteractiveArgv:  []string{"-i"},
+	SystemPromptArgv: []string{"-i"},
+	HeadlessArgv:     []string{"--yolo", "-p"},
+}
+
 const defaultHarness = "claude-code"
 
 // HarnessEnvVar is the environment variable that selects the harness when no
@@ -192,6 +223,7 @@ var harnessProfiles = map[string]Profile{
 	aiderProfile.Name:      aiderProfile,
 	hermesProfile.Name:     hermesProfile,
 	codexProfile.Name:      codexProfile,
+	geminiProfile.Name:     geminiProfile,
 }
 
 // harnessAliases maps alternative names to their canonical harness name.
