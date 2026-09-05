@@ -454,7 +454,7 @@ func RunBuilder(args []string, installDir string) {
 		}
 
 		// Build the assertion
-		colorLog(colorMagenta, "Launching Claude Code Builder Agent...")
+		colorLog(colorMagenta, fmt.Sprintf("Launching %s Builder Agent...", profile.DisplayName))
 
 		opts := LaunchOptions{
 			Agent:      "builder",

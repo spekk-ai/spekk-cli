@@ -3,12 +3,14 @@ id: harness-flags-verified-against-cli
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: harness-profile-abstraction
 branch: feature/configurable-harness
 ---
 
 # A harness profile only emits flags its binary actually defines
+
+**Tests:** internal/agent/harness_cliverify_test.go
 
 A profile's flags are checked against the real CLI, not written from memory. The
 opencode profile shipped flags opencode does not define (`--prompt`, `--auto` on

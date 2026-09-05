@@ -182,7 +182,7 @@ func RunObserver(args []string, installDir string) {
 	cfg.InstallDir = installDir
 
 	if !cfg.Headless {
-		fmt.Println("Launching Observer Agent with Claude Code...")
+		fmt.Println("Launching Observer Agent with " + profile.DisplayName + "...")
 		wd, _ := os.Getwd()
 		fmt.Println("Working directory:", wd)
 		fmt.Println("Press Ctrl+C to exit the observation session.")
