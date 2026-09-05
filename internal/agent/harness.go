@@ -88,6 +88,33 @@ var opencodeProfile = Profile{
 	HeadlessArgv:     []string{"run", "--auto"},
 }
 
+// aiderProfile launches the coach, builder, and observer through the aider CLI.
+// aider's argv differs again from the other harnesses — verified against the
+// installed `aider --help`:
+//
+//   - Interactive: bare `aider <prompt>` — aider with no flags starts an
+//     interactive chat session and waits for input. There is no interactive
+//     flag to add; "bare" means bare, so the interactive argv carries no flags.
+//   - Headless: `aider --yes-always --message <prompt>` — `--message`/`-m`
+//     feeds aider a single message, which it processes and then exits (aider's
+//     one-off form), and `--yes-always` auto-answers every confirmation, the
+//     equivalent of claude's --dangerously-skip-permissions for a no-TTY cron
+//     run with no human to confirm.
+//
+// aider has no separate system-prompt flag, so the interactive builder reuses
+// the bare interactive form and seeds the session with the prompt. `--yes-always`
+// is intentionally absent from the interactive/system-prompt modes: a human is
+// present to answer confirmations there, exactly as opencode omits `--auto`.
+var aiderProfile = Profile{
+	Name:             "aider",
+	Binary:           "aider",
+	DisplayName:      "Aider",
+	InstallURL:       "https://aider.chat/docs/install.html",
+	InteractiveArgv:  []string{},
+	SystemPromptArgv: []string{},
+	HeadlessArgv:     []string{"--yes-always", "--message"},
+}
+
 const defaultHarness = "claude-code"
 
 // HarnessEnvVar is the environment variable that selects the harness when no
@@ -98,6 +125,7 @@ const HarnessEnvVar = "SPEKK_HARNESS"
 var harnessProfiles = map[string]Profile{
 	claudeCodeProfile.Name: claudeCodeProfile,
 	opencodeProfile.Name:   opencodeProfile,
+	aiderProfile.Name:      aiderProfile,
 }
 
 // harnessAliases maps alternative names to their canonical harness name.
