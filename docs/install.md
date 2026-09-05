@@ -1,28 +1,39 @@
-# Spekk CLI — Install
+# Spekk CLI Install
 
-## Quick install (macOS / Linux)
+## Quick install (macOS and Linux)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-The script detects your platform, downloads the latest release, and installs to `~/.local/bin` (override with `SPEKK_INSTALL_DIR`, e.g. `SPEKK_INSTALL_DIR=/usr/local/bin` for a system-wide install). If `~/.local/bin` is not on your `PATH`, the script prints the exact line to add to your shell config. Verify:
+The script detects your platform, downloads the latest release, and installs it to `~/.local/bin`. When that directory is not on your `PATH`, the script prints the line to add to your shell configuration. Verify the install:
 
 ```bash
 spekk version
 ```
 
+The script reads two environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPEKK_INSTALL_DIR` | `~/.local/bin` | Where to put the binary. For example `SPEKK_INSTALL_DIR=/usr/local/bin` for a system-wide install, which needs sudo |
+| `SPEKK_VERSION` | `latest` | The release tag to install, for example `v1.28.0`. Pin it in CI |
+
+The script never uses sudo for a directory under your home. A root-owned file there would break `spekk update` later.
+
 ## Windows (PowerShell)
 
+Windows binaries are published but not tested. Use [WSL](https://learn.microsoft.com/en-us/windows/wsl/) for the supported path. To install the native binary:
+
 ```powershell
-$arch = if ([System.Environment]::Is64BitOperatingSystem) { "amd64" } else { "arm64" }
+$arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
 $url = "https://github.com/spekk-ai/spekk-cli/releases/latest/download/spekk-windows-${arch}.exe"
 Invoke-WebRequest -Uri $url -OutFile "$env:LOCALAPPDATA\Microsoft\WindowsApps\spekk.exe"
 ```
 
 ## Manual download
 
-Download the binary for your platform from the [Releases page](https://github.com/spekk-ai/spekk-cli/releases/latest):
+Download the binary for your platform from the [releases page](https://github.com/spekk-ai/spekk-cli/releases/latest):
 
 | Platform              | Binary name                  |
 |-----------------------|------------------------------|
@@ -33,22 +44,32 @@ Download the binary for your platform from the [Releases page](https://github.co
 | Windows (x86_64)      | `spekk-windows-amd64.exe`    |
 | Windows (ARM)         | `spekk-windows-arm64.exe`    |
 
+Make the file executable, name it `spekk`, and put it on your `PATH`.
+
+## From source
+
+```bash
+go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest
+```
+
+This needs Go 1.25 or later. A build from source reports `spekk version` as `dev`, and `spekk update` refuses to update it. Run `go install` again instead.
+
 ## Updating
 
 ```bash
-spekk update          # install latest
-spekk update --check  # preview without installing
+spekk update          # Install the latest release
+spekk update --check  # See what is available, install nothing
 ```
 
-`spekk update` replaces the binary in place, so it needs write access to the install directory. The default install location (`~/.local/bin`) is user-owned, so updates just work. If spekk lives in a root-owned directory like `/usr/local/bin` (e.g. from an older install or `SPEKK_INSTALL_DIR=/usr/local/bin`), run `sudo spekk update` — this applies to every update there, not just the first. To update without sudo, reinstall to the user-owned default:
+`spekk update` replaces the binary in place, so it needs write access to the install directory. The default location, `~/.local/bin`, is yours, so the update works. When spekk is in a root-owned directory such as `/usr/local/bin`, from an older install or from `SPEKK_INSTALL_DIR=/usr/local/bin`, run `sudo spekk update`, every time. To update without sudo, install again to the default location:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-(Ensure `~/.local/bin` is on your `PATH` — the installer tells you the exact line to add if it isn't.)
+Make sure `~/.local/bin` is on your `PATH`, and remove the old binary, or the shell keeps finding it first. The installer warns you when another `spekk` is earlier on the `PATH`.
 
----
+After an update, `spekk update` checks the files that `spekk install --target` wrote and tells you when one no longer matches the new binary.
 
 ## Claude-assisted setup
 
