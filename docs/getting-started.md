@@ -4,27 +4,27 @@ icon: lucide/rocket
 
 # Getting Started
 
-Get up and running with Spekk CLI in under five minutes.
+Install spekk, write one spec, and build it.
 
 ## Prerequisites
 
-- **Claude CLI** (for builder/coach/observer agents)
-- **Git** (for automated commits)
-- **Go** 1.23+ (only if building from source)
+- **Claude Code CLI**, for the `spekk coach`, `spekk builder`, and `spekk observer` launchers. You do not need it when you run the agents from another assistant.
+- **Git**, for branch-aware parsing and the commits the agents make.
+- **Go** 1.25 or later, only to build from source.
 
 ## Installation
 
-### Install script (recommended)
+### Install script
 
-Detects your platform, installs to user-owned `~/.local/bin` (no sudo needed — for installs or updates), and warns if the directory isn't on your `PATH`:
+The script detects your platform, installs to `~/.local/bin` (no sudo, for the install or a later update), and warns you when that directory is not on your `PATH`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 ```
 
-See the [install guide](install.md) for manual downloads and options.
+See the [install guide](install.md) for manual downloads, Windows, and the script's options.
 
-### From Source
+### From source
 
 ```bash
 go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest
@@ -33,18 +33,30 @@ go install github.com/spekk-ai/spekk-cli/cmd/spekk@latest
 ### Verify
 
 ```bash
-spekk --help
+spekk version
 ```
 
-### Updating
+### Update
 
-Download the latest release binary again using the same curl command above, or rebuild from source with `go install`.
+```bash
+spekk update           # Install the latest release
+spekk update --check   # See what is available, install nothing
+```
 
----
+A build from source updates with `go install` again.
 
 ## Your first spec
 
-### Create a spec with the coach
+### Set up the project
+
+```bash
+cd your-project
+spekk init
+```
+
+This creates `specs/` at the git root, with a README that describes the format.
+
+### Write a spec with the coach
 
 ```bash
 spekk coach
@@ -56,104 +68,77 @@ Tell the coach what you want to build:
 > "I need to add user authentication to my app"
 ```
 
-The coach guides you through creating a well-formed specification with clear success criteria, atomic assertions, and priority ordering.
+The coach asks questions, then writes a spec with clear success criteria, small assertions, and priorities.
 
-### View your specs
+### Look at the specs
 
 ```bash
-# What's next?
-spekk next
-
-# Full overview
-spekk status
-
-# Interactive web explorer
-spekk show
+spekk next      # What is next?
+spekk status    # Overview of every spec and assertion
+spekk show      # Spec explorer in the browser
+spekk validate  # Check the tree for faults
 ```
 
 ### Build it
 
 ```bash
-# Build the next priority assertion
-spekk builder --once
-
-# Or loop through all assertions
-spekk builder
+spekk builder --once   # Build the next assertion
+spekk builder          # Build assertions until you stop it
 ```
-
----
 
 ## Directory structure
 
-After creating specs, your project will have:
+After the coach has run, the project has:
 
 ```
 your-project/
 ├── specs/
+│   ├── README.md                    # Written by spekk init
 │   ├── authentication/
-│   │   ├── authentication.md        # Parent spec
+│   │   ├── authentication.md        # The spec
 │   │   └── assertions/
-│   │       ├── password-hashing.md  # Atomic assertion
-│   │       └── session-tokens.md    # Atomic assertion
+│   │       ├── password-hashing.md  # One assertion
+│   │       └── session-tokens.md    # One assertion
 │   └── another-feature/
 │       ├── another-feature.md
 │       └── assertions/
 │           └── ...
-├── TODOS.md          # Action items (from meetings)
-└── CONTEXT.md        # Architecture decisions
+├── .spekk/           # Prompt and skill customizations, and derived files such as the index
+├── TODOS.md          # Action items, from the meeting skill
+└── CONTEXT.md        # Decisions, from the meeting skill
 ```
-
----
 
 ## Common workflows
 
-### Creating a new feature
+### A new feature
 
 ```bash
-# 1. Define the spec
-spekk coach
-
-# 2. Coordinate dependencies
-spekk coach coordinate
-
-# 3. Create feature branch
-git checkout -b feature/authentication
-
-# 4. Build it
-spekk builder --once
+spekk coach                           # 1. Write the spec
+spekk coach coordinate                # 2. Plan dependencies and branches
+git checkout -b feature/authentication  # 3. Make the feature branch
+spekk builder --once                  # 4. Build the first assertion
 ```
 
-### Processing meeting notes
+### Meeting notes
 
 ```bash
-# Process a transcript
-spekk coach meeting notes.txt
-
-# Review extracted todos
-cat TODOS.md
-
-# Review new specs
-spekk next --all
+spekk coach meeting notes.txt   # Turn the transcript into specs, todos, and context
+cat TODOS.md                    # Review the action items
+spekk next --all                # Review the new specs
 ```
 
-### Planning a sprint
+### Sprint planning
 
 ```bash
-# See what's ready
-spekk status
-
-# Coordinate work across branches
-spekk coach coordinate
-
-# Start building
-spekk builder
+spekk status            # What is ready?
+spekk coach coordinate  # Plan the work across branches
+spekk builder           # Start the build loop
 ```
-
----
 
 ## Next steps
 
-- [Concepts](concepts.md) -- Understand specs, assertions, and priorities
-- [CLI Reference](cli-reference.md) -- Complete command documentation
-- [Coach Skills](coach-skills.md) -- Meeting notes, coordination, and more
-- [Configuration](configuration.md) -- Customize agent prompts
+- [Concepts](concepts.md): specs, assertions, and priorities
+- [CLI Reference](cli-reference.md): every command and flag
+- [Skills](coach-skills.md): meeting notes, coordination, and your own skills
+- [Configuration](configuration.md): agent prompts, environment variables, and the suppression file
+- [Validation in CI](ci.md): run `spekk validate` in a pre-commit hook and in CI

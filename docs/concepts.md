@@ -4,13 +4,13 @@ icon: lucide/lightbulb
 
 # Concepts
 
-The core ideas behind spec-driven development with Spekk.
+The ideas behind spec-driven development with Spekk.
 
 ## Specs and assertions
 
 ### Specs
 
-A **spec** defines a feature or capability. It lives in `specs/<name>/<name>.md` and contains a high-level description of what you're building.
+A **spec** describes one feature or capability. It lives in `specs/<name>/<name>.md` and says, at a high level, what you are building.
 
 ```
 specs/
@@ -21,19 +21,24 @@ specs/
 │       └── session-tokens.md
 ```
 
-A spec's status is **computed automatically** from its assertions:
+Spekk computes a spec's status from its assertions:
 
-- All assertions `done` → spec is `done`
-- Any assertion `in_progress` → spec is `in_progress`
-- Otherwise → `not_started`
+- Draft assertions do not count.
+- Any `failed` assertion makes the spec `failed`.
+- All assertions `done` makes the spec `done`.
+- A spec with no assertions, or with only draft assertions, is `not_started`.
+- Every other mix is `in_progress`.
+
+Do not write a `status` on a spec. The one exception is the literal `draft`, which hides the spec and all of its assertions from the work queue.
 
 ### Assertions
 
-An **assertion** is an atomic unit of work. Each assertion is a markdown file with YAML frontmatter:
+An **assertion** is one small unit of work. Each assertion is a markdown file with YAML frontmatter:
 
 ```markdown
 ---
 id: password-hashing
+parent: authentication
 created: 2026-01-21T12:00:00Z
 priority: 1
 status: not_started
@@ -54,9 +59,7 @@ Plain-text passwords are never written to the database.
 ```
 
 !!! tip "One assertion per file"
-    Keep assertions atomic. Each file describes one testable behavior. If you find yourself writing "and" in the title, split it into two assertions.
-
----
+    Keep each assertion small. Each file describes one testable behavior. When the title needs the word "and", split it into two assertions.
 
 ## Frontmatter fields
 
@@ -64,114 +67,111 @@ Plain-text passwords are never written to the database.
 
 | Field | Description | Example |
 |-------|-------------|---------|
-| `id` | Unique identifier | `password-hashing` |
-| `created` | ISO timestamp (never changes) | `2026-01-21T12:00:00Z` |
+| `id` | Unique identifier, kebab-case | `password-hashing` |
+| `parent` | The id of the spec. Assertions only | `authentication` |
+| `created` | ISO 8601 timestamp. It never changes | `2026-01-21T12:00:00Z` |
 | `priority` | 1 (highest) to 3 (lowest) | `1` |
-| `status` | Current state | `not_started` |
 
 ### Optional fields
 
 | Field | Description | Example |
 |-------|-------------|---------|
-| `depends-on` | ID of prerequisite assertion | `websocket-connection` |
-| `branch` | Git branch for this work | `feature/chat-system` |
+| `status` | Current state. Default: `not_started`. On a spec, only the literal `draft` is allowed | `in_progress` |
+| `branch` | Git branch for this work. Default: `main` | `feature/chat-system` |
+| `depends-on` | Id of one assertion that must be `done` first. Assertions only | `websocket-connection` |
+| `locked-by` | Set by a builder while it holds an `in_progress` assertion. Removed when the status changes | `builder-myhost-4242-1756562531` |
+
+A key outside this set is a custom field. `spekk validate` accepts it, and `spekk query` can read it. See [Custom frontmatter fields](cli-reference.md#custom-frontmatter-fields).
 
 ### Status values
 
 | Status | Meaning |
 |--------|---------|
-| `not_started` | Default. Not yet implemented. |
-| `in_progress` | Currently being worked on. |
-| `done` | Fully implemented and validated. |
-| `draft` | Placeholder/planning. Excluded from work queue. |
-| `failed` | Confirmed issue that needs fixing. |
+| `not_started` | The default. Not yet implemented. |
+| `in_progress` | Somebody is working on it. |
+| `done` | Implemented and validated. |
+| `draft` | A placeholder. Out of the work queue. |
+| `failed` | A confirmed fault that needs a fix. |
 
 ### Priority levels
 
 | Priority | Meaning |
 |----------|---------|
-| **1** | Highest -- critical, blocking |
-| **2** | Medium -- important, not blocking |
-| **3** | Lowest -- nice to have, future |
+| **1** | Highest. Critical, or it blocks other work. |
+| **2** | Medium. Important, not blocking. |
+| **3** | Lowest. Good to have, later. |
 
-!!! note "Only three levels"
-    Intentionally limited to force clear prioritization. If everything is priority 1, nothing is.
-
----
+!!! note "Three levels only"
+    The limit forces a clear order. When everything is priority 1, nothing is.
 
 ## Dependencies
 
-Assertions can declare a single dependency using `depends-on`:
+An assertion can declare one dependency with `depends-on`:
 
 ```yaml
 ---
 id: chat-message-input
+parent: chat
 depends-on: chat-session-model
 branch: feature/chat-system
 ---
 ```
 
-**Rules:**
+Rules:
 
-- Each assertion can depend on **at most one** other assertion
-- The parser validates that dependency IDs exist
-- `spekk next` skips assertions whose dependencies aren't `done`
-- No circular dependencies allowed
+- Each assertion depends on at most one other assertion.
+- `spekk validate` checks that the id exists and that there is no cycle.
+- `spekk next` skips an assertion whose dependency is not `done`.
 
-**If you need multiple prerequisites**, either:
+When an assertion needs more than one prerequisite, do one of two things:
 
-- **Sequence them:** A → B → C (chain of single dependencies)
-- **Create a junction:** A "prerequisites-ready" assertion that the others depend on
+- **Make a chain.** A, then B, then C, each with one `depends-on`.
+- **Make a junction.** One "prerequisites-ready" assertion that the others depend on.
 
----
+A list in `depends-on` is refused, and the error stops the parse of the whole tree. The single id is what orders the work: a chain releases assertions one at a time, and assertions with no link between them can run in parallel. The coach's `coordinate` skill turns a set of prerequisites into a chain.
 
 ## Branches
 
-Assertions can be assigned to git branches:
+An assertion can name a git branch:
 
 ```yaml
 ---
 id: password-hashing
+parent: authentication
 branch: feature/authentication
 ---
 ```
 
-- Defaults to `main` if omitted
-- `spekk next` filters to the current branch by default
-- Use `spekk next --all-branches` to see everything
-- Assertions on different branches should be independent (buildable in parallel)
+- The default is `main`.
+- `spekk next` shows the current branch only, by default.
+- `spekk next --all-branches` shows every branch.
+- Assertions on different branches must be independent, so that they can be built in parallel.
 
----
+## Selection rules
 
-## Priority rules
+`spekk next` picks the next assertion in this order:
 
-When determining what to build next, the parser follows these rules:
-
-1. **Filter** -- Remove `done`, `draft`, and blocked assertions
-2. **Branch** -- Only show assertions for the current git branch
-3. **Priority** -- Lower number = higher priority (1 beats 2 beats 3)
-4. **Tiebreak** -- Oldest `created` timestamp wins
-
----
+1. **Filter.** Drop `done` and `draft` assertions, every assertion of a `draft` spec, every assertion whose dependency is not `done`, and every `in_progress` assertion that a builder holds with a fresh lock.
+2. **Branch.** Keep the current git branch only.
+3. **Priority.** A lower number wins: 1 before 2 before 3.
+4. **Tiebreak.** The oldest `created` timestamp wins.
 
 ## Writing good specs
 
 ### Do
 
-- **Be testable** -- Clear success criteria that can be verified
-- **Be atomic** -- One assertion per file, one behavior per assertion
-- **Be ordered** -- Priority indicates sequence of importance
-- **Be immutable** -- `created` timestamp never changes
-- **Be clear** -- Anyone should understand the requirements
+- **Be testable.** Write success criteria that a test can check.
+- **Be small.** One assertion per file, one behavior per assertion.
+- **Be ordered.** The priority says what comes first.
+- **Be stable.** The `created` timestamp never changes.
+- **Be clear.** A new reader must understand the requirement.
 
-### Don't
+### Do not
 
-- **Be vague** -- "Make it better" is not a spec
-- **Be compound** -- Multiple concerns in one assertion
-- **Be prescriptive** -- Say WHAT, not HOW (leave implementation to the builder)
-- **Be indecisive** -- Avoid changing priorities mid-work
-
----
+- **Be vague.** "Make it better" is not a spec.
+- **Be compound.** Keep one concern per assertion.
+- **Be prescriptive.** Say what, not how. The builder decides how.
+- **Be indecisive.** Do not change priorities in the middle of the work.
 
 ## The development loop
 
@@ -185,9 +185,9 @@ graph TD
   F -->|next assertion| C;
 ```
 
-1. **Coach creates specs** from your requirements
-2. **Parser prioritizes** the next assertion
-3. **Builder implements** the assertion
-4. **Tests validate** the implementation
-5. **Status updates** to done
-6. **Repeat** until all assertions are complete
+1. The coach writes specs from your requirements.
+2. `spekk next` picks the next assertion.
+3. The builder implements it.
+4. The tests validate the implementation.
+5. The status becomes `done`.
+6. Repeat until every assertion is done.
