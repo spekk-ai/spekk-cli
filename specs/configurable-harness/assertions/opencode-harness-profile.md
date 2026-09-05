@@ -3,10 +3,9 @@ id: opencode-harness-profile
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 2
-status: in_progress
+status: done
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
-locked-by: builder-MacBook-Pro-35863-1788638306
 ---
 
 # The opencode profile drives coach/builder/observer with opencode's real flags
@@ -38,3 +37,5 @@ opened an empty TUI instead of acting as the agent.
   the installed opencode defines.
 - Selecting opencode changes only the launch harness; prompts, skills, and the
   spec workflow are unchanged.
+
+**Tests:** internal/agent/harness_test.go, internal/agent/harness_cliverify_test.go

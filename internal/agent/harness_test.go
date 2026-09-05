@@ -110,10 +110,12 @@ func TestDefaultProfile_ResolvedArgv(t *testing.T) {
 }
 
 // The opencode profile's resolved argv must follow opencode's own CLI
-// conventions in both interactive and headless modes — not a copy of the claude
-// flags. Interactive seeds the TUI with --prompt (a bare positional there is the
-// project dir); headless uses the `run` subcommand with the message as a bare
-// positional; --auto is opencode's skip-permissions flag.
+// conventions in every mode — not a copy of the claude flags. Interactive and
+// the interactive builder route through `run -i` and carry the prompt as a bare
+// positional message (a bare positional on the top-level `opencode` command is
+// read as the project dir, not a prompt, so the message would be dropped);
+// headless uses `run --auto` with the message as a bare positional. The bare
+// `opencode` command receives no flags at all.
 func TestOpencodeProfile_ResolvedArgv(t *testing.T) {
 	p, err := ResolveProfile("opencode")
 	if err != nil {
@@ -126,8 +128,8 @@ func TestOpencodeProfile_ResolvedArgv(t *testing.T) {
 		got  []string
 		want []string
 	}{
-		{"interactive", p.InteractiveArgs(msg), []string{"--auto", "--prompt", msg}},
-		{"system-prompt", p.SystemPromptArgs(msg), []string{"--auto", "--prompt", msg}},
+		{"interactive", p.InteractiveArgs(msg), []string{"run", "-i", msg}},
+		{"system-prompt", p.SystemPromptArgs(msg), []string{"run", "-i", msg}},
 		{"headless", p.HeadlessArgs(msg), []string{"run", "--auto", msg}},
 	}
 	for _, tc := range cases {
