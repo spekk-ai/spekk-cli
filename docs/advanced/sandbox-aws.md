@@ -6,9 +6,7 @@ icon: lucide/cloud
 
 One CloudFormation template creates everything a spekk sandbox needs on AWS: an isolated VPC, one Ubuntu 24.04 instance prepared to the same state a DigitalOcean droplet reaches, and the command that registers the instance with spekk. One `create-stack` builds it, and one `delete-stack` removes it.
 
-The template is `internal/sandbox/aws-cloudformation.yaml` in the [spekk-cli repository](https://github.com/spekk-ai/spekk-cli). It lives beside `cloud-init.yaml` because its UserData is a copy of that file, and a test in the repository fails when the two drift.
-
----
+The template is `internal/sandbox/aws-cloudformation.yaml` in the [spekk-cli repository](https://github.com/spekk-ai/spekk-cli). It lives beside `cloud-init.yaml` because its UserData is a copy of that file with two differences: the `agent` user's key comes from a parameter, and the users list opens with `default`, which keeps the `ubuntu` login that the key pair is for. A test in the repository fails when the two files drift in any other way.
 
 ## What the stack creates
 
@@ -50,7 +48,7 @@ aws cloudformation wait stack-create-complete --stack-name my-sandbox
 
 `ssh-keygen -y` prints the public key of a private key file, so you do not need a separate `.pub` file for a key pair you downloaded from AWS.
 
-The stack reports `CREATE_COMPLETE` when the instance is running, not when cloud-init has finished. Cloud-init upgrades every package and installs Docker and Node.js, which takes several minutes. Wait for it before you register the machine:
+The stack reports `CREATE_COMPLETE` when the instance is running, not when cloud-init has finished. Cloud-init upgrades every package and installs Docker and Node.js, which takes about two minutes on a `t3.medium`. Wait for it before you register the machine:
 
 ```bash
 ssh -i ~/.ssh/my-key.pem ubuntu@<PublicIP> cloud-init status --wait

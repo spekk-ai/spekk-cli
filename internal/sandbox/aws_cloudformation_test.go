@@ -21,13 +21,23 @@ const (
 	// user's public key placeholder on AWS. On a droplet spekk fills the
 	// same line with a key it generated.
 	awsAgentKeyVariable = "${AgentPublicKey}"
+
+	// cloudInitUsersKey opens the users list in cloud-init.yaml.
+	cloudInitUsersKey = "users:\n"
+
+	// awsDefaultUserEntry is the entry the template adds at the top of that
+	// list. A users list without it makes cloud-init create the listed
+	// users only, so the image's ubuntu user, the login KeyName is for,
+	// never exists. A droplet logs in as root and does not need it.
+	awsDefaultUserEntry = "  - default\n"
 )
 
 // The template's UserData has to give an instance the same preparation that
 // cloud-init.yaml gives a droplet, because spekk registers the instance as a
 // machine it did not create and then deploys onto it without any preparation
-// of its own. The two files are a copy, and a copy drifts unless something
-// fails when it does.
+// of its own. The two files are a copy with two declared differences, the
+// key variable and the default user entry, and a copy drifts unless
+// something fails when it does.
 func TestAWSUserDataMatchesCloudInit(t *testing.T) {
 	template, err := os.ReadFile(awsTemplateFile)
 	if err != nil {
@@ -37,13 +47,30 @@ func TestAWSUserDataMatchesCloudInit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := renderCloudInit(cloudInitTemplate, awsAgentKeyVariable)
+	want := awsUserDataFromCloudInit(cloudInitTemplate)
 	if got == want {
 		return
 	}
 	line, gotLine, wantLine := firstDifference(got, want)
-	t.Errorf("%s UserData differs from cloud-init.yaml at line %d:\n  template:   %q\n  cloud-init: %q\nEdit cloud-init.yaml first, then copy it into the template with the key placeholder mapped to %s.",
-		awsTemplateFile, line, gotLine, wantLine, awsAgentKeyVariable)
+	t.Errorf("%s UserData differs from cloud-init.yaml at line %d:\n  template:   %q\n  cloud-init: %q\nEdit cloud-init.yaml first, then copy it into the template with the key placeholder mapped to %s and %q at the top of the users list.",
+		awsTemplateFile, line, gotLine, wantLine, awsAgentKeyVariable, strings.TrimSpace(awsDefaultUserEntry))
+}
+
+// The default user entry is one line in one place. If cloud-init.yaml ever
+// has no users list, or more than one, the transform below is wrong and the
+// test above would pass on a template that is wrong in the same way.
+func TestCloudInitHasOneUsersList(t *testing.T) {
+	if n := strings.Count(string(cloudInitTemplate), cloudInitUsersKey); n != 1 {
+		t.Errorf("cloud-init.yaml has %d %q lines, want 1", n, strings.TrimSpace(cloudInitUsersKey))
+	}
+}
+
+// awsUserDataFromCloudInit returns the UserData the template must carry for
+// a given cloud-init.yaml: the key placeholder mapped to the Fn::Sub
+// variable, and the default user entry at the top of the users list.
+func awsUserDataFromCloudInit(cloudInit []byte) string {
+	rendered := renderCloudInit(cloudInit, awsAgentKeyVariable)
+	return strings.Replace(rendered, cloudInitUsersKey, cloudInitUsersKey+awsDefaultUserEntry, 1)
 }
 
 // Fn::Sub reads every "${...}" in the UserData as a variable, and an unknown

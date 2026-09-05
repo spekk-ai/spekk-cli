@@ -11,7 +11,7 @@ branch: feature/sandbox-aws-cloudformation
 
 The instance has to reach the state a droplet reaches, because spekk checks for `/opt/spekk/.provisioned` and then injects credentials and deploys the agent without any preparation of its own. Cloud-init on EC2 reads the instance's UserData the same way it reads a droplet's user data, so the template's UserData carries the cloud-init content from `internal/sandbox/cloud-init.yaml`.
 
-That content has one placeholder, the public key line for the `agent` user. On a droplet spekk fills it with a key it generated. On AWS the template fills it with a parameter, and a test proves that the parameter is the only difference between the two.
+That content has one placeholder, the public key line for the `agent` user. On a droplet spekk fills it with a key it generated. On AWS the template fills it with a parameter. The template also opens the users list with `default`, because a users list without that entry makes cloud-init create the listed users only, and the image's `ubuntu` user never exists. A droplet logs in as root and does not need the entry. A test proves that these two are the only differences between the files.
 
 An AWS Ubuntu AMI disables root over SSH and gives the `ubuntu` user passwordless sudo, so the register command names `--ssh-user ubuntu`.
 
@@ -22,7 +22,7 @@ An AWS Ubuntu AMI disables root over SSH and gives the `ubuntu` user passwordles
 - Instance type is a parameter with the default `t3.medium`
 - Key pair name is a required parameter with no default: the operator names an existing key pair, and it is the key the `ubuntu` login user accepts
 - The public key for the `agent` user is a required parameter, `AgentPublicKey`, and it fills the placeholder line of `cloud-init.yaml`
-- The UserData is the content of `internal/sandbox/cloud-init.yaml` with the placeholder line mapped to `AgentPublicKey`, and nothing else differs. A Go test compares the two and fails when they drift, and it also fails when `cloud-init.yaml` gains a `${` that `Fn::Sub` would read as a variable
+- The UserData is the content of `internal/sandbox/cloud-init.yaml` with the placeholder line mapped to `AgentPublicKey` and `- default` at the top of the users list, and nothing else differs. A Go test compares the two and fails when they drift, and it also fails when `cloud-init.yaml` gains a `${` that `Fn::Sub` would read as a variable, or when it has more than one users list
 - The UserData ends by writing `/opt/spekk/.provisioned`, because that is what `cloud-init.yaml` ends with
 - Instance gets a public IP through subnet auto-assign, with no Elastic IP
 - Root EBS volume is 50 GB gp3

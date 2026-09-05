@@ -5,9 +5,13 @@ Description: >-
   registers the instance with spekk. Delete the stack to remove everything.
 
 # The UserData below is the cloud-init content from cloud-init.yaml in this
-# directory, with the agent user's key placeholder mapped to the AgentPublicKey
-# parameter. TestAWSUserDataMatchesCloudInit fails when the two drift, so edit
-# cloud-init.yaml first and copy the result here.
+# directory, with two differences. The agent user's key placeholder is mapped
+# to the AgentPublicKey parameter, and the users list opens with "default",
+# which keeps the image's ubuntu user. Without that entry cloud-init creates
+# the listed users only, and the ubuntu login that KeyName is for never
+# exists. A droplet logs in as root, so cloud-init.yaml does not need it.
+# TestAWSUserDataMatchesCloudInit fails when the files drift in any other
+# way, so edit cloud-init.yaml first and copy the result here.
 
 Parameters:
   InstanceType:
@@ -156,6 +160,7 @@ Resources:
           package_upgrade: true
 
           users:
+            - default
             - name: agent
               shell: /bin/bash
               groups: [docker, sudo, systemd-journal]
