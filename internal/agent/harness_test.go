@@ -39,6 +39,65 @@ func TestResolveProfile_Opencode(t *testing.T) {
 	}
 }
 
+// The aider alias resolves to the aider profile (not claude-code), so a user
+// can select aider by name in both --harness and SPEKK_HARNESS.
+func TestResolveProfile_Aider(t *testing.T) {
+	p, err := ResolveProfile("aider")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"aider\") errored: %v", err)
+	}
+	if p.Name != "aider" || p.Binary != "aider" {
+		t.Fatalf("ResolveProfile(\"aider\") = %s/%s, want aider/aider", p.Name, p.Binary)
+	}
+}
+
+// The aider profile's resolved argv must follow aider's own CLI conventions in
+// every mode. Interactive and the interactive builder launch bare aider (no
+// flags) so it opens a chat session and waits for input; headless uses
+// `--yes-always --message` so aider auto-confirms and processes the single
+// message before exiting.
+func TestAiderProfile_ResolvedArgv(t *testing.T) {
+	p, err := ResolveProfile("aider")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"aider\") errored: %v", err)
+	}
+	const msg = "activation message"
+
+	cases := []struct {
+		name string
+		got  []string
+		want []string
+	}{
+		{"interactive", p.InteractiveArgs(msg), []string{msg}},
+		{"system-prompt", p.SystemPromptArgs(msg), []string{msg}},
+		{"headless", p.HeadlessArgs(msg), []string{"--yes-always", "--message", msg}},
+	}
+	for _, tc := range cases {
+		if !equalArgs(tc.got, tc.want) {
+			t.Errorf("%s argv = %v, want %v", tc.name, tc.got, tc.want)
+		}
+	}
+}
+
+// The aider profile's not-found guidance must name aider and point at aider's
+// install instructions — never Claude's.
+func TestAiderProfile_NotFoundNamesAider(t *testing.T) {
+	p, err := ResolveProfile("aider")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"aider\") errored: %v", err)
+	}
+	l1, l2 := p.notFoundLines()
+	if !strings.Contains(l1, "Aider") {
+		t.Errorf("first not-found line does not name aider: %q", l1)
+	}
+	if !strings.Contains(l2, p.InstallURL) || !strings.Contains(l2, "aider.chat") {
+		t.Errorf("second not-found line does not point at aider's install URL: %q", l2)
+	}
+	if strings.Contains(l1+l2, "Claude") || strings.Contains(l1+l2, "claude.ai") {
+		t.Errorf("aider guidance mentions Claude: %q / %q", l1, l2)
+	}
+}
+
 // Harness selection follows the precedence --harness flag > SPEKK_HARNESS env >
 // default claude-code, and an explicit flag overrides a conflicting env var.
 func TestResolveHarness_Precedence(t *testing.T) {

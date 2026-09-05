@@ -3,10 +3,9 @@ id: aider-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 2
-status: in_progress
+status: done
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
-locked-by: builder-MacBook-Pro.local-67485-1788640230
 ---
 
 # An aider profile drives coach/builder/observer through the aider CLI
@@ -27,3 +26,5 @@ again from the other harnesses.
 - `observer_cron.go` bakes the aider binary into the crontab entry.
 - The not-found error names aider and links its install docs.
 - A test asserts the resolved argv for aider in interactive and headless modes.
+
+**Tests:** internal/agent/harness_test.go, internal/agent/harness_cliverify_test.go
