@@ -3,17 +3,17 @@ id: codex-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 3
-status: draft
+status: not_started
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
 ---
 
 # A codex profile drives coach/builder/observer through the codex CLI
 
-Selecting the codex harness runs the agents through the codex CLI. This is
-`draft` because codex is not installed in the working environment; it stays out
-of the build queue until the binary is present, so no builder fabricates flags
-against a missing CLI.
+Selecting the codex harness runs the agents through the codex CLI. codex is not
+installed in the working environment, so the builder must install it (or run
+where it is available) and read its real `--help` before this can be done — no
+flags from memory.
 
 ## Success Criteria
 
@@ -26,5 +26,6 @@ against a missing CLI.
 - `observer_cron.go` bakes the codex binary into the crontab entry.
 - The not-found error names codex and links its install docs.
 - A test asserts the resolved argv for codex in interactive and headless modes.
-- Promotion out of `draft` requires the flags to have been verified against the
-  installed codex binary (per `harness-flags-verified-against-cli`).
+- This is not done until the flags have been verified against the installed
+  codex binary (per `harness-flags-verified-against-cli`); an absent binary
+  means the assertion stays open, not fabricated.

@@ -61,6 +61,7 @@ and `--auto` on the bare command), so the whole prompt was dropped and opencode
 opened an empty TUI instead of running as the agent. The argv tests passed
 because they only checked the profile's own output against itself. Every profile
 must therefore be checked against its actual binary's `--help`
-(`harness-flags-verified-against-cli`), and a profile whose binary is not yet
-installed (`codex`, `gemini`) stays `draft` — out of the build queue — until the
-binary is present, so no builder fabricates flags against a missing CLI.
+(`harness-flags-verified-against-cli`). For a harness whose binary is not yet
+installed (`codex`, `gemini`), the builder installs it (or runs where it is
+available) and reads the real `--help` before the profile can be done; an absent
+binary leaves the assertion open rather than fabricated.
