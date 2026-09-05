@@ -19,8 +19,14 @@ func TestEmbeddedFS_SpekkDevLoopSkill(t *testing.T) {
 	}
 
 	content := string(data)
-	if !strings.Contains(content, "name: spekk-dev-loop") {
-		t.Errorf("embedded spekk-dev-loop skill missing \"name: spekk-dev-loop\" in frontmatter")
+	for _, want := range []string{
+		"name: spekk-dev-loop",
+		"spekk skill show builder review",
+		"spekk builder review",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("embedded spekk-dev-loop skill missing %q", want)
+		}
 	}
 }
 
@@ -74,6 +80,45 @@ func TestEmbeddedFS_ObserverPruneSkill(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Errorf("embedded prune skill missing %q", want)
 		}
+	}
+}
+
+// TestEmbeddedFS_BuilderReviewSkill verifies the review builder skill ships
+// with the binary via the embedded FS, and that its frontmatter and body
+// carry the fields and the sections, in order, that the
+// review-skill-markdown-exists assertion requires.
+func TestEmbeddedFS_BuilderReviewSkill(t *testing.T) {
+	const path = "specs/builder-skills/review-skill.md"
+
+	data, err := fs.ReadFile(EmbeddedFS, path)
+	if err != nil {
+		t.Fatalf("expected %s in embedded FS: %v", path, err)
+	}
+
+	content := string(data)
+	for _, want := range []string{"id: review", "description:"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("embedded review skill missing %q", want)
+		}
+	}
+
+	last := -1
+	for _, heading := range []string{
+		"## Triggers",
+		"## Workflow",
+		"## Output Format",
+		"## Validation",
+		"## Examples",
+	} {
+		idx := strings.Index(content, heading)
+		if idx < 0 {
+			t.Errorf("embedded review skill missing %q", heading)
+			continue
+		}
+		if idx < last {
+			t.Errorf("embedded review skill has %q out of order", heading)
+		}
+		last = idx
 	}
 }
 

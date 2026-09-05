@@ -390,6 +390,7 @@ spekk builder --assertion login      # Build one assertion, whatever its status
 spekk builder --confirm              # Ask before each build
 spekk builder --interactive          # Work with the builder in one session
 spekk builder my-skill               # Launch with a builder skill active
+spekk builder review                 # Review what was built, in a fresh session
 ```
 
 **Flags:**

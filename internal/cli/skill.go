@@ -19,7 +19,9 @@ var legacyAliases = map[string]map[string]string{
 		"validate":       "business-model-validator-skill",
 		"property-tests": "property-tests-skill",
 	},
-	"builder": {},
+	"builder": {
+		"review": "review-skill",
+	},
 	"observer": {
 		"coverage-gap": "coverage-gap-skill",
 		"prune":        "prune-skill",
