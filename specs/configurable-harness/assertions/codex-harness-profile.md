@@ -3,9 +3,10 @@ id: codex-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 3
-status: not_started
+status: in_progress
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
+locked-by: builder-Paris-MacBook-Pro-12345-1757088000
 ---
 
 # A codex profile drives coach/builder/observer through the codex CLI
