@@ -268,6 +268,12 @@ EOF
 
 **Your work is done for this session.** Do NOT run `spekk next` again or pick up another task. The orchestration system (Ralph loop or user) will invoke you again when it's time to work on the next assertion.
 
+## Available Skills
+
+Skills are markdown files resolved by the spekk CLI. Run `spekk skill list builder` to see everything available in the current project (built-in skills plus any project or user overrides). Built-in:
+
+- **review** - Review what was built against the assertions marked `done`, fix what the review finds, and gate the push. Use it after the assertions for a feature are `done` and before the push. Load it with `spekk skill show builder review` and follow it in the session, or run `spekk builder review` for a fresh session.
+
 ## Spec Format
 
 Assertions are markdown files with YAML frontmatter:

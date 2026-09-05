@@ -400,3 +400,36 @@ func TestBuildHelpText_ObserverAlwaysShowsOptions(t *testing.T) {
 		t.Error("help should reference the observer command")
 	}
 }
+
+// TestBuildHelpText_BuilderWithReviewSkill verifies the builder help lists
+// the review skill under its invocation name and shows a builder example,
+// not the coach's meeting example.
+func TestBuildHelpText_BuilderWithReviewSkill(t *testing.T) {
+	install := t.TempDir()
+	skillDir := filepath.Join(install, "specs", "builder-skills")
+	os.MkdirAll(skillDir, 0o755)
+	os.WriteFile(filepath.Join(skillDir, "review-skill.md"), []byte("---\nid: review\n---\n# Review"), 0o644)
+
+	// Isolate cwd/home so local/global layers don't shadow.
+	isolated := t.TempDir()
+	t.Setenv("HOME", isolated)
+	t.Setenv("XDG_CONFIG_HOME", isolated)
+	origWd, _ := os.Getwd()
+	os.Chdir(isolated)
+	t.Cleanup(func() { os.Chdir(origWd) })
+
+	out := buildHelpText(install, "builder")
+
+	if !strings.Contains(out, "  review\n") {
+		t.Errorf("help should list the skill under its invocation name %q, got:\n%s", "review", out)
+	}
+	if strings.Contains(out, "review-skill") {
+		t.Error("help should not expose the raw filename stem review-skill")
+	}
+	if !strings.Contains(out, "spekk builder review") {
+		t.Error("help should show the spekk builder review example")
+	}
+	if strings.Contains(out, "meeting") {
+		t.Error("builder help should not show the coach's meeting example")
+	}
+}

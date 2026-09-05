@@ -522,3 +522,38 @@ func TestResolveSkill_ObserverEmbeddedPruneAlias(t *testing.T) {
 		t.Errorf("expected ListSkills(observer) to include prune-skill, got %v", skills)
 	}
 }
+
+func TestResolveSkill_BuilderEmbeddedReviewAlias(t *testing.T) {
+	efs := fstest.MapFS{
+		"specs/builder-skills/review-skill.md": &fstest.MapFile{
+			Data: []byte("---\nid: review\n---\n# Review"),
+		},
+	}
+	home, cwd, install := setupSkillDirs(t, "builder")
+	r := newSkillResolver(home, cwd, install)
+	r.EmbeddedFS = efs
+
+	if got := r.ListAliases("builder")["review"]; got != "review-skill" {
+		t.Fatalf("expected builder alias review -> review-skill, got %q", got)
+	}
+
+	for _, name := range []string{"review", "review-skill"} {
+		skill := r.ResolveSkill("builder", name)
+		if skill == nil {
+			t.Fatalf("expected embedded builder skill to resolve via %q", name)
+		}
+		if skill.Source != "(embedded)" {
+			t.Errorf("%s: expected source (embedded), got %s", name, skill.Source)
+		}
+	}
+
+	found := false
+	for _, s := range r.ListSkills("builder") {
+		if s.Name == "review-skill" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected ListSkills(builder) to include review-skill")
+	}
+}

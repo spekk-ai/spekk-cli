@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/config"
 )
@@ -41,7 +43,7 @@ func stubCreateEnv(t *testing.T) {
 	t.Cleanup(func() { fetchArtifacts = origArtifacts })
 
 	origWait := waitReady
-	waitReady = func(ip, keyPath, name string) error { return fmt.Errorf("boom") }
+	waitReady = func(ip, keyPath, name string, timeout time.Duration) error { return fmt.Errorf("boom") }
 	t.Cleanup(func() { waitReady = origWait })
 }
 
@@ -206,24 +208,169 @@ func TestDestroyGuards(t *testing.T) {
 		}
 	})
 
-	t.Run("keeps a key it did not generate", func(t *testing.T) {
-		isolateConfig(t)
-		home := os.Getenv("XDG_CONFIG_HOME")
+}
 
-		operatorKey := filepath.Join(t.TempDir(), "id_ed25519")
-		for _, p := range []string{operatorKey, operatorKey + ".pub"} {
+// The key pair is deleted only when spekk generated it, and the test for
+// that is where the private key is. Both the recorded path and the file it
+// resolves to must be inside the keys directory; a symlink in either
+// direction is the operator's arrangement and is kept.
+func TestOwnsKeyPair(t *testing.T) {
+	isolateConfig(t)
+	keys := generatedKeysDir()
+	if err := os.MkdirAll(keys, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	write := func(path string) string {
+		t.Helper()
+		if err := os.WriteFile(path, []byte("k"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	link := func(target, path string) string {
+		t.Helper()
+		if err := os.Symlink(target, path); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	generated := write(filepath.Join(keys, "box"))
+	operator := write(filepath.Join(outside, "id_ed25519"))
+	// A sibling directory that shares the prefix of the keys directory.
+	if err := os.MkdirAll(keys+"-old", 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := map[string]struct {
+		path string
+		want bool
+	}{
+		"a key spekk generated":                {generated, true},
+		"a recorded path with no file at it":   {filepath.Join(keys, "gone"), true},
+		"an operator key outside the keys dir": {operator, false},
+		"a link in the keys dir that points out of it": {
+			link(operator, filepath.Join(keys, "borrowed")), false},
+		"a link outside the keys dir that points into it": {
+			link(generated, filepath.Join(outside, "spekk-box")), false},
+		"a key in a sibling dir with the same prefix": {
+			write(filepath.Join(keys+"-old", "box")), false},
+		"a path that climbs out of the keys dir": {
+			filepath.Join(keys, "..", "..", filepath.Base(outside), "id_ed25519"), false},
+		"an empty path": {"", false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := ownsKeyPair(tc.path); got != tc.want {
+				t.Errorf("ownsKeyPair(%q) = %v, want %v", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+// Destroy removes the key pair spekk generated and nothing else. When it
+// keeps a key, it says so on stderr and names the path, so the operator knows
+// the file is still there.
+func TestDestroyRemovesOnlyGeneratedKeys(t *testing.T) {
+	keyPair := func(t *testing.T, path string) {
+		t.Helper()
+		for _, p := range []string{path, path + ".pub"} {
 			if err := os.WriteFile(p, []byte("k"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if ownsKeyPair(operatorKey) {
-			t.Fatal("a key outside the generated keys dir is not ours to delete")
+	}
+	exists := func(path string) bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}
+
+	t.Run("removes the key pair it generated", func(t *testing.T) {
+		isolateConfig(t)
+		useTempStore(t)
+		if err := os.MkdirAll(generatedKeysDir(), 0o700); err != nil {
+			t.Fatal(err)
 		}
-		generated := filepath.Join(home, "spekk", "keys", "box")
-		if !ownsKeyPair(generated) {
-			t.Fatalf("a key under %s is ours", generatedKeysDir())
+		key := filepath.Join(generatedKeysDir(), "box")
+		keyPair(t, key)
+		if err := SaveSandbox("box", &SandboxMeta{Provider: "digitalocean", DropletID: 5, SSHKeyPath: key}); err != nil {
+			t.Fatal(err)
+		}
+
+		stderr := captureStderr(t)
+		if err := Destroy(&recordingProvider{}, "box", true); err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range []string{key, key + ".pub"} {
+			if exists(p) {
+				t.Errorf("%s should be gone: spekk generated it", p)
+			}
+		}
+		if out := stderr(); strings.Contains(out, "Kept SSH key") {
+			t.Errorf("a generated key must not be reported as kept:\n%s", out)
 		}
 	})
+
+	t.Run("keeps an operator key and says so", func(t *testing.T) {
+		isolateConfig(t)
+		useTempStore(t)
+		// A droplet created with --ssh-key pointing at the operator's own
+		// key: the record names a droplet, and the key is not ours.
+		key := filepath.Join(t.TempDir(), "id_rsa")
+		keyPair(t, key)
+		if err := SaveSandbox("box", &SandboxMeta{Provider: "digitalocean", DropletID: 5, SSHKeyPath: key}); err != nil {
+			t.Fatal(err)
+		}
+
+		stderr := captureStderr(t)
+		if err := Destroy(&recordingProvider{}, "box", true); err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range []string{key, key + ".pub"} {
+			if !exists(p) {
+				t.Errorf("destroy deleted %s, which the operator supplied", p)
+			}
+		}
+		if out := stderr(); !strings.Contains(out, "Kept SSH key "+key) {
+			t.Errorf("stderr should name the kept key %s:\n%s", key, out)
+		}
+		if got, _ := GetSandbox("box"); got != nil {
+			t.Error("the record should be gone after a clean destroy")
+		}
+	})
+}
+
+// captureStderr redirects os.Stderr into a pipe until the returned function
+// is called, which restores it and returns everything written.
+func captureStderr(t *testing.T) func() string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	done := make(chan string)
+	go func() {
+		var b strings.Builder
+		io.Copy(&b, r)
+		done <- b.String()
+	}()
+	restored := false
+	restore := func() string {
+		if restored {
+			return ""
+		}
+		restored = true
+		os.Stderr = orig
+		w.Close()
+		out := <-done
+		r.Close()
+		return out
+	}
+	t.Cleanup(func() { restore() })
+	return restore
 }
 
 func TestDOProviderDestroy(t *testing.T) {

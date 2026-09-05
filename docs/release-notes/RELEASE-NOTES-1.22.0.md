@@ -20,7 +20,7 @@ repos:
       - id: spekk-validate
 ```
 
-Use both checks, because one alone is not sufficient. The hook gives fast feedback. `spekk validate` takes less than 10 ms, so the author sees the problem before the commit exists. But the hook is not active in a new clone until a person runs `pre-commit install`, and `git commit --no-verify` does not run it. CI is the check that a user cannot bypass. Refer to [Validation in CI and pre-commit](ci.md).
+Use both checks, because one alone is not sufficient. The hook gives fast feedback. `spekk validate` takes less than 10 ms, so the author sees the problem before the commit exists. But the hook is not active in a new clone until a person runs `pre-commit install`, and `git commit --no-verify` does not run it. CI is the check that a user cannot bypass. Refer to [Validation in CI and pre-commit](../ci.md).
 
 The hook uses `language: system`. Thus it runs the spekk binary on `PATH`, and it agrees with the version that the developer and the agents use. For this reason, `rev` pins this hook definition and not the binary. Pin the binary in CI with `SPEKK_VERSION`. Without that pin, a more strict validator in a later version can make the repository fail with no change on its side.
 

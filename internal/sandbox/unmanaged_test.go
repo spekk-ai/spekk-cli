@@ -97,6 +97,33 @@ func TestDestroyUnmanagedMachine(t *testing.T) {
 		}
 	})
 
+	t.Run("needs no cloud token and calls no cloud", func(t *testing.T) {
+		// No cloud owns this machine, so destroy must not need the
+		// DigitalOcean token, and there is no droplet 0 to delete. The
+		// command layer resolves the provider from the record, and a
+		// nil provider is what keeps Destroy away from the API.
+		isolateConfig(t)
+		useTempStore(t)
+		t.Setenv("DO_API_TOKEN", "")
+		t.Setenv("DIGITALOCEAN_TOKEN", "")
+		save(t, operatorKey(t))
+		stubStopAgent(t, nil)
+
+		p, err := ProviderForName("box")
+		if err != nil {
+			t.Fatalf("a machine no cloud owns must not need a cloud token: %v", err)
+		}
+		if p != nil {
+			t.Fatalf("provider = %T, want nil", p)
+		}
+		if err := Destroy(p, "box", true); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := GetSandbox("box"); got != nil {
+			t.Error("the record should be gone after a clean destroy")
+		}
+	})
+
 	t.Run("keeps the record when the agent cannot be stopped", func(t *testing.T) {
 		isolateConfig(t)
 		useTempStore(t)

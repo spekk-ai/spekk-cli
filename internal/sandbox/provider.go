@@ -3,6 +3,7 @@ package sandbox
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -75,31 +76,54 @@ func generatedKeysDir() string {
 }
 
 // ownsKeyPair reports whether spekk generated the key pair at path and may
-// therefore delete it.
+// therefore delete it. Spekk writes every key it generates into
+// generatedKeysDir, so the test is whether the private key is a file in that
+// directory. An operator-supplied --ssh-key is anywhere else.
+//
+// The recorded path and the file it resolves to must both be inside the keys
+// directory. The path is cleaned and made absolute first, so a
+// `keys/../../.ssh/id_rsa` does not pass on its prefix. Then symlinks are
+// followed on both sides, and the resolved paths are compared: a link inside
+// the keys directory that points out of it is the operator's file, and a link
+// outside it that points in is a path the operator arranged, so both are kept.
+// A path with nothing on disk at it passes on the cleaned path alone; there
+// is nothing at it to protect, and the removal is a no-op.
 //
 // One known gap: a key still sitting at the pre-XDG path under ~/.spekk/keys
 // answers false, so destroy leaves those two files behind. That direction is
-// the safe one, and the alternative — widening the test — is what would risk
-// the operator's own key.
-//
-// Today every key is generated, so this always answers true. It exists so
-// that a provider which accepts an operator-supplied key — a machine spekk
-// did not create — cannot reach the unconditional os.Remove in Destroy. A
-// destroy that deletes the operator's own ~/.ssh key is not recoverable, so
-// the guard goes in before the caller that needs it, not after.
+// the safe one. Widening the test is what would risk the operator's own key,
+// and a destroy that deletes that key is not recoverable.
 func ownsKeyPair(path string) bool {
 	if path == "" {
-		return false
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
 		return false
 	}
 	keys, err := filepath.Abs(generatedKeysDir())
 	if err != nil {
 		return false
 	}
-	return strings.HasPrefix(abs, keys+string(filepath.Separator))
+	abs, err := filepath.Abs(path)
+	if err != nil || !insideDir(abs, keys) {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	resolvedKeys, err := filepath.EvalSymlinks(keys)
+	if err != nil {
+		return false
+	}
+	return insideDir(resolved, resolvedKeys)
+}
+
+// insideDir reports whether path is under dir. Both must be clean and
+// absolute. The separator is part of the test so that a sibling directory
+// with the same prefix, such as keys-old beside keys, does not pass.
+func insideDir(path, dir string) bool {
+	return strings.HasPrefix(path, dir+string(filepath.Separator))
 }
 
 // ProviderForName returns the Provider that owns the named sandbox.

@@ -133,6 +133,11 @@ var agentHelpExtras = map[string]struct {
 	Options  string
 	Examples string
 }{
+	"builder": {
+		Examples: `  spekk builder                           # Implement the ready assertions, one at a time
+  spekk builder review                    # Review what was built, in a fresh session
+`,
+	},
 	"observer": {
 		Options: `  --quiet                Preference for minimal output (Claude agent decides)
 `,
