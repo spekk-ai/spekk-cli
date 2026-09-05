@@ -8,7 +8,7 @@ priority: 2
 
 Decides whether a promise in the specs deserves a property-based test, then writes that test for the right layer and proves it reached the state it guards. A property states a promise the product makes and lets a tool search for a state that breaks it: a browser explorer such as Bombadil for the web client, a property-based library such as Hypothesis (Python), Hegel (Rust, Go), or fast-check (TypeScript) for the backend.
 
-**CLI Command:** `spekk coach property-tests [assertion-id | spec-id | layer]`
+**CLI Command:** `spekk coach property-tests`
 
 The method is adapted from the public Antithesis agent skills (antithesishq/antithesis-skills, Apache 2.0), cut down to what transfers to a project that runs its own tools without the Antithesis platform.
 

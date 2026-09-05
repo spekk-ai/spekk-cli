@@ -14,10 +14,10 @@ import (
 // legacyAliases maps agent → subcommand → skill filename stem.
 var legacyAliases = map[string]map[string]string{
 	"coach": {
-		"meeting":    "meeting-notes-to-specs-skill",
-		"coordinate": "coordinator-skill",
-		"validate":   "business-model-validator-skill",
-		"properties": "property-tests-skill",
+		"meeting":        "meeting-notes-to-specs-skill",
+		"coordinate":     "coordinator-skill",
+		"validate":       "business-model-validator-skill",
+		"property-tests": "property-tests-skill",
 	},
 	"builder": {},
 	"observer": {
