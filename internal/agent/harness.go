@@ -115,6 +115,38 @@ var aiderProfile = Profile{
 	HeadlessArgv:     []string{"--yes-always", "--message"},
 }
 
+// hermesProfile launches the coach, builder, and observer through the Hermes
+// Agent CLI (Nous Research). Its argv follows hermes's own conventions —
+// verified against the installed `hermes --help` (v0.18.x) — and is deliberately
+// not a copy of the claude/opencode flags:
+//
+//   - Interactive: `hermes --tui -z <prompt>` — `-z/--oneshot` seeds the agent
+//     prompt and `--tui` launches the interactive interface, so hermes carries
+//     the prompt and waits for input. `chat` is hermes's interactive
+//     subcommand, but its only prompt-carrying flag (`-q/--query`) is
+//     non-interactive; the top-level `-z`+`--tui` pair is the form that both
+//     seeds a prompt and stays interactive, so the profile uses it.
+//   - Headless: `hermes --yolo --cli -z <prompt>` — `--cli` runs the prompt
+//     non-interactively (as opposed to `--tui`), `-z` supplies the single
+//     message, and `--yolo` bypasses every approval prompt, hermes's equivalent
+//     of claude's --dangerously-skip-permissions for a no-TTY cron run with no
+//     human to confirm.
+//
+// hermes has no separate system-prompt flag, so the interactive builder reuses
+// the interactive `--tui -z` form and seeds the session with the prompt.
+// `--yolo` is intentionally absent from the interactive/system-prompt modes: a
+// human is present to answer approval prompts there, exactly as opencode omits
+// `--auto` and aider omits `--yes-always`.
+var hermesProfile = Profile{
+	Name:             "hermes",
+	Binary:           "hermes",
+	DisplayName:      "Hermes",
+	InstallURL:       "https://hermes-agent.nousresearch.com/docs/",
+	InteractiveArgv:  []string{"--tui", "-z"},
+	SystemPromptArgv: []string{"--tui", "-z"},
+	HeadlessArgv:     []string{"--yolo", "--cli", "-z"},
+}
+
 const defaultHarness = "claude-code"
 
 // HarnessEnvVar is the environment variable that selects the harness when no
@@ -126,6 +158,7 @@ var harnessProfiles = map[string]Profile{
 	claudeCodeProfile.Name: claudeCodeProfile,
 	opencodeProfile.Name:   opencodeProfile,
 	aiderProfile.Name:      aiderProfile,
+	hermesProfile.Name:     hermesProfile,
 }
 
 // harnessAliases maps alternative names to their canonical harness name.

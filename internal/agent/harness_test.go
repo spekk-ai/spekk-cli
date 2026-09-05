@@ -98,6 +98,78 @@ func TestAiderProfile_NotFoundNamesAider(t *testing.T) {
 	}
 }
 
+// The hermes name resolves to the hermes profile (not claude-code), so a user
+// can select hermes by name in both --harness and SPEKK_HARNESS.
+func TestResolveProfile_Hermes(t *testing.T) {
+	p, err := ResolveProfile("hermes")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"hermes\") errored: %v", err)
+	}
+	if p.Name != "hermes" || p.Binary != "hermes" {
+		t.Fatalf("ResolveProfile(\"hermes\") = %s/%s, want hermes/hermes", p.Name, p.Binary)
+	}
+}
+
+// The hermes profile's resolved argv must follow hermes's own CLI conventions —
+// not a copy of the claude flags. Interactive and the interactive builder use
+// `--tui -z` so hermes seeds the prompt and stays interactive; headless uses
+// `--yolo --cli -z` so hermes runs the single prompt non-interactively and
+// bypasses approval prompts. The permission-skip flag is hermes's real `--yolo`
+// and appears only in headless.
+func TestHermesProfile_ResolvedArgv(t *testing.T) {
+	p, err := ResolveProfile("hermes")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"hermes\") errored: %v", err)
+	}
+	const msg = "activation message"
+
+	cases := []struct {
+		name string
+		got  []string
+		want []string
+	}{
+		{"interactive", p.InteractiveArgs(msg), []string{"--tui", "-z", msg}},
+		{"system-prompt", p.SystemPromptArgs(msg), []string{"--tui", "-z", msg}},
+		{"headless", p.HeadlessArgs(msg), []string{"--yolo", "--cli", "-z", msg}},
+	}
+	for _, tc := range cases {
+		if !equalArgs(tc.got, tc.want) {
+			t.Errorf("%s argv = %v, want %v", tc.name, tc.got, tc.want)
+		}
+	}
+
+	// The permission-skip flag must be hermes's real --yolo, never a claude or
+	// opencode flag copied across.
+	head := strings.Join(p.HeadlessArgs(msg), " ")
+	if !strings.Contains(head, "--yolo") {
+		t.Errorf("headless argv missing hermes's --yolo: %q", head)
+	}
+	for _, foreign := range []string{"--dangerously-skip-permissions", "--auto", "--yes-always"} {
+		if strings.Contains(head, foreign) {
+			t.Errorf("hermes headless argv copied a foreign permission flag %q: %q", foreign, head)
+		}
+	}
+}
+
+// The hermes profile's not-found guidance must name Hermes and point at
+// Hermes's install docs — never Claude's.
+func TestHermesProfile_NotFoundNamesHermes(t *testing.T) {
+	p, err := ResolveProfile("hermes")
+	if err != nil {
+		t.Fatalf("ResolveProfile(\"hermes\") errored: %v", err)
+	}
+	l1, l2 := p.notFoundLines()
+	if !strings.Contains(l1, "Hermes") {
+		t.Errorf("first not-found line does not name Hermes: %q", l1)
+	}
+	if !strings.Contains(l2, p.InstallURL) || !strings.Contains(l2, "hermes-agent.nousresearch.com") {
+		t.Errorf("second not-found line does not point at Hermes's install docs: %q", l2)
+	}
+	if strings.Contains(l1+l2, "Claude") || strings.Contains(l1+l2, "claude.ai") {
+		t.Errorf("hermes guidance mentions Claude: %q / %q", l1, l2)
+	}
+}
+
 // Harness selection follows the precedence --harness flag > SPEKK_HARNESS env >
 // default claude-code, and an explicit flag overrides a conflicting env var.
 func TestResolveHarness_Precedence(t *testing.T) {

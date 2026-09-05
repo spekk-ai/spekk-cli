@@ -194,7 +194,7 @@ func buildHelpText(installDir, agent string) string {
 	}
 
 	extras := agentHelpExtras[agent]
-	optionsBlock := extras.Options + `  --harness <name>       Agent harness: claude-code (default) or opencode.
+	optionsBlock := extras.Options + `  --harness <name>       Agent harness: claude-code (default), opencode, aider, or hermes.
                          Overrides the ` + HarnessEnvVar + ` env var.
   --help, -h             Show this help message`
 
