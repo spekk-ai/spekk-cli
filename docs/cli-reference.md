@@ -591,12 +591,14 @@ spekk sandbox ssh my-sandbox -L 8080:localhost:8080
 
 ### `spekk sandbox destroy <name>`
 
-Tear down a sandbox droplet and remove local metadata.
+Tear down a sandbox droplet and remove local metadata. For a machine spekk did not create (`--provider none`), it stops the agent and removes the credentials from the machine, then removes the local record; it makes no DigitalOcean call and needs no API token.
 
 ```bash
 spekk sandbox destroy my-sandbox
 spekk sandbox destroy my-sandbox --force   # Skip confirmation
 ```
+
+The local SSH key pair is deleted only when spekk generated it. The test is where the private key is: the recorded path, cleaned and made absolute, must be inside the `keys` directory under spekk's config dir, and so must the file it resolves to once symlinks are followed on both sides. A key anywhere else, including a symlink that points into or out of that directory, is kept, and destroy prints one line to stderr that names the path it kept.
 
 **Flags:**
 

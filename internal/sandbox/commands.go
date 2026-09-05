@@ -346,12 +346,7 @@ func Destroy(p Provider, name string, force bool) error {
 		fmt.Fprintf(os.Stderr, "Warning: %s; removing the local record anyway because --force was given.\n", err)
 	}
 
-	// Remove local SSH key files, but only the ones spekk generated. An
-	// operator-supplied key belongs to the operator.
-	if ownsKeyPair(sandbox.SSHKeyPath) {
-		os.Remove(sandbox.SSHKeyPath)
-		os.Remove(sandbox.SSHKeyPath + ".pub")
-	}
+	removeGeneratedKeyPair(sandbox.SSHKeyPath)
 
 	// Remove per-sandbox known_hosts file.
 	os.Remove(KnownHostsFile(name))
@@ -362,6 +357,22 @@ func Destroy(p Provider, name string, force bool) error {
 
 	fmt.Fprintf(os.Stderr, "Sandbox %q destroyed.\n", name)
 	return nil
+}
+
+// removeGeneratedKeyPair deletes the local key pair at path, but only when
+// spekk generated it; ownsKeyPair holds the rule. An operator-supplied key
+// belongs to the operator, and saying that it stayed is what tells them the
+// destroy did not take it.
+func removeGeneratedKeyPair(path string) {
+	if path == "" {
+		return
+	}
+	if !ownsKeyPair(path) {
+		fmt.Fprintf(os.Stderr, "Kept SSH key %s: spekk did not generate it.\n", path)
+		return
+	}
+	os.Remove(path)
+	os.Remove(path + ".pub")
 }
 
 // providerName reports the provider that owns a sandbox, reading an entry
