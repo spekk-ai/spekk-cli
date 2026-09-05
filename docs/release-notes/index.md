@@ -8,6 +8,18 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.28.0 -- A Slow cloud-init No Longer Costs You the Droplet](RELEASE-NOTES-1.28.0.md)
+
+`spekk sandbox create` waited a fixed ten minutes for cloud-init, and a slow apt upgrade could take eighteen. When it gave up, the droplet kept running and the record stayed at `provisioning`, with no command to finish it. The wait is now `--provision-timeout` (default 30 minutes), it prints progress once a minute, and it stops early when cloud-init reports an error. `spekk sandbox provision <name>` finishes a sandbox the wait left behind.
+
+## [1.27.0 -- A Sandbox That Does Not Admit Root](RELEASE-NOTES-1.27.0.md)
+
+1.26.0 let a sandbox be a machine you already have, and assumed that machine lets you log in as root. Many do not: an AWS Ubuntu AMI gives you `ubuntu` and disables root over SSH. `--ssh-user <user>` logs in as that user and escalates the four steps that need root with `sudo`. A sandbox recorded before this release reads as root, so nothing changes for one that already exists.
+
+## [1.26.0 -- A Sandbox Stops Being a Droplet](RELEASE-NOTES-1.26.0.md)
+
+A sandbox could only be a DigitalOcean droplet that spekk created, billing Claude through Bedrock. This release makes the machine, the cloud that owns it, and the account that pays each a separate choice: a `Provider` interface with DigitalOcean as one implementation, `--ip`/`--ssh-key` to register a machine you already have, and `--auth subscription` to pay with a Claude subscription instead of the Bedrock API. Nothing changes for an existing sandbox -- Bedrock stays the default. **Earlier releases wrote a live `ANTHROPIC_API_KEY` into the agent's login shell, outside the env file and outside what `destroy` removed; this release stops writing it and clears it. Read the upgrading section.**
+
 ## [1.25.0 -- Four Silent Failures](RELEASE-NOTES-1.25.0.md)
 
 Every fix here is for something that failed without saying so. A dropped WebSocket killed the turn it was carrying, so a long job reported nothing at all. A follow-up message for a running session wedged the sandbox permanently, while its heartbeats kept it looking healthy. An observation suppressed new findings from any branch, so drift a team had already fixed once could never be reported again. And a comment in frontmatter quietly changed a value or discarded a list. **A value with an unquoted `#` now loses its tail, which rewrites rows an existing index holds -- read the upgrading section before you take this.**

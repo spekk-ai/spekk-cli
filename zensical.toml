@@ -57,8 +57,12 @@ nav = [
     "advanced/index.md",
     { "Sandbox Agent Architecture" = "advanced/sandbox-architecture.md" },
   ] },
+  { "Cutting a Release" = "releasing.md" },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.28.0 - A Slow cloud-init No Longer Costs You the Droplet" = "release-notes/RELEASE-NOTES-1.28.0.md" },
+    { "1.27.0 — A Sandbox That Does Not Admit Root" = "release-notes/RELEASE-NOTES-1.27.0.md" },
+    { "1.26.0 — A Sandbox Stops Being a Droplet" = "release-notes/RELEASE-NOTES-1.26.0.md" },
     { "1.25.0 — Four Silent Failures" = "release-notes/RELEASE-NOTES-1.25.0.md" },
     { "1.24.0 — An Observation's Own Keys, Indexed" = "release-notes/RELEASE-NOTES-1.24.0.md" },
     { "1.23.0 — Quieter Output and a Real Branch Check" = "release-notes/RELEASE-NOTES-1.23.0.md" },

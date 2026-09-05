@@ -2,11 +2,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -976,29 +978,55 @@ OPTIONS:
 	}
 }
 
-// launchSandbox manages cloud sandbox environments.
-// Subcommands: create, list, status, ssh, destroy, deploy.
-func launchSandbox(args []string) {
-	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
-		fmt.Print(`
+// sandboxHelpText is the help for `spekk sandbox`. It is a constant so a test
+// can check that every subcommand the switch below dispatches is listed.
+const sandboxHelpText = `
 spekk sandbox - Manage cloud sandbox environments
 
 USAGE:
   spekk sandbox <subcommand> [options]
 
 SUBCOMMANDS:
-  create      Create a new sandbox droplet
-  list        List all sandbox droplets
+  create      Create a sandbox, or register a machine you already have
+  provision   Finish a sandbox that create left at "provisioning"
+  list        List all sandboxes
   status      Show status of a sandbox
   ssh         SSH into a sandbox
-  destroy     Destroy a sandbox droplet
+  destroy     Destroy a sandbox, or deregister a machine you own
   deploy      Deploy agent client to a sandbox
 
 OPTIONS:
   --help, -h  Show this help message
 
 Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
-`)
+`
+
+// sandboxProvisionHelpText is the help for `spekk sandbox provision`.
+const sandboxProvisionHelpText = `
+spekk sandbox provision - Finish a sandbox that create left at "provisioning"
+
+USAGE:
+  spekk sandbox provision <name> [options]
+
+OPTIONS:
+  --auth <mode>  bedrock or subscription. Default: the mode the sandbox was
+                 created with
+  --force, -f    Provision a sandbox whose status is not "provisioning"
+  --help, -h     Show this help message
+
+When "spekk sandbox create" stops waiting for cloud-init, the machine keeps
+running and the record stays at "provisioning". Once /opt/spekk/.provisioned
+exists on the machine, this command injects the credentials, configures git
+for the agent, deploys the agent binary, and marks the sandbox active. It
+needs the same environment variables as create, and it prints a new agent
+token to register on the control host.
+`
+
+// launchSandbox manages cloud sandbox environments.
+// Subcommands: create, provision, list, status, ssh, destroy, deploy.
+func launchSandbox(args []string) {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
+		fmt.Print(sandboxHelpText)
 		return
 	}
 
@@ -1008,6 +1036,8 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 	switch subcommand {
 	case "create":
 		createSandbox(subArgs)
+	case "provision":
+		provisionSandbox(subArgs)
 	case "list":
 		if err := sandbox.List(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -1022,7 +1052,17 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Status(subArgs[0]); err != nil {
+		// Status reads more than the provider knows, so a provider it
+		// cannot build is a warning, not a failure. Before this command
+		// needed an API token at all, it still printed the stored fields
+		// and the SSH checks; it keeps doing that.
+		// Status reports a missing sandbox itself, so only a real
+		// provider problem is worth a warning here.
+		p, err := sandbox.ProviderForName(subArgs[0])
+		if err != nil && !errors.Is(err, sandbox.ErrSandboxNotFound) {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", err)
+		}
+		if err := sandbox.Status(p, subArgs[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1057,7 +1097,12 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Destroy(name, force); err != nil {
+		p, err := sandbox.ProviderForName(name)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		if err := sandbox.Destroy(p, name, force); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1081,29 +1126,116 @@ Use "spekk sandbox <subcommand> --help" for more information about a subcommand.
 	}
 }
 
+// provisionSandbox parses arguments for `spekk sandbox provision <name>`.
+func provisionSandbox(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"auth":  {Names: []string{"--auth"}, Type: cli.StringFlag},
+		"force": {Names: []string{"--force", "-f"}, Type: cli.BoolFlag},
+		"help":  {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Print(sandboxProvisionHelpText)
+		return
+	}
+
+	name := sandboxPositional(args, "--auth")
+	if name == "" {
+		fmt.Fprintln(os.Stderr, "Usage: spekk sandbox provision <name> [--auth <mode>] [--force]")
+		os.Exit(1)
+	}
+	if err := sandbox.ValidateSandboxName(name); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// An absent --auth keeps the recorded mode, so it must stay empty here
+	// rather than fall to ParseAuthMode's bedrock default.
+	var auth sandbox.AuthMode
+	if s := flags.String("auth"); s != "" {
+		mode, err := sandbox.ParseAuthMode(s)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		auth = mode
+	}
+
+	if err := sandbox.Provision(name, sandbox.ProvisionOptions{Auth: auth, Force: flags.Bool("force")}); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+// sandboxPositional returns the first argument that is neither a flag nor
+// the value of one of valueFlags. It is how a sandbox subcommand finds its
+// <name> among flags that take a value.
+func sandboxPositional(args []string, valueFlags ...string) string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if slices.Contains(valueFlags, a) {
+			i++
+			continue
+		}
+		if !strings.HasPrefix(a, "-") {
+			return a
+		}
+	}
+	return ""
+}
+
 func createSandbox(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
-		"name":    {Names: []string{"--name"}, Type: cli.StringFlag},
-		"region":  {Names: []string{"--region"}, Type: cli.StringFlag},
-		"size":    {Names: []string{"--size"}, Type: cli.StringFlag},
-		"project": {Names: []string{"--project"}, Type: cli.StringFlag},
-		"vpc":     {Names: []string{"--vpc"}, Type: cli.StringFlag},
-		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		"name":              {Names: []string{"--name"}, Type: cli.StringFlag},
+		"provider":          {Names: []string{"--provider"}, Type: cli.StringFlag},
+		"region":            {Names: []string{"--region"}, Type: cli.StringFlag},
+		"size":              {Names: []string{"--size"}, Type: cli.StringFlag},
+		"project":           {Names: []string{"--project"}, Type: cli.StringFlag},
+		"vpc":               {Names: []string{"--vpc"}, Type: cli.StringFlag},
+		"ip":                {Names: []string{"--ip"}, Type: cli.StringFlag},
+		"ssh-key":           {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
+		"ssh-user":          {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
+		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
+		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
+		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
 	if flags.Bool("help") {
 		fmt.Print(`
-spekk sandbox create - Create a new sandbox droplet
+spekk sandbox create - Create a new sandbox
 
 USAGE:
   spekk sandbox create --name <name> [options]
 
 OPTIONS:
-  --name <name>        Sandbox name (required)
-  --region <region>    DigitalOcean region (default: nyc1)
-  --size <size>        Droplet size slug (default: s-2vcpu-4gb)
-  --project <project>  Assign to a DigitalOcean project (name or UUID)
-  --vpc <uuid>         Place droplet in a specific DigitalOcean VPC
+  --name <name>          Sandbox name (required)
+  --provider <provider>  digitalocean, or none for a machine you already
+                         have (inferred from --ip / --ssh-key)
+
+  DigitalOcean options:
+  --region <region>      DigitalOcean region (default: nyc1)
+  --size <size>          Droplet size slug (default: s-2vcpu-4gb)
+  --project <project>    Assign to a DigitalOcean project (name or UUID)
+  --vpc <uuid>           Place droplet in a specific DigitalOcean VPC
+  --provision-timeout <duration>
+                         How long to wait for cloud-init (default: 30m).
+                         If it runs out, the machine keeps running; finish
+                         it later with "spekk sandbox provision <name>"
+
+  Options for a machine you already have:
+  --ip <address>         Address of the machine
+  --ssh-key <path>       Private key that reaches it as the login user
+  --ssh-user <user>      SSH login user (default: root); a non-root user must
+                         have passwordless sudo, as AWS Ubuntu AMIs do
+
+  Model credential:
+  --auth <mode>          How the agent authenticates Claude: bedrock (default,
+                         bills through the AWS Bedrock API) or subscription
+                         (uses CLAUDE_CODE_OAUTH_TOKEN from your environment,
+                         minted by "claude setup-token")
+
+  spekk does not provision a machine it did not create. The machine must
+  already carry /opt/spekk/.provisioned; spekk then injects credentials
+  and deploys the agent onto it.
 `)
 		return
 	}
@@ -1118,14 +1250,60 @@ OPTIONS:
 		os.Exit(1)
 	}
 
+	auth, err := sandbox.ParseAuthMode(flags.String("auth"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	provisionTimeout, err := sandbox.ParseProvisionTimeout(flags.String("provision-timeout"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	setFlags := map[string]bool{
+		"--region":   flags.String("region") != "",
+		"--size":     flags.String("size") != "",
+		"--vpc":      flags.String("vpc") != "",
+		"--project":  flags.String("project") != "",
+		"--ip":       flags.String("ip") != "",
+		"--ssh-key":  flags.String("ssh-key") != "",
+		"--ssh-user": flags.String("ssh-user") != "",
+	}
+
+	// Naming an existing machine is what says there is nothing to create.
+	providerName, err := sandbox.ResolveProviderName(flags.String("provider"), sandbox.NamesExistingMachine(setFlags))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Validate provider-specific flags.
+	if err := sandbox.ValidateProviderFlags(providerName, setFlags); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	p, err := sandbox.ProviderByName(providerName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 	opts := sandbox.CreateOptions{
 		Name:    flags.String("name"),
 		Region:  flags.String("region"),
 		Size:    flags.String("size"),
 		Project: flags.String("project"),
 		VPC:     flags.String("vpc"),
+		IP:      flags.String("ip"),
+		SSHKey:  flags.String("ssh-key"),
+		SSHUser: flags.String("ssh-user"),
+		Auth:    auth,
+
+		ProvisionTimeout: provisionTimeout,
 	}
-	if err := sandbox.Create(opts); err != nil {
+	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -1649,7 +1827,7 @@ COMMANDS:
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to find spec-code drift
-  sandbox   Manage cloud sandbox environments (create, list, status, ssh, destroy, deploy)
+  sandbox   Manage cloud sandbox environments (create, provision, list, status, ssh, destroy, deploy)
   conversation  Request a conversation on the connected chat surface (open)
   install   Install a skill for an agent (coach/builder/observer)
   uninstall Remove an installed skill from local or global scope
