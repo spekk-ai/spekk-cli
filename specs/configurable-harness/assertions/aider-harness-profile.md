@@ -3,9 +3,10 @@ id: aider-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 2
-status: not_started
+status: in_progress
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
+locked-by: builder-MacBook-Pro.local-67485-1788640230
 ---
 
 # An aider profile drives coach/builder/observer through the aider CLI
