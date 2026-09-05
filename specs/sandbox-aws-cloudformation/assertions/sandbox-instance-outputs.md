@@ -22,7 +22,7 @@ An AWS Ubuntu AMI disables root over SSH and gives the `ubuntu` user passwordles
 - Instance type is a parameter with the default `t3.medium`
 - Key pair name is a required parameter with no default: the operator names an existing key pair, and it is the key the `ubuntu` login user accepts
 - The public key for the `agent` user is a required parameter, `AgentPublicKey`, and it fills the placeholder line of `cloud-init.yaml`
-- The UserData is the content of `internal/sandbox/cloud-init.yaml` with the placeholder line mapped to `AgentPublicKey` and `- default` at the top of the users list, and nothing else differs. A Go test compares the two and fails when they drift, and it also fails when `cloud-init.yaml` gains a `${` that `Fn::Sub` would read as a variable, or when it has more than one users list
+- The UserData is the content of `internal/sandbox/cloud-init.yaml` with the placeholder line mapped to `AgentPublicKey` and `- default` at the top of the users list, and nothing else differs. `go generate ./internal/sandbox` writes the block from `cloud-init.yaml`, and a Go test compares the two and fails when they drift, and it also fails when `cloud-init.yaml` gains a `${` that `Fn::Sub` would read as a variable, or when it has more than one users list
 - The UserData ends by writing `/opt/spekk/.provisioned`, because that is what `cloud-init.yaml` ends with
 - Instance gets a public IP through subnet auto-assign, with no Elastic IP
 - Root EBS volume is 50 GB gp3

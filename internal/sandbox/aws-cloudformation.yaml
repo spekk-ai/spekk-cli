@@ -11,7 +11,8 @@ Description: >-
 # the listed users only, and the ubuntu login that KeyName is for never
 # exists. A droplet logs in as root, so cloud-init.yaml does not need it.
 # TestAWSUserDataMatchesCloudInit fails when the files drift in any other
-# way, so edit cloud-init.yaml first and copy the result here.
+# way. Edit cloud-init.yaml, then run "go generate ./internal/sandbox" to
+# write the block below from it.
 
 Parameters:
   InstanceType:
