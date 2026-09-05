@@ -50,6 +50,17 @@ are skipped, how headless mode is requested, and the "not found — install X"
 guidance shown when the binary is missing. Launch sites resolve a profile and
 read those fields instead of embedding literals.
 
-The canonical harness names match the existing install targets so a user names
-the harness the same way in both places: `claude-code` and `opencode` (with
-`claude` as an alias for `claude-code`).
+Supported harnesses: `claude-code` (default, alias `claude`), `opencode`,
+`hermes`, `aider`, `codex`, and `gemini`. Each harness has its own CLI shape —
+they share no flag conventions — so every profile is independent.
+
+## Flags are verified against the real CLI, never written from memory
+
+The first opencode profile emitted flags opencode does not define (`--prompt`,
+and `--auto` on the bare command), so the whole prompt was dropped and opencode
+opened an empty TUI instead of running as the agent. The argv tests passed
+because they only checked the profile's own output against itself. Every profile
+must therefore be checked against its actual binary's `--help`
+(`harness-flags-verified-against-cli`), and a profile whose binary is not yet
+installed (`codex`, `gemini`) stays `draft` — out of the build queue — until the
+binary is present, so no builder fabricates flags against a missing CLI.

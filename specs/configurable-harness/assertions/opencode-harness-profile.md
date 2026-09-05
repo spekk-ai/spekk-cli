@@ -3,30 +3,37 @@ id: opencode-harness-profile
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 2
-status: done
-depends-on: harness-profile-abstraction
+status: not_started
+depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
 ---
 
-# An opencode profile drives the interactive, headless, and observer launches
+# The opencode profile drives coach/builder/observer with opencode's real flags
 
 Selecting the opencode harness runs the coach, builder, and observer through the
-opencode CLI instead of `claude`, with opencode's own flag conventions.
+opencode CLI. The profile's flags must match the installed opencode binary — an
+earlier version emitted flags opencode does not define (`--prompt`, and `--auto`
+on the bare command), so the whole prompt was silently dropped and opencode
+opened an empty TUI instead of acting as the agent.
 
 ## Success Criteria
 
-- An opencode profile exists whose binary and flags match the opencode CLI's
-  actual conventions for: passing a prompt, running non-interactively/headless,
-  and skipping permission prompts. (The builder confirms the real opencode flag
-  names; the profile is not a copy of the claude flags.)
-- With `SPEKK_HARNESS=opencode` (or `--harness opencode`), the interactive and
-  headless launch sites spawn the opencode binary, and `observer_cron.go` bakes
-  the opencode binary into the crontab entry.
-- The opencode profile's not-found error names opencode and points to opencode's
-  install instructions, not Claude's.
-- A test asserts the resolved argv for the opencode profile in both interactive
-  and headless modes.
-- Selecting opencode changes only the launch harness; the prompts, skills, and
+- Every flag and subcommand the opencode profile emits appears in the output of
+  `opencode --help` / `opencode run --help` for the installed binary. In
+  particular: opencode has no `--prompt` flag (the message is a bare positional),
+  and `--auto` and the message live under the `run` subcommand, not the bare
+  `opencode` command.
+- Interactive coach/builder launches an opencode session that carries the agent
+  prompt as its message and does not auto-run it as a one-off task — e.g.
+  `opencode run -i <message>` — and the bare `opencode` command receives no
+  flags it does not define.
+- Headless mode uses `opencode run <message>` with opencode's real
+  permission-skip flag.
+- `observer_cron.go` bakes the opencode binary into the crontab entry.
+- The opencode profile's not-found error names opencode and links opencode's
+  install docs, not Claude's.
+- A test asserts the resolved argv for opencode in interactive and headless
+  modes, and (per `harness-flags-verified-against-cli`) that argv uses only flags
+  the installed opencode defines.
+- Selecting opencode changes only the launch harness; prompts, skills, and the
   spec workflow are unchanged.
-
-**Tests:** internal/agent/harness_test.go
