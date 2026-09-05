@@ -4,49 +4,47 @@ icon: lucide/graduation-cap
 
 # Skills
 
-Skills are markdown workflow files that agents read and follow. Both the **coach** and **builder** support skills.
+A skill is a markdown file with a workflow that an agent reads and follows. The coach, the builder, and the observer all support skills.
 
 ## How skills work
 
-1. **Activation** -- You invoke a skill via the CLI (e.g., `spekk coach meeting`)
-2. **Resolution** -- Spekk finds the skill file using layered discovery
-3. **Injection** -- The skill content is inlined into the agent's prompt
-4. **Execution** -- The agent follows the workflow steps
-5. **Validation** -- The agent validates output against success criteria
+1. **Activation.** You name the skill on the command line, for example `spekk coach meeting`.
+2. **Resolution.** Spekk finds the skill file through the layers below.
+3. **Injection.** Spekk inlines the skill content into the agent's prompt.
+4. **Execution.** The agent follows the workflow steps.
+5. **Validation.** The agent checks its output against the skill's success criteria.
 
 ### Skill discovery
 
-Skills are resolved from three locations, checked in order (first match wins):
+Spekk looks in three places, in order. The first match wins:
 
-| Priority | Location | Scope |
-|----------|----------|-------|
-| 1 | `.spekk/skills/{agent}/` | **Local** -- project-specific skills |
-| 2 | `~/.config/spekk/skills/{agent}/` | **Global** -- your personal skills |
-| 3 | Package built-ins | **Default** -- ships with Spekk |
+| Order | Location | Scope |
+|-------|----------|-------|
+| 1 | `.spekk/skills/{agent}/` | Local: skills for this project |
+| 2 | `~/.config/spekk/skills/{agent}/` | Global: your skills, for every project |
+| 3 | The skills in the binary | Default: what ships with Spekk |
 
-Where `{agent}` is `coach` or `builder`.
+`{agent}` is `coach`, `builder`, or `observer`.
 
-A local skill with the same name as a built-in skill will shadow it, letting you customize behavior per-project.
+A local skill with the same name as a built-in skill shadows it, so you can change a skill's behavior per project.
 
 ### Skill matching
 
-When you run `spekk coach meeting`, the resolver tries three strategies:
+When you run `spekk coach meeting`, the resolver tries three things in each directory:
 
-1. **Filename match** -- looks for `meeting.md` in each skill directory
-2. **Legacy alias** -- maps `meeting` → `meeting-notes-to-specs-skill.md`
-3. **Frontmatter ID** -- scans all `.md` files for a `id: meeting` field in YAML frontmatter
-
----
+1. **File name.** A file named `meeting.md`.
+2. **Alias.** `meeting` maps to `meeting-notes-to-specs-skill.md`. The aliases are `meeting`, `coordinate`, and `validate` for the coach, and `coverage-gap` and `prune` for the observer.
+3. **Frontmatter id.** Any `.md` file with `id: meeting` in its YAML frontmatter.
 
 ## Built-in coach skills
 
 ### Meeting notes to specs
 
-Process meeting transcripts into structured outputs.
+Turn a meeting transcript into three outputs.
 
-**CLI:** `spekk coach meeting [file]`
+**Command:** `spekk coach meeting [file]`
 
-**Aliases:** `meeting` → `meeting-notes-to-specs-skill`
+**Alias:** `meeting` maps to `meeting-notes-to-specs-skill`
 
 === "Todos"
 
@@ -62,7 +60,7 @@ Process meeting transcripts into structured outputs.
 
 === "Specs"
 
-    Created in `specs/`:
+    Written to `specs/`:
 
     ```yaml
     ---
@@ -85,25 +83,21 @@ Process meeting transcripts into structured outputs.
 
 #### Workflow
 
-1. Provide meeting transcript (paste or file)
-2. Coach categorizes: action items → todos, feature requests → specs, decisions → context
-3. Coach shows proposed outputs for review
-4. You approve
-5. Files are created/updated and committed together
-
----
+1. Give the coach the transcript, as a file or pasted text.
+2. The coach sorts the content: action items become todos, feature requests become specs, decisions become context.
+3. The coach shows the proposed output.
+4. You approve it.
+5. The coach writes the files and commits them together.
 
 ### Coordinator
 
-Create a dependency-aware work plan with branch assignments.
+Make a dependency-aware work plan with branch assignments.
 
-**CLI:** `spekk coach coordinate`
+**Command:** `spekk coach coordinate`
 
-**Aliases:** `coordinate` → `coordinator-skill`
+**Alias:** `coordinate` maps to `coordinator-skill`
 
-#### What it does
-
-Analyzes all `draft` and `not_started` assertions, identifies prerequisites, groups related work into feature branches, and updates YAML frontmatter.
+The coordinator reads every `draft` and `not_started` assertion, finds the prerequisites, groups related work into feature branches, and writes the result into the frontmatter.
 
 #### Example output
 
@@ -126,13 +120,14 @@ main (isolated work):
   update-button-styles (no dependencies)
 ```
 
-#### YAML changes
+#### Frontmatter changes
 
 Before:
 
 ```yaml
 ---
 id: chat-message-input
+parent: chat
 created: 2026-01-15T10:00:00Z
 priority: 2
 status: not_started
@@ -144,6 +139,7 @@ After:
 ```yaml
 ---
 id: chat-message-input
+parent: chat
 created: 2026-01-15T10:00:00Z
 priority: 2
 status: not_started
@@ -152,26 +148,19 @@ branch: feature/chat-system
 ---
 ```
 
-After updating, the coordinator validates with the parser to catch errors before committing.
-
----
+After the update, the coordinator runs `spekk validate` to catch a fault before it commits.
 
 ### Business model validator
 
-Assess startup or business ideas through structured questions.
+Assess a business idea through structured questions.
 
-**CLI:** `spekk coach validate`
+**Command:** `spekk coach validate`
 
-**Aliases:** `validate` → `business-model-validator-skill`
+**Alias:** `validate` maps to `business-model-validator-skill`
 
 **Triggers:** "validate business model", "startup validation", "is this viable"
 
-#### How it works
-
-1. Asks structured questions (problem, market, solution, competition, business model)
-2. Scores responses across dimensions
-3. Provides a quantitative health score
-4. Identifies risks and opportunities
+The coach asks about the problem, the market, the solution, the competition, and the business model. It scores each answer, gives a total score, and lists risks and opportunities.
 
 #### Example
 
@@ -183,7 +172,7 @@ Strengths:
 - Well-defined target market (8/10)
 
 Risks:
-- Competitive landscape is crowded (4/10)
+- Many competitors (4/10)
 - Unclear path to profitability (5/10)
 
 Recommendations:
@@ -191,21 +180,25 @@ Recommendations:
 2. Validate pricing model...
 ```
 
----
+## Built-in observer skills
+
+| Skill | Command | What it does |
+|-------|---------|--------------|
+| Coverage gap | `spekk observer coverage-gap` | Finds code that a spec could document. An aid for gradual adoption, not a defect report |
+| Prune | `spekk observer prune` | Finds code that nothing uses, and design-level redundancy. It recommends and never deletes |
+| Consolidate | `spekk observer consolidate` | Curates the open observations by editing their frontmatter on their own branches |
+
+See [`spekk observer`](cli-reference.md#spekk-observer) for the details.
 
 ## Creating custom skills
 
-Create a markdown file in your local or global skills directory:
+Write a markdown file in a local or global skills directory:
 
 ```bash
-# Local (this project only)
-.spekk/skills/coach/my-skill.md
-
-# Global (all projects)
-~/.config/spekk/skills/coach/my-skill.md
-
-# Builder skills work the same way
-.spekk/skills/builder/my-skill.md
+.spekk/skills/coach/my-skill.md             # This project only
+~/.config/spekk/skills/coach/my-skill.md    # Every project
+.spekk/skills/builder/my-skill.md           # A builder skill
+.spekk/skills/observer/my-skill.md          # An observer skill
 ```
 
 ### Skill file format
@@ -218,7 +211,7 @@ created: 2026-01-15T00:00:00Z
 
 # Skill Name
 
-Brief description of what this skill does.
+What this skill does, in one or two sentences.
 
 ## Triggers
 
@@ -237,18 +230,21 @@ Brief description of what this skill does.
 - Success criterion 2
 ```
 
-Once created, invoke it directly:
+Then invoke it:
 
 ```bash
 spekk coach my-skill
 spekk builder my-skill
+spekk observer my-skill
 ```
+
+`spekk install <agent> <skill>` fetches a skill from the registry into one of these directories. See [Installing skills](cli-reference.md#spekk-install-agent-skill).
 
 ### Tips for good skills
 
-| Do | Don't |
-|----|-------|
-| Clear, memorable triggers | Vague workflows |
+| Do | Do not |
+|----|--------|
+| Clear triggers that a person remembers | Vague workflows |
 | Step-by-step instructions | Too many steps |
 | Concrete validation criteria | Implementation details |
-| Examples of expected output | Overlapping triggers with other skills |
+| Examples of the expected output | Triggers that overlap with another skill |

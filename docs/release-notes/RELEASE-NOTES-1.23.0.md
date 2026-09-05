@@ -87,7 +87,7 @@ The coach prompt now writes `not_started` when it edits a `done` or `failed` ass
 - A path with the name `assertions` that is not a directory.
 - An `assertions/` directory that spekk cannot read.
 
-Run `spekk validate` one time with the new binary before you change a `SPEKK_VERSION` pin or a pre-commit `rev`. [Validation in CI and pre-commit](ci.md) gives the advice about pins for this reason.
+Run `spekk validate` one time with the new binary before you change a `SPEKK_VERSION` pin or a pre-commit `rev`. [Validation in CI and pre-commit](../ci.md) gives the advice about pins for this reason.
 
 A spec directory with no `assertions/` directory still passes. It is not a fault.
 

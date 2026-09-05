@@ -1,18 +1,20 @@
-# Spekk CLI — Beta Install
+# Spekk CLI Beta Install
 
-You'll receive a **token** from us — a GitHub PAT scoped to download releases.
+**This page is for the private beta, which ended when the repository became public.** You no longer need a token to download a release. Use the [install guide](install.md) instead. The steps below still work with a GitHub token, and stay here for anyone who follows an old link.
 
-## 1. Install via curl
+You receive a **token** from us: a GitHub personal access token that can download releases.
 
-Export your token first:
+## 1. Install with curl
+
+Export the token first:
 
 ```bash
 export GH_SPEKK_TOKEN="<token-we-gave-you>"
 ```
 
-Then pick your binary name and run:
+Then pick your binary name and run the commands below.
 
-### macOS / Linux
+### macOS and Linux
 
 | Platform             | Binary name             |
 |----------------------|-------------------------|
@@ -24,9 +26,9 @@ Then pick your binary name and run:
 | Windows (ARM)        | `spekk-windows-arm64.exe` |
 
 ```bash
-BINARY="spekk-darwin-arm64"  # ← change this for your platform
+BINARY="spekk-darwin-arm64"  # Change this for your platform
 
-# Fetch the asset download URL from the latest release
+# Get the asset download URL from the latest release
 ASSET_URL=$(curl -sL -H "Authorization: token $GH_SPEKK_TOKEN" \
   https://api.github.com/repos/spekk-ai/spekk-cli/releases/latest \
   | python3 -c "import sys,json; assets=json.load(sys.stdin).get('assets',[]); print(next(a['url'] for a in assets if a['name']=='$BINARY'))")
@@ -50,37 +52,24 @@ Invoke-WebRequest -Uri $asset.url -Headers $dlHeaders -OutFile "$env:LOCALAPPDAT
 Verify:
 
 ```bash
-spekk --version
+spekk version
 ```
 
-## 2. Set up auto-update
+## 2. Updates
 
-Add the token we gave you to your shell profile:
-
-**macOS / Linux (zsh):**
-```bash
-echo 'export GH_SPEKK_TOKEN="<token-we-gave-you>"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-**Windows (PowerShell):**
-```powershell
-[System.Environment]::SetEnvironmentVariable("GH_SPEKK_TOKEN", "<token-we-gave-you>", "User")
-```
-
-Then you can update anytime:
+`spekk update` downloads from the public releases page and reads no token. Run it at any time:
 
 ```bash
-spekk update          # install latest
-spekk update --check  # preview without installing
+spekk update          # Install the latest release
+spekk update --check  # See what is available, install nothing
 ```
 
----
+A binary in `/usr/local/bin` is root-owned, so the update there needs `sudo spekk update`. To update without sudo, install again to `~/.local/bin` with the [install script](install.md).
 
 ## Claude-assisted setup
 
 Paste this into Claude Code:
 
 ```
-Install the spekk CLI for me. Use the GitHub releases API at spekk-ai/spekk-cli to download the right binary for my platform. Add GH_SPEKK_TOKEN to my shell profile. Ask me for the token value.
+Install the spekk CLI for me. Download the right binary from https://github.com/spekk-ai/spekk-cli/releases/latest for my platform, put it in ~/.local/bin/ (create the directory if needed), make it executable, and make sure ~/.local/bin is on my PATH.
 ```
