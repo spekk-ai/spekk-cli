@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/config"
 )
@@ -41,7 +42,7 @@ func stubCreateEnv(t *testing.T) {
 	t.Cleanup(func() { fetchArtifacts = origArtifacts })
 
 	origWait := waitReady
-	waitReady = func(ip, keyPath, name string) error { return fmt.Errorf("boom") }
+	waitReady = func(ip, keyPath, name string, timeout time.Duration) error { return fmt.Errorf("boom") }
 	t.Cleanup(func() { waitReady = origWait })
 }
 

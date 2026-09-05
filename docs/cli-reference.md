@@ -561,8 +561,34 @@ spekk sandbox create --name my-sandbox --project "My Project" --vpc <uuid>
 | `--size` | Droplet size slug (default: `s-2vcpu-4gb`) |
 | `--project` | Assign to a DigitalOcean project by name or UUID |
 | `--vpc` | Place droplet in a specific VPC |
+| `--provision-timeout` | How long to wait for cloud-init, as a Go duration (default: `30m`) |
 
 Creates a droplet with cloud-init, waits for SSH readiness, injects credentials, configures git/gh, and deploys the agent client.
+
+While it waits for cloud-init, `create` prints a progress line at most once a minute with the time waited and the last line of `/var/log/cloud-init-output.log` on the droplet. If `cloud-init status` reports `error`, or `done` without the `/opt/spekk/.provisioned` marker, the wait stops at once instead of running out the clock.
+
+If the wait runs out, the droplet keeps running and the record stays at status `provisioning`. Nothing is destroyed. Finish it with [`spekk sandbox provision <name>`](#spekk-sandbox-provision-name) once cloud-init is done.
+
+### `spekk sandbox provision <name>`
+
+Finish a sandbox that `create` left at `provisioning`.
+
+```bash
+spekk sandbox provision my-sandbox
+spekk sandbox provision my-sandbox --force              # A sandbox that is not at "provisioning"
+spekk sandbox provision my-sandbox --auth subscription  # Override the recorded auth mode
+```
+
+**Flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--auth` | | `bedrock` or `subscription`. Default: the mode the sandbox was created with |
+| `--force` | `-f` | Provision a sandbox whose status is not `provisioning` |
+
+Checks that `/opt/spekk/.provisioned` exists on the machine, then runs the same three steps `create` runs after its wait, in the same order: inject credentials, configure git/gh, deploy the agent client. It then marks the sandbox `active` and prints a new agent token to register on the control host.
+
+It needs the same environment variables as `create` for its auth mode, and it refuses to start, before it touches the machine, when one is missing.
 
 ### `spekk sandbox list`
 
