@@ -117,7 +117,7 @@ The spec directory structure is detected automatically -- no configuration neede
 
 ### Sandbox provisioning
 
-These variables are used by `spekk sandbox create` and other provisioning commands, run on your local machine.
+These variables are used by `spekk sandbox create`, `spekk sandbox provision`, and other provisioning commands, run on your local machine.
 
 **Choose an auth mode first.** `spekk sandbox create --auth <mode>` decides how the sandbox authenticates Claude, and the mode decides which credentials you need:
 
@@ -136,7 +136,7 @@ These variables are used by `spekk sandbox create` and other provisioning comman
 
 **A model pin belongs to its mode.** `ANTHROPIC_MODEL` names a model for whichever API the sandbox authenticates against, and the names differ: a Bedrock sandbox pins an inference profile such as `us.anthropic.claude-sonnet-5`, which a subscription rejects outright. Moving a sandbox between modes therefore drops any pin it had, reports what it dropped, and writes a replacement only if you supply one for the mode you are moving to.
 
-`spekk sandbox create` refuses to start when a variable its mode needs is missing, and it names every missing one at once. It checks before it creates anything billable.
+`spekk sandbox create` refuses to start when a variable its mode needs is missing, and it names every missing one at once. It checks before it creates anything billable. `spekk sandbox provision` makes the same check, for the mode the sandbox was created with, before it touches the machine.
 
 #### Minting a subscription token
 

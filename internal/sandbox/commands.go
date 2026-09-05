@@ -45,10 +45,39 @@ type CreateOptions struct {
 	SSHUser string // login user for an existing machine (default: root)
 	Auth    AuthMode
 
+	// ProvisionTimeout is how long Create waits for cloud-init to write the
+	// provisioned marker. Zero means DefaultProvisionTimeout.
+	ProvisionTimeout time.Duration
+
 	// CloudInit is the provisioning payload from the release artifacts.
 	// Create fills it in; no flag sets it. A provider that does not use
 	// cloud-init ignores it.
 	CloudInit []byte
+}
+
+// ProvisionOptions holds flags for the provision subcommand.
+type ProvisionOptions struct {
+	// Auth overrides the mode the record carries. Empty keeps the recorded
+	// mode, which is bedrock for a record written before the field existed.
+	Auth AuthMode
+	// Force provisions a record whose status is not "provisioning".
+	Force bool
+}
+
+// checkRequiredEnv reports every variable the auth mode needs that is not
+// set, so a subscription sandbox is not blocked by AWS keys it will never
+// use. Create and Provision both call it before touching a machine.
+func checkRequiredEnv(mode AuthMode) error {
+	var missing []string
+	for _, v := range requiredEnvVars(mode) {
+		if strings.TrimSpace(os.Getenv(v)) == "" {
+			missing = append(missing, v)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // --- Create ---
@@ -56,17 +85,8 @@ type CreateOptions struct {
 // Create provisions a sandbox using the given Provider for VM lifecycle and
 // then runs generic provisioning (SSH wait, credential injection, agent deploy).
 func Create(p Provider, opts CreateOptions) error {
-	// Check the credentials this sandbox's auth mode actually needs, so a
-	// subscription sandbox is not blocked by AWS keys it will never use.
-	requiredVars := requiredEnvVars(opts.Auth)
-	var missing []string
-	for _, v := range requiredVars {
-		if strings.TrimSpace(os.Getenv(v)) == "" {
-			missing = append(missing, v)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	if err := checkRequiredEnv(opts.Auth); err != nil {
+		return err
 	}
 
 	// A name that is already taken is nearly always a create that failed
@@ -97,6 +117,7 @@ func Create(p Provider, opts CreateOptions) error {
 	// machine: it already exists, and spekk only registers and equips it.
 	meta := &SandboxMeta{
 		Provider:  ProviderNone,
+		Auth:      string(opts.Auth),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	if p != nil {
@@ -130,14 +151,13 @@ func Create(p Provider, opts CreateOptions) error {
 
 	// --- Generic provisioning (provider-agnostic) ---
 
-	// The login user for every SSH step below. root on a machine spekk
-	// created; whatever the operator gave for one they already had.
-	user := sshUser(meta)
-
-	// A failure from here on leaves a real machine running. Say so, and
-	// say which one, every time.
+	// A failure from here on leaves a real machine running, and a record
+	// at "provisioning". Say so, say which machine, and say how to finish:
+	// `spekk sandbox provision` picks up from here, so a slow cloud-init
+	// does not cost the operator the droplet.
 	fail := func(stage string, err error) error {
-		fmt.Fprintf(os.Stderr, "%s -- not auto-destroyed. Debug it, or run: spekk sandbox destroy %s\n", machineRef(meta), opts.Name)
+		fmt.Fprintf(os.Stderr, "%s -- not auto-destroyed. Finish it with: spekk sandbox provision %s\nOr remove it with: spekk sandbox destroy %s\n",
+			machineRef(meta), opts.Name, opts.Name)
 		return fmt.Errorf("%s: %w", stage, err)
 	}
 
@@ -147,24 +167,13 @@ func Create(p Provider, opts CreateOptions) error {
 		if err := checkReady(meta, opts.Name); err != nil {
 			return fail("checking the machine", err)
 		}
-	} else if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name); err != nil {
+	} else if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name, opts.ProvisionTimeout); err != nil {
 		return fail("waiting for provisioning", err)
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
 
-	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(meta.IP, meta.SSHKeyPath, opts.Name, user, agentToken, opts.Auth); err != nil {
-		return fail("injecting credentials", err)
-	}
-
-	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
-	if err := configureGitCredentials(meta.IP, meta.SSHKeyPath, opts.Name, user); err != nil {
-		return fail("configuring git credentials", err)
-	}
-
-	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
-	if err := deployAgent(meta.IP, meta.SSHKeyPath, opts.Name, user, artifacts); err != nil {
-		return fail("deploying agent", err)
+	if err := equipSandbox(meta, opts.Name, agentToken, opts.Auth, artifacts); err != nil {
+		return fail(err.stage, err.err)
 	}
 
 	meta.Status = "active"
@@ -172,10 +181,54 @@ func Create(p Provider, opts CreateOptions) error {
 		return fmt.Errorf("saving metadata: %w", err)
 	}
 
+	printRegistration("Sandbox created successfully", opts.Name, meta.IP, agentToken)
+	return nil
+}
+
+// stageError is a failure from one step of equipSandbox, with the step it
+// came from, so Create and Provision can say which step stopped them.
+type stageError struct {
+	stage string
+	err   error
+}
+
+func (e *stageError) Error() string { return e.stage + ": " + e.err.Error() }
+func (e *stageError) Unwrap() error { return e.err }
+
+// equipSandbox runs the steps that turn a provisioned machine into a sandbox:
+// inject the credentials, configure git for the agent, deploy the agent
+// binary. Create runs it after the provisioning wait, and Provision runs it
+// on a record that wait left behind, so the two cannot drift apart.
+func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, artifacts *releaseArtifacts) *stageError {
+	// The login user for every SSH step. root on a machine spekk created;
+	// whatever the operator gave for one they already had.
+	user := sshUser(meta)
+
+	fmt.Fprintln(os.Stderr, "Injecting credentials...")
+	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, mode); err != nil {
+		return &stageError{"injecting credentials", err}
+	}
+
+	fmt.Fprintln(os.Stderr, "Configuring git credentials...")
+	if err := configureGitCredentials(meta.IP, meta.SSHKeyPath, name, user); err != nil {
+		return &stageError{"configuring git credentials", err}
+	}
+
+	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
+	if err := deployAgent(meta.IP, meta.SSHKeyPath, name, user, artifacts); err != nil {
+		return &stageError{"deploying agent", err}
+	}
+	return nil
+}
+
+// printRegistration prints the token the operator has to register on the
+// control host. The agent cannot connect until they do, so the message is
+// the same whichever command finished the sandbox.
+func printRegistration(headline, name, ip, agentToken string) {
 	bareHost := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(os.Getenv("SPEKK_HOST"), "https://"), "http://"), "/")
 
 	fmt.Fprintf(os.Stderr, `
-Sandbox created successfully:
+%s:
   Name:           spekk-%s
   IP:             %s
   AGENT_TOKEN:    %s
@@ -184,8 +237,68 @@ Next: Register this agent on the control host admin at https://%s/
   - Name: %s
   - Sandbox ID: spekk-%s
   - Auth token: %s
-`, opts.Name, meta.IP, agentToken, bareHost, opts.Name, opts.Name, agentToken)
+`, headline, name, ip, agentToken, bareHost, name, name, agentToken)
+}
 
+// --- Provision ---
+
+// Provision finishes a sandbox that Create left at "provisioning": the
+// machine exists and cloud-init may have finished after Create stopped
+// waiting, but no credentials or agent reached it. It checks the marker,
+// then runs the same steps Create runs after its wait, and records the
+// sandbox as active.
+func Provision(name string, opts ProvisionOptions) error {
+	sandbox, err := GetSandbox(name)
+	if err != nil {
+		return err
+	}
+	if sandbox == nil {
+		return fmt.Errorf("sandbox %q not found", name)
+	}
+
+	// A record that is not provisioning has already been equipped, or was
+	// never a machine spekk should touch. --force says the operator knows.
+	if sandbox.Status != "provisioning" && !opts.Force {
+		return fmt.Errorf("sandbox %q is %s, not provisioning; use --force to provision it again", name, orUnknown(sandbox.Status))
+	}
+
+	mode := opts.Auth
+	if mode == "" {
+		if mode, err = ParseAuthMode(sandbox.Auth); err != nil {
+			return fmt.Errorf("recorded auth mode: %w", err)
+		}
+	}
+
+	// Fail before touching the machine when a credential is missing, for
+	// the same reason Create does: a half-written env file is worse than
+	// none.
+	if err := checkRequiredEnv(mode); err != nil {
+		return err
+	}
+
+	if err := checkReady(sandbox, name); err != nil {
+		return fmt.Errorf("checking the machine: %w", err)
+	}
+
+	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
+	artifacts, err := fetchArtifacts("latest")
+	if err != nil {
+		return fmt.Errorf("fetching release artifacts: %w", err)
+	}
+	defer os.Remove(artifacts.BinaryPath)
+
+	agentToken := generateAgentToken()
+	if err := equipSandbox(sandbox, name, agentToken, mode, artifacts); err != nil {
+		return err
+	}
+
+	sandbox.Auth = string(mode)
+	sandbox.Status = "active"
+	if err := SaveSandbox(name, sandbox); err != nil {
+		return fmt.Errorf("saving metadata: %w", err)
+	}
+
+	printRegistration("Sandbox provisioned successfully", name, sandbox.IP, agentToken)
 	return nil
 }
 
@@ -654,11 +767,123 @@ func waitForDroplet(client *Client, dropletID int) (string, error) {
 }
 
 // waitReady is the seam Create waits through. It is a variable so a test
-// can reach the steps after machine creation without a ten-minute wait.
+// can reach the steps after machine creation without a long wait.
 var waitReady = waitForProvisioning
 
-func waitForProvisioning(ip, keyPath, name string) error {
-	deadline := time.Now().Add(10 * time.Minute)
+// DefaultProvisionTimeout is how long Create waits for cloud-init when the
+// operator sets no --provision-timeout. Ten minutes was too short: an apt
+// upgrade plus the nodesource repository has taken eighteen on a slow night,
+// and the droplet then finished provisioning after Create had given up on it.
+const DefaultProvisionTimeout = 30 * time.Minute
+
+// ParseProvisionTimeout reads the --provision-timeout flag. An empty value
+// is the default; anything else must be a positive Go duration such as 45m.
+func ParseProvisionTimeout(s string) (time.Duration, error) {
+	if strings.TrimSpace(s) == "" {
+		return DefaultProvisionTimeout, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("invalid --provision-timeout %q: use a duration such as 30m or 1h", s)
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("invalid --provision-timeout %q: must be longer than zero", s)
+	}
+	return d, nil
+}
+
+// provisionPollInterval is how often the wait asks the machine whether the
+// marker is there. provisionReportInterval is how often it tells the
+// operator what it saw, so a long wait reads as alive rather than hung.
+// Both are variables so a test can run the loop without the real delays.
+var (
+	provisionPollInterval   = 5 * time.Second
+	provisionReportInterval = time.Minute
+)
+
+// cloudInitLog is where cloud-init writes the output of every runcmd step,
+// so its last line says what provisioning is doing right now.
+const cloudInitLog = "/var/log/cloud-init-output.log"
+
+// provisionProbeScript is one SSH round trip that reports everything the
+// wait wants to know: the marker, what cloud-init says about itself, and the
+// last line of its log. The log line goes through printf, quoted, so a line
+// with a glob character or a run of spaces arrives as it was written.
+const provisionProbeScript = `marker=no; test -f ` + provisionedMarker + ` && marker=yes
+status=$(cloud-init status 2>/dev/null | sed -n 's/^status: //p' | head -n 1)
+log=$(tail -n 1 ` + cloudInitLog + ` 2>/dev/null)
+printf 'marker=%s\nstatus=%s\nlog=%s\n' "$marker" "$status" "$log"`
+
+// provisionProbe is what one poll of a provisioning machine reports.
+type provisionProbe struct {
+	// marker is true once /opt/spekk/.provisioned exists.
+	marker bool
+	// cloudInit is what `cloud-init status` reports: running, done, error,
+	// or "" when the machine could not be asked.
+	cloudInit string
+	// lastLog is the last line of cloud-init's output log.
+	lastLog string
+}
+
+// parseProvisionProbe reads the output of provisionProbeScript. Output that
+// is not in that form, including the empty string a failed connection
+// returns, reads as "nothing known yet".
+func parseProvisionProbe(out string) provisionProbe {
+	var p provisionProbe
+	for _, line := range strings.Split(out, "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "marker":
+			p.marker = value == "yes"
+		case "status":
+			p.cloudInit = strings.TrimSpace(value)
+		case "log":
+			p.lastLog = strings.TrimSpace(value)
+		}
+	}
+	return p
+}
+
+// probeProvisioning is the seam the wait polls through, so a test can drive
+// the loop without a machine.
+var probeProvisioning = func(ip, keyPath, name string) provisionProbe {
+	return parseProvisionProbe(runSSH(ip, keyPath, name, "root", provisionProbeScript))
+}
+
+// provisionStopped reports why the marker will not appear, or nil while it
+// still may. The marker is the last runcmd step, so cloud-init saying "done"
+// without it means a step before it failed silently; "error" says so
+// outright. Either way, waiting out the clock would tell the operator
+// nothing more.
+func provisionStopped(p provisionProbe) error {
+	if p.marker {
+		return nil
+	}
+	switch p.cloudInit {
+	case "error":
+		return fmt.Errorf("cloud-init reported an error before writing %s", provisionedMarker)
+	case "done":
+		return fmt.Errorf("cloud-init finished without writing %s", provisionedMarker)
+	}
+	return nil
+}
+
+// lastLogOrPlaceholder is the last cloud-init log line as a progress note.
+func lastLogOrPlaceholder(p provisionProbe) string {
+	if p.lastLog == "" {
+		return "(no cloud-init output yet)"
+	}
+	return p.lastLog
+}
+
+func waitForProvisioning(ip, keyPath, name string, timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = DefaultProvisionTimeout
+	}
+	deadline := time.Now().Add(timeout)
 
 	// Wait for SSH connectivity
 	fmt.Fprintln(os.Stderr, "Waiting for SSH connectivity...")
@@ -666,19 +891,37 @@ func waitForProvisioning(ip, keyPath, name string) error {
 		if checkTCPPort(ip, 22) {
 			break
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(provisionPollInterval)
 	}
 
-	// Wait for provisioning marker
-	fmt.Fprintln(os.Stderr, "Waiting for cloud-init provisioning to complete...")
+	fmt.Fprintf(os.Stderr, "Waiting up to %s for cloud-init provisioning to complete...\n", timeout)
+	return waitForMarker(deadline, func() provisionProbe { return probeProvisioning(ip, keyPath, name) })
+}
+
+// waitForMarker polls probe until the marker appears, cloud-init says it
+// will not, or the deadline passes. At most once a report interval it prints
+// how long it has waited and what cloud-init last logged.
+func waitForMarker(deadline time.Time, probe func() provisionProbe) error {
+	start := time.Now()
+	lastReport := start
+	var last provisionProbe
 	for time.Now().Before(deadline) {
-		out := runSSH(ip, keyPath, name, "root", "test -f /opt/spekk/.provisioned && echo ok")
-		if strings.TrimSpace(out) == "ok" {
+		last = probe()
+		if last.marker {
 			return nil
 		}
-		time.Sleep(5 * time.Second)
+		if err := provisionStopped(last); err != nil {
+			return fmt.Errorf("%w\nLast log line: %s", err, lastLogOrPlaceholder(last))
+		}
+		if time.Since(lastReport) >= provisionReportInterval {
+			lastReport = time.Now()
+			fmt.Fprintf(os.Stderr, "Still provisioning after %s. cloud-init: %s\n",
+				time.Since(start).Round(time.Second), lastLogOrPlaceholder(last))
+		}
+		time.Sleep(provisionPollInterval)
 	}
-	return fmt.Errorf("provisioning did not complete within 10 minutes on %s", ip)
+	return fmt.Errorf("provisioning did not complete within %s; cloud-init may still be running (last log line: %s)",
+		time.Since(start).Round(time.Second), lastLogOrPlaceholder(last))
 }
 
 func checkTCPPort(ip string, port int) bool {

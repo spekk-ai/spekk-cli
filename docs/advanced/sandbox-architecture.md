@@ -222,6 +222,8 @@ After `spekk sandbox create` provisions the VM and deploys the agent binary, one
 
 The `create` command prints the token and a reminder to register it. Until registration, the agent will repeatedly attempt to connect and fail authentication.
 
+`create` waits for cloud-init for `--provision-timeout` (default 30 minutes) and then stops, with the VM still running and the record at status `provisioning`. `spekk sandbox provision <name>` finishes that sandbox once `/opt/spekk/.provisioned` exists: it runs the same credential injection, git configuration, and agent deploy that `create` runs, marks the record `active`, and prints a new token to register.
+
 ---
 
 ## Environment variables
