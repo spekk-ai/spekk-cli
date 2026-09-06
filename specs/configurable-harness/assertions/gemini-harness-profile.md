@@ -22,10 +22,11 @@ done — no flags from memory.
 - `--harness gemini` / `SPEKK_HARNESS=gemini` resolves to a gemini profile.
 - Every flag and subcommand the gemini profile emits is confirmed present in a
   real `gemini --help` — no flag is taken from memory or another harness.
-- Interactive mode opens a skill-governed gemini session that waits for input
-  (per `interactive-uses-installed-skill`) — the full agent prompt is not passed
-  as an executed message. Headless mode runs a single message non-interactively;
-  the profile uses the Gemini CLI's real permission-skip / non-interactive flag.
+- Interactive mode opens an instruction-governed gemini session that waits for
+  input (per `interactive-uses-installed-skill`) — instructions come from the
+  auto-read `GEMINI.md` context file, not an inline prompt argument. Headless
+  mode runs a single message non-interactively; the profile uses the Gemini
+  CLI's real permission-skip / non-interactive flag.
 - `observer_cron.go` bakes the gemini binary into the crontab entry.
 - The not-found error names the Gemini CLI and links its install docs.
 - A test asserts the resolved argv for gemini in interactive and headless modes.

@@ -61,14 +61,23 @@ a claude-code-only capability. opencode, hermes, gemini, and codex take any
 prompt as a message they execute, so seeding the full agent prompt inline makes
 them run it as a task (opencode starts a build; hermes answers once and exits).
 
-For those harnesses, interactive `spekk coach` / `spekk builder` instead relies
-on the spekk skill: spekk ensures the skill is installed for the harness (the
-`spekk install --target <h>` result), then opens the harness's own interactive
-session governed by that skill, waiting for input. Instructions live in the
-skill, not in an inline argument. Delivery is via skills only — no agent-shim
-files. spekk stays the launcher and the CLI the agent calls; only prompt
-delivery changes (`interactive-uses-installed-skill`). claude-code keeps its
-inline `--system-prompt` path unchanged.
+`spekk coach --harness <h>` and `spekk builder --harness <h>` are the single
+entry point: the command ensures the instructions are installed for the harness
+and then launches it — the user never runs `spekk install` separately. spekk
+stays the launcher and the CLI the agent calls; only prompt delivery changes
+(`interactive-uses-installed-skill`).
+
+Delivery matches each harness's own native, auto-loaded mechanism rather than
+forcing one shape:
+
+- `claude-code` — inline `--system-prompt` (no install).
+- `opencode`, `hermes` — a skill file (hermes loads it with `chat -s`).
+- `gemini`, `codex` — an auto-read context file (`GEMINI.md`, `AGENTS.md`).
+
+No agent-shim files are used. Because `spekk install` did not originally cover
+`hermes` or `gemini`, that coverage is added
+(`install-covers-hermes-and-gemini`) so the auto-ensure step has a real
+destination for every harness.
 
 ## Flags are verified against the real CLI, never written from memory
 
