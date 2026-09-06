@@ -3,10 +3,9 @@ id: interactive-uses-installed-skill
 parent: configurable-harness
 created: 2026-09-06T00:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: install-covers-hermes-and-gemini
 branch: feature/configurable-harness
-locked-by: builder-MacBook-Pro-local-96959-1788728588
 ---
 
 # `spekk coach/builder --harness <h>` self-installs instructions and opens a governed session
@@ -42,3 +41,5 @@ each harness's native auto-loaded mechanism, not in an inline argument.
 - A test asserts that for a non-claude harness the interactive argv carries no
   full-prompt-body argument and that the ensure-instructions step runs before
   launch.
+
+**Tests:** internal/agent/harness_test.go, internal/agent/launcher_test.go, internal/install/ensure_role_skill_test.go, internal/install/context_file_test.go
