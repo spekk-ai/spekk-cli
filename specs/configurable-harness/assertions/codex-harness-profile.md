@@ -3,7 +3,7 @@ id: codex-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 3
-status: not_started
+status: done
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
 ---
