@@ -51,8 +51,8 @@ guidance shown when the binary is missing. Launch sites resolve a profile and
 read those fields instead of embedding literals.
 
 Supported harnesses: `claude-code` (default, alias `claude`), `opencode`,
-`hermes`, `aider`, `codex`, and `gemini`. Each harness has its own CLI shape —
-they share no flag conventions — so every profile is independent.
+`hermes`, `codex`, and `gemini`. Each harness has its own CLI shape — they share
+no flag conventions — so every profile is independent.
 
 ## Flags are verified against the real CLI, never written from memory
 
