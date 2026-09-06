@@ -3,7 +3,8 @@ id: hermes-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 2
-status: not_started
+status: in_progress
+locked-by: builder-MacBook-Pro.local-28433-1788727354
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
 ---
