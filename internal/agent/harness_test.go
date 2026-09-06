@@ -453,6 +453,66 @@ func TestProfile_NotFoundNamesHarness(t *testing.T) {
 	}
 }
 
+// For a non-claude harness, the resolved interactive argv must carry no
+// full-prompt-body argument — the harness executes any message it is handed, so
+// seeding the full prompt makes it auto-run the prompt as a task. The argv
+// instead carries a short activation that names the role skill, and the plan
+// reports the install target so the launcher can install the skill first.
+func TestInteractiveLaunch_NonClaudeCarriesActivationNotFullPrompt(t *testing.T) {
+	p, err := ResolveProfile("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A stand-in for the full agent prompt: long, and unmistakable if it leaks.
+	fullPrompt := "You are the Coach Agent. " + strings.Repeat("FULL-PROMPT-BODY ", 200)
+	inlineArgv := p.InteractiveArgs(fullPrompt) // what an inline-prompt harness would use
+
+	plan := p.InteractiveLaunch(SkillActivationMessage("coach"), inlineArgv)
+
+	for _, a := range plan.Argv {
+		if strings.Contains(a, "FULL-PROMPT-BODY") {
+			t.Fatalf("non-claude interactive argv carries the full prompt body: %v", plan.Argv)
+		}
+	}
+	if !strings.Contains(strings.Join(plan.Argv, " "), "spekk-coach") {
+		t.Errorf("activation must name the spekk-coach skill: %v", plan.Argv)
+	}
+	if plan.InstallTarget != "opencode" {
+		t.Errorf("plan.InstallTarget = %q, want opencode so the skill install runs before launch", plan.InstallTarget)
+	}
+}
+
+// claude-code is unaffected: it takes an inline system prompt, so its resolved
+// interactive argv is exactly the inline argv the launch site built (full prompt
+// and all), and it installs nothing to run interactively.
+func TestInteractiveLaunch_ClaudeKeepsInlinePromptNoInstall(t *testing.T) {
+	p := DefaultProfile()
+	inlineArgv := p.SystemPromptArgs("the full builder prompt")
+
+	plan := p.InteractiveLaunch(SkillActivationMessage("builder"), inlineArgv)
+
+	if plan.InstallTarget != "" {
+		t.Errorf("claude-code must install nothing to run interactively; got target %q", plan.InstallTarget)
+	}
+	if !equalArgs(plan.Argv, inlineArgv) {
+		t.Errorf("claude-code interactive argv changed: got %v, want inline %v", plan.Argv, inlineArgv)
+	}
+}
+
+// Every non-claude harness delivers via an installed skill (non-empty install
+// target), and only claude-code takes the inline prompt. This guards against a
+// new profile silently defaulting to the inline path that breaks non-claude
+// harnesses.
+func TestInstallTarget_NonClaudeUsesSkillDelivery(t *testing.T) {
+	for name, p := range harnessProfiles {
+		wantInline := name == "claude-code"
+		gotInline := p.InstallTarget == ""
+		if gotInline != wantInline {
+			t.Errorf("harness %s: InstallTarget=%q (inline=%v), want inline=%v", name, p.InstallTarget, gotInline, wantInline)
+		}
+	}
+}
+
 func equalArgs(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

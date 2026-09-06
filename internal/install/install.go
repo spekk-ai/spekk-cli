@@ -312,38 +312,79 @@ func (t target) legacyAgentShimPaths(project bool, home, cwd string) []string {
 	}
 }
 
-// Install reconciles the managed files for one target and scope to their desired
-// final state. It writes the desired files (each stamped), removes owned files
-// that are no longer desired, and never clobbers a file the user changed.
-func Install(opts Options) (Result, error) {
-	name := opts.Target
+// resolveTarget resolves opts to a target and the home/cwd the scope needs,
+// applying the target alias and filling in os defaults for whichever of home or
+// cwd the scope uses. It is the shared front half of Install and EnsureRoleSkill.
+func resolveTarget(opts Options) (t target, name, home, cwd string, err error) {
+	name = opts.Target
 	if canonical, ok := targetAliases[name]; ok {
 		name = canonical
 	}
 	t, ok := targets[name]
 	if !ok {
-		return Result{}, fmt.Errorf("unknown target %q: valid targets are %s\nFor other tools, use \"spekk prompt <agent>\" directly — see \"spekk install --help\"", opts.Target, strings.Join(ValidTargets(), ", "))
+		return target{}, name, "", "", fmt.Errorf("unknown target %q: valid targets are %s\nFor other tools, use \"spekk prompt <agent>\" directly — see \"spekk install --help\"", opts.Target, strings.Join(ValidTargets(), ", "))
 	}
 
-	home := opts.HomeDir
-	cwd := opts.Cwd
+	home = opts.HomeDir
+	cwd = opts.Cwd
 	if opts.Project {
 		if t.projectDir == "" {
-			return Result{}, fmt.Errorf("target %q does not support --project installs; omit --project to install globally", name)
+			return target{}, name, "", "", fmt.Errorf("target %q does not support --project installs; omit --project to install globally", name)
 		}
 		if cwd == "" {
-			var err error
 			if cwd, err = os.Getwd(); err != nil {
-				return Result{}, fmt.Errorf("determining working directory: %w", err)
+				return target{}, name, "", "", fmt.Errorf("determining working directory: %w", err)
 			}
 		}
 	} else {
 		if home == "" {
-			var err error
 			if home, err = os.UserHomeDir(); err != nil {
-				return Result{}, fmt.Errorf("determining home directory: %w", err)
+				return target{}, name, "", "", fmt.Errorf("determining home directory: %w", err)
 			}
 		}
+	}
+	return t, name, home, cwd, nil
+}
+
+// EnsureRoleSkill installs (or refreshes) only the spekk-<role> skill for a
+// harness target — the coach or builder skill an interactive session is governed
+// by. Unlike Install it writes no observer agent shim, no dev-loop skill, and no
+// other role: only the one file the interactive launcher needs, so the launch
+// path adds nothing the user did not ask for. role is "coach" or "builder".
+//
+// The skill lands at the same path with the same content `spekk install --target
+// <t>` writes for it, and the write is idempotent: a pristine, up-to-date skill
+// is left untouched. A target whose host has no skill path for the role (a
+// prompt/command host) writes the role's agent shim instead, matching Install.
+func EnsureRoleSkill(opts Options, role string) (Result, error) {
+	if role != "coach" && role != "builder" {
+		return Result{}, fmt.Errorf("EnsureRoleSkill: role must be \"coach\" or \"builder\", got %q", role)
+	}
+	t, _, home, cwd, err := resolveTarget(opts)
+	if err != nil {
+		return Result{}, err
+	}
+
+	var desired map[string][]byte
+	if sp := t.skillPath(opts.Project, home, cwd, "spekk-"+role); sp != "" {
+		desired = map[string][]byte{sp: t.skillContent(role)}
+	} else {
+		desired = map[string][]byte{
+			t.agentShimPath(opts.Project, home, cwd, role): []byte(t.frontmatter(role) + shimBody(role)),
+		}
+	}
+	// writeDesired, not reconcile: this must add/refresh one file without pruning
+	// the other spekk files that share a directory on a prompt/command host.
+	return writeDesired(desired)
+}
+
+// Install reconciles the managed files for one target and scope to their desired
+// final state. It writes the desired files (each stamped), removes owned files
+// that are no longer desired, and never clobbers a file the user changed.
+func Install(opts Options) (Result, error) {
+	t, _, home, cwd, err := resolveTarget(opts)
+	if err != nil {
+		return Result{}, err
 	}
 
 	skillFS := opts.SkillFS

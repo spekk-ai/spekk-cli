@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/install"
 )
 
 // CoachFlags defines the flag set for the coach CLI. The coach takes an
@@ -92,10 +93,58 @@ func BuildSkillMessage(installDir, agent, subcommand string, args []string) (str
 	return sb.String(), nil
 }
 
-// Launch spawns the harness binary with the given message and inherited stdio.
-// It forwards SIGINT and preserves the exit code.
+// Launch spawns the harness binary with message as the interactive prompt and
+// inherited stdio. It forwards SIGINT and preserves the exit code.
 func Launch(profile Profile, message string) error {
-	cmd := exec.Command(profile.Binary, profile.InteractiveArgs(message)...)
+	return spawn(profile, profile.InteractiveArgs(message))
+}
+
+// ensureInteractiveSkill installs (or refreshes) the coach/builder skill for a
+// skill-delivery harness before its interactive session opens, so the session
+// is governed by an installed skill rather than an inline prompt. target is the
+// harness's install target; an empty target (claude-code takes an inline system
+// prompt) is a no-op. The install is idempotent — an up-to-date skill is not
+// rewritten — and writes only the one role skill, no agent shim.
+func ensureInteractiveSkill(target, role string) error {
+	if target == "" {
+		return nil
+	}
+	_, err := install.EnsureRoleSkill(install.Options{Target: target}, role)
+	return err
+}
+
+// runInteractivePlan ensures the skill (for a skill-delivery harness) and then
+// launches, in that order: a skill-governed session must not open before its
+// skill is on disk. ensure and launch are injected so the ordering is testable
+// without spawning a process. For an inline-prompt harness (empty InstallTarget)
+// ensure is skipped and only launch runs.
+func runInteractivePlan(plan InteractivePlan, role string, ensure func(target, role string) error, launch func(argv []string) error) error {
+	if plan.InstallTarget != "" {
+		if err := ensure(plan.InstallTarget, role); err != nil {
+			return fmt.Errorf("ensuring the spekk-%s skill for %s: %w", role, plan.InstallTarget, err)
+		}
+	}
+	return launch(plan.Argv)
+}
+
+// LaunchInteractive opens an interactive coach or builder session under profile.
+// role is "coach" or "builder". inlineArgv is the argv used only for a harness
+// that accepts an inline system prompt (claude-code) — the caller builds it from
+// the full agent prompt (InteractiveArgs or SystemPromptArgs). Every other
+// harness executes any message it receives, so the full prompt is never passed:
+// its role skill is ensured installed and the session opens governed by that
+// skill, seeded only with a short activation message.
+func LaunchInteractive(profile Profile, role string, inlineArgv []string) error {
+	plan := profile.InteractiveLaunch(SkillActivationMessage(role), inlineArgv)
+	return runInteractivePlan(plan, role, ensureInteractiveSkill, func(argv []string) error {
+		return spawn(profile, argv)
+	})
+}
+
+// spawn runs the harness binary with the given argv and inherited stdio. It
+// forwards SIGINT and preserves the exit code.
+func spawn(profile Profile, argv []string) error {
+	cmd := exec.Command(profile.Binary, argv...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

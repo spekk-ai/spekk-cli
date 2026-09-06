@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,56 @@ import (
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
+
+// A skill-governed session must not open before its skill is on disk: for a
+// skill-delivery harness the install step runs strictly before launch. An
+// inline-prompt harness (empty install target) installs nothing and only
+// launches.
+func TestRunInteractivePlan_InstallsSkillBeforeLaunch(t *testing.T) {
+	var order []string
+	ensure := func(target, role string) error {
+		order = append(order, "install:"+target+":"+role)
+		return nil
+	}
+	launch := func(argv []string) error {
+		order = append(order, "launch")
+		return nil
+	}
+
+	// Skill-delivery harness: install, then launch.
+	plan := InteractivePlan{Argv: []string{"run", "-i", "activate"}, InstallTarget: "opencode"}
+	if err := runInteractivePlan(plan, "coach", ensure, launch); err != nil {
+		t.Fatal(err)
+	}
+	if len(order) != 2 || order[0] != "install:opencode:coach" || order[1] != "launch" {
+		t.Fatalf("skill-delivery order = %v, want [install:opencode:coach launch]", order)
+	}
+
+	// Inline-prompt harness: only launch, no install.
+	order = nil
+	if err := runInteractivePlan(InteractivePlan{Argv: []string{"x"}}, "builder", ensure, launch); err != nil {
+		t.Fatal(err)
+	}
+	if len(order) != 1 || order[0] != "launch" {
+		t.Fatalf("inline order = %v, want [launch] with no install", order)
+	}
+}
+
+// If installing the skill fails, the session must not open — launching an
+// ungoverned session is worse than surfacing the install error.
+func TestRunInteractivePlan_InstallFailureAbortsLaunch(t *testing.T) {
+	launched := false
+	ensure := func(target, role string) error { return errors.New("install boom") }
+	launch := func(argv []string) error { launched = true; return nil }
+
+	err := runInteractivePlan(InteractivePlan{Argv: []string{"x"}, InstallTarget: "opencode"}, "coach", ensure, launch)
+	if err == nil {
+		t.Fatal("expected an error when the skill install fails")
+	}
+	if launched {
+		t.Fatal("launch ran despite the install failing — session opened ungoverned")
+	}
+}
 
 // testEmbeddedFS creates a fake embedded FS with a base prompt for the agent.
 func testEmbeddedFS(agent string) fstest.MapFS {

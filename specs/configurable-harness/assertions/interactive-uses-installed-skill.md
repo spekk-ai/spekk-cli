@@ -3,13 +3,14 @@ id: interactive-uses-installed-skill
 parent: configurable-harness
 created: 2026-09-06T00:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: harness-profile-abstraction
 branch: feature/configurable-harness
-locked-by: builder-MacBook-Pro.local-32770-1788724806
 ---
 
 # Interactive coach/builder is governed by the installed skill, not an inline prompt
+
+**Tests:** internal/agent/harness_test.go, internal/agent/launcher_test.go, internal/install/ensure_role_skill_test.go
 
 Harnesses other than claude-code have no inline system-prompt mechanism: any
 prompt handed to them is a message they execute. Passing the full agent prompt

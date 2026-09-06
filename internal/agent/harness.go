@@ -41,6 +41,52 @@ type Profile struct {
 	// (no-TTY) mode, where the prompt is run as a one-off task with no human to
 	// answer permission prompts.
 	HeadlessArgv []string
+	// InstallTarget selects how an interactive coach/builder session is
+	// governed. An empty value means the harness can take an inline system
+	// prompt (claude-code): the full agent prompt seeds the session and no skill
+	// is installed. A non-empty value is the `spekk install --target` name for a
+	// harness that executes any message it is handed — it cannot take an inline
+	// system prompt, so spekk instead ensures the harness's spekk skill is
+	// installed and opens a skill-governed session seeded only with a short
+	// activation. See InteractiveLaunch.
+	InstallTarget string
+}
+
+// InteractivePlan describes how to open an interactive coach/builder session.
+type InteractivePlan struct {
+	// Argv are the tokens (excluding the binary) to spawn.
+	Argv []string
+	// InstallTarget, when non-empty, is the `spekk install --target` name whose
+	// spekk skill must be installed before the session launches. Empty means the
+	// session is governed by an inline system prompt and installs nothing.
+	InstallTarget string
+}
+
+// InteractiveLaunch resolves how to open an interactive coach/builder session.
+//
+// A harness with no install target (claude-code) accepts an inline system
+// prompt: it launches with inlineArgv — the exact argv the launch site has
+// always used to seed the full agent prompt — and installs nothing.
+//
+// Every other harness executes any message it receives, so seeding the full
+// prompt inline makes it auto-run the prompt as a task (opencode starts a build;
+// hermes answers once and exits). Such a harness instead reports an install
+// target so the caller can ensure its spekk skill is installed, and launches a
+// skill-governed interactive session seeded only with the short activation — the
+// full prompt body is never passed as a message argument.
+func (p Profile) InteractiveLaunch(activation string, inlineArgv []string) InteractivePlan {
+	if p.InstallTarget == "" {
+		return InteractivePlan{Argv: inlineArgv}
+	}
+	return InteractivePlan{Argv: p.InteractiveArgs(activation), InstallTarget: p.InstallTarget}
+}
+
+// SkillActivationMessage is the short message that seeds a skill-governed
+// interactive session: it names the role's spekk skill so the harness loads and
+// follows it, and it carries none of the full prompt body. agent is "coach" or
+// "builder".
+func SkillActivationMessage(agent string) string {
+	return fmt.Sprintf("Load and follow your `spekk-%s` skill for this session, then wait for my instructions.", agent)
 }
 
 // claudeCodeProfile is the built-in default: the argv and guidance that were
@@ -86,6 +132,7 @@ var opencodeProfile = Profile{
 	InteractiveArgv:  []string{"run", "-i"},
 	SystemPromptArgv: []string{"run", "-i"},
 	HeadlessArgv:     []string{"run", "--auto"},
+	InstallTarget:    "opencode",
 }
 
 // hermesProfile launches the coach, builder, and observer through the Hermes
@@ -118,6 +165,7 @@ var hermesProfile = Profile{
 	InteractiveArgv:  []string{"--tui", "-z"},
 	SystemPromptArgv: []string{"--tui", "-z"},
 	HeadlessArgv:     []string{"--yolo", "--cli", "-z"},
+	InstallTarget:    "hermes",
 }
 
 // codexProfile launches the coach, builder, and observer through the codex CLI
@@ -149,6 +197,7 @@ var codexProfile = Profile{
 	InteractiveArgv:  []string{},
 	SystemPromptArgv: []string{},
 	HeadlessArgv:     []string{"exec", "--dangerously-bypass-approvals-and-sandbox"},
+	InstallTarget:    "codex",
 }
 
 // geminiProfile launches the coach, builder, and observer through the Gemini CLI
@@ -180,6 +229,7 @@ var geminiProfile = Profile{
 	InteractiveArgv:  []string{"-i"},
 	SystemPromptArgv: []string{"-i"},
 	HeadlessArgv:     []string{"--yolo", "-p"},
+	InstallTarget:    "gemini",
 }
 
 const defaultHarness = "claude-code"

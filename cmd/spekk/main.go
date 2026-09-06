@@ -838,7 +838,11 @@ func launchCoachAgent(args []string) {
 		os.Exit(1)
 	}
 
-	if err := agent.Launch(profile, message); err != nil {
+	// Interactive delivery. claude-code seeds the full prompt as its first
+	// message and waits; every other harness executes any message it is handed,
+	// so LaunchInteractive ensures the spekk-coach skill is installed and opens a
+	// skill-governed session seeded only with a short activation instead.
+	if err := agent.LaunchInteractive(profile, "coach", profile.InteractiveArgs(message)); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}

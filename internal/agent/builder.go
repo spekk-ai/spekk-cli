@@ -529,22 +529,16 @@ func launchInteractiveBuilder(cfg BuilderConfig) {
 		message = hint + message
 	}
 
-	// Interactive mode: pass the prompt as a system prompt so the harness
-	// waits for user input.
+	// Interactive delivery. claude-code seeds the full prompt as a system prompt
+	// and waits; every other harness executes any message it is handed, so
+	// LaunchInteractive ensures the spekk-builder skill is installed and opens a
+	// skill-governed session seeded only with a short activation instead.
 	profile := resolveHarnessOrExit(cfg.Harness)
-	success, launchErr := launchHarness(
-		profile,
-		profile.SystemPromptArgs(message),
-		nil,
-	)
-
-	if launchErr != nil {
-		colorLog(colorRed, fmt.Sprintf("Error: %s", launchErr))
+	if err := LaunchInteractive(profile, "builder", profile.SystemPromptArgs(message)); err != nil {
+		colorLog(colorRed, fmt.Sprintf("Error: %s", err))
 		os.Exit(1)
 	}
-	if success {
-		colorLog(colorGreen, "Builder agent session ended")
-	}
+	colorLog(colorGreen, "Builder agent session ended")
 }
 
 func hasHelp(args []string) bool {
