@@ -3,9 +3,10 @@ id: interactive-uses-installed-skill
 parent: configurable-harness
 created: 2026-09-06T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: harness-profile-abstraction
 branch: feature/configurable-harness
+locked-by: builder-MacBook-Pro.local-32770-1788724806
 ---
 
 # Interactive coach/builder is governed by the installed skill, not an inline prompt
