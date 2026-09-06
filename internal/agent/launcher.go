@@ -135,7 +135,7 @@ func runInteractivePlan(plan InteractivePlan, role string, ensure func(target, r
 // its role skill is ensured installed and the session opens governed by that
 // skill, seeded only with a short activation message.
 func LaunchInteractive(profile Profile, role string, inlineArgv []string) error {
-	plan := profile.InteractiveLaunch(SkillActivationMessage(role), inlineArgv)
+	plan := profile.InteractiveLaunch(role, SkillActivationMessage(role), inlineArgv)
 	return runInteractivePlan(plan, role, ensureInteractiveSkill, func(argv []string) error {
 		return spawn(profile, argv)
 	})

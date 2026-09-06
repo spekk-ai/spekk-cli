@@ -3,8 +3,7 @@ id: hermes-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 2
-status: in_progress
-locked-by: builder-MacBook-Pro.local-28433-1788727354
+status: done
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
 ---
@@ -32,4 +31,4 @@ flags differ from both claude and opencode.
 - The not-found error names Hermes and links its install docs.
 - A test asserts the resolved argv for hermes in interactive and headless modes.
 
-**Tests:** internal/agent/harness_test.go
+**Tests:** internal/agent/harness_test.go, internal/agent/harness_cliverify_test.go, internal/install/ensure_role_skill_test.go

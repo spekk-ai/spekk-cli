@@ -141,6 +141,24 @@ var targets = map[string]target{
 		},
 		strip: true,
 	},
+	// hermes stores skills as a directory per skill containing SKILL.md, under
+	// ~/.hermes/skills/ (global) or .hermes/skills/ (project); a skill dropped
+	// there is discovered by name and preloadable with `hermes chat -s <name>`.
+	// It is a native-skill host, so the frontmatter is kept (strip: false).
+	"hermes": {
+		globalDir:  func(home string) string { return filepath.Join(home, ".hermes", "skills") },
+		projectDir: filepath.Join(".hermes", "skills"),
+		frontmatter: func(agent string) string {
+			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
+		},
+		skillGlobalPath: func(home, name string) string {
+			return filepath.Join(home, ".hermes", "skills", name, "SKILL.md")
+		},
+		skillProjectPath: func(cwd, name string) string {
+			return filepath.Join(cwd, ".hermes", "skills", name, "SKILL.md")
+		},
+		strip: false,
+	},
 }
 
 // skillNames lists the skills that spekk install writes. The coach and the

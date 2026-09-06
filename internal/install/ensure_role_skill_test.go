@@ -40,6 +40,33 @@ func TestEnsureRoleSkill_WritesOnlyTheRoleSkill(t *testing.T) {
 	}
 }
 
+// The hermes interactive launch preloads the skill by name (`chat -s
+// spekk-<role>`), so EnsureRoleSkill must place it at the exact path hermes
+// discovers a local skill under — ~/.hermes/skills/spekk-<role>/SKILL.md — with
+// its frontmatter kept (hermes is a native-skill host that names skills by their
+// `name:` field). If this path drifts from the -s argument the session opens
+// governed by nothing.
+func TestEnsureRoleSkill_HermesSkillPathMatchesPreload(t *testing.T) {
+	home := t.TempDir()
+
+	res, err := EnsureRoleSkill(Options{Target: "hermes", HomeDir: home}, "builder")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	skill := filepath.Join(home, ".hermes", "skills", "spekk-builder", "SKILL.md")
+	if len(res.Written) != 1 || res.Written[0] != skill {
+		t.Fatalf("EnsureRoleSkill wrote %v, want only the hermes builder skill %s", res.Written, skill)
+	}
+	body := string(mustRead(t, skill))
+	if !strings.Contains(body, "name: spekk-builder") {
+		t.Errorf("hermes skill must keep its frontmatter name so `chat -s spekk-builder` resolves it: %q", body)
+	}
+	if !strings.Contains(body, "`spekk prompt builder`") {
+		t.Errorf("builder skill body must run spekk prompt builder: %q", body)
+	}
+}
+
 // The install is idempotent: a second call over a pristine, up-to-date skill
 // rewrites nothing. This is what lets the interactive launcher call it before
 // every session without churn.

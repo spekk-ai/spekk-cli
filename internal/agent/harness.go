@@ -50,6 +50,15 @@ type Profile struct {
 	// installed and opens a skill-governed session seeded only with a short
 	// activation. See InteractiveLaunch.
 	InstallTarget string
+	// SkillPreload marks a skill-delivery harness that receives its role skill
+	// as a named preload (hermes: `chat -s spekk-<role>`) rather than as an
+	// activation-message positional (opencode: `run -i <activation>`). Some CLIs
+	// — hermes's interactive `chat` among them — reject a bare positional
+	// message, so the only way to seed the session is to name the already
+	// installed skill. When set, the interactive skill-governed launch appends
+	// the skill name spekk-<role> to InteractiveArgv (whose trailing token is the
+	// preload flag) in place of the activation message. See InteractiveLaunch.
+	SkillPreload bool
 }
 
 // InteractivePlan describes how to open an interactive coach/builder session.
@@ -74,11 +83,21 @@ type InteractivePlan struct {
 // target so the caller can ensure its spekk skill is installed, and launches a
 // skill-governed interactive session seeded only with the short activation — the
 // full prompt body is never passed as a message argument.
-func (p Profile) InteractiveLaunch(activation string, inlineArgv []string) InteractivePlan {
+//
+// role is "coach" or "builder"; it names the installed skill (spekk-<role>) for
+// a SkillPreload harness, which seeds the session by naming the skill rather than
+// by passing the activation message (its interactive subcommand takes no
+// positional). For every other skill-delivery harness the activation message is
+// the seed, exactly as before.
+func (p Profile) InteractiveLaunch(role, activation string, inlineArgv []string) InteractivePlan {
 	if p.InstallTarget == "" {
 		return InteractivePlan{Argv: inlineArgv}
 	}
-	return InteractivePlan{Argv: p.InteractiveArgs(activation), InstallTarget: p.InstallTarget}
+	seed := activation
+	if p.SkillPreload {
+		seed = "spekk-" + role
+	}
+	return InteractivePlan{Argv: p.InteractiveArgs(seed), InstallTarget: p.InstallTarget}
 }
 
 // SkillActivationMessage is the short message that seeds a skill-governed
@@ -137,35 +156,39 @@ var opencodeProfile = Profile{
 
 // hermesProfile launches the coach, builder, and observer through the Hermes
 // Agent CLI (Nous Research). Its argv follows hermes's own conventions —
-// verified against the installed `hermes --help` (v0.18.x) — and is deliberately
-// not a copy of the claude/opencode flags:
+// verified against the installed `hermes --help` / `hermes chat --help`
+// (v0.18.x) — and is deliberately not a copy of the claude/opencode flags:
 //
-//   - Interactive: `hermes --tui -z <prompt>` — `-z/--oneshot` seeds the agent
-//     prompt and `--tui` launches the interactive interface, so hermes carries
-//     the prompt and waits for input. `chat` is hermes's interactive
-//     subcommand, but its only prompt-carrying flag (`-q/--query`) is
-//     non-interactive; the top-level `-z`+`--tui` pair is the form that both
-//     seeds a prompt and stays interactive, so the profile uses it.
-//   - Headless: `hermes --yolo --cli -z <prompt>` — `--cli` runs the prompt
-//     non-interactively (as opposed to `--tui`), `-z` supplies the single
-//     message, and `--yolo` bypasses every approval prompt, hermes's equivalent
-//     of claude's --dangerously-skip-permissions for a no-TTY cron run with no
-//     human to confirm.
+//   - Interactive: `hermes chat -s spekk-<role>` — `chat` is hermes's
+//     interactive subcommand ("Interactive chat with the agent") and
+//     `-s/--skills` preloads a named, already-installed skill, so the session is
+//     governed by the spekk role skill and waits for the user's input. `chat`
+//     takes no positional message and its only prompt-carrying flag
+//     (`-q/--query`) is non-interactive, so the skill is named rather than a
+//     message passed — see SkillPreload and InteractiveLaunch. `-z/--oneshot` is
+//     deliberately NOT used interactively: it "sends a single prompt and prints
+//     ONLY the final response", i.e. one-shot, exiting instead of waiting.
+//   - Headless: `hermes --yolo --cli -z <prompt>` — `-z/--oneshot` runs the
+//     single prompt non-interactively (its whole purpose), `--cli` selects the
+//     classic (non-TUI) interface, and `--yolo` "bypasses all dangerous command
+//     approval prompts", hermes's equivalent of claude's
+//     --dangerously-skip-permissions for a no-TTY cron run with no human to
+//     confirm.
 //
 // hermes has no separate system-prompt flag, so the interactive builder reuses
-// the interactive `--tui -z` form and seeds the session with the prompt.
-// `--yolo` is intentionally absent from the interactive/system-prompt modes: a
-// human is present to answer approval prompts there, exactly as opencode omits
-// `--auto`.
+// the interactive `chat -s` form. `--yolo` is intentionally absent from the
+// interactive/system-prompt modes: a human is present to answer approval prompts
+// there, exactly as opencode omits `--auto`.
 var hermesProfile = Profile{
 	Name:             "hermes",
 	Binary:           "hermes",
 	DisplayName:      "Hermes",
 	InstallURL:       "https://hermes-agent.nousresearch.com/docs/",
-	InteractiveArgv:  []string{"--tui", "-z"},
-	SystemPromptArgv: []string{"--tui", "-z"},
+	InteractiveArgv:  []string{"chat", "-s"},
+	SystemPromptArgv: []string{"chat", "-s"},
 	HeadlessArgv:     []string{"--yolo", "--cli", "-z"},
 	InstallTarget:    "hermes",
+	SkillPreload:     true,
 }
 
 // codexProfile launches the coach, builder, and observer through the codex CLI

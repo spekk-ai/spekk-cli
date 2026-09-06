@@ -71,11 +71,11 @@ func TestResolveProfile_Hermes(t *testing.T) {
 }
 
 // The hermes profile's resolved argv must follow hermes's own CLI conventions —
-// not a copy of the claude flags. Interactive and the interactive builder use
-// `--tui -z` so hermes seeds the prompt and stays interactive; headless uses
-// `--yolo --cli -z` so hermes runs the single prompt non-interactively and
-// bypasses approval prompts. The permission-skip flag is hermes's real `--yolo`
-// and appears only in headless.
+// not a copy of the claude flags. Interactive and the interactive builder open a
+// skill-governed `hermes chat -s spekk-<role>` session that waits for input;
+// headless uses `--yolo --cli -z` so hermes runs the single prompt
+// (`-z/--oneshot`) non-interactively and bypasses approval prompts. The
+// permission-skip flag is hermes's real `--yolo` and appears only in headless.
 func TestHermesProfile_ResolvedArgv(t *testing.T) {
 	p, err := ResolveProfile("hermes")
 	if err != nil {
@@ -83,23 +83,31 @@ func TestHermesProfile_ResolvedArgv(t *testing.T) {
 	}
 	const msg = "activation message"
 
-	cases := []struct {
-		name string
-		got  []string
-		want []string
-	}{
-		{"interactive", p.InteractiveArgs(msg), []string{"--tui", "-z", msg}},
-		{"system-prompt", p.SystemPromptArgs(msg), []string{"--tui", "-z", msg}},
-		{"headless", p.HeadlessArgs(msg), []string{"--yolo", "--cli", "-z", msg}},
-	}
-	for _, tc := range cases {
-		if !equalArgs(tc.got, tc.want) {
-			t.Errorf("%s argv = %v, want %v", tc.name, tc.got, tc.want)
+	// The resolved interactive argv is the skill-governed launch plan: the
+	// coach/builder session hermes actually opens. It uses the interactive `chat`
+	// subcommand and names the installed role skill via -s — never -z/--oneshot,
+	// which would send one prompt and exit instead of waiting for input.
+	for _, role := range []string{"coach", "builder"} {
+		inlineArgv := p.InteractiveArgs(SkillActivationMessage(role))
+		plan := p.InteractiveLaunch(role, SkillActivationMessage(role), inlineArgv)
+		want := []string{"chat", "-s", "spekk-" + role}
+		if !equalArgs(plan.Argv, want) {
+			t.Errorf("%s interactive argv = %v, want %v", role, plan.Argv, want)
+		}
+		joined := strings.Join(plan.Argv, " ")
+		if strings.Contains(joined, "-z") || strings.Contains(joined, "--oneshot") {
+			t.Errorf("%s interactive argv uses the one-shot flag instead of chat: %q", role, joined)
 		}
 	}
 
+	// Headless runs the single prompt non-interactively with -z/--oneshot.
+	if got, want := p.HeadlessArgs(msg), []string{"--yolo", "--cli", "-z", msg}; !equalArgs(got, want) {
+		t.Errorf("headless argv = %v, want %v", got, want)
+	}
+
 	// The permission-skip flag must be hermes's real --yolo, never a claude or
-	// opencode flag copied across.
+	// opencode flag copied across, and it belongs only in headless (a human is
+	// present to approve interactively).
 	head := strings.Join(p.HeadlessArgs(msg), " ")
 	if !strings.Contains(head, "--yolo") {
 		t.Errorf("headless argv missing hermes's --yolo: %q", head)
@@ -108,6 +116,9 @@ func TestHermesProfile_ResolvedArgv(t *testing.T) {
 		if strings.Contains(head, foreign) {
 			t.Errorf("hermes headless argv copied a foreign permission flag %q: %q", foreign, head)
 		}
+	}
+	if inter := strings.Join(p.InteractiveLaunch("coach", SkillActivationMessage("coach"), nil).Argv, " "); strings.Contains(inter, "--yolo") {
+		t.Errorf("hermes interactive argv must not carry the permission-skip flag: %q", inter)
 	}
 }
 
@@ -467,7 +478,7 @@ func TestInteractiveLaunch_NonClaudeCarriesActivationNotFullPrompt(t *testing.T)
 	fullPrompt := "You are the Coach Agent. " + strings.Repeat("FULL-PROMPT-BODY ", 200)
 	inlineArgv := p.InteractiveArgs(fullPrompt) // what an inline-prompt harness would use
 
-	plan := p.InteractiveLaunch(SkillActivationMessage("coach"), inlineArgv)
+	plan := p.InteractiveLaunch("coach", SkillActivationMessage("coach"), inlineArgv)
 
 	for _, a := range plan.Argv {
 		if strings.Contains(a, "FULL-PROMPT-BODY") {
@@ -489,7 +500,7 @@ func TestInteractiveLaunch_ClaudeKeepsInlinePromptNoInstall(t *testing.T) {
 	p := DefaultProfile()
 	inlineArgv := p.SystemPromptArgs("the full builder prompt")
 
-	plan := p.InteractiveLaunch(SkillActivationMessage("builder"), inlineArgv)
+	plan := p.InteractiveLaunch("builder", SkillActivationMessage("builder"), inlineArgv)
 
 	if plan.InstallTarget != "" {
 		t.Errorf("claude-code must install nothing to run interactively; got target %q", plan.InstallTarget)
