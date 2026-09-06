@@ -3,10 +3,9 @@ id: gemini-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 3
-status: in_progress
+status: done
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
-locked-by: builder-MacBook-Pro.local-32748-1788729431
 ---
 
 # A gemini-cli profile drives coach/builder/observer through the Gemini CLI

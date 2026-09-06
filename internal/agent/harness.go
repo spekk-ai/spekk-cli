@@ -225,7 +225,7 @@ var codexProfile = Profile{
 
 // geminiProfile launches the coach, builder, and observer through the Gemini CLI
 // (Google). Its argv follows gemini's own conventions — verified against the
-// installed `gemini --help` (v0.58.x) — and is deliberately not a copy of the
+// installed `gemini --help` (v0.46.0) — and is deliberately not a copy of the
 // claude/opencode flags:
 //
 //   - Interactive: `gemini -i <prompt>` — `-i/--prompt-interactive` "Execute the
