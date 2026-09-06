@@ -3,7 +3,8 @@ id: install-covers-hermes-and-gemini
 parent: configurable-harness
 created: 2026-09-06T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-MacBook-Pro.local-63521-1788727954
 depends-on: harness-profile-abstraction
 branch: feature/configurable-harness
 ---
