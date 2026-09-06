@@ -88,33 +88,6 @@ var opencodeProfile = Profile{
 	HeadlessArgv:     []string{"run", "--auto"},
 }
 
-// aiderProfile launches the coach, builder, and observer through the aider CLI.
-// aider's argv differs again from the other harnesses — verified against the
-// installed `aider --help`:
-//
-//   - Interactive: bare `aider <prompt>` — aider with no flags starts an
-//     interactive chat session and waits for input. There is no interactive
-//     flag to add; "bare" means bare, so the interactive argv carries no flags.
-//   - Headless: `aider --yes-always --message <prompt>` — `--message`/`-m`
-//     feeds aider a single message, which it processes and then exits (aider's
-//     one-off form), and `--yes-always` auto-answers every confirmation, the
-//     equivalent of claude's --dangerously-skip-permissions for a no-TTY cron
-//     run with no human to confirm.
-//
-// aider has no separate system-prompt flag, so the interactive builder reuses
-// the bare interactive form and seeds the session with the prompt. `--yes-always`
-// is intentionally absent from the interactive/system-prompt modes: a human is
-// present to answer confirmations there, exactly as opencode omits `--auto`.
-var aiderProfile = Profile{
-	Name:             "aider",
-	Binary:           "aider",
-	DisplayName:      "Aider",
-	InstallURL:       "https://aider.chat/docs/install.html",
-	InteractiveArgv:  []string{},
-	SystemPromptArgv: []string{},
-	HeadlessArgv:     []string{"--yes-always", "--message"},
-}
-
 // hermesProfile launches the coach, builder, and observer through the Hermes
 // Agent CLI (Nous Research). Its argv follows hermes's own conventions —
 // verified against the installed `hermes --help` (v0.18.x) — and is deliberately
@@ -136,7 +109,7 @@ var aiderProfile = Profile{
 // the interactive `--tui -z` form and seeds the session with the prompt.
 // `--yolo` is intentionally absent from the interactive/system-prompt modes: a
 // human is present to answer approval prompts there, exactly as opencode omits
-// `--auto` and aider omits `--yes-always`.
+// `--auto`.
 var hermesProfile = Profile{
 	Name:             "hermes",
 	Binary:           "hermes",
@@ -155,8 +128,7 @@ var hermesProfile = Profile{
 //   - Interactive: bare `codex <prompt>` — codex with no subcommand forwards to
 //     the interactive TUI and takes the prompt as its trailing positional
 //     ("Optional user prompt to start the session"), so it seeds the prompt and
-//     waits for input. There is no interactive flag to add; "bare" means bare,
-//     exactly as aider starts interactive with no flags.
+//     waits for input. There is no interactive flag to add; "bare" means bare.
 //   - Headless: `codex exec --dangerously-bypass-approvals-and-sandbox <prompt>`
 //     — the `exec` subcommand runs Codex non-interactively with the prompt as a
 //     one-off task, and `--dangerously-bypass-approvals-and-sandbox` skips all
@@ -168,7 +140,7 @@ var hermesProfile = Profile{
 // the bare interactive form and seeds the session with the prompt. The
 // permission-skip flag is intentionally absent from the interactive/system-prompt
 // modes: a human is present to answer approval prompts there, exactly as
-// opencode omits `--auto`, aider omits `--yes-always`, and hermes omits `--yolo`.
+// opencode omits `--auto` and hermes omits `--yolo`.
 var codexProfile = Profile{
 	Name:             "codex",
 	Binary:           "codex",
@@ -199,7 +171,7 @@ var codexProfile = Profile{
 // the interactive `-i` form and seeds the session with the prompt. `--yolo` is
 // intentionally absent from the interactive/system-prompt modes: a human is
 // present to answer approval prompts there, exactly as opencode omits `--auto`,
-// aider omits `--yes-always`, hermes omits `--yolo`, and codex omits its bypass.
+// hermes omits `--yolo`, and codex omits its bypass.
 var geminiProfile = Profile{
 	Name:             "gemini",
 	Binary:           "gemini",
@@ -220,7 +192,6 @@ const HarnessEnvVar = "SPEKK_HARNESS"
 var harnessProfiles = map[string]Profile{
 	claudeCodeProfile.Name: claudeCodeProfile,
 	opencodeProfile.Name:   opencodeProfile,
-	aiderProfile.Name:      aiderProfile,
 	hermesProfile.Name:     hermesProfile,
 	codexProfile.Name:      codexProfile,
 	geminiProfile.Name:     geminiProfile,
@@ -279,15 +250,23 @@ func resolveHarnessOrExit(flag string) Profile {
 	return p
 }
 
-// knownHarnessNames returns the canonical harness names plus aliases, sorted,
-// for use in error messages.
+// knownHarnessNames returns one entry per canonical harness, sorted, for use in
+// error messages. A harness with aliases carries them as an annotation on its
+// single entry (e.g. "claude-code (alias: claude)") rather than appearing again
+// as a bare alias entry, so the list reads as one line per real harness.
 func knownHarnessNames() []string {
-	names := make([]string, 0, len(harnessProfiles)+len(harnessAliases))
-	for name := range harnessProfiles {
-		names = append(names, name)
+	aliasesByCanonical := make(map[string][]string)
+	for alias, canonical := range harnessAliases {
+		aliasesByCanonical[canonical] = append(aliasesByCanonical[canonical], alias)
 	}
-	for alias := range harnessAliases {
-		names = append(names, alias)
+	names := make([]string, 0, len(harnessProfiles))
+	for name := range harnessProfiles {
+		entry := name
+		if aliases := aliasesByCanonical[name]; len(aliases) > 0 {
+			sort.Strings(aliases)
+			entry = fmt.Sprintf("%s (alias: %s)", name, strings.Join(aliases, ", "))
+		}
+		names = append(names, entry)
 	}
 	sort.Strings(names)
 	return names

@@ -3,7 +3,7 @@ id: harness-selection-config
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: harness-profile-abstraction
 branch: feature/configurable-harness
 ---
@@ -12,6 +12,8 @@ branch: feature/configurable-harness
 
 The active harness resolves from an explicit flag, falling back to an
 environment variable, falling back to the built-in default.
+
+**Tests:** internal/agent/harness_test.go
 
 ## Success Criteria
 
