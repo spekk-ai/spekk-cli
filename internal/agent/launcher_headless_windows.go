@@ -8,18 +8,21 @@ import (
 	"os/exec"
 )
 
-// LaunchHeadless spawns `claude -p` (print/non-interactive mode) with the given
-// message. It does not inherit stdin and does not forward signals — suitable for
-// background invocations where no TTY is present.
+// LaunchHeadless spawns the harness in headless/print (non-interactive) mode
+// with the given message. It does not inherit stdin and does not forward
+// signals — suitable for background invocations where no TTY is present.
+//
+// binaryPath is an explicit path to the harness binary; if empty, the profile's
+// binary name is used (relies on PATH).
 //
 // On Windows the overlap guard (flock) is not available; the lockFile parameter
 // is accepted for API compatibility but ignored.
-func LaunchHeadless(claudePath, lockFile, message string) error {
-	if claudePath == "" {
-		claudePath = "claude"
+func LaunchHeadless(profile Profile, binaryPath, lockFile, message string) error {
+	if binaryPath == "" {
+		binaryPath = profile.Binary
 	}
 
-	cmd := exec.Command(claudePath, "-p", "--dangerously-skip-permissions", message)
+	cmd := exec.Command(binaryPath, profile.HeadlessArgs(message)...)
 	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -27,11 +30,12 @@ func LaunchHeadless(claudePath, lockFile, message string) error {
 
 	if err := cmd.Start(); err != nil {
 		if isNotFound(err) {
-			fmt.Fprintln(os.Stderr, "Error: Claude Code CLI not found. Please install Claude Code first.")
-			fmt.Fprintln(os.Stderr, "Visit: https://claude.ai/code for installation instructions.")
+			l1, l2 := profile.notFoundLines()
+			fmt.Fprintln(os.Stderr, "Error: "+l1)
+			fmt.Fprintln(os.Stderr, l2)
 			os.Exit(1)
 		}
-		return fmt.Errorf("Error launching Claude Code headless: %w", err)
+		return fmt.Errorf("Error launching %s headless: %w", profile.DisplayName, err)
 	}
 
 	if err := cmd.Wait(); err != nil {

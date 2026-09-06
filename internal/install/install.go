@@ -70,6 +70,17 @@ type target struct {
 	skillGlobalPath  func(home, name string) string
 	skillProjectPath func(cwd, name string) string
 	strip            bool
+
+	// Context-file host (gemini). When globalContextFile is non-nil this target
+	// does not write one file per role into managed directories; instead install
+	// updates a single spekk-owned section inside a shared markdown context file
+	// the harness auto-reads (gemini's GEMINI.md). Each function returns the
+	// context file for one scope; a "" return means the scope is unsupported and
+	// is a clean no-op rather than a wrong write. isContextFile() branches Install
+	// and EnsureRoleSkill onto the section writer, so the per-file skill/agent
+	// fields above are unused for such a target.
+	globalContextFile  func(home string) string
+	projectContextFile func(cwd string) string
 }
 
 var targets = map[string]target{
@@ -141,6 +152,39 @@ var targets = map[string]target{
 		},
 		strip: true,
 	},
+	// hermes stores skills as a directory per skill containing SKILL.md, under
+	// ~/.hermes/skills/ (global) or .hermes/skills/ (project); a skill dropped
+	// there is discovered by name and preloadable with `hermes chat -s <name>`.
+	// It is a native-skill host, so the frontmatter is kept (strip: false).
+	"hermes": {
+		globalDir:  func(home string) string { return filepath.Join(home, ".hermes", "skills") },
+		projectDir: filepath.Join(".hermes", "skills"),
+		frontmatter: func(agent string) string {
+			return fmt.Sprintf("---\nname: spekk-%s\ndescription: %q\n---\n", agent, descriptions[agent])
+		},
+		skillGlobalPath: func(home, name string) string {
+			return filepath.Join(home, ".hermes", "skills", name, "SKILL.md")
+		},
+		skillProjectPath: func(cwd, name string) string {
+			return filepath.Join(cwd, ".hermes", "skills", name, "SKILL.md")
+		},
+		strip: false,
+	},
+	// gemini has no per-skill directory: it auto-reads a single markdown context
+	// file — ~/.gemini/GEMINI.md globally, ./GEMINI.md in a project — and
+	// concatenates everything in it into the model's context. So spekk does not
+	// write one file per role here; it maintains one spekk-owned section inside
+	// that shared file (see installContextFile / spliceSection). globalDir /
+	// projectDir name the directory that holds GEMINI.md purely so the target's
+	// enumeration helpers (managedDirs, eachInstallScope) resolve to a real path;
+	// no per-file skill or agent shim is ever written there.
+	"gemini": {
+		globalDir:          func(home string) string { return filepath.Join(home, ".gemini") },
+		projectDir:         ".",
+		frontmatter:        func(agent string) string { return "" },
+		globalContextFile:  func(home string) string { return filepath.Join(home, ".gemini", "GEMINI.md") },
+		projectContextFile: func(cwd string) string { return filepath.Join(cwd, "GEMINI.md") },
+	},
 }
 
 // skillNames lists the skills that spekk install writes. The coach and the
@@ -201,6 +245,28 @@ func (t target) skillPath(project bool, home, cwd, name string) string {
 	}
 	if t.skillGlobalPath != nil {
 		return t.skillGlobalPath(home, name)
+	}
+	return ""
+}
+
+// isContextFile reports whether this target is a shared-context-file host
+// (gemini): one that maintains a spekk-owned section inside a single markdown
+// file the harness auto-reads, rather than one file per role.
+func (t target) isContextFile() bool {
+	return t.globalContextFile != nil
+}
+
+// contextFilePath returns the shared context file for the given scope, or "" when
+// the scope is unsupported (a clean no-op, not a wrong write).
+func (t target) contextFilePath(project bool, home, cwd string) string {
+	if project {
+		if t.projectContextFile != nil {
+			return t.projectContextFile(cwd)
+		}
+		return ""
+	}
+	if t.globalContextFile != nil {
+		return t.globalContextFile(home)
 	}
 	return ""
 }
@@ -267,6 +333,14 @@ func (t target) skillContent(role string) []byte {
 // this target writes for the given scope: the observer agent shim, the thin
 // coach and builder skills, and the bundled dev-loop skill.
 func (t target) desiredFiles(project bool, home, cwd string, skillFS fs.FS) (map[string][]byte, error) {
+	// A context-file host owns a section of a shared file, not any whole file, so
+	// it writes no per-file skills or agent shims. Returning empty keeps the
+	// reconciler-based callers (CheckStale, InstalledTargets) from inventing a
+	// managed file it never wrote; installContextFile handles its writes instead.
+	if t.isContextFile() {
+		return map[string][]byte{}, nil
+	}
+
 	desired := map[string][]byte{}
 
 	// The observer stays an agent shim.
@@ -312,38 +386,93 @@ func (t target) legacyAgentShimPaths(project bool, home, cwd string) []string {
 	}
 }
 
-// Install reconciles the managed files for one target and scope to their desired
-// final state. It writes the desired files (each stamped), removes owned files
-// that are no longer desired, and never clobbers a file the user changed.
-func Install(opts Options) (Result, error) {
-	name := opts.Target
+// resolveTarget resolves opts to a target and the home/cwd the scope needs,
+// applying the target alias and filling in os defaults for whichever of home or
+// cwd the scope uses. It is the shared front half of Install and EnsureRoleSkill.
+func resolveTarget(opts Options) (t target, name, home, cwd string, err error) {
+	name = opts.Target
 	if canonical, ok := targetAliases[name]; ok {
 		name = canonical
 	}
 	t, ok := targets[name]
 	if !ok {
-		return Result{}, fmt.Errorf("unknown target %q: valid targets are %s\nFor other tools, use \"spekk prompt <agent>\" directly — see \"spekk install --help\"", opts.Target, strings.Join(ValidTargets(), ", "))
+		return target{}, name, "", "", fmt.Errorf("unknown target %q: valid targets are %s\nFor other tools, use \"spekk prompt <agent>\" directly — see \"spekk install --help\"", opts.Target, strings.Join(ValidTargets(), ", "))
 	}
 
-	home := opts.HomeDir
-	cwd := opts.Cwd
+	home = opts.HomeDir
+	cwd = opts.Cwd
 	if opts.Project {
 		if t.projectDir == "" {
-			return Result{}, fmt.Errorf("target %q does not support --project installs; omit --project to install globally", name)
+			return target{}, name, "", "", fmt.Errorf("target %q does not support --project installs; omit --project to install globally", name)
 		}
 		if cwd == "" {
-			var err error
 			if cwd, err = os.Getwd(); err != nil {
-				return Result{}, fmt.Errorf("determining working directory: %w", err)
+				return target{}, name, "", "", fmt.Errorf("determining working directory: %w", err)
 			}
 		}
 	} else {
 		if home == "" {
-			var err error
 			if home, err = os.UserHomeDir(); err != nil {
-				return Result{}, fmt.Errorf("determining home directory: %w", err)
+				return target{}, name, "", "", fmt.Errorf("determining home directory: %w", err)
 			}
 		}
+	}
+	return t, name, home, cwd, nil
+}
+
+// EnsureRoleSkill installs (or refreshes) only the spekk-<role> skill for a
+// harness target — the coach or builder skill an interactive session is governed
+// by. Unlike Install it writes no observer agent shim, no dev-loop skill, and no
+// other role: only the one file the interactive launcher needs, so the launch
+// path adds nothing the user did not ask for. role is "coach" or "builder".
+//
+// The skill lands at the same path with the same content `spekk install --target
+// <t>` writes for it, and the write is idempotent: a pristine, up-to-date skill
+// is left untouched. A target whose host has no skill path for the role (a
+// prompt/command host) writes the role's agent shim instead, matching Install.
+func EnsureRoleSkill(opts Options, role string) (Result, error) {
+	if role != "coach" && role != "builder" {
+		return Result{}, fmt.Errorf("EnsureRoleSkill: role must be \"coach\" or \"builder\", got %q", role)
+	}
+	t, _, home, cwd, err := resolveTarget(opts)
+	if err != nil {
+		return Result{}, err
+	}
+
+	// A context-file host has no per-role file: its spekk-owned section already
+	// carries every role (coach and builder included), so ensuring one role means
+	// ensuring that section is present and current.
+	if t.isContextFile() {
+		return installContextFile(t, opts.Project, home, cwd)
+	}
+
+	var desired map[string][]byte
+	if sp := t.skillPath(opts.Project, home, cwd, "spekk-"+role); sp != "" {
+		desired = map[string][]byte{sp: t.skillContent(role)}
+	} else {
+		desired = map[string][]byte{
+			t.agentShimPath(opts.Project, home, cwd, role): []byte(t.frontmatter(role) + shimBody(role)),
+		}
+	}
+	// writeDesired, not reconcile: this must add/refresh one file without pruning
+	// the other spekk files that share a directory on a prompt/command host.
+	return writeDesired(desired)
+}
+
+// Install reconciles the managed files for one target and scope to their desired
+// final state. It writes the desired files (each stamped), removes owned files
+// that are no longer desired, and never clobbers a file the user changed.
+func Install(opts Options) (Result, error) {
+	t, _, home, cwd, err := resolveTarget(opts)
+	if err != nil {
+		return Result{}, err
+	}
+
+	// A context-file host (gemini) maintains a spekk-owned section inside a shared
+	// markdown file rather than a set of managed files, so it uses the section
+	// writer instead of the reconciler.
+	if t.isContextFile() {
+		return installContextFile(t, opts.Project, home, cwd)
 	}
 
 	skillFS := opts.SkillFS

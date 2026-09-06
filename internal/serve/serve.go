@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/spekk-ai/spekk-cli/internal/agent"
 	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
@@ -56,6 +57,25 @@ type Options struct {
 	Port    int
 	Host    string
 	Verbose bool
+	// Harness is the resolved agent harness. serve speaks Claude Code's
+	// stream-json protocol and only drives the claude-code harness; a zero
+	// value defaults to claude-code so existing callers behave as before.
+	Harness agent.Profile
+}
+
+// requireClaudeHarness rejects any non-claude harness. serve spawns a
+// subprocess and speaks Claude Code's stream-json protocol over its stdio, so
+// under any other harness it must refuse explicitly rather than spawn a binary
+// that cannot speak that protocol. A zero profile is treated as the default
+// claude-code harness.
+func requireClaudeHarness(p agent.Profile) error {
+	claude := agent.DefaultProfile()
+	if p.Name == "" || p.Name == claude.Name {
+		return nil
+	}
+	return fmt.Errorf(
+		"serve supports only the %s harness, but %s was selected; serve relies on Claude Code's stream-json protocol and cannot drive another harness",
+		claude.DisplayName, p.DisplayName)
 }
 
 // connection tracks a single WebSocket client and its Claude subprocess.
@@ -75,6 +95,9 @@ func (c *connection) sendJSON(msg outgoingMessage) {
 
 // Run starts the WebSocket serve bridge.
 func Run(opts Options, installDir string) error {
+	if err := requireClaudeHarness(opts.Harness); err != nil {
+		return err
+	}
 	if opts.Port == 0 {
 		opts.Port = defaultPort
 	}
