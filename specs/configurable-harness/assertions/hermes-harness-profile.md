@@ -3,7 +3,7 @@ id: hermes-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 2
-status: done
+status: not_started
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
 ---
@@ -21,8 +21,10 @@ flags differ from both claude and opencode.
   from the real CLI: `-z <prompt>` seeds a prompt, `--yolo` auto-approves
   (skip-permissions equivalent), `--cli`/`--tui` select non-interactive vs
   interactive mode, and `chat` is the interactive subcommand.
-- Interactive mode launches hermes so it carries the agent prompt and waits for
-  input; headless mode runs a single message non-interactively.
+- Interactive mode opens a skill-governed hermes session that waits for input
+  (per `interactive-uses-installed-skill`) using hermes's interactive `chat`
+  subcommand — not `-z/--oneshot`, which sends one prompt and exits. Headless
+  mode runs a single message non-interactively.
 - The profile's permission-skip flag is hermes's real one (`--yolo`), not a
   copied claude/opencode flag.
 - `observer_cron.go` bakes the hermes binary into the crontab entry.

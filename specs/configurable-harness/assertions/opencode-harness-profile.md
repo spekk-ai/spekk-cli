@@ -3,7 +3,7 @@ id: opencode-harness-profile
 parent: configurable-harness
 created: 2026-09-04T00:00:00Z
 priority: 2
-status: done
+status: not_started
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
 ---
@@ -23,10 +23,10 @@ opened an empty TUI instead of acting as the agent.
   particular: opencode has no `--prompt` flag (the message is a bare positional),
   and `--auto` and the message live under the `run` subcommand, not the bare
   `opencode` command.
-- Interactive coach/builder launches an opencode session that carries the agent
-  prompt as its message and does not auto-run it as a one-off task — e.g.
-  `opencode run -i <message>` — and the bare `opencode` command receives no
-  flags it does not define.
+- Interactive coach/builder opens a skill-governed opencode session that waits
+  for input (per `interactive-uses-installed-skill`) — the full agent prompt is
+  not passed as an executed message, so opencode does not auto-run it as a build
+  task. The bare `opencode` command receives no flags it does not define.
 - Headless mode uses `opencode run <message>` with opencode's real
   permission-skip flag.
 - `observer_cron.go` bakes the opencode binary into the crontab entry.

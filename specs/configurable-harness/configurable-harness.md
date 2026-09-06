@@ -54,6 +54,22 @@ Supported harnesses: `claude-code` (default, alias `claude`), `opencode`,
 `hermes`, `codex`, and `gemini`. Each harness has its own CLI shape — they share
 no flag conventions — so every profile is independent.
 
+## Interactive delivery: installed skill, not an inline prompt
+
+`--system-prompt` — install governing instructions, then wait for the user — is
+a claude-code-only capability. opencode, hermes, gemini, and codex take any
+prompt as a message they execute, so seeding the full agent prompt inline makes
+them run it as a task (opencode starts a build; hermes answers once and exits).
+
+For those harnesses, interactive `spekk coach` / `spekk builder` instead relies
+on the spekk skill: spekk ensures the skill is installed for the harness (the
+`spekk install --target <h>` result), then opens the harness's own interactive
+session governed by that skill, waiting for input. Instructions live in the
+skill, not in an inline argument. Delivery is via skills only — no agent-shim
+files. spekk stays the launcher and the CLI the agent calls; only prompt
+delivery changes (`interactive-uses-installed-skill`). claude-code keeps its
+inline `--system-prompt` path unchanged.
+
 ## Flags are verified against the real CLI, never written from memory
 
 The first opencode profile emitted flags opencode does not define (`--prompt`,

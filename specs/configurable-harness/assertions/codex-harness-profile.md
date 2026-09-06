@@ -3,7 +3,7 @@ id: codex-harness-profile
 parent: configurable-harness
 created: 2026-09-05T00:00:00Z
 priority: 3
-status: done
+status: not_started
 depends-on: harness-flags-verified-against-cli
 branch: feature/configurable-harness
 ---
@@ -20,9 +20,10 @@ flags from memory.
 - `--harness codex` / `SPEKK_HARNESS=codex` resolves to a codex profile.
 - Every flag and subcommand the codex profile emits is confirmed present in a
   real `codex --help` — no flag is taken from memory or another harness.
-- Interactive mode carries the agent prompt and waits for input; headless mode
-  runs a single message non-interactively; the profile uses codex's real
-  permission-skip flag.
+- Interactive mode opens a skill-governed codex session that waits for input
+  (per `interactive-uses-installed-skill`) — the full agent prompt is not passed
+  as an executed message. Headless mode runs a single message non-interactively;
+  the profile uses codex's real permission-skip flag.
 - `observer_cron.go` bakes the codex binary into the crontab entry.
 - The not-found error names codex and links its install docs.
 - A test asserts the resolved argv for codex in interactive and headless modes.
