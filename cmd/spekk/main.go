@@ -863,7 +863,7 @@ func runLoop(args []string) {
 
 	switch args[0] {
 	case "builder":
-		runBuilderLoop(findInstallDir())
+		runBuilderLoop(args[1:], findInstallDir())
 	case "coach":
 		runCoachLoop(findInstallDir())
 	case "help", "--help", "-h":
@@ -871,12 +871,24 @@ func runLoop(args []string) {
 spekk loop - Orchestration workflows for spec-driven development
 
 USAGE:
-  spekk loop [COMMAND]
+  spekk loop [COMMAND] [FLAGS]
 
 COMMANDS:
   builder   Run the automated builder loop (gets next assertion, implements, commits, repeats)
   coach     Run the interactive coach loop (create specs, commit, repeat)
-  help      Show this help message`)
+  help      Show this help message
+
+BUILDER USAGE:
+  spekk loop builder [FLAGS] [SKILL...]
+
+BUILDER FLAGS:
+  --watch, -w                Keep polling for new work after all assertions complete (default: exit on complete)
+  --idle-timeout <seconds>   Kill stuck builder after N seconds of no output (default: 120)
+
+BUILDER SKILLS:
+  Positional arguments after flags are treated as post-build skill names.
+  Skills run sequentially after all assertions complete (only if at least one was built).
+  Example: spekk loop builder e2e-testing-skill api-audit-skill`)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown loop command: %s\n", args[0])
 		fmt.Fprintln(os.Stderr, `Run "spekk loop help" for available commands.`)
@@ -885,8 +897,8 @@ COMMANDS:
 }
 
 // runBuilderLoop runs the automated builder loop.
-func runBuilderLoop(installDir string) {
-	agent.RunBuilderLoop(installDir)
+func runBuilderLoop(args []string, installDir string) {
+	agent.RunBuilderLoop(args, installDir)
 }
 
 // runCoachLoop runs the interactive coach loop.
