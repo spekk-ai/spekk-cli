@@ -3,9 +3,10 @@ id: interactive-uses-installed-skill
 parent: configurable-harness
 created: 2026-09-06T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: install-covers-hermes-and-gemini
 branch: feature/configurable-harness
+locked-by: builder-MacBook-Pro-local-96959-1788728588
 ---
 
 # `spekk coach/builder --harness <h>` self-installs instructions and opens a governed session
