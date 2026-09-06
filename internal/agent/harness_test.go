@@ -398,11 +398,11 @@ func TestDefaultProfile_ResolvedArgv(t *testing.T) {
 
 // The opencode profile's resolved argv must follow opencode's own CLI
 // conventions in every mode — not a copy of the claude flags. Interactive and
-// the interactive builder route through `run -i` and carry the prompt as a bare
-// positional message (a bare positional on the top-level `opencode` command is
-// read as the project dir, not a prompt, so the message would be dropped);
-// headless uses `run --auto` with the message as a bare positional. The bare
-// `opencode` command receives no flags at all.
+// the interactive builder open the PERSISTENT TUI via the bare `opencode`
+// command and seed it with `--prompt <activation>`: the TUI stays open and waits
+// for input. `run` (which executes its message and exits) must NOT appear in the
+// interactive argv. Headless uses `run --auto` with the message as a bare
+// positional.
 func TestOpencodeProfile_ResolvedArgv(t *testing.T) {
 	p, err := ResolveProfile("opencode")
 	if err != nil {
@@ -415,13 +415,21 @@ func TestOpencodeProfile_ResolvedArgv(t *testing.T) {
 		got  []string
 		want []string
 	}{
-		{"interactive", p.InteractiveArgs(msg), []string{"run", "-i", msg}},
-		{"system-prompt", p.SystemPromptArgs(msg), []string{"run", "-i", msg}},
+		{"interactive", p.InteractiveArgs(msg), []string{"--prompt", msg}},
+		{"system-prompt", p.SystemPromptArgs(msg), []string{"--prompt", msg}},
 		{"headless", p.HeadlessArgs(msg), []string{"run", "--auto", msg}},
 	}
 	for _, tc := range cases {
 		if !equalArgs(tc.got, tc.want) {
 			t.Errorf("%s argv = %v, want %v", tc.name, tc.got, tc.want)
+		}
+	}
+
+	// The persistent-TUI interactive launch must not route through `run`, which
+	// executes its message then exits and so cannot host an interactive session.
+	for _, tok := range p.InteractiveArgs(msg) {
+		if tok == "run" {
+			t.Errorf("interactive argv routes through `run` (exits after the message): %v", p.InteractiveArgs(msg))
 		}
 	}
 }

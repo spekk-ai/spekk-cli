@@ -27,7 +27,7 @@ func TestRunInteractivePlan_InstallsSkillBeforeLaunch(t *testing.T) {
 	}
 
 	// Skill-delivery harness: install, then launch.
-	plan := InteractivePlan{Argv: []string{"run", "-i", "activate"}, InstallTarget: "opencode"}
+	plan := InteractivePlan{Argv: []string{"--prompt", "activate"}, InstallTarget: "opencode"}
 	if err := runInteractivePlan(plan, "coach", ensure, launch); err != nil {
 		t.Fatal(err)
 	}

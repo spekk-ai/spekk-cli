@@ -128,28 +128,31 @@ var claudeCodeProfile = Profile{
 // `opencode --help` / `opencode run --help`, v1.18.x) and is deliberately not a
 // copy of the claude flags:
 //
-//   - Interactive: `opencode run -i <msg>` — the `run` subcommand carries the
-//     agent prompt as a bare positional message and `-i` keeps the session
-//     interactive. An earlier version passed the prompt with `--prompt` on the
-//     bare `opencode` command; on binaries that do not define that flag the
-//     whole prompt was silently dropped and opencode opened an empty TUI instead
-//     of acting as the agent, so the launch now routes through `run`.
-//   - Headless: `opencode run --auto <msg>` — `run` executes the message as a
-//     one-off task and `--auto` auto-approves permissions not explicitly denied,
-//     opencode's equivalent of claude's --dangerously-skip-permissions (there is
-//     no human at a no-TTY cron run to answer a prompt).
+//   - Interactive: `opencode --prompt <activation>` — the bare `opencode`
+//     command starts the PERSISTENT TUI (`opencode [project]` is opencode's
+//     `[default]` command) and `--prompt` seeds it with an initial message. The
+//     TUI stays open and waits for the user's input. The seed is only the short
+//     skill-activation message, never the full agent prompt: opencode runs any
+//     message it is handed, so seeding the whole prompt would auto-run it as a
+//     build task. `run -i` is deliberately NOT used — `run` executes its message
+//     and exits, so it cannot host a persistent interactive session.
+//   - Headless: `opencode run --auto <msg>` — the `run` subcommand executes the
+//     message as a one-off task and `--auto` auto-approves permissions not
+//     explicitly denied, opencode's equivalent of claude's
+//     --dangerously-skip-permissions (there is no human at a no-TTY cron run to
+//     answer a prompt).
 //
 // opencode has no separate system-prompt flag, so the interactive builder reuses
-// the interactive `run -i` form and seeds the session with the prompt as its
-// message. `--auto` is intentionally absent interactively: a human is present to
-// answer permission prompts.
+// the interactive `--prompt` form and seeds the persistent TUI with the
+// activation. `--auto` is intentionally absent interactively: a human is present
+// to answer permission prompts.
 var opencodeProfile = Profile{
 	Name:             "opencode",
 	Binary:           "opencode",
 	DisplayName:      "opencode",
 	InstallURL:       "https://opencode.ai/docs/",
-	InteractiveArgv:  []string{"run", "-i"},
-	SystemPromptArgv: []string{"run", "-i"},
+	InteractiveArgv:  []string{"--prompt"},
+	SystemPromptArgv: []string{"--prompt"},
 	HeadlessArgv:     []string{"run", "--auto"},
 	InstallTarget:    "opencode",
 }
