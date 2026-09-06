@@ -3,8 +3,7 @@ id: install-covers-hermes-and-gemini
 parent: configurable-harness
 created: 2026-09-06T00:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-MacBook-Pro.local-63521-1788727954
+status: done
 depends-on: harness-profile-abstraction
 branch: feature/configurable-harness
 ---
@@ -29,3 +28,5 @@ the missing coverage.
 - Installs are idempotent and, for a shared context file like `GEMINI.md`, update
   only the spekk-owned section without clobbering other content.
 - A test covers the hermes and gemini install destinations.
+
+**Tests:** internal/install/context_file_test.go

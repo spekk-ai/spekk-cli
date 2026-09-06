@@ -1533,7 +1533,7 @@ Next steps:
   spekk builder    # implement the next ready assertion
 
 Using a different coding assistant? Register the agents with it:
-  spekk install --target claude-code|copilot|cursor|opencode|codex`)
+  spekk install --target claude-code|copilot|cursor|opencode|codex|hermes|gemini`)
 }
 
 // runPrompt prints the layered-resolved prompt for an agent to stdout.
@@ -1639,6 +1639,8 @@ TARGETS:
   cursor                        ~/.cursor/agents/
   opencode                      ~/.config/opencode/agents/
   codex                         ~/.codex/prompts/ (global only)
+  hermes                        ~/.hermes/skills/ (project: .hermes/skills/)
+  gemini                        ~/.gemini/GEMINI.md (project: ./GEMINI.md)
 
 OPTIONS:
   --target <tool>   Host tool to install into (required)
