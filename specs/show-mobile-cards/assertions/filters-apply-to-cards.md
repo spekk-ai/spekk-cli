@@ -3,7 +3,8 @@ id: filters-apply-to-cards
 parent: show-mobile-cards
 created: 2026-09-07T18:00:00Z
 priority: 2
-status: not_started
+status: in_progress
+locked-by: builder-MacBook-Pro-local-23135-1788833058
 depends-on: spec-cards-fill-viewport
 branch: feature/show-mobile-cards
 ---
