@@ -19,7 +19,7 @@ Add this to `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/spekk-ai/spekk-cli
-    rev: v1.28.0
+    rev: v1.29.0
     hooks:
       - id: spekk-validate
 ```
@@ -64,7 +64,7 @@ jobs:
       - name: Install spekk
         if: steps.check.outputs.found == 'true'
         env:
-          SPEKK_VERSION: v1.28.0
+          SPEKK_VERSION: v1.29.0
         run: curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh
 
       - name: Validate specs
