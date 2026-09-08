@@ -1058,15 +1058,30 @@
 
             .card-deck {
                 display: block;
-                height: 100vh;
+                /* 100dvh (not 100vh) so mobile browser toolbars don't leave a
+                   sliver of the next card peeking in. */
+                height: 100dvh;
                 overflow-y: auto;
                 background: #f8fafc;
+                /* Vertical scroll-snap so exactly one card comes to rest in view
+                   at a time as the deck is swiped. */
+                scroll-snap-type: y mandatory;
             }
 
             .spec-card {
+                /* Each spec is one card that fills the viewport. */
+                height: 100dvh;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
                 padding: 20px;
                 border-bottom: 1px solid #e2e8f0;
                 background: white;
+                /* Snap this card's top to the deck top; stop on every card so a
+                   swipe never skips past one. */
+                scroll-snap-align: start;
+                scroll-snap-stop: always;
             }
 
             .spec-card-title {
@@ -1081,6 +1096,10 @@
                 gap: 8px;
                 font-size: 13px;
                 color: #64748b;
+            }
+
+            .spec-card-count {
+                font-variant-numeric: tabular-nums;
             }
         }
     </style>
@@ -2015,12 +2034,24 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             for (var si = 0; si < specs.length; si++) {
                 var spec = specs[si];
                 if (crossBranchMode && !cbSpecVisible(spec)) continue;
+
+                // N/M done: done assertions out of the spec's total, counted from
+                // the same children the tree nests under this spec.
+                var kids = assertionsByParent[spec.id] || [];
+                var doneCount = 0;
+                for (var ai = 0; ai < kids.length; ai++) {
+                    if (kids[ai].status === 'done') doneCount++;
+                }
+
                 html += '<div class="spec-card" data-spec-id="' + escapeHtml(spec.id) + '">';
                 html += '<div class="spec-card-title">' + escapeHtml(spec.title) + '</div>';
                 html += '<div class="spec-card-meta">';
+                // Priority, then the status badge reflecting the parser's computed
+                // parent status (same value the desktop tree renders).
                 html += '<span class="priority-badge priority-' + spec.priority + '">' + (spec.priority || '–') + '</span>';
                 html += '<span class="status-badge status-' + escapeHtml(statusClass(spec.status)) + '"></span>';
                 html += '<span>' + statusEmoji(spec.status) + '</span>';
+                html += '<span class="spec-card-count">' + doneCount + '/' + kids.length + ' done</span>';
                 html += '</div>';
                 html += '</div>';
             }

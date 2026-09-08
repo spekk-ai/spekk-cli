@@ -131,6 +131,36 @@ func TestTemplateMobileBreakpoint(t *testing.T) {
 	}
 }
 
+// TestTemplateCardDeckFillsViewport guards the card-deck rendering: each spec is
+// a full-viewport (100dvh) card in a vertical scroll-snapping deck, and a
+// collapsed card carries the N/M-done count alongside its priority and status
+// badge. These are string-level checks (the deck is built in template JS that Go
+// can't execute) mirroring TestTemplateMobileBreakpoint's approach.
+func TestTemplateCardDeckFillsViewport(t *testing.T) {
+	// Cards size to dynamic viewport height, not 100vh, so mobile toolbars don't
+	// push a card past the visible area (both the deck and each card use 100dvh).
+	if strings.Count(templateHTML, "100dvh") < 2 {
+		t.Error("card deck and cards must size to 100dvh (dynamic viewport height), not 100vh")
+	}
+	if strings.Contains(templateHTML, "height: 100vh;\n                overflow-y: auto") {
+		t.Error("the card deck must not use 100vh (mobile toolbars would cause overshoot)")
+	}
+
+	// Vertical scroll-snap: the deck snaps on the y axis and each card aligns to
+	// the top, so exactly one card comes to rest in view at a time.
+	if !strings.Contains(templateHTML, "scroll-snap-type: y mandatory") {
+		t.Error("card deck must use vertical scroll-snap (scroll-snap-type: y mandatory)")
+	}
+	if !strings.Contains(templateHTML, "scroll-snap-align: start") {
+		t.Error("each card must snap to the deck top (scroll-snap-align: start)")
+	}
+
+	// A collapsed card shows an "N/M done" assertion count.
+	if !strings.Contains(templateHTML, " done</span>") || !strings.Contains(templateHTML, "spec-card-count") {
+		t.Error("a card must render an N/M done assertion count")
+	}
+}
+
 // git runs a raw git command in dir, failing the test on error. Used only to
 // build fixture repos for cross-branch tests.
 func git(t *testing.T, dir string, args ...string) string {

@@ -3,13 +3,14 @@ id: spec-cards-fill-viewport
 parent: show-mobile-cards
 created: 2026-09-07T18:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: viewport-breakpoint-switches-layout
 branch: feature/show-mobile-cards
-locked-by: builder-MacBook-Pro.local-80269-1788829817
 ---
 
 # Each spec is a full-viewport card in a scroll-snapping deck
+
+**Tests:** internal/show/show_test.go (`TestTemplateCardDeckFillsViewport`)
 
 In the mobile layout every visible spec renders as one card that fills the screen, and the deck snaps so a single card rests in view at a time.
 
