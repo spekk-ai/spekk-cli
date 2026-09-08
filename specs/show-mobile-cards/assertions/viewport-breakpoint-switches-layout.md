@@ -3,8 +3,9 @@ id: viewport-breakpoint-switches-layout
 parent: show-mobile-cards
 created: 2026-09-07T18:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 branch: feature/show-mobile-cards
+locked-by: builder-MacBook-Pro.local-67604-1788829391
 ---
 
 # A viewport breakpoint swaps the two-panel layout for the card deck
