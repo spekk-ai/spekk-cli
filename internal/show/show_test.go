@@ -99,6 +99,210 @@ func TestTemplateSanitizesMarkdown(t *testing.T) {
 	}
 }
 
+// TestTemplateMobileBreakpoint guards the ≤768px media-query swap: a single
+// generated file carries both layouts, the card deck is hidden by default
+// (desktop unchanged), and the media query flips .container off and .card-deck on.
+func TestTemplateMobileBreakpoint(t *testing.T) {
+	// Both layouts live in the one embedded template — no separate mobile artifact.
+	if !strings.Contains(templateHTML, `id="card-deck"`) {
+		t.Error("template must contain the mobile card-deck container")
+	}
+
+	// The deck defaults to hidden so the desktop two-panel layout is untouched at >768px.
+	if !strings.Contains(templateHTML, ".card-deck {\n            display: none;\n        }") {
+		t.Error("card-deck must default to display:none (desktop layout unchanged)")
+	}
+
+	// The switch is a max-width:768px media query that hides .container and shows the deck.
+	mq := "@media (max-width: 768px)"
+	idx := strings.Index(templateHTML, mq)
+	if idx == -1 {
+		t.Fatal("template must switch layouts via an @media (max-width: 768px) query")
+	}
+	block := templateHTML[idx:]
+	if end := strings.Index(block, "</style>"); end != -1 {
+		block = block[:end]
+	}
+	if !strings.Contains(block, ".container {\n                display: none;") {
+		t.Error("≤768px media query must hide the two-panel .container")
+	}
+	if !strings.Contains(block, ".card-deck {\n                display: block;") {
+		t.Error("≤768px media query must display the card deck")
+	}
+}
+
+// TestTemplateCardDeckFillsViewport guards the card-deck rendering: each spec is
+// a full-viewport (100dvh) card in a vertical scroll-snapping deck, and a
+// collapsed card carries the N/M-done count alongside its priority and status
+// badge. These are string-level checks (the deck is built in template JS that Go
+// can't execute) mirroring TestTemplateMobileBreakpoint's approach.
+func TestTemplateCardDeckFillsViewport(t *testing.T) {
+	// Cards size to dynamic viewport height, not 100vh, so mobile toolbars don't
+	// push a card past the visible area (both the deck and each card use 100dvh).
+	if strings.Count(templateHTML, "100dvh") < 2 {
+		t.Error("card deck and cards must size to 100dvh (dynamic viewport height), not 100vh")
+	}
+	if strings.Contains(templateHTML, "height: 100vh;\n                overflow-y: auto") {
+		t.Error("the card deck must not use 100vh (mobile toolbars would cause overshoot)")
+	}
+
+	// Vertical scroll-snap: the deck snaps on the y axis and each card aligns to
+	// the top, so exactly one card comes to rest in view at a time.
+	if !strings.Contains(templateHTML, "scroll-snap-type: y mandatory") {
+		t.Error("card deck must use vertical scroll-snap (scroll-snap-type: y mandatory)")
+	}
+	if !strings.Contains(templateHTML, "scroll-snap-align: start") {
+		t.Error("each card must snap to the deck top (scroll-snap-align: start)")
+	}
+
+	// A collapsed card shows an "N/M done" assertion count.
+	if !strings.Contains(templateHTML, " done</span>") || !strings.Contains(templateHTML, "spec-card-count") {
+		t.Error("a card must render an N/M done assertion count")
+	}
+}
+
+// TestTemplateAssertionSheet guards the swipe-up sheet + assertion reader: the
+// mobile-only sheet, its overlay, and the content view exist; the sheet is
+// reachable via a pointer gesture (so a desktop mouse at the breakpoint drives
+// it too); and the assertion body reuses the desktop marked+DOMPurify renderer.
+// String-level checks mirror the sibling mobile tests (the sheet is built in
+// template JS that Go can't execute).
+func TestTemplateAssertionSheet(t *testing.T) {
+	// The three mobile surfaces must exist in the one embedded template.
+	for _, id := range []string{`id="assertion-sheet"`, `id="assertion-sheet-overlay"`, `id="assertion-content-view"`} {
+		if !strings.Contains(templateHTML, id) {
+			t.Errorf("template must contain the mobile element %s", id)
+		}
+	}
+
+	// They default to display:none so the desktop layout is untouched at >768px.
+	if !strings.Contains(templateHTML, ".assertion-content-view {\n            display: none;\n        }") {
+		t.Error("assertion sheet/overlay/content-view must default to display:none (desktop unchanged)")
+	}
+
+	// The interaction is pointer-driven (unifies touch + mouse), so it is
+	// exercisable in a desktop browser sized to the mobile breakpoint.
+	if !strings.Contains(templateHTML, "pointerdown") || !strings.Contains(templateHTML, "pointerup") {
+		t.Error("sheet gestures must use pointer events so mouse and touch both drive them")
+	}
+
+	// A back control returns from the assertion content to the sheet.
+	if !strings.Contains(templateHTML, `id="assertion-content-back"`) {
+		t.Error("the assertion content view must have a back control")
+	}
+
+	// The assertion body must render through the same sanitized markdown pipeline
+	// the desktop panel uses. TestTemplateSanitizesMarkdown already asserts every
+	// marked.parse is wrapped in DOMPurify.sanitize; here we confirm the sheet's
+	// reader emits a detail-body via that pipeline.
+	if !strings.Contains(templateHTML, "DOMPurify.sanitize(marked.parse(a.content") {
+		t.Error("assertion content must be rendered with the desktop marked+DOMPurify renderer")
+	}
+}
+
+// TestTemplateDeckFilters guards that the hide-completed toggle and branch
+// filter apply to the card deck and compose with search: cards carry the fields
+// search matches on, applyDeckFilters gates each card on both search and the
+// toggle, done specs are marked completed, and an explicit no-matches surface
+// stands in when everything is filtered out. String-level checks mirror the
+// sibling mobile tests (the deck is built in template JS Go can't execute).
+func TestTemplateDeckFilters(t *testing.T) {
+	// Cards carry a data-search-text the deck filter matches against, so search
+	// narrows the deck the same way it narrows the desktop tree.
+	if !strings.Contains(templateHTML, `data-search-text="' + escapeHtml(searchText) + '"`) {
+		t.Error("each spec card must carry a data-search-text for the deck search to match")
+	}
+
+	// A done spec's card is tagged completed so the hide-completed toggle can drop it.
+	if !strings.Contains(templateHTML, "spec.status === 'done' ? ' completed' : ''") {
+		t.Error("a card for a done spec must be marked completed for the hide-completed toggle")
+	}
+
+	// The single filter pass gates a card on BOTH the search query and the toggle,
+	// so the two compose — a card shows only when it satisfies every active filter.
+	for _, needle := range []string{
+		"function applyDeckFilters()",
+		"matchesSearch && !completedHidden",
+	} {
+		if !strings.Contains(templateHTML, needle) {
+			t.Errorf("deck filter must compose search and the hide-completed toggle (missing %q)", needle)
+		}
+	}
+
+	// Both the search box and the toggle re-run the composed deck filter.
+	if strings.Count(templateHTML, "applyDeckFilters()") < 3 {
+		t.Error("search, the hide-completed toggle, and the branch-filter rebuild must all re-run applyDeckFilters")
+	}
+	if !strings.Contains(templateHTML, "searchInput.addEventListener('input', applyDeckFilters)") {
+		t.Error("the search box must drive the deck filter")
+	}
+
+	// When active filters plus search leave no cards, an explicit no-matches
+	// surface replaces the deck (toggled via its hidden attribute), never a blank.
+	if !strings.Contains(templateHTML, `id="deck-empty"`) {
+		t.Error("the deck must have an explicit no-matches surface")
+	}
+	if !strings.Contains(templateHTML, "emptyEl.hidden = anyVisible") {
+		t.Error("the no-matches surface must show exactly when no card survives the filters")
+	}
+	if !strings.Contains(templateHTML, ".deck-empty[hidden]") {
+		t.Error("the no-matches surface must honor its hidden attribute (.deck-empty[hidden] rule)")
+	}
+}
+
+// TestTemplateCardDeckSearch guards mobile-deck search: a search bar that stays
+// fixed in view while cards scroll, drives the deck through the same match path as
+// the desktop tree, and surfaces an assertion-only match in the card's sheet.
+// String-level checks mirror the sibling mobile tests (the deck is built in
+// template JS Go can't execute).
+func TestTemplateCardDeckSearch(t *testing.T) {
+	// A mobile search input exists (the desktop #spec-search sits inside the
+	// display:none .container at ≤768px, so the deck needs its own bar).
+	if !strings.Contains(templateHTML, `id="card-search"`) {
+		t.Error("template must contain a mobile deck search input (#card-search)")
+	}
+
+	// The bar is fixed to the viewport top inside the ≤768px media query, so it
+	// stays in view while the deck scrolls under it.
+	mq := "@media (max-width: 768px)"
+	block := templateHTML[strings.Index(templateHTML, mq):]
+	if end := strings.Index(block, "</style>"); end != -1 {
+		block = block[:end]
+	}
+	barIdx := strings.Index(block, ".card-search-bar {")
+	if barIdx == -1 {
+		t.Fatal("≤768px media query must style the .card-search-bar")
+	}
+	barRule := block[barIdx:]
+	barRule = barRule[:strings.Index(barRule, "}")]
+	if !strings.Contains(barRule, "position: fixed") {
+		t.Error("the mobile search bar must be position:fixed so it stays in view while cards scroll")
+	}
+
+	// Typing in the deck bar mirrors into #spec-search and re-fires its input, so
+	// the deck and tree run one match path — and the initializer is wired up.
+	for _, needle := range []string{
+		"function initializeCardSearch()",
+		"specSearch.value = cardSearch.value",
+		"specSearch.dispatchEvent(new Event('input'))",
+		"initializeCardSearch();",
+	} {
+		if !strings.Contains(templateHTML, needle) {
+			t.Errorf("card search must reuse the desktop search path (missing %q)", needle)
+		}
+	}
+
+	// A spec matched only through an assertion still shows as a card, and that
+	// assertion is surfaced in the sheet: matching rows are tinted and floated to
+	// the top (matched rows emitted before the rest).
+	if !strings.Contains(templateHTML, "sheet-assertion-match") {
+		t.Error("openSheet must tag matching assertion rows so they are surfaced")
+	}
+	if !strings.Contains(templateHTML, "var html = matched + rest;") {
+		t.Error("openSheet must float matching assertion rows to the top of the sheet")
+	}
+}
+
 // git runs a raw git command in dir, failing the test on error. Used only to
 // build fixture repos for cross-branch tests.
 func git(t *testing.T, dir string, args ...string) string {

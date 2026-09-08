@@ -1041,6 +1041,323 @@
         .spec-item.search-match {
             display: block !important;
         }
+
+        /* ===== Mobile card deck ===== */
+        /* The deck is hidden on desktop; the ≤768px media query below swaps it in
+           for the two-panel .container. Both layouts live in the same DOM — only
+           their visibility differs by viewport width, so resizing or rotating
+           across the breakpoint re-lays-out live with no reload. */
+        .card-deck {
+            display: none;
+        }
+
+        /* The mobile search bar rides above the deck; hidden on desktop, where the
+           tree-panel search box serves the same role. The ≤768px media query below
+           fixes it to the top of the viewport so it never scrolls away with cards. */
+        .card-search-bar {
+            display: none;
+        }
+
+        /* The assertion sheet, its overlay, and the assertion content view are
+           mobile-only surfaces. They stay display:none on desktop so the
+           two-panel layout is untouched at >768px; the ≤768px media query below
+           turns them into off-screen elements that slide in on demand. */
+        .assertion-sheet-overlay,
+        .assertion-sheet,
+        .assertion-content-view {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                display: none;
+            }
+
+            .card-deck {
+                display: block;
+                /* 100dvh (not 100vh) so mobile browser toolbars don't leave a
+                   sliver of the next card peeking in. */
+                height: 100dvh;
+                overflow-y: auto;
+                background: #f8fafc;
+                /* Vertical scroll-snap so exactly one card comes to rest in view
+                   at a time as the deck is swiped. */
+                scroll-snap-type: y mandatory;
+            }
+
+            /* Search bar pinned to the top of the viewport: position:fixed keeps it
+               in view while the deck scrolls under it, so search is always reachable
+               no matter how far down the deck a swipe has travelled. z-index sits
+               below the sheet (45) and overlay (40) so an open sheet covers it. */
+            .card-search-bar {
+                display: block;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 30;
+                padding: 10px 12px;
+                background: rgba(248, 250, 252, 0.96);
+                backdrop-filter: blur(6px);
+                border-bottom: 1px solid #e2e8f0;
+            }
+
+            .card-search-bar .search-container {
+                margin-top: 0;
+            }
+
+            /* A card the active filters/search exclude drops out of the deck
+               entirely (higher specificity than the .spec-card rule below, so it
+               wins without !important). */
+            .spec-card.deck-hidden {
+                display: none;
+            }
+
+            /* Shown only when every card is filtered out — the same explicit
+               "no matches" surface an empty search would show, never a blank deck. */
+            .deck-empty {
+                height: 100dvh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #94a3b8;
+                font-size: 15px;
+            }
+
+            /* The hidden attribute must win over display:flex above. */
+            .deck-empty[hidden] {
+                display: none;
+            }
+
+            .spec-card {
+                /* Each spec is one card that fills the viewport. */
+                height: 100dvh;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start;
+                padding: 20px;
+                border-bottom: 1px solid #e2e8f0;
+                background: white;
+                position: relative;
+                /* Snap this card's top to the deck top; stop on every card so a
+                   swipe never skips past one. */
+                scroll-snap-align: start;
+                scroll-snap-stop: always;
+            }
+
+            .spec-card-title {
+                font-size: 18px;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }
+
+            .spec-card-meta {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 13px;
+                color: #64748b;
+            }
+
+            .spec-card-count {
+                font-variant-numeric: tabular-nums;
+            }
+
+            /* The card body holds the centered spec summary; the handle pins to
+               the bottom as the swipe-up affordance. touch-action:none on the
+               handle hands its pointer stream entirely to our gesture code, so a
+               swipe there raises the sheet instead of scroll-snapping the deck. */
+            .spec-card-body {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }
+
+            .spec-card-handle {
+                flex-shrink: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+                padding: 12px 0 4px;
+                color: #94a3b8;
+                font-size: 12px;
+                cursor: pointer;
+                user-select: none;
+                touch-action: none;
+            }
+
+            .spec-card-handle .grabber {
+                width: 36px;
+                height: 4px;
+                border-radius: 2px;
+                background: #cbd5e1;
+            }
+
+            /* Overlay dims the deck behind the open sheet; tapping it dismisses. */
+            .assertion-sheet-overlay {
+                display: block;
+                position: fixed;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.4);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.25s ease;
+                z-index: 40;
+            }
+
+            .assertion-sheet-overlay.open {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            /* Bottom sheet: parked below the viewport (translateY 100%), slides to
+               rest when .open. Capped at 85dvh so the card stays peeking above. */
+            .assertion-sheet {
+                display: flex;
+                flex-direction: column;
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                max-height: 85dvh;
+                background: white;
+                border-radius: 16px 16px 0 0;
+                transform: translateY(100%);
+                transition: transform 0.28s ease;
+                z-index: 45;
+                touch-action: none;
+            }
+
+            .assertion-sheet.open {
+                transform: translateY(0);
+                box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+            }
+
+            .assertion-sheet.no-transition {
+                transition: none;
+            }
+
+            .assertion-sheet-grabber {
+                width: 40px;
+                height: 4px;
+                border-radius: 2px;
+                background: #cbd5e1;
+                margin: 10px auto 6px;
+                flex-shrink: 0;
+            }
+
+            .assertion-sheet-title {
+                padding: 0 20px 10px;
+                font-size: 15px;
+                font-weight: 600;
+                color: #1e293b;
+                border-bottom: 1px solid #e2e8f0;
+                flex-shrink: 0;
+            }
+
+            .assertion-sheet-list {
+                overflow-y: auto;
+                padding: 8px 12px 20px;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .assertion-sheet-empty {
+                padding: 20px;
+                color: #94a3b8;
+                font-size: 14px;
+                text-align: center;
+            }
+
+            .sheet-assertion-row {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 12px;
+                margin-bottom: 6px;
+                background: #f8fafc;
+                border-radius: 8px;
+                border-left: 3px solid #e2e8f0;
+                cursor: pointer;
+            }
+
+            .sheet-assertion-row:active {
+                background: #eff6ff;
+                border-left-color: #3b82f6;
+            }
+
+            /* An assertion the active search matched: floated to the top of the
+               sheet (see openSheet) and tinted so it stands out from the rest. */
+            .sheet-assertion-row.sheet-assertion-match {
+                background: #fef9c3;
+                border-left-color: #eab308;
+            }
+
+            .sheet-assertion-row .sheet-assertion-title {
+                flex: 1;
+                font-size: 14px;
+                font-weight: 500;
+                color: #1e293b;
+            }
+
+            /* Full-screen assertion markdown reader; slides over the sheet and
+               returns to it via the back control. */
+            .assertion-content-view {
+                display: flex;
+                flex-direction: column;
+                position: fixed;
+                inset: 0;
+                background: white;
+                transform: translateX(100%);
+                transition: transform 0.25s ease;
+                z-index: 50;
+            }
+
+            .assertion-content-view.open {
+                transform: translateX(0);
+            }
+
+            .assertion-content-bar {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 12px 16px;
+                border-bottom: 1px solid #e2e8f0;
+                background: #f8fafc;
+                flex-shrink: 0;
+            }
+
+            .assertion-back {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 14px;
+                font-weight: 600;
+                color: #2563eb;
+                background: none;
+                border: none;
+                cursor: pointer;
+                padding: 4px 6px;
+            }
+
+            .assertion-content-heading {
+                font-size: 15px;
+                font-weight: 600;
+                color: #1e293b;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .assertion-content-body {
+                flex: 1;
+                overflow-y: auto;
+                padding: 20px;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1090,6 +1407,36 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Mobile search bar: fixed to the top of the viewport at ≤768px so search
+         stays reachable while the deck scrolls. Its input mirrors into #spec-search
+         so the deck and tree share one match path (see initializeCardSearch). -->
+    <div class="card-search-bar" id="card-search-bar">
+        <div class="search-container">
+            <span class="search-icon">&#128269;</span>
+            <input type="text" id="card-search" placeholder="Search specs..." autocomplete="off">
+        </div>
+    </div>
+
+    <!-- Mobile card deck: shown in place of .container at ≤768px (see media query). -->
+    <div class="card-deck" id="card-deck"></div>
+
+    <!-- Mobile-only overlays (hidden on desktop). The overlay dims the deck, the
+         sheet lists the active spec's assertions, and the content view renders one
+         assertion's markdown. All three are reused across specs/assertions. -->
+    <div class="assertion-sheet-overlay" id="assertion-sheet-overlay"></div>
+    <div class="assertion-sheet" id="assertion-sheet">
+        <div class="assertion-sheet-grabber" id="assertion-sheet-grabber"></div>
+        <div class="assertion-sheet-title" id="assertion-sheet-title"></div>
+        <div class="assertion-sheet-list" id="assertion-sheet-list"></div>
+    </div>
+    <div class="assertion-content-view" id="assertion-content-view">
+        <div class="assertion-content-bar">
+            <button class="assertion-back" id="assertion-content-back" type="button">&#8592; Back</button>
+            <span class="assertion-content-heading" id="assertion-content-heading"></span>
+        </div>
+        <div class="assertion-content-body" id="assertion-content-body"></div>
     </div>
 
     <script>/* marked@15.0.12 inline *//**
@@ -1490,6 +1837,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
 
             buildTree();
             buildDetailPanels();
+            buildCardDeck();
             markCompletedSpecs();
             updateHiddenCount();
 
@@ -1960,9 +2308,94 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             metroMapSection.style.display = 'none';
         }
 
+        // Build the mobile card deck: one card per spec, sharing the same `specs`
+        // data as the tree. Only visible at ≤768px (CSS), but populated always so
+        // resizing across the breakpoint needs no re-run of `spekk show`.
+        function buildCardDeck() {
+            var deckEl = document.getElementById('card-deck');
+            var html = '';
+            for (var si = 0; si < specs.length; si++) {
+                var spec = specs[si];
+                if (crossBranchMode && !cbSpecVisible(spec)) continue;
+
+                // N/M done: done assertions out of the spec's total, counted from
+                // the same children the tree nests under this spec.
+                var kids = assertionsByParent[spec.id] || [];
+                var doneCount = 0;
+                // Combined search text so a card matches on its own fields or on
+                // any of its assertions' — the same fields (id/title/status/
+                // priority) the desktop tree indexes, so deck search matches it.
+                var searchText = spec.id + ' ' + spec.title.toLowerCase() + ' ' + spec.status + ' ' + spec.priority;
+                for (var ai = 0; ai < kids.length; ai++) {
+                    if (kids[ai].status === 'done') doneCount++;
+                    searchText += ' ' + kids[ai].id + ' ' + kids[ai].title.toLowerCase() + ' ' + kids[ai].status + ' ' + kids[ai].priority;
+                }
+
+                // A card is "completed" when the spec's own status is done — the
+                // same signal the desktop tree's hide-completed toggle keys off.
+                var completedClass = spec.status === 'done' ? ' completed' : '';
+                html += '<div class="spec-card' + completedClass + '" data-spec-id="' + escapeHtml(spec.id) + '" data-search-text="' + escapeHtml(searchText) + '">';
+                html += '<div class="spec-card-body">';
+                html += '<div class="spec-card-title">' + escapeHtml(spec.title) + '</div>';
+                html += '<div class="spec-card-meta">';
+                // Priority, then the status badge reflecting the parser's computed
+                // parent status (same value the desktop tree renders).
+                html += '<span class="priority-badge priority-' + spec.priority + '">' + (spec.priority || '–') + '</span>';
+                html += '<span class="status-badge status-' + escapeHtml(statusClass(spec.status)) + '"></span>';
+                html += '<span>' + statusEmoji(spec.status) + '</span>';
+                html += '<span class="spec-card-count">' + doneCount + '/' + kids.length + ' done</span>';
+                html += '</div>';
+                html += '</div>';
+                // Swipe-up affordance: dragging up here (or clicking it) raises the
+                // assertion sheet for this spec.
+                html += '<div class="spec-card-handle" data-action="open-sheet" data-spec-id="' + escapeHtml(spec.id) + '">';
+                html += '<div class="grabber"></div>';
+                html += '<span>' + kids.length + (kids.length === 1 ? ' assertion' : ' assertions') + ' — swipe up</span>';
+                html += '</div>';
+                html += '</div>';
+            }
+            // Always emit the no-matches surface (hidden until every card is
+            // filtered out); it lives inside the deck so a rebuild keeps it.
+            html += '<div class="deck-empty" id="deck-empty" hidden>No matches</div>';
+            deckEl.innerHTML = html;
+            applyDeckFilters();
+        }
+
+        // Apply the live filters to the mobile card deck. Search (the same box the
+        // desktop tree uses) and the hide-completed toggle compose: a card shows
+        // only when it satisfies every active filter at once. The branch filter is
+        // applied when the deck is rebuilt (cbApplyBranchSelection), so cards for
+        // fully-deselected specs never render here. When nothing survives, the
+        // no-matches surface replaces the deck rather than leaving it blank.
+        function applyDeckFilters() {
+            var deckEl = document.getElementById('card-deck');
+            if (!deckEl) return;
+            var searchInput = document.getElementById('spec-search');
+            var query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+            var toggle = document.getElementById('toggle-completed-specs');
+            var showCompleted = toggle ? toggle.checked : true;
+
+            var cards = deckEl.querySelectorAll('.spec-card');
+            var anyVisible = false;
+            for (var i = 0; i < cards.length; i++) {
+                var card = cards[i];
+                var matchesSearch = !query || (card.getAttribute('data-search-text') || '').indexOf(query) !== -1;
+                var completedHidden = !showCompleted && card.classList.contains('completed');
+                if (matchesSearch && !completedHidden) {
+                    card.classList.remove('deck-hidden');
+                    anyVisible = true;
+                } else {
+                    card.classList.add('deck-hidden');
+                }
+            }
+            var emptyEl = document.getElementById('deck-empty');
+            if (emptyEl) emptyEl.hidden = anyVisible;
+        }
+
         // Initialize the UI
         buildTree();
         buildDetailPanels();
+        buildCardDeck();
 
         // Mark completed specs
         function markCompletedSpecs() {
@@ -1991,6 +2424,8 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             }
 
             updateHiddenCount();
+            // Reflect the restored toggle state onto the deck at load.
+            applyDeckFilters();
 
             toggleCheckbox.addEventListener('change', function() {
                 var isChecked = this.checked;
@@ -2003,6 +2438,8 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                 }
 
                 updateHiddenCount();
+                // The toggle drives the deck too, composing with any active search.
+                applyDeckFilters();
             });
         }
 
@@ -2102,6 +2539,24 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                         specItem.classList.remove('search-match');
                     }
                 }
+            });
+
+            // The card deck reacts to the same search box, composing with the
+            // hide-completed toggle in applyDeckFilters.
+            searchInput.addEventListener('input', applyDeckFilters);
+        }
+
+        // Wire the mobile search bar to the desktop search box. Typing in the deck's
+        // fixed bar mirrors the query into #spec-search and re-fires its input event,
+        // so the deck and tree run the exact same match logic (applyDeckFilters plus
+        // the tree filter both listen there) — clearing it restores the full deck.
+        function initializeCardSearch() {
+            var cardSearch = document.getElementById('card-search');
+            var specSearch = document.getElementById('spec-search');
+            if (!cardSearch || !specSearch) return;
+            cardSearch.addEventListener('input', function() {
+                specSearch.value = cardSearch.value;
+                specSearch.dispatchEvent(new Event('input'));
             });
         }
 
@@ -2447,11 +2902,164 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             }
         }
 
+        // ===== Mobile assertion sheet + content reader =====
+        // Swiping up a card (or tapping its handle) raises a bottom sheet listing
+        // that spec's assertions; tapping a row opens the assertion's markdown,
+        // rendered with the same marked+DOMPurify pipeline as the desktop panel.
+        // All pointer-based, so a desktop browser at the mobile breakpoint drives
+        // it with the mouse exactly as a touch device does with a finger.
+        function initializeMobileSheet() {
+            var deckEl = document.getElementById('card-deck');
+            var overlayEl = document.getElementById('assertion-sheet-overlay');
+            var sheetEl = document.getElementById('assertion-sheet');
+            var sheetTitleEl = document.getElementById('assertion-sheet-title');
+            var sheetListEl = document.getElementById('assertion-sheet-list');
+            var grabberEl = document.getElementById('assertion-sheet-grabber');
+            var contentViewEl = document.getElementById('assertion-content-view');
+            var contentBodyEl = document.getElementById('assertion-content-body');
+            var contentHeadingEl = document.getElementById('assertion-content-heading');
+            var backBtn = document.getElementById('assertion-content-back');
+            if (!deckEl || !sheetEl) return;
+
+            // A deliberate gesture must clear this many px before it counts as a
+            // swipe; anything shorter is treated as a tap.
+            var SWIPE_THRESHOLD = 30;
+            // Drag the open sheet down past this to dismiss it.
+            var DISMISS_THRESHOLD = 80;
+
+            function openSheet(specId) {
+                var spec = specById[specId];
+                if (!spec) return;
+                sheetTitleEl.textContent = spec.title;
+
+                var kids = assertionsByParent[specId] || [];
+                // A spec can appear in the deck because one of its assertions matched
+                // the search (its card's data-search-text folds in assertion fields).
+                // Surface those matches: rows the active query hits are tinted and
+                // floated to the top, using the same fields the tree/deck match on.
+                var specSearch = document.getElementById('spec-search');
+                var query = specSearch ? specSearch.value.trim().toLowerCase() : '';
+                var matched = '';
+                var rest = '';
+                for (var i = 0; i < kids.length; i++) {
+                    var a = kids[i];
+                    if (crossBranchMode && !cbAssertionVisible(a)) continue;
+                    var isMatch = !!query &&
+                        (a.id + ' ' + a.title.toLowerCase() + ' ' + a.status + ' ' + a.priority).indexOf(query) !== -1;
+                    var row = '<div class="sheet-assertion-row' + (isMatch ? ' sheet-assertion-match' : '') + '" data-action="open-assertion" data-assertion-id="' + escapeHtml(a.id) + '">';
+                    row += '<span class="priority-badge priority-' + a.priority + '">' + (a.priority || '–') + '</span>';
+                    row += '<span class="status-badge status-' + escapeHtml(statusClass(a.status)) + '"></span>';
+                    row += '<span>' + statusEmoji(a.status) + '</span>';
+                    row += '<span class="sheet-assertion-title">' + escapeHtml(a.title) + '</span>';
+                    row += '</div>';
+                    if (isMatch) { matched += row; } else { rest += row; }
+                }
+                var html = matched + rest;
+                if (!html) {
+                    html = '<div class="assertion-sheet-empty">No assertions</div>';
+                }
+                sheetListEl.innerHTML = html;
+
+                sheetEl.style.transform = '';
+                sheetEl.classList.add('open');
+                overlayEl.classList.add('open');
+            }
+
+            function closeSheet() {
+                sheetEl.classList.remove('open');
+                overlayEl.classList.remove('open');
+                sheetEl.style.transform = '';
+            }
+
+            function openAssertion(assertionId) {
+                var a = assertionById[assertionId];
+                if (!a) return;
+                contentHeadingEl.textContent = a.title;
+                // Same renderer as the desktop detail panel.
+                try {
+                    contentBodyEl.innerHTML = '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(a.content || '')) + '</div>';
+                } catch (e) {
+                    contentBodyEl.innerHTML = '<div class="detail-body markdown-body">' + escapeHtml(a.content || '') + '</div>';
+                }
+                contentBodyEl.scrollTop = 0;
+                contentViewEl.classList.add('open');
+            }
+
+            function closeAssertion() {
+                // Return to the sheet, which stays open underneath.
+                contentViewEl.classList.remove('open');
+            }
+
+            // --- Tap wiring for the sheet list, the overlay, and the back button ---
+            sheetListEl.addEventListener('click', function(e) {
+                var row = e.target.closest('[data-action="open-assertion"]');
+                if (row) openAssertion(row.getAttribute('data-assertion-id'));
+            });
+            overlayEl.addEventListener('click', closeSheet);
+            backBtn.addEventListener('click', closeAssertion);
+
+            // --- Swipe up on a card handle to raise the sheet ---
+            // touch-action:none on the handle means we own its pointer stream, so
+            // this never fights the deck's vertical scroll-snap.
+            // A near-stationary release counts as a tap, so no click handler is needed.
+            var handleDrag = null;
+            deckEl.addEventListener('pointerdown', function(e) {
+                var handle = e.target.closest('[data-action="open-sheet"]');
+                if (!handle) return;
+                handleDrag = { id: e.pointerId, specId: handle.getAttribute('data-spec-id'), startY: e.clientY, startX: e.clientX, el: handle };
+                try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+            });
+            deckEl.addEventListener('pointerup', function(e) {
+                if (!handleDrag || e.pointerId !== handleDrag.id) return;
+                var dy = handleDrag.startY - e.clientY;      // positive = upward
+                var dx = Math.abs(e.clientX - handleDrag.startX);
+                var specId = handleDrag.specId;
+                handleDrag = null;
+                // Swipe up past the threshold, or a near-stationary tap.
+                if (dy >= SWIPE_THRESHOLD || (Math.abs(dy) < 10 && dx < 10)) {
+                    openSheet(specId);
+                }
+            });
+            deckEl.addEventListener('pointercancel', function() { handleDrag = null; });
+
+            // --- Drag the sheet down (from its grabber) to dismiss ---
+            var sheetDrag = null;
+            grabberEl.addEventListener('pointerdown', function(e) {
+                sheetDrag = { id: e.pointerId, startY: e.clientY };
+                sheetEl.classList.add('no-transition');
+                try { grabberEl.setPointerCapture(e.pointerId); } catch (err) {}
+            });
+            grabberEl.addEventListener('pointermove', function(e) {
+                if (!sheetDrag || e.pointerId !== sheetDrag.id) return;
+                var dy = e.clientY - sheetDrag.startY;       // positive = downward
+                if (dy > 0) sheetEl.style.transform = 'translateY(' + dy + 'px)';
+            });
+            function endSheetDrag(e) {
+                if (!sheetDrag || e.pointerId !== sheetDrag.id) return;
+                var dy = e.clientY - sheetDrag.startY;
+                sheetDrag = null;
+                sheetEl.classList.remove('no-transition');
+                if (dy >= DISMISS_THRESHOLD) {
+                    closeSheet();
+                } else {
+                    sheetEl.style.transform = '';           // snap back open
+                }
+            }
+            grabberEl.addEventListener('pointerup', endSheetDrag);
+            grabberEl.addEventListener('pointercancel', function() {
+                sheetDrag = null;
+                sheetEl.classList.remove('no-transition');
+                sheetEl.style.transform = '';
+            });
+        }
+
         // Initialize everything
         initializeCompletedSpecsToggle();
         initializeMetroMapCollapse();
         initializeSearch();
+        initializeCardSearch();
         initializeBranchFilter();
+        initializeMobileSheet();
 
     })();
     </script>

@@ -278,6 +278,8 @@ spekk query "SELECT f.value AS workflow, COUNT(*) AS total, SUM(a.status = 'done
 
 Open the spec explorer, a web page that shows the spec tree.
 
+On a screen that is 768 pixels wide or less, the page shows each spec as a full-screen card. Swipe up on a card to see its assertions, and tap an assertion to read it.
+
 ```bash
 spekk show                                          # Write the page and open it
 spekk show --watch                                  # Serve it and reload on change
