@@ -3,7 +3,8 @@ id: search-filters-card-deck
 parent: show-mobile-cards
 created: 2026-09-07T18:00:00Z
 priority: 2
-status: not_started
+status: in_progress
+locked-by: builder-Paris-MacBook-Pro-30001-1757260800
 depends-on: spec-cards-fill-viewport
 branch: feature/show-mobile-cards
 ---
