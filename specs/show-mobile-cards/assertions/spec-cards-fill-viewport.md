@@ -3,9 +3,10 @@ id: spec-cards-fill-viewport
 parent: show-mobile-cards
 created: 2026-09-07T18:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: viewport-breakpoint-switches-layout
 branch: feature/show-mobile-cards
+locked-by: builder-MacBook-Pro.local-80269-1788829817
 ---
 
 # Each spec is a full-viewport card in a scroll-snapping deck
