@@ -1051,6 +1051,16 @@
             display: none;
         }
 
+        /* The assertion sheet, its overlay, and the assertion content view are
+           mobile-only surfaces. They stay display:none on desktop so the
+           two-panel layout is untouched at >768px; the ≤768px media query below
+           turns them into off-screen elements that slide in on demand. */
+        .assertion-sheet-overlay,
+        .assertion-sheet,
+        .assertion-content-view {
+            display: none;
+        }
+
         @media (max-width: 768px) {
             .container {
                 display: none;
@@ -1100,6 +1110,198 @@
 
             .spec-card-count {
                 font-variant-numeric: tabular-nums;
+            }
+
+            /* The card body holds the centered spec summary; the handle pins to
+               the bottom as the swipe-up affordance. touch-action:none on the
+               handle hands its pointer stream entirely to our gesture code, so a
+               swipe there raises the sheet instead of scroll-snapping the deck. */
+            .spec-card {
+                justify-content: flex-start;
+                position: relative;
+            }
+
+            .spec-card-body {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }
+
+            .spec-card-handle {
+                flex-shrink: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+                padding: 12px 0 4px;
+                color: #94a3b8;
+                font-size: 12px;
+                cursor: pointer;
+                user-select: none;
+                touch-action: none;
+            }
+
+            .spec-card-handle .grabber {
+                width: 36px;
+                height: 4px;
+                border-radius: 2px;
+                background: #cbd5e1;
+            }
+
+            /* Overlay dims the deck behind the open sheet; tapping it dismisses. */
+            .assertion-sheet-overlay {
+                display: block;
+                position: fixed;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.4);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.25s ease;
+                z-index: 40;
+            }
+
+            .assertion-sheet-overlay.open {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            /* Bottom sheet: parked below the viewport (translateY 100%), slides to
+               rest when .open. Capped at 85dvh so the card stays peeking above. */
+            .assertion-sheet {
+                display: flex;
+                flex-direction: column;
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                max-height: 85dvh;
+                background: white;
+                border-radius: 16px 16px 0 0;
+                box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+                transform: translateY(100%);
+                transition: transform 0.28s ease;
+                z-index: 45;
+                touch-action: none;
+            }
+
+            .assertion-sheet.open {
+                transform: translateY(0);
+            }
+
+            .assertion-sheet.no-transition {
+                transition: none;
+            }
+
+            .assertion-sheet-grabber {
+                width: 40px;
+                height: 4px;
+                border-radius: 2px;
+                background: #cbd5e1;
+                margin: 10px auto 6px;
+                flex-shrink: 0;
+            }
+
+            .assertion-sheet-title {
+                padding: 0 20px 10px;
+                font-size: 15px;
+                font-weight: 600;
+                color: #1e293b;
+                border-bottom: 1px solid #e2e8f0;
+                flex-shrink: 0;
+            }
+
+            .assertion-sheet-list {
+                overflow-y: auto;
+                padding: 8px 12px 20px;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .assertion-sheet-empty {
+                padding: 20px;
+                color: #94a3b8;
+                font-size: 14px;
+                text-align: center;
+            }
+
+            .sheet-assertion-row {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 12px;
+                margin-bottom: 6px;
+                background: #f8fafc;
+                border-radius: 8px;
+                border-left: 3px solid #e2e8f0;
+                cursor: pointer;
+            }
+
+            .sheet-assertion-row:active {
+                background: #eff6ff;
+                border-left-color: #3b82f6;
+            }
+
+            .sheet-assertion-row .sheet-assertion-title {
+                flex: 1;
+                font-size: 14px;
+                font-weight: 500;
+                color: #1e293b;
+            }
+
+            /* Full-screen assertion markdown reader; slides over the sheet and
+               returns to it via the back control. */
+            .assertion-content-view {
+                display: flex;
+                flex-direction: column;
+                position: fixed;
+                inset: 0;
+                background: white;
+                transform: translateX(100%);
+                transition: transform 0.25s ease;
+                z-index: 50;
+            }
+
+            .assertion-content-view.open {
+                transform: translateX(0);
+            }
+
+            .assertion-content-bar {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 12px 16px;
+                border-bottom: 1px solid #e2e8f0;
+                background: #f8fafc;
+                flex-shrink: 0;
+            }
+
+            .assertion-back {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 14px;
+                font-weight: 600;
+                color: #2563eb;
+                background: none;
+                border: none;
+                cursor: pointer;
+                padding: 4px 6px;
+            }
+
+            .assertion-content-heading {
+                font-size: 15px;
+                font-weight: 600;
+                color: #1e293b;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .assertion-content-body {
+                flex: 1;
+                overflow-y: auto;
+                padding: 20px;
+                -webkit-overflow-scrolling: touch;
             }
         }
     </style>
@@ -1155,6 +1357,23 @@
 
     <!-- Mobile card deck: shown in place of .container at ≤768px (see media query). -->
     <div class="card-deck" id="card-deck"></div>
+
+    <!-- Mobile-only overlays (hidden on desktop). The overlay dims the deck, the
+         sheet lists the active spec's assertions, and the content view renders one
+         assertion's markdown. All three are reused across specs/assertions. -->
+    <div class="assertion-sheet-overlay" id="assertion-sheet-overlay"></div>
+    <div class="assertion-sheet" id="assertion-sheet">
+        <div class="assertion-sheet-grabber" id="assertion-sheet-grabber"></div>
+        <div class="assertion-sheet-title" id="assertion-sheet-title"></div>
+        <div class="assertion-sheet-list" id="assertion-sheet-list"></div>
+    </div>
+    <div class="assertion-content-view" id="assertion-content-view">
+        <div class="assertion-content-bar">
+            <button class="assertion-back" id="assertion-content-back" type="button">&#8592; Back</button>
+            <span class="assertion-content-heading" id="assertion-content-heading"></span>
+        </div>
+        <div class="assertion-content-body" id="assertion-content-body"></div>
+    </div>
 
     <script>/* marked@15.0.12 inline *//**
  * marked v15.0.12 - a markdown parser
@@ -2044,6 +2263,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                 }
 
                 html += '<div class="spec-card" data-spec-id="' + escapeHtml(spec.id) + '">';
+                html += '<div class="spec-card-body">';
                 html += '<div class="spec-card-title">' + escapeHtml(spec.title) + '</div>';
                 html += '<div class="spec-card-meta">';
                 // Priority, then the status badge reflecting the parser's computed
@@ -2052,6 +2272,13 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                 html += '<span class="status-badge status-' + escapeHtml(statusClass(spec.status)) + '"></span>';
                 html += '<span>' + statusEmoji(spec.status) + '</span>';
                 html += '<span class="spec-card-count">' + doneCount + '/' + kids.length + ' done</span>';
+                html += '</div>';
+                html += '</div>';
+                // Swipe-up affordance: dragging up here (or clicking it) raises the
+                // assertion sheet for this spec.
+                html += '<div class="spec-card-handle" data-action="open-sheet" data-spec-id="' + escapeHtml(spec.id) + '">';
+                html += '<div class="grabber"></div>';
+                html += '<span>' + kids.length + (kids.length === 1 ? ' assertion' : ' assertions') + ' — swipe up</span>';
                 html += '</div>';
                 html += '</div>';
             }
@@ -2546,11 +2773,155 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             }
         }
 
+        // ===== Mobile assertion sheet + content reader =====
+        // Swiping up a card (or tapping its handle) raises a bottom sheet listing
+        // that spec's assertions; tapping a row opens the assertion's markdown,
+        // rendered with the same marked+DOMPurify pipeline as the desktop panel.
+        // All pointer-based, so a desktop browser at the mobile breakpoint drives
+        // it with the mouse exactly as a touch device does with a finger.
+        function initializeMobileSheet() {
+            var deckEl = document.getElementById('card-deck');
+            var overlayEl = document.getElementById('assertion-sheet-overlay');
+            var sheetEl = document.getElementById('assertion-sheet');
+            var sheetTitleEl = document.getElementById('assertion-sheet-title');
+            var sheetListEl = document.getElementById('assertion-sheet-list');
+            var grabberEl = document.getElementById('assertion-sheet-grabber');
+            var contentViewEl = document.getElementById('assertion-content-view');
+            var contentBodyEl = document.getElementById('assertion-content-body');
+            var contentHeadingEl = document.getElementById('assertion-content-heading');
+            var backBtn = document.getElementById('assertion-content-back');
+            if (!deckEl || !sheetEl) return;
+
+            // A deliberate gesture must clear this many px before it counts as a
+            // swipe; anything shorter is treated as a tap.
+            var SWIPE_THRESHOLD = 30;
+            // Drag the open sheet down past this to dismiss it.
+            var DISMISS_THRESHOLD = 80;
+
+            function openSheet(specId) {
+                var spec = specById[specId];
+                if (!spec) return;
+                sheetTitleEl.textContent = spec.title;
+
+                var kids = assertionsByParent[specId] || [];
+                var html = '';
+                for (var i = 0; i < kids.length; i++) {
+                    var a = kids[i];
+                    if (crossBranchMode && !cbAssertionVisible(a)) continue;
+                    html += '<div class="sheet-assertion-row" data-action="open-assertion" data-assertion-id="' + escapeHtml(a.id) + '">';
+                    html += '<span class="priority-badge priority-' + a.priority + '">' + (a.priority || '–') + '</span>';
+                    html += '<span class="status-badge status-' + escapeHtml(statusClass(a.status)) + '"></span>';
+                    html += '<span>' + statusEmoji(a.status) + '</span>';
+                    html += '<span class="sheet-assertion-title">' + escapeHtml(a.title) + '</span>';
+                    html += '</div>';
+                }
+                if (!html) {
+                    html = '<div class="assertion-sheet-empty">No assertions</div>';
+                }
+                sheetListEl.innerHTML = html;
+
+                sheetEl.style.transform = '';
+                sheetEl.classList.add('open');
+                overlayEl.classList.add('open');
+            }
+
+            function closeSheet() {
+                sheetEl.classList.remove('open');
+                overlayEl.classList.remove('open');
+                sheetEl.style.transform = '';
+            }
+
+            function openAssertion(assertionId) {
+                var a = assertionById[assertionId];
+                if (!a) return;
+                contentHeadingEl.textContent = a.title;
+                // Same renderer as the desktop detail panel.
+                try {
+                    contentBodyEl.innerHTML = '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(a.content || '')) + '</div>';
+                } catch (e) {
+                    contentBodyEl.innerHTML = '<div class="detail-body markdown-body">' + escapeHtml(a.content || '') + '</div>';
+                }
+                contentBodyEl.scrollTop = 0;
+                contentViewEl.classList.add('open');
+            }
+
+            function closeAssertion() {
+                // Return to the sheet, which stays open underneath.
+                contentViewEl.classList.remove('open');
+            }
+
+            // --- Click / tap wiring (mouse click, or touch without drag) ---
+            deckEl.addEventListener('click', function(e) {
+                var handle = e.target.closest('[data-action="open-sheet"]');
+                if (handle) openSheet(handle.getAttribute('data-spec-id'));
+            });
+            sheetListEl.addEventListener('click', function(e) {
+                var row = e.target.closest('[data-action="open-assertion"]');
+                if (row) openAssertion(row.getAttribute('data-assertion-id'));
+            });
+            overlayEl.addEventListener('click', closeSheet);
+            backBtn.addEventListener('click', closeAssertion);
+
+            // --- Swipe up on a card handle to raise the sheet ---
+            // touch-action:none on the handle means we own its pointer stream, so
+            // this never fights the deck's vertical scroll-snap.
+            var handleDrag = null;
+            deckEl.addEventListener('pointerdown', function(e) {
+                var handle = e.target.closest('[data-action="open-sheet"]');
+                if (!handle) return;
+                handleDrag = { id: e.pointerId, specId: handle.getAttribute('data-spec-id'), startY: e.clientY, startX: e.clientX, el: handle };
+                try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+            });
+            deckEl.addEventListener('pointerup', function(e) {
+                if (!handleDrag || e.pointerId !== handleDrag.id) return;
+                var dy = handleDrag.startY - e.clientY;      // positive = upward
+                var dx = Math.abs(e.clientX - handleDrag.startX);
+                var specId = handleDrag.specId;
+                handleDrag = null;
+                // Swipe up past the threshold, or a near-stationary tap.
+                if (dy >= SWIPE_THRESHOLD || (Math.abs(dy) < 10 && dx < 10)) {
+                    openSheet(specId);
+                }
+            });
+            deckEl.addEventListener('pointercancel', function() { handleDrag = null; });
+
+            // --- Drag the sheet down (from its grabber) to dismiss ---
+            var sheetDrag = null;
+            grabberEl.addEventListener('pointerdown', function(e) {
+                sheetDrag = { id: e.pointerId, startY: e.clientY };
+                sheetEl.classList.add('no-transition');
+                try { grabberEl.setPointerCapture(e.pointerId); } catch (err) {}
+            });
+            grabberEl.addEventListener('pointermove', function(e) {
+                if (!sheetDrag || e.pointerId !== sheetDrag.id) return;
+                var dy = e.clientY - sheetDrag.startY;       // positive = downward
+                if (dy > 0) sheetEl.style.transform = 'translateY(' + dy + 'px)';
+            });
+            function endSheetDrag(e) {
+                if (!sheetDrag || e.pointerId !== sheetDrag.id) return;
+                var dy = e.clientY - sheetDrag.startY;
+                sheetDrag = null;
+                sheetEl.classList.remove('no-transition');
+                if (dy >= DISMISS_THRESHOLD) {
+                    closeSheet();
+                } else {
+                    sheetEl.style.transform = '';           // snap back open
+                }
+            }
+            grabberEl.addEventListener('pointerup', endSheetDrag);
+            grabberEl.addEventListener('pointercancel', function() {
+                sheetDrag = null;
+                sheetEl.classList.remove('no-transition');
+                sheetEl.style.transform = '';
+            });
+        }
+
         // Initialize everything
         initializeCompletedSpecsToggle();
         initializeMetroMapCollapse();
         initializeSearch();
         initializeBranchFilter();
+        initializeMobileSheet();
 
     })();
     </script>

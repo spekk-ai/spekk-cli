@@ -3,15 +3,16 @@ id: swipe-up-reveals-assertions
 parent: show-mobile-cards
 created: 2026-09-07T18:00:00Z
 priority: 1
-status: in_progress
+status: done
 depends-on: spec-cards-fill-viewport
 branch: feature/show-mobile-cards
-locked-by: builder-MacBook-Pro.local-99726-1788830698
 ---
 
 # Swiping up a card reveals its assertions; tapping one opens its content
 
 A card's assertions live in a sheet that rises from the bottom on an upward gesture. From the sheet, an assertion opens its rendered markdown.
+
+**Tests:** internal/show/show_test.go (`TestTemplateAssertionSheet`)
 
 ## Success Criteria
 

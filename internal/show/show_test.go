@@ -161,6 +161,45 @@ func TestTemplateCardDeckFillsViewport(t *testing.T) {
 	}
 }
 
+// TestTemplateAssertionSheet guards the swipe-up sheet + assertion reader: the
+// mobile-only sheet, its overlay, and the content view exist; the sheet is
+// reachable via a pointer gesture (so a desktop mouse at the breakpoint drives
+// it too); and the assertion body reuses the desktop marked+DOMPurify renderer.
+// String-level checks mirror the sibling mobile tests (the sheet is built in
+// template JS that Go can't execute).
+func TestTemplateAssertionSheet(t *testing.T) {
+	// The three mobile surfaces must exist in the one embedded template.
+	for _, id := range []string{`id="assertion-sheet"`, `id="assertion-sheet-overlay"`, `id="assertion-content-view"`} {
+		if !strings.Contains(templateHTML, id) {
+			t.Errorf("template must contain the mobile element %s", id)
+		}
+	}
+
+	// They default to display:none so the desktop layout is untouched at >768px.
+	if !strings.Contains(templateHTML, ".assertion-content-view {\n            display: none;\n        }") {
+		t.Error("assertion sheet/overlay/content-view must default to display:none (desktop unchanged)")
+	}
+
+	// The interaction is pointer-driven (unifies touch + mouse), so it is
+	// exercisable in a desktop browser sized to the mobile breakpoint.
+	if !strings.Contains(templateHTML, "pointerdown") || !strings.Contains(templateHTML, "pointerup") {
+		t.Error("sheet gestures must use pointer events so mouse and touch both drive them")
+	}
+
+	// A back control returns from the assertion content to the sheet.
+	if !strings.Contains(templateHTML, `id="assertion-content-back"`) {
+		t.Error("the assertion content view must have a back control")
+	}
+
+	// The assertion body must render through the same sanitized markdown pipeline
+	// the desktop panel uses. TestTemplateSanitizesMarkdown already asserts every
+	// marked.parse is wrapped in DOMPurify.sanitize; here we confirm the sheet's
+	// reader emits a detail-body via that pipeline.
+	if !strings.Contains(templateHTML, "DOMPurify.sanitize(marked.parse(a.content") {
+		t.Error("assertion content must be rendered with the desktop marked+DOMPurify renderer")
+	}
+}
+
 // git runs a raw git command in dir, failing the test on error. Used only to
 // build fixture repos for cross-branch tests.
 func git(t *testing.T, dir string, args ...string) string {
