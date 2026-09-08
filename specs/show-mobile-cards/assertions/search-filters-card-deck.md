@@ -20,4 +20,4 @@ Search stays available in the card layout from a bar that does not scroll away, 
 - Clearing the search restores the full deck
 - When no spec matches, the deck shows an explicit "no matches" state rather than a blank screen
 
-**Tests:** internal/show/show_test.go
+**Tests:** internal/show/show_test.go (`TestTemplateCardDeckSearch`)

@@ -20,7 +20,7 @@ The mobile view is browse-first: cards and their assertion sheets are the primar
 
 ## Assertions
 
-- `viewport-breakpoint-switches-layout` — media query swaps two-panel for card deck; desktop byte-identical
+- `viewport-breakpoint-switches-layout` — media query swaps two-panel for card deck; desktop rendering unchanged
 - `spec-cards-fill-viewport` — each spec is a full-viewport scroll-snapping card
 - `swipe-up-reveals-assertions` — swipe up raises the assertion sheet; tap opens assertion markdown
 - `search-filters-card-deck` — search box in a sticky bar filters which cards appear

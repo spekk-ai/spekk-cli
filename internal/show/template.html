@@ -1124,16 +1124,22 @@
                 font-size: 15px;
             }
 
+            /* The hidden attribute must win over display:flex above. */
+            .deck-empty[hidden] {
+                display: none;
+            }
+
             .spec-card {
                 /* Each spec is one card that fills the viewport. */
                 height: 100dvh;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
-                justify-content: center;
+                justify-content: flex-start;
                 padding: 20px;
                 border-bottom: 1px solid #e2e8f0;
                 background: white;
+                position: relative;
                 /* Snap this card's top to the deck top; stop on every card so a
                    swipe never skips past one. */
                 scroll-snap-align: start;
@@ -1162,11 +1168,6 @@
                the bottom as the swipe-up affordance. touch-action:none on the
                handle hands its pointer stream entirely to our gesture code, so a
                swipe there raises the sheet instead of scroll-snapping the deck. */
-            .spec-card {
-                justify-content: flex-start;
-                position: relative;
-            }
-
             .spec-card-body {
                 flex: 1;
                 display: flex;
@@ -1224,7 +1225,6 @@
                 max-height: 85dvh;
                 background: white;
                 border-radius: 16px 16px 0 0;
-                box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
                 transform: translateY(100%);
                 transition: transform 0.28s ease;
                 z-index: 45;
@@ -1233,6 +1233,7 @@
 
             .assertion-sheet.open {
                 transform: translateY(0);
+                box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
             }
 
             .assertion-sheet.no-transition {
@@ -2989,11 +2990,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                 contentViewEl.classList.remove('open');
             }
 
-            // --- Click / tap wiring (mouse click, or touch without drag) ---
-            deckEl.addEventListener('click', function(e) {
-                var handle = e.target.closest('[data-action="open-sheet"]');
-                if (handle) openSheet(handle.getAttribute('data-spec-id'));
-            });
+            // --- Tap wiring for the sheet list, the overlay, and the back button ---
             sheetListEl.addEventListener('click', function(e) {
                 var row = e.target.closest('[data-action="open-assertion"]');
                 if (row) openAssertion(row.getAttribute('data-assertion-id'));
@@ -3004,6 +3001,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             // --- Swipe up on a card handle to raise the sheet ---
             // touch-action:none on the handle means we own its pointer stream, so
             // this never fights the deck's vertical scroll-snap.
+            // A near-stationary release counts as a tap, so no click handler is needed.
             var handleDrag = null;
             deckEl.addEventListener('pointerdown', function(e) {
                 var handle = e.target.closest('[data-action="open-sheet"]');

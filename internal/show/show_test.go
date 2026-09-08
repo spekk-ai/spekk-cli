@@ -245,6 +245,9 @@ func TestTemplateDeckFilters(t *testing.T) {
 	if !strings.Contains(templateHTML, "emptyEl.hidden = anyVisible") {
 		t.Error("the no-matches surface must show exactly when no card survives the filters")
 	}
+	if !strings.Contains(templateHTML, ".deck-empty[hidden]") {
+		t.Error("the no-matches surface must honor its hidden attribute (.deck-empty[hidden] rule)")
+	}
 }
 
 // TestTemplateCardDeckSearch guards mobile-deck search: a search bar that stays
