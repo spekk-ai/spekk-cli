@@ -247,6 +247,59 @@ func TestTemplateDeckFilters(t *testing.T) {
 	}
 }
 
+// TestTemplateCardDeckSearch guards mobile-deck search: a search bar that stays
+// fixed in view while cards scroll, drives the deck through the same match path as
+// the desktop tree, and surfaces an assertion-only match in the card's sheet.
+// String-level checks mirror the sibling mobile tests (the deck is built in
+// template JS Go can't execute).
+func TestTemplateCardDeckSearch(t *testing.T) {
+	// A mobile search input exists (the desktop #spec-search sits inside the
+	// display:none .container at ≤768px, so the deck needs its own bar).
+	if !strings.Contains(templateHTML, `id="card-search"`) {
+		t.Error("template must contain a mobile deck search input (#card-search)")
+	}
+
+	// The bar is fixed to the viewport top inside the ≤768px media query, so it
+	// stays in view while the deck scrolls under it.
+	mq := "@media (max-width: 768px)"
+	block := templateHTML[strings.Index(templateHTML, mq):]
+	if end := strings.Index(block, "</style>"); end != -1 {
+		block = block[:end]
+	}
+	barIdx := strings.Index(block, ".card-search-bar {")
+	if barIdx == -1 {
+		t.Fatal("≤768px media query must style the .card-search-bar")
+	}
+	barRule := block[barIdx:]
+	barRule = barRule[:strings.Index(barRule, "}")]
+	if !strings.Contains(barRule, "position: fixed") {
+		t.Error("the mobile search bar must be position:fixed so it stays in view while cards scroll")
+	}
+
+	// Typing in the deck bar mirrors into #spec-search and re-fires its input, so
+	// the deck and tree run one match path — and the initializer is wired up.
+	for _, needle := range []string{
+		"function initializeCardSearch()",
+		"specSearch.value = cardSearch.value",
+		"specSearch.dispatchEvent(new Event('input'))",
+		"initializeCardSearch();",
+	} {
+		if !strings.Contains(templateHTML, needle) {
+			t.Errorf("card search must reuse the desktop search path (missing %q)", needle)
+		}
+	}
+
+	// A spec matched only through an assertion still shows as a card, and that
+	// assertion is surfaced in the sheet: matching rows are tinted and floated to
+	// the top (matched rows emitted before the rest).
+	if !strings.Contains(templateHTML, "sheet-assertion-match") {
+		t.Error("openSheet must tag matching assertion rows so they are surfaced")
+	}
+	if !strings.Contains(templateHTML, "var html = matched + rest;") {
+		t.Error("openSheet must float matching assertion rows to the top of the sheet")
+	}
+}
+
 // git runs a raw git command in dir, failing the test on error. Used only to
 // build fixture repos for cross-branch tests.
 func git(t *testing.T, dir string, args ...string) string {

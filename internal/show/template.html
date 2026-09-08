@@ -1051,6 +1051,13 @@
             display: none;
         }
 
+        /* The mobile search bar rides above the deck; hidden on desktop, where the
+           tree-panel search box serves the same role. The ≤768px media query below
+           fixes it to the top of the viewport so it never scrolls away with cards. */
+        .card-search-bar {
+            display: none;
+        }
+
         /* The assertion sheet, its overlay, and the assertion content view are
            mobile-only surfaces. They stay display:none on desktop so the
            two-panel layout is untouched at >768px; the ≤768px media query below
@@ -1076,6 +1083,27 @@
                 /* Vertical scroll-snap so exactly one card comes to rest in view
                    at a time as the deck is swiped. */
                 scroll-snap-type: y mandatory;
+            }
+
+            /* Search bar pinned to the top of the viewport: position:fixed keeps it
+               in view while the deck scrolls under it, so search is always reachable
+               no matter how far down the deck a swipe has travelled. z-index sits
+               below the sheet (45) and overlay (40) so an open sheet covers it. */
+            .card-search-bar {
+                display: block;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 30;
+                padding: 10px 12px;
+                background: rgba(248, 250, 252, 0.96);
+                backdrop-filter: blur(6px);
+                border-bottom: 1px solid #e2e8f0;
+            }
+
+            .card-search-bar .search-container {
+                margin-top: 0;
             }
 
             /* A card the active filters/search exclude drops out of the deck
@@ -1259,6 +1287,13 @@
                 border-left-color: #3b82f6;
             }
 
+            /* An assertion the active search matched: floated to the top of the
+               sheet (see openSheet) and tinted so it stands out from the rest. */
+            .sheet-assertion-row.sheet-assertion-match {
+                background: #fef9c3;
+                border-left-color: #eab308;
+            }
+
             .sheet-assertion-row .sheet-assertion-title {
                 flex: 1;
                 font-size: 14px;
@@ -1370,6 +1405,16 @@
                     <p>Click on any spec or assertion to view details</p>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Mobile search bar: fixed to the top of the viewport at ≤768px so search
+         stays reachable while the deck scrolls. Its input mirrors into #spec-search
+         so the deck and tree share one match path (see initializeCardSearch). -->
+    <div class="card-search-bar" id="card-search-bar">
+        <div class="search-container">
+            <span class="search-icon">&#128269;</span>
+            <input type="text" id="card-search" placeholder="Search specs..." autocomplete="off">
         </div>
     </div>
 
@@ -2500,6 +2545,20 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             searchInput.addEventListener('input', applyDeckFilters);
         }
 
+        // Wire the mobile search bar to the desktop search box. Typing in the deck's
+        // fixed bar mirrors the query into #spec-search and re-fires its input event,
+        // so the deck and tree run the exact same match logic (applyDeckFilters plus
+        // the tree filter both listen there) — clearing it restores the full deck.
+        function initializeCardSearch() {
+            var cardSearch = document.getElementById('card-search');
+            var specSearch = document.getElementById('spec-search');
+            if (!cardSearch || !specSearch) return;
+            cardSearch.addEventListener('input', function() {
+                specSearch.value = cardSearch.value;
+                specSearch.dispatchEvent(new Event('input'));
+            });
+        }
+
         // Initialize metro map collapse
         function initializeMetroMapCollapse() {
             var metroMapSection = document.getElementById('metro-map-section');
@@ -2873,17 +2932,28 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                 sheetTitleEl.textContent = spec.title;
 
                 var kids = assertionsByParent[specId] || [];
-                var html = '';
+                // A spec can appear in the deck because one of its assertions matched
+                // the search (its card's data-search-text folds in assertion fields).
+                // Surface those matches: rows the active query hits are tinted and
+                // floated to the top, using the same fields the tree/deck match on.
+                var specSearch = document.getElementById('spec-search');
+                var query = specSearch ? specSearch.value.trim().toLowerCase() : '';
+                var matched = '';
+                var rest = '';
                 for (var i = 0; i < kids.length; i++) {
                     var a = kids[i];
                     if (crossBranchMode && !cbAssertionVisible(a)) continue;
-                    html += '<div class="sheet-assertion-row" data-action="open-assertion" data-assertion-id="' + escapeHtml(a.id) + '">';
-                    html += '<span class="priority-badge priority-' + a.priority + '">' + (a.priority || '–') + '</span>';
-                    html += '<span class="status-badge status-' + escapeHtml(statusClass(a.status)) + '"></span>';
-                    html += '<span>' + statusEmoji(a.status) + '</span>';
-                    html += '<span class="sheet-assertion-title">' + escapeHtml(a.title) + '</span>';
-                    html += '</div>';
+                    var isMatch = !!query &&
+                        (a.id + ' ' + a.title.toLowerCase() + ' ' + a.status + ' ' + a.priority).indexOf(query) !== -1;
+                    var row = '<div class="sheet-assertion-row' + (isMatch ? ' sheet-assertion-match' : '') + '" data-action="open-assertion" data-assertion-id="' + escapeHtml(a.id) + '">';
+                    row += '<span class="priority-badge priority-' + a.priority + '">' + (a.priority || '–') + '</span>';
+                    row += '<span class="status-badge status-' + escapeHtml(statusClass(a.status)) + '"></span>';
+                    row += '<span>' + statusEmoji(a.status) + '</span>';
+                    row += '<span class="sheet-assertion-title">' + escapeHtml(a.title) + '</span>';
+                    row += '</div>';
+                    if (isMatch) { matched += row; } else { rest += row; }
                 }
+                var html = matched + rest;
                 if (!html) {
                     html = '<div class="assertion-sheet-empty">No assertions</div>';
                 }
@@ -2989,6 +3059,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
         initializeCompletedSpecsToggle();
         initializeMetroMapCollapse();
         initializeSearch();
+        initializeCardSearch();
         initializeBranchFilter();
         initializeMobileSheet();
 
