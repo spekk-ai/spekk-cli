@@ -1041,6 +1041,48 @@
         .spec-item.search-match {
             display: block !important;
         }
+
+        /* ===== Mobile card deck ===== */
+        /* The deck is hidden on desktop; the ≤768px media query below swaps it in
+           for the two-panel .container. Both layouts live in the same DOM — only
+           their visibility differs by viewport width, so resizing or rotating
+           across the breakpoint re-lays-out live with no reload. */
+        .card-deck {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                display: none;
+            }
+
+            .card-deck {
+                display: block;
+                height: 100vh;
+                overflow-y: auto;
+                background: #f8fafc;
+            }
+
+            .spec-card {
+                padding: 20px;
+                border-bottom: 1px solid #e2e8f0;
+                background: white;
+            }
+
+            .spec-card-title {
+                font-size: 18px;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }
+
+            .spec-card-meta {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 13px;
+                color: #64748b;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1091,6 +1133,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Mobile card deck: shown in place of .container at ≤768px (see media query). -->
+    <div class="card-deck" id="card-deck"></div>
 
     <script>/* marked@15.0.12 inline *//**
  * marked v15.0.12 - a markdown parser
@@ -1490,6 +1535,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
 
             buildTree();
             buildDetailPanels();
+            buildCardDeck();
             markCompletedSpecs();
             updateHiddenCount();
 
@@ -1960,9 +2006,31 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             metroMapSection.style.display = 'none';
         }
 
+        // Build the mobile card deck: one card per spec, sharing the same `specs`
+        // data as the tree. Only visible at ≤768px (CSS), but populated always so
+        // resizing across the breakpoint needs no re-run of `spekk show`.
+        function buildCardDeck() {
+            var deckEl = document.getElementById('card-deck');
+            var html = '';
+            for (var si = 0; si < specs.length; si++) {
+                var spec = specs[si];
+                if (crossBranchMode && !cbSpecVisible(spec)) continue;
+                html += '<div class="spec-card" data-spec-id="' + escapeHtml(spec.id) + '">';
+                html += '<div class="spec-card-title">' + escapeHtml(spec.title) + '</div>';
+                html += '<div class="spec-card-meta">';
+                html += '<span class="priority-badge priority-' + spec.priority + '">' + (spec.priority || '–') + '</span>';
+                html += '<span class="status-badge status-' + escapeHtml(statusClass(spec.status)) + '"></span>';
+                html += '<span>' + statusEmoji(spec.status) + '</span>';
+                html += '</div>';
+                html += '</div>';
+            }
+            deckEl.innerHTML = html;
+        }
+
         // Initialize the UI
         buildTree();
         buildDetailPanels();
+        buildCardDeck();
 
         // Mark completed specs
         function markCompletedSpecs() {

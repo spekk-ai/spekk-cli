@@ -99,6 +99,38 @@ func TestTemplateSanitizesMarkdown(t *testing.T) {
 	}
 }
 
+// TestTemplateMobileBreakpoint guards the ≤768px media-query swap: a single
+// generated file carries both layouts, the card deck is hidden by default
+// (desktop unchanged), and the media query flips .container off and .card-deck on.
+func TestTemplateMobileBreakpoint(t *testing.T) {
+	// Both layouts live in the one embedded template — no separate mobile artifact.
+	if !strings.Contains(templateHTML, `id="card-deck"`) {
+		t.Error("template must contain the mobile card-deck container")
+	}
+
+	// The deck defaults to hidden so the desktop two-panel layout is untouched at >768px.
+	if !strings.Contains(templateHTML, ".card-deck {\n            display: none;\n        }") {
+		t.Error("card-deck must default to display:none (desktop layout unchanged)")
+	}
+
+	// The switch is a max-width:768px media query that hides .container and shows the deck.
+	mq := "@media (max-width: 768px)"
+	idx := strings.Index(templateHTML, mq)
+	if idx == -1 {
+		t.Fatal("template must switch layouts via an @media (max-width: 768px) query")
+	}
+	block := templateHTML[idx:]
+	if end := strings.Index(block, "</style>"); end != -1 {
+		block = block[:end]
+	}
+	if !strings.Contains(block, ".container {\n                display: none;") {
+		t.Error("≤768px media query must hide the two-panel .container")
+	}
+	if !strings.Contains(block, ".card-deck {\n                display: block;") {
+		t.Error("≤768px media query must display the card deck")
+	}
+}
+
 // git runs a raw git command in dir, failing the test on error. Used only to
 // build fixture repos for cross-branch tests.
 func git(t *testing.T, dir string, args ...string) string {
