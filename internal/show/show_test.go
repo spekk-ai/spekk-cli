@@ -200,6 +200,53 @@ func TestTemplateAssertionSheet(t *testing.T) {
 	}
 }
 
+// TestTemplateDeckFilters guards that the hide-completed toggle and branch
+// filter apply to the card deck and compose with search: cards carry the fields
+// search matches on, applyDeckFilters gates each card on both search and the
+// toggle, done specs are marked completed, and an explicit no-matches surface
+// stands in when everything is filtered out. String-level checks mirror the
+// sibling mobile tests (the deck is built in template JS Go can't execute).
+func TestTemplateDeckFilters(t *testing.T) {
+	// Cards carry a data-search-text the deck filter matches against, so search
+	// narrows the deck the same way it narrows the desktop tree.
+	if !strings.Contains(templateHTML, `data-search-text="' + escapeHtml(searchText) + '"`) {
+		t.Error("each spec card must carry a data-search-text for the deck search to match")
+	}
+
+	// A done spec's card is tagged completed so the hide-completed toggle can drop it.
+	if !strings.Contains(templateHTML, "spec.status === 'done' ? ' completed' : ''") {
+		t.Error("a card for a done spec must be marked completed for the hide-completed toggle")
+	}
+
+	// The single filter pass gates a card on BOTH the search query and the toggle,
+	// so the two compose — a card shows only when it satisfies every active filter.
+	for _, needle := range []string{
+		"function applyDeckFilters()",
+		"matchesSearch && !completedHidden",
+	} {
+		if !strings.Contains(templateHTML, needle) {
+			t.Errorf("deck filter must compose search and the hide-completed toggle (missing %q)", needle)
+		}
+	}
+
+	// Both the search box and the toggle re-run the composed deck filter.
+	if strings.Count(templateHTML, "applyDeckFilters()") < 3 {
+		t.Error("search, the hide-completed toggle, and the branch-filter rebuild must all re-run applyDeckFilters")
+	}
+	if !strings.Contains(templateHTML, "searchInput.addEventListener('input', applyDeckFilters)") {
+		t.Error("the search box must drive the deck filter")
+	}
+
+	// When active filters plus search leave no cards, an explicit no-matches
+	// surface replaces the deck (toggled via its hidden attribute), never a blank.
+	if !strings.Contains(templateHTML, `id="deck-empty"`) {
+		t.Error("the deck must have an explicit no-matches surface")
+	}
+	if !strings.Contains(templateHTML, "emptyEl.hidden = anyVisible") {
+		t.Error("the no-matches surface must show exactly when no card survives the filters")
+	}
+}
+
 // git runs a raw git command in dir, failing the test on error. Used only to
 // build fixture repos for cross-branch tests.
 func git(t *testing.T, dir string, args ...string) string {

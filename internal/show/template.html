@@ -1078,6 +1078,24 @@
                 scroll-snap-type: y mandatory;
             }
 
+            /* A card the active filters/search exclude drops out of the deck
+               entirely (higher specificity than the .spec-card rule below, so it
+               wins without !important). */
+            .spec-card.deck-hidden {
+                display: none;
+            }
+
+            /* Shown only when every card is filtered out — the same explicit
+               "no matches" surface an empty search would show, never a blank deck. */
+            .deck-empty {
+                height: 100dvh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #94a3b8;
+                font-size: 15px;
+            }
+
             .spec-card {
                 /* Each spec is one card that fills the viewport. */
                 height: 100dvh;
@@ -2258,11 +2276,19 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                 // the same children the tree nests under this spec.
                 var kids = assertionsByParent[spec.id] || [];
                 var doneCount = 0;
+                // Combined search text so a card matches on its own fields or on
+                // any of its assertions' — the same fields (id/title/status/
+                // priority) the desktop tree indexes, so deck search matches it.
+                var searchText = spec.id + ' ' + spec.title.toLowerCase() + ' ' + spec.status + ' ' + spec.priority;
                 for (var ai = 0; ai < kids.length; ai++) {
                     if (kids[ai].status === 'done') doneCount++;
+                    searchText += ' ' + kids[ai].id + ' ' + kids[ai].title.toLowerCase() + ' ' + kids[ai].status + ' ' + kids[ai].priority;
                 }
 
-                html += '<div class="spec-card" data-spec-id="' + escapeHtml(spec.id) + '">';
+                // A card is "completed" when the spec's own status is done — the
+                // same signal the desktop tree's hide-completed toggle keys off.
+                var completedClass = spec.status === 'done' ? ' completed' : '';
+                html += '<div class="spec-card' + completedClass + '" data-spec-id="' + escapeHtml(spec.id) + '" data-search-text="' + escapeHtml(searchText) + '">';
                 html += '<div class="spec-card-body">';
                 html += '<div class="spec-card-title">' + escapeHtml(spec.title) + '</div>';
                 html += '<div class="spec-card-meta">';
@@ -2282,7 +2308,42 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                 html += '</div>';
                 html += '</div>';
             }
+            // Always emit the no-matches surface (hidden until every card is
+            // filtered out); it lives inside the deck so a rebuild keeps it.
+            html += '<div class="deck-empty" id="deck-empty" hidden>No matches</div>';
             deckEl.innerHTML = html;
+            applyDeckFilters();
+        }
+
+        // Apply the live filters to the mobile card deck. Search (the same box the
+        // desktop tree uses) and the hide-completed toggle compose: a card shows
+        // only when it satisfies every active filter at once. The branch filter is
+        // applied when the deck is rebuilt (cbApplyBranchSelection), so cards for
+        // fully-deselected specs never render here. When nothing survives, the
+        // no-matches surface replaces the deck rather than leaving it blank.
+        function applyDeckFilters() {
+            var deckEl = document.getElementById('card-deck');
+            if (!deckEl) return;
+            var searchInput = document.getElementById('spec-search');
+            var query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+            var toggle = document.getElementById('toggle-completed-specs');
+            var showCompleted = toggle ? toggle.checked : true;
+
+            var cards = deckEl.querySelectorAll('.spec-card');
+            var anyVisible = false;
+            for (var i = 0; i < cards.length; i++) {
+                var card = cards[i];
+                var matchesSearch = !query || (card.getAttribute('data-search-text') || '').indexOf(query) !== -1;
+                var completedHidden = !showCompleted && card.classList.contains('completed');
+                if (matchesSearch && !completedHidden) {
+                    card.classList.remove('deck-hidden');
+                    anyVisible = true;
+                } else {
+                    card.classList.add('deck-hidden');
+                }
+            }
+            var emptyEl = document.getElementById('deck-empty');
+            if (emptyEl) emptyEl.hidden = anyVisible;
         }
 
         // Initialize the UI
@@ -2317,6 +2378,8 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             }
 
             updateHiddenCount();
+            // Reflect the restored toggle state onto the deck at load.
+            applyDeckFilters();
 
             toggleCheckbox.addEventListener('change', function() {
                 var isChecked = this.checked;
@@ -2329,6 +2392,8 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                 }
 
                 updateHiddenCount();
+                // The toggle drives the deck too, composing with any active search.
+                applyDeckFilters();
             });
         }
 
@@ -2429,6 +2494,10 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                     }
                 }
             });
+
+            // The card deck reacts to the same search box, composing with the
+            // hide-completed toggle in applyDeckFilters.
+            searchInput.addEventListener('input', applyDeckFilters);
         }
 
         // Initialize metro map collapse
