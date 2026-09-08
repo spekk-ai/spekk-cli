@@ -3,9 +3,10 @@ id: swipe-up-reveals-assertions
 parent: show-mobile-cards
 created: 2026-09-07T18:00:00Z
 priority: 1
-status: not_started
+status: in_progress
 depends-on: spec-cards-fill-viewport
 branch: feature/show-mobile-cards
+locked-by: builder-MacBook-Pro.local-99726-1788830698
 ---
 
 # Swiping up a card reveals its assertions; tapping one opens its content
