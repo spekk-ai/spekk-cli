@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.29.0 -- The Spec Explorer on a Phone, and Two New Skills](RELEASE-NOTES-1.29.0.md)
+
+`spekk show` had one layout, and a phone got the desktop one. At 768 pixels wide or less the page now shows each spec as a full-screen card in a snapping deck, a swipe up raises that spec's assertions, and search and the filters apply to the deck. Two built-in skills join it: `spekk coach property-tests` decides whether a promise deserves a property-based test and writes it, and `spekk builder review` reviews what the builder just built through six lenses and fixes what it finds. The docs and the README were read against the code and corrected.
+
 ## [1.28.0 -- A Slow cloud-init No Longer Costs You the Droplet](RELEASE-NOTES-1.28.0.md)
 
 `spekk sandbox create` waited a fixed ten minutes for cloud-init, and a slow apt upgrade could take eighteen. When it gave up, the droplet kept running and the record stayed at `provisioning`, with no command to finish it. The wait is now `--provision-timeout` (default 30 minutes), it prints progress once a minute, and it stops early when cloud-init reports an error. `spekk sandbox provision <name>` finishes a sandbox the wait left behind.
