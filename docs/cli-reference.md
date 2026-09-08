@@ -278,7 +278,7 @@ spekk query "SELECT f.value AS workflow, COUNT(*) AS total, SUM(a.status = 'done
 
 Open the spec explorer, a web page that shows the spec tree.
 
-On a screen that is 768 pixels wide or less, the page shows each spec as a full-screen card. Swipe up on a card to see its assertions, and tap an assertion to read it.
+On a screen that is 768 pixels wide or less, the page shows each spec as a full-screen card in a deck that snaps one card into view at a time. Swipe up on a card to see its assertions, and tap an assertion to read it. The search box, the hide-completed toggle, and the branch filter apply to the deck. The cross-branch metro map is on the wide layout only.
 
 ```bash
 spekk show                                          # Write the page and open it
@@ -435,6 +435,7 @@ spekk coach meeting                  # Turn a meeting transcript into specs
 spekk coach meeting notes.txt        # The same, from a file
 spekk coach coordinate               # Plan dependencies and branches
 spekk coach validate                 # Assess a business idea
+spekk coach property-tests           # Write a property-based test for a promise
 ```
 
 The coach needs the `claude` command on your `PATH`. The first positional argument names a skill. `spekk coach --help` lists the skills it can find. See [Skills](coach-skills.md) for what each built-in skill does and how to add your own.
