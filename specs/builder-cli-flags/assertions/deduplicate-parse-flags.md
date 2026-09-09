@@ -17,6 +17,7 @@ CLI commands use `internal/cli.ParseFlags` to recognize flag names and values. C
 - Builder and parser commands use the shared argument parser.
 - Parsed results report the count for each recognized flag, including aliases and occurrences with missing values.
 - Parsed results report unknown arguments and missing or empty string values. A later valid occurrence cannot hide an earlier missing value.
+- A repeated string flag is an argument error, whether it repeats under one name or an alias, because the result holds one value for each flag and a repeat would discard a value the caller typed. A repeated boolean flag discards nothing and stays valid. The parser owns this rule, so no command re-states it.
 - Negative numeric values reach command-specific value validation.
 - `spekk list` and `spekk observer install-cron` reject reported argument errors, including unsupported `--flag=value` syntax. Both use the shared parser without a separate argument scan.
 - Existing flag values and aliases retain their behavior for other commands.
