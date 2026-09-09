@@ -48,7 +48,7 @@ aws cloudformation wait stack-create-complete --stack-name my-sandbox
 
 `ssh-keygen -y` prints the public key of a private key file, so you do not need a separate `.pub` file for a key pair you downloaded from AWS.
 
-The stack reports `CREATE_COMPLETE` when the instance is running, not when cloud-init has finished. Cloud-init upgrades every package and installs Docker and Node.js, which takes about two minutes on a `t3.medium`. Wait for it before you register the machine:
+The stack reports `CREATE_COMPLETE` when the instance is running, not when cloud-init has finished. Cloud-init upgrades every package and installs Docker and Node.js, which takes several minutes and gets slower as the upgrade set grows. Do not count minutes: wait for the command below, which returns when cloud-init is done.
 
 ```bash
 ssh -i ~/.ssh/my-key.pem ubuntu@<PublicIP> cloud-init status --wait
