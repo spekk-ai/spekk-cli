@@ -19,6 +19,7 @@ Skills are markdown files resolved by the spekk CLI. Run `spekk skill list coach
 - **business-model-validator-skill** - Systematically assess startup/business ideas through structured questions and provide quantitative health scores
 - **meeting-notes-to-specs-skill** - Process meeting transcripts and extract todos, specs, and context updates
 - **coordinator-skill** - Analyze assertions and create dependency-aware work plan with branch assignments
+- **property-tests-skill** - Decide whether a promise in the specs deserves a property-based test, then write the test for the right layer and prove that the run reached the state it guards
 
 **To use a skill:**
 1. Load it with `spekk skill show coach <name>` (fallback if the spekk CLI is unavailable: read the file from `specs/coach-skills-system/` in the spekk-cli repo)

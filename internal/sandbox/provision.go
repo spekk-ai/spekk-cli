@@ -82,10 +82,16 @@ func checkProvisioned(meta *SandboxMeta, name string) error {
 		return nil
 	}
 	// runSSH returns "" for a failed connection as well as for a missing
-	// file, so name both rather than guess.
-	return fmt.Errorf("could not confirm %s on %s as %s: the machine is not provisioned, or the connection failed.\n"+
-		"spekk does not provision a machine it did not create. Prepare it first, then re-run this command",
-		provisionedMarker, meta.IP, user)
+	// file, so name both rather than guess. What to do about it depends on
+	// who provisions the machine: the operator, for one they brought; cloud-
+	// init, for one spekk created, which may still be running.
+	advice := "spekk does not provision a machine it did not create. Prepare it first, then re-run this command"
+	if meta.Provider != ProviderNone {
+		advice = fmt.Sprintf("cloud-init may still be running. Watch it with: spekk sandbox ssh %s tail -f %s\n"+
+			"Then re-run this command", name, cloudInitLog)
+	}
+	return fmt.Errorf("could not confirm %s on %s as %s: the machine is not provisioned, or the connection failed.\n%s",
+		provisionedMarker, meta.IP, user, advice)
 }
 
 // agentSecrets are the files spekk puts on a sandbox. On a machine that

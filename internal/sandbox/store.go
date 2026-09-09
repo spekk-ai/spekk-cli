@@ -37,6 +37,10 @@ type SandboxMeta struct {
 	SSHKeyPath string `json:"sshKeyPath,omitempty"`
 	// SSHUser is the login user for an existing machine; empty means root.
 	SSHUser string `json:"sshUser,omitempty"`
+	// Auth is the mode the sandbox authenticates Claude with, so `provision`
+	// can finish a record with the credential `create` chose for it. Empty
+	// means bedrock, the mode every record had before the field existed.
+	Auth string `json:"auth,omitempty"`
 }
 
 // sandboxesFile returns the path to the sandboxes metadata file.

@@ -56,6 +56,10 @@ Processes meeting transcripts and extracts actionable outcomes. Activated via `s
 
 See `specs/meeting-notes-to-specs/` for full spec.
 
+### Property Tests
+
+Decides whether a promise in the specs deserves a property-based test, applies a value gate before any code, studies the code through fixed lenses, and writes the property for the right layer, a browser explorer or a backend property library. Adapted from the Antithesis agent skills.
+
 ## Success Criteria
 
 - Coach automatically suggests skills when appropriate contexts arise
