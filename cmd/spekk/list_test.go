@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -95,6 +97,71 @@ func TestExecList_InvalidStatus(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "bogus") {
 		t.Errorf("expected stdout to contain 'bogus', got: %q", stdout.String())
+	}
+}
+
+func TestExecList_PriorityFilter(t *testing.T) {
+	specsDir := makeTmpSpecs(t)
+	for id, priority := range map[string]int{"done-high": 1, "done-medium": 2} {
+		content := fmt.Sprintf("---\nid: %s\nparent: my-spec\ncreated: 2026-01-01T00:00:00Z\npriority: %d\nstatus: done\n---\n# Example\n", id, priority)
+		if err := os.WriteFile(filepath.Join(specsDir, "my-spec", "assertions", id+".md"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, tc := range []struct {
+		name      string
+		args      []string
+		want      []string
+		emptyText string
+	}{
+		{"unfiltered", nil, []string{"done-high", "done-medium", "my-assertion"}, ""},
+		{"high-table", []string{"--priority", "1"}, []string{"done-high", "my-assertion"}, ""},
+		{"medium-tsv", []string{"--priority", "2", "--tsv"}, []string{"done-medium"}, ""},
+		{"combined-json", []string{"--priority", "1", "--status", "done", "--json"}, []string{"done-high"}, ""},
+		{"combined-csv", []string{"--priority", "1", "--status", "done", "--csv", "--assertions-only", "--long"}, []string{"done-high"}, ""},
+		{"zero-json", []string{"--priority", "0", "--json"}, nil, ""},
+		{"zero-table", []string{"--priority", "0"}, nil, "No assertions match the requested filters.\n"},
+		{"outside-range-tsv", []string{"--priority", "4", "--tsv"}, nil, "id\tstatus\tpri\tparent\ttitle\n"},
+		{"combined-empty-csv", []string{"--priority", "2", "--status", "not_started", "--csv"}, nil, "id,status,pri,parent,title\r\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := execList(tc.args, &stdout, &stderr, specsDir); code != 0 {
+				t.Fatalf("exit %d: %s", code, stderr.String())
+			}
+			for _, id := range []string{"done-high", "done-medium", "my-assertion"} {
+				if strings.Contains(stdout.String(), id) != slices.Contains(tc.want, id) {
+					t.Errorf("wrong selection for %s: %s", id, stdout.String())
+				}
+			}
+			if slices.Contains(tc.args, "--json") {
+				var result parser.AssertionsFlatOutput
+				if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.Assertions == nil || len(result.Assertions) != len(tc.want) {
+					t.Fatalf("invalid assertion list: %s (%v)", stdout.String(), err)
+				}
+			}
+			if tc.emptyText != "" && stdout.String() != tc.emptyText {
+				t.Fatalf("empty output = %q, want %q", stdout.String(), tc.emptyText)
+			}
+		})
+	}
+}
+
+func TestExecList_InvalidPriority(t *testing.T) {
+	for _, args := range [][]string{
+		{"--priority"}, {"--priority", "--json"},
+		{"--priority", "text"}, {"--priority", "-1"},
+		{"--priority", "999999999999999999999999999999"},
+		{"--priority", "1", "--cross-branch"},
+		{"--priority", "1", "--priority"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := execList(args, &stdout, &stderr, t.TempDir()); code == 0 || !strings.Contains(stderr.String(), "--priority") {
+				t.Fatalf("expected priority error, got exit %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+			}
+		})
 	}
 }
 

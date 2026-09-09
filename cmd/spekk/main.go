@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	spekk "github.com/spekk-ai/spekk-cli"
@@ -232,6 +233,7 @@ func runList(args []string) {
 func execList(args []string, stdout, stderr io.Writer, specsDir string) int {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"status":         {Names: []string{"--status"}, Type: cli.StringFlag},
+		"priority":       {Names: []string{"--priority"}, Type: cli.StringFlag},
 		"assertionsOnly": {Names: []string{"--assertions-only"}, Type: cli.BoolFlag},
 		"specsDir":       {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
 		"json":           {Names: []string{"--json"}, Type: cli.BoolFlag},
@@ -258,7 +260,8 @@ OUTPUT FORMAT (default: table):
 
 FILTER OPTIONS:
   --status <value>      Filter by assertion status. Valid values:
-                          not_started, in_progress, done, draft, failed
+                           not_started, in_progress, done, draft, failed
+  --priority <N>        Filter by priority (nonnegative integer); combines with --status
   --assertions-only     Accepted for backward compatibility (now a no-op; assertions are the default)
   --specs-dir <path>    Read specs from a specific directory (default: git root specs/)
   --help, -h            Show this help message
@@ -282,6 +285,7 @@ EXAMPLES:
   spekk list --csv
   spekk list --long
   spekk list --status draft
+  spekk list --status not_started --priority 1
   spekk list --status draft --tsv
   spekk list --assertions-only --csv
   spekk list --specs-dir /path/to/specs
@@ -300,6 +304,11 @@ EXAMPLES:
 	useCSV := flags.Bool("csv")
 	showFile := flags.Bool("long")
 	statusVal := flags.String("status")
+	priority, err := listPriority(args, flags)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", err)
+		return 1
+	}
 
 	// Reject mutually exclusive format flags.
 	formatCount := 0
@@ -314,6 +323,10 @@ EXAMPLES:
 	}
 
 	if flags.Bool("crossBranch") {
+		if priority != nil {
+			fmt.Fprintln(stderr, "Error: --priority does not apply to --cross-branch output")
+			return 1
+		}
 		if statusVal != "" {
 			fmt.Fprintln(stderr, "Error: --status does not apply to --cross-branch output")
 			return 1
@@ -368,6 +381,21 @@ EXAMPLES:
 		}
 		result = filtered
 	}
+	if priority != nil {
+		result = parser.FilterByPriority(result, *priority)
+	}
+
+	// JSON includes branch and dependency fields and follows the table order.
+	if useJSON && (len(result.Assertions) > 0 || priority != nil) {
+		out, err := parser.FormatAssertionsFlat(result)
+		if err != nil {
+			out2, _ := parser.FormatError(err.Error())
+			fmt.Fprintln(stdout, string(out2))
+			return 1
+		}
+		fmt.Fprintln(stdout, string(out))
+		return 0
+	}
 
 	// Handle empty results with format-aware output.
 	if len(result.Assertions) == 0 {
@@ -376,6 +404,8 @@ EXAMPLES:
 			fmt.Fprint(stdout, formatter.FormatTSVHeader(opts))
 		case useCSV:
 			fmt.Fprint(stdout, formatter.FormatCSVHeader(opts))
+		case priority != nil:
+			fmt.Fprintln(stdout, "No assertions match the requested filters.")
 		default:
 			var out []byte
 			if statusVal != "" {
@@ -385,20 +415,6 @@ EXAMPLES:
 			}
 			fmt.Fprintln(stdout, string(out))
 		}
-		return 0
-	}
-
-	// --json: flat assertion JSON, in the same order as the default table.
-	// The JSON is a superset: it also carries branch and depends_on, which the
-	// table, TSV, and CSV columns do not show.
-	if useJSON {
-		out, err := parser.FormatAssertionsFlat(result)
-		if err != nil {
-			out2, _ := parser.FormatError(err.Error())
-			fmt.Fprintln(stdout, string(out2))
-			return 1
-		}
-		fmt.Fprintln(stdout, string(out))
 		return 0
 	}
 
@@ -418,6 +434,22 @@ EXAMPLES:
 		fmt.Fprintln(stdout, formatter.FormatTable(rows, opts))
 	}
 	return 0
+}
+
+func listPriority(args []string, flags *cli.ParseResult) (*int, error) {
+	index := slices.Index(args, "--priority")
+	if index < 0 {
+		return nil, nil
+	}
+	if slices.Contains(args[index+1:], "--priority") {
+		return nil, fmt.Errorf("--priority must be supplied only once")
+	}
+	value := flags.String("priority")
+	priority, err := strconv.Atoi(value)
+	if err != nil || priority < 0 {
+		return nil, fmt.Errorf("--priority requires a nonnegative integer, got %q", value)
+	}
+	return &priority, nil
 }
 
 // execListCrossBranch renders the cross-branch classification — the same

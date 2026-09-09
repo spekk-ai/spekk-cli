@@ -13,7 +13,6 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
-	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -54,13 +53,10 @@ func SelectCandidates(rows []Candidate) []Candidate {
 	seen := map[string]bool{}
 	var out []Candidate
 	for _, c := range rows {
-		if c.OnMain || seen[c.Slug] {
+		if seen[c.Slug] || !observation.IsLiveClaim(c.Slug, c.Ref, c.OnMain) {
 			continue
 		}
 		if c.Severity != observation.SeverityHigh && c.Severity != observation.SeverityMedium {
-			continue
-		}
-		if !isObserverRef(c.Ref) {
 			continue
 		}
 		// Evidence gate, enforced in code even though parsing and indexing
@@ -82,20 +78,6 @@ func SelectCandidates(rows []Candidate) []Candidate {
 		return out[i].Slug < out[j].Slug
 	})
 	return out
-}
-
-// isObserverRef reports whether a fully-qualified ref names an observer/*
-// branch, local or remote-tracking.
-func isObserverRef(ref string) bool {
-	if rest, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
-		return strings.HasPrefix(rest, observation.BranchPrefix)
-	}
-	if rest, ok := strings.CutPrefix(ref, "refs/remotes/"); ok {
-		if i := strings.IndexByte(rest, '/'); i >= 0 {
-			return strings.HasPrefix(rest[i+1:], observation.BranchPrefix)
-		}
-	}
-	return false
 }
 
 // loadCandidates reads the unannounced open observations from the index at

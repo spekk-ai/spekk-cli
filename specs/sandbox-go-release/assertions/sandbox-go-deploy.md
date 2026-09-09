@@ -10,27 +10,21 @@ depends-on: sandbox-release-downloader
 
 # Sandbox Create and Deploy Share One Go Deploy Path
 
-Both `sandbox create` and `sandbox deploy` deploy the Go agent binary through a
-single shared function. No Python, uv, or venv steps remain.
+`sandbox create`, `sandbox provision`, and `sandbox deploy` install the Go agent binary through one shared function. Deployment can replace a running agent for root and non-root SSH users. This fixes the remaining deployment defect in issue #214.
 
 ## Success Criteria
 
-- `internal/sandbox/commands.go` defines
-  `deployAgent(ip, keyPath, name string, artifacts *releaseArtifacts)` which:
-  - scp's `artifacts.BinaryPath` to `root@{ip}:/opt/spekk/agent-client`
-  - runs one remote script over SSH that `chmod +x /opt/spekk/agent-client`,
-    creates `/opt/spekk/workspace`, chowns `/opt/spekk` to `agent:agent`, and
-    creates `/var/log/spekk` owned by `agent:agent`
-  - writes the Go systemd unit to `/etc/systemd/system/spekk-agent.service`
-    (ExecStart `/opt/spekk/agent-client`, stdout/stderr appended to
-    `/var/log/spekk/agent.log`)
-  - runs `systemctl daemon-reload && systemctl enable spekk-agent && systemctl restart spekk-agent`
-- `Create` (in `commands.go`) fetches artifacts via
-  `fetchReleaseArtifacts("latest")`, renders the embedded cloud-init with the
-  sandbox's public key (`renderCloudInit`) and passes it to `createDroplet` as
-  droplet user-data, then calls `deployAgent(ip, keyPath, name, artifacts)` with
-  the already-fetched artifacts
-- `Deploy` (in `commands.go`) fetches artifacts via
-  `fetchReleaseArtifacts("latest")` and calls the same `deployAgent(...)`
-- No calls to `uv`, `pip`, or `websockets`, and no `src/sandbox/**` JS files,
-  remain in the sandbox source
+- `deployAgent` is the shared installation path for create, provision, and deploy. It uses the recorded SSH login user.
+- Every upload stages the binary in the login user's home directory. SCP never writes to the running executable or a fixed name in a shared temporary directory.
+- Installation prepares an executable file on the destination filesystem, then replaces `/opt/spekk/agent-client` by rename. A running process retains its old executable until the service restart.
+- Upload or preparation failure leaves the installed binary intact and prevents the service restart. Temporary destination files are removed after success or failure.
+- The installation script creates `/opt/spekk/workspace` and `/var/log/spekk`, sets their required ownership, and writes `/etc/systemd/system/spekk-agent.service`.
+- The systemd unit runs `/opt/spekk/agent-client` and appends stdout and stderr to `/var/log/spekk/agent.log`.
+- The service reload, enable, and restart commands run after the replacement succeeds.
+- Root runs the installation script directly. A non-root login uses the shared privilege helper.
+- Create and deploy download the versioned release binary. Create uses the embedded cloud-init template for provisioning.
+- The sandbox source has no Python, uv, pip, or venv deployment steps.
+
+## Verification
+
+`internal/sandbox/deploy_replace_test.go` runs the generated installation command against a running executable and checks failure handling and temporary-file cleanup. `internal/sandbox/ssh_user_test.go` checks the production upload and SSH commands for root and non-root users, including upload failure.

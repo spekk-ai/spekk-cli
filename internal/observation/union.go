@@ -113,28 +113,10 @@ func isMainRef(ref string) bool {
 	return name == "main" || name == "master"
 }
 
-// isLiveClaim reports whether an observation still speaks for its finding:
-// somebody filed it, its branch is there, and the work is not finished.
-// Both facts come from git, not from the frontmatter:
-//
-//   - The ref is the branch named after the observation. Every observer
-//     branch is cut from origin/main, so every branch carries a copy of
-//     every observation already merged. Such a copy sits at another
-//     finding's branch and is not a claim on anything. Main is never
-//     observer/<slug>, so this excludes main as well.
-//   - The slug is not on main. Presence on main ends the claim, whatever a
-//     lagging status field says, and it settles the branch that was merged
-//     but not deleted: both facts are true at once, and main wins.
-//
-// The branch-local `status: resolved` is deliberately not part of this. The
-// frontmatter is the record and the branch set is the state machine, so a
-// status flipped while the remedy PR is still open must not end a claim
-// that is live.
-func (u *Union) isLiveClaim(o *Observation) bool {
-	if BranchFromRef(o.Ref) != BranchName(o.Slug) {
-		return false
-	}
-	return !u.OnMain(o.Slug)
+// IsLiveClaim requires the observation's own branch and a slug absent from main.
+// The rule uses Git state; branch-local status changes do not end a claim.
+func IsLiveClaim(slug, ref string, onMain bool) bool {
+	return !onMain && BranchFromRef(ref) == BranchName(slug)
 }
 
 // OnMain reports whether an observation with the given slug exists on main.
@@ -248,14 +230,14 @@ func BaseSlug(slug string) string {
 // FindCovering returns the live claim in the union that is the candidate
 // finding, or nil when nobody is claiming it.
 //
-// Only a live claim covers (see isLiveClaim): the observation on the branch
+// Only a live claim covers (see IsLiveClaim): the observation on the branch
 // named after it, whose slug has not reached main. A parked branch (its PR
 // closed, the branch kept) claims exactly like a pending one, because the
 // tooling never reads PR state. A covered finding must not produce a new
 // observation or a new branch.
 func (u *Union) FindCovering(typ, slug string) *Observation {
 	for _, o := range u.Observations {
-		if u.isLiveClaim(o) && o.Covers(typ, slug) {
+		if IsLiveClaim(o.Slug, o.Ref, u.OnMain(o.Slug)) && o.Covers(typ, slug) {
 			return o
 		}
 	}
@@ -271,7 +253,7 @@ const DigestCap = 5
 //
 // The digest is a query, never a committed artifact: observations/DIGEST.md
 // is abolished, and no part of the observer workflow writes a digest file.
-// It shows the live claims that are open (see isLiveClaim), so the digest
+// It shows the live claims that are open (see IsLiveClaim), so the digest
 // and scan-time dedup answer "which findings are live" the same way. Each
 // slug appears at most once, and it is the copy on the branch named after
 // it — the copies other branches inherited are not claims.
@@ -279,7 +261,7 @@ func (u *Union) Digest() []*Observation {
 	seen := map[string]bool{}
 	var open []*Observation
 	for _, o := range u.Observations {
-		if o.Status != StatusOpen || !u.isLiveClaim(o) {
+		if o.Status != StatusOpen || !IsLiveClaim(o.Slug, o.Ref, u.OnMain(o.Slug)) {
 			continue
 		}
 		if seen[o.Slug] {

@@ -267,6 +267,10 @@ func execObserverScanCheck(args []string, stdout, stderr io.Writer, now time.Tim
 		fmt.Fprintf(stderr, "Error: --slug must be kebab-case (lowercase letters and digits, single hyphens), got %q\n", slug)
 		return 1
 	}
+	if err := observation.ValidateType(typ); err != nil {
+		fmt.Fprintf(stderr, "Error: --type %s\n", err)
+		return 1
+	}
 
 	// Suppression first: suppressed drift is invisible to the entire
 	// downstream lifecycle — no observation, no branch, no index row, no

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
+	"github.com/spekk-ai/spekk-cli/internal/observation"
 )
 
 func gitT(t *testing.T, dir string, args ...string) string {
@@ -362,6 +363,7 @@ func TestSelectCandidatesRules(t *testing.T) {
 	}
 	branchRef := func(slug string) string { return "refs/remotes/origin/observer/" + slug }
 	rows := []Candidate{
+		mk("high-old", "high", "2026-01-01T00:00:00Z", branchRef("unrelated"), []string{"a.go"}, false),
 		mk("low-old", "low", "2026-01-01T00:00:00Z", branchRef("low-old"), []string{"a.go"}, false),
 		mk("medium-old", "medium", "2026-01-01T00:00:00Z", branchRef("medium-old"), []string{"a.go"}, false),
 		mk("high-new", "high", "2026-03-01T00:00:00Z", branchRef("high-new"), []string{"a.go"}, false),
@@ -382,6 +384,48 @@ func TestSelectCandidatesRules(t *testing.T) {
 		if got[i].Slug != slug {
 			t.Fatalf("candidate[%d]: got %q want %q", i, got[i].Slug, slug)
 		}
+		if got[i].Ref != branchRef(slug) {
+			t.Fatalf("candidate %s must come from its own branch, got %q", slug, got[i].Ref)
+		}
+	}
+}
+
+func TestActiveFindingRuleAgreesAcrossOperations(t *testing.T) {
+	const slug = "finding"
+	for _, tc := range []struct {
+		name   string
+		ref    string
+		onMain bool
+		want   bool
+	}{
+		{"local", "refs/heads/observer/finding", false, true},
+		{"remote", "refs/remotes/origin/observer/finding", false, true},
+		{"renamed-local", "refs/heads/observer/renamed", false, false},
+		{"renamed-remote", "refs/remotes/origin/observer/renamed", false, false},
+		{"merged", "refs/heads/observer/finding", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			obs := &observation.Observation{
+				Slug: slug, Ref: tc.ref, Type: observation.TypeCodeSpecMisalignment,
+				Status: observation.StatusOpen, Severity: observation.SeverityHigh, Affected: []string{"example.go"},
+			}
+			u := &observation.Union{Observations: []*observation.Observation{obs}}
+			if tc.onMain {
+				u.Observations = append(u.Observations, &observation.Observation{Slug: slug, Ref: "refs/heads/main"})
+			}
+			candidates := SelectCandidates([]Candidate{{
+				Slug: obs.Slug, Ref: obs.Ref, Severity: obs.Severity, Affected: obs.Affected, OnMain: tc.onMain,
+			}})
+			if got := len(candidates) > 0; got != tc.want {
+				t.Errorf("announce eligibility = %v, want %v", got, tc.want)
+			}
+			if got := len(u.Digest()) > 0; got != tc.want {
+				t.Errorf("digest visibility = %v, want %v", got, tc.want)
+			}
+			if got := u.FindCovering(obs.Type, slug) != nil; got != tc.want {
+				t.Errorf("deduplication coverage = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
