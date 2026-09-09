@@ -162,3 +162,27 @@ func assertNoTemporaryBinaries(t *testing.T, target string) {
 		t.Fatalf("temporary binaries remain: %v (%v)", paths, err)
 	}
 }
+
+// A machine an operator provisioned by hand may not carry the install
+// directory. The script creates it before it writes the temporary file. With
+// the two lines in the other order `set -e` aborts at mktemp, and the mkdir
+// downstream of the failure never runs, so no retry heals the machine.
+func TestInstallCommandCreatesTheDestinationDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the remote installation script requires a Unix shell")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.WriteFile(filepath.Join(home, stagedBinary), []byte("#!/bin/sh\nprintf replacement\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A space in the path also proves the script quotes the install path.
+	target := filepath.Join(t.TempDir(), "absent dir", "agent-client")
+	command := replaceInstallTarget(t, installCommand("root", "printf ready"), target)
+	if output, err := exec.Command("bash", "-c", command).CombinedOutput(); err != nil {
+		t.Fatalf("installation into a missing directory failed: %v, output %q", err, output)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("the installed executable is missing: %v", err)
+	}
+}

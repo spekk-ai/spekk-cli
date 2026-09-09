@@ -203,3 +203,20 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 		t.Fatalf("upload failure must stop installation: error %v, commands %v", err, sshCommands)
 	}
 }
+
+// The script reaches bash on stdin, so the positional parameters must follow
+// the `sudo bash` token with nothing between them. An edit that inserts a
+// redirect there feeds bash an empty script: the deploy reports success, the
+// old executable stays, and the service never restarts.
+func TestSudoWrapAttachesArgumentsToTheShell(t *testing.T) {
+	const script = `install -m 755 "$1" /opt/spekk/agent-client`
+	const arg = `"$HOME/agent-client.staged"`
+	got := sudoWrap(script, arg)
+
+	if want := "| sudo bash -s -- " + arg; !strings.HasSuffix(got, want) {
+		t.Errorf("sudoWrap output = %q, want it to end with %q", got, want)
+	}
+	if bare := sudoWrap(script); got != bare+" -s -- "+arg {
+		t.Errorf("sudoWrap with parameters = %q, want %q and the parameters appended", got, bare)
+	}
+}

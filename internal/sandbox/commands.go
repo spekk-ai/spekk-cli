@@ -629,11 +629,7 @@ func privilegedScript(user, script string, shellArgs ...string) string {
 		}
 		return script
 	}
-	command := sudoWrap(script)
-	if len(shellArgs) > 0 {
-		command += " -s -- " + strings.Join(shellArgs, " ")
-	}
-	return command
+	return sudoWrap(script, shellArgs...)
 }
 
 // scpTarget stages each upload in the SSH login user's home.
@@ -644,11 +640,15 @@ func scpTarget(user, ip string) string {
 // installCommand replaces the executable before it runs the service setup script.
 func installCommand(user, script string) string {
 	// Prepare on the destination filesystem so the final rename is atomic.
+	// The directory comes first: a machine an operator provisioned by hand may
+	// not carry it, and every later step writes inside it.
 	install := fmt.Sprintf(`set -e
-next=$(mktemp /opt/spekk/agent-client.XXXXXX)
+installed="/opt/spekk/agent-client"
+mkdir -p "$(dirname "$installed")"
+next=$(mktemp "$installed.XXXXXX")
 trap 'rm -f "$next"' EXIT
 install -m 755 "$1" "$next"
-mv -f "$next" /opt/spekk/agent-client
+mv -f "$next" "$installed"
 rm -f "$1"
 %s`, script)
 	// Resolve the upload path before sudo can change HOME or the working directory.
@@ -658,9 +658,18 @@ rm -f "$1"
 // sudoWrap base64-encodes a script and pipes it through `sudo bash`, running
 // it as root without the quoting problems heredocs and nested quotes pose.
 // The login user must have passwordless sudo.
-func sudoWrap(script string) string {
+//
+// shellArgs become the script's positional parameters. They build here, in the
+// same expression as the `sudo bash` token, because bash reads the script on
+// stdin: anything inserted between that token and `-s --` changes the script
+// that runs.
+func sudoWrap(script string, shellArgs ...string) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(script))
-	return fmt.Sprintf("echo '%s' | base64 -d | sudo bash", encoded)
+	args := ""
+	if len(shellArgs) > 0 {
+		args = " -s -- " + strings.Join(shellArgs, " ")
+	}
+	return fmt.Sprintf("echo '%s' | base64 -d | sudo bash%s", encoded, args)
 }
 
 // sshUser returns the login user for a sandbox, defaulting to root.
