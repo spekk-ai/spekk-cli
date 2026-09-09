@@ -176,7 +176,8 @@ func TestInstallCommandCreatesTheDestinationDirectory(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, stagedBinary), []byte("#!/bin/sh\nprintf replacement\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	target := filepath.Join(t.TempDir(), "absent", "agent-client")
+	// A space in the path also proves the script quotes the install path.
+	target := filepath.Join(t.TempDir(), "absent dir", "agent-client")
 	command := replaceInstallTarget(t, installCommand("root", "printf ready"), target)
 	if output, err := exec.Command("bash", "-c", command).CombinedOutput(); err != nil {
 		t.Fatalf("installation into a missing directory failed: %v, output %q", err, output)

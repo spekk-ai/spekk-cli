@@ -643,7 +643,7 @@ func installCommand(user, script string) string {
 	// The directory comes first: a machine an operator provisioned by hand may
 	// not carry it, and every later step writes inside it.
 	install := fmt.Sprintf(`set -e
-installed=/opt/spekk/agent-client
+installed="/opt/spekk/agent-client"
 mkdir -p "$(dirname "$installed")"
 next=$(mktemp "$installed.XXXXXX")
 trap 'rm -f "$next"' EXIT
