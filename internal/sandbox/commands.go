@@ -620,15 +620,20 @@ var scpExec = func(args []string) ([]byte, error) {
 	return exec.Command("scp", args...).CombinedOutput()
 }
 
-// privilegedScript returns the remote command that runs script as root. A
-// root login runs it as it is; any other login user escalates. Every
-// privileged step goes through here, so the rule lives in one place rather
-// than in a repeated conditional at each call site.
-func privilegedScript(user, script string) string {
+// privilegedScript runs script directly for root and through sudo for other users.
+// shellArgs are quoted shell expressions expanded by the login shell before escalation.
+func privilegedScript(user, script string, shellArgs ...string) string {
 	if user == "root" {
+		if len(shellArgs) > 0 {
+			return "set -- " + strings.Join(shellArgs, " ") + "\n" + script
+		}
 		return script
 	}
-	return sudoWrap(script)
+	command := sudoWrap(script)
+	if len(shellArgs) > 0 {
+		command += " -s -- " + strings.Join(shellArgs, " ")
+	}
+	return command
 }
 
 // scpTarget stages each upload in the SSH login user's home.
@@ -642,12 +647,12 @@ func installCommand(user, script string) string {
 	install := fmt.Sprintf(`set -e
 next=$(mktemp /opt/spekk/agent-client.XXXXXX)
 trap 'rm -f "$next"' EXIT
-install -m 755 %s "$next"
+install -m 755 "$1" "$next"
 mv -f "$next" /opt/spekk/agent-client
-rm -f %s
-%s`, stagedBinary, stagedBinary, script)
-	// sudo bash retains the working directory, including when HOME changes.
-	return "cd \"$HOME\" || exit 1\n" + privilegedScript(user, install)
+rm -f "$1"
+%s`, script)
+	// Resolve the upload path before sudo can change HOME or the working directory.
+	return privilegedScript(user, install, fmt.Sprintf(`"$HOME/%s"`, stagedBinary))
 }
 
 // sudoWrap base64-encodes a script and pipes it through `sudo bash`, running

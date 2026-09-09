@@ -112,19 +112,19 @@ func loadCandidates(dbPath string) ([]Candidate, error) {
 	}
 
 	mainSlugs := map[string]bool{}
-	mainRows, err := db.Query(`SELECT DISTINCT slug FROM observations
-		WHERE ref LIKE 'refs/heads/main' OR ref LIKE 'refs/heads/master'
-		   OR ref LIKE 'refs/remotes/%/main' OR ref LIKE 'refs/remotes/%/master'`)
+	mainRows, err := db.Query(`SELECT slug, ref FROM observations`)
 	if err != nil {
 		return nil, fmt.Errorf("cannot query main observations: %w", err)
 	}
 	defer mainRows.Close()
 	for mainRows.Next() {
-		var slug string
-		if err := mainRows.Scan(&slug); err != nil {
-			return nil, fmt.Errorf("cannot scan main slug: %w", err)
+		var slug, ref string
+		if err := mainRows.Scan(&slug, &ref); err != nil {
+			return nil, fmt.Errorf("cannot scan observation ref: %w", err)
 		}
-		mainSlugs[slug] = true
+		if observation.IsMainRef(ref) {
+			mainSlugs[slug] = true
+		}
 	}
 	if err := mainRows.Err(); err != nil {
 		return nil, fmt.Errorf("cannot read main slugs: %w", err)

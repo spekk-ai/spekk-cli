@@ -315,16 +315,14 @@ func TestConsolidateDoesNotRunAgainstTheScan(t *testing.T) {
 	}
 }
 
-// install-cron installs a schedule, so an argument it does not understand
-// must fail loudly. The shared parser ignores unknown flags; left alone,
-// a typo or the --flag=value form would install the daily default in place
-// of the schedule the operator asked for.
+// Invalid arguments must stop installation before a default schedule replaces the requested one.
 func TestParseInstallCronFlags_RefusesUnknownArguments(t *testing.T) {
 	for _, args := range [][]string{
 		{"--loop-interval=60"},   // = form is not supported
 		{"--lop-interval", "60"}, // typo
 		{"--interval", "60"},     // the removed observer flag
 		{"--loop-interval"},      // missing value
+		{"--loop-interval", ""},  // empty value
 		{"stray"},                // bare positional
 	} {
 		if _, err := ParseInstallCronFlags(args); err == nil {
@@ -351,13 +349,13 @@ func TestDailyConsolidationAvoidsEveryHourlyScan(t *testing.T) {
 	}
 }
 
-// A flag-shaped token in value position is refused: the shared parser would
-// not consume it as a value, so the defaults would be installed silently.
-func TestCheckInstallCronArgs_RefusesFlagInValuePosition(t *testing.T) {
+// A missing value must remain an error even if a later occurrence has a value.
+func TestParseInstallCronFlags_RefusesFlagInValuePosition(t *testing.T) {
 	for _, args := range [][]string{
 		{"--loop-interval", "--consolidate-interval"},
 		{"--loop-interval", "--quiet"},
 		{"--consolidate-interval", "--loop-interval"},
+		{"--loop-interval", "--loop-interval", "60"},
 	} {
 		if _, err := ParseInstallCronFlags(args); err == nil {
 			t.Errorf("args %v were accepted; the parser would not consume the flag as a value and the defaults would be installed silently", args)

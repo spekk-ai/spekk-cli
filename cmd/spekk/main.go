@@ -304,7 +304,11 @@ EXAMPLES:
 	useCSV := flags.Bool("csv")
 	showFile := flags.Bool("long")
 	statusVal := flags.String("status")
-	priority, err := listPriority(args, flags)
+	if flags.Err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", flags.Err)
+		return 1
+	}
+	priority, err := listPriority(flags)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %s\n", err)
 		return 1
@@ -386,7 +390,7 @@ EXAMPLES:
 	}
 
 	// JSON includes branch and dependency fields and follows the table order.
-	if useJSON && (len(result.Assertions) > 0 || priority != nil) {
+	if useJSON {
 		out, err := parser.FormatAssertionsFlat(result)
 		if err != nil {
 			out2, _ := parser.FormatError(err.Error())
@@ -404,16 +408,19 @@ EXAMPLES:
 			fmt.Fprint(stdout, formatter.FormatTSVHeader(opts))
 		case useCSV:
 			fmt.Fprint(stdout, formatter.FormatCSVHeader(opts))
-		case priority != nil:
-			fmt.Fprintln(stdout, "No assertions match the requested filters.")
 		default:
-			var out []byte
+			var filters []string
 			if statusVal != "" {
-				out, _ = parser.FormatEmptyFiltered(statusVal)
-			} else {
-				out, _ = parser.FormatEmpty()
+				filters = append(filters, fmt.Sprintf("status '%s'", statusVal))
 			}
-			fmt.Fprintln(stdout, string(out))
+			if priority != nil {
+				filters = append(filters, fmt.Sprintf("priority %d", *priority))
+			}
+			message := "No assertions found in specs/ directory."
+			if len(filters) > 0 {
+				message = "No assertions match " + strings.Join(filters, " and ") + "."
+			}
+			fmt.Fprintln(stdout, message)
 		}
 		return 0
 	}
@@ -436,12 +443,11 @@ EXAMPLES:
 	return 0
 }
 
-func listPriority(args []string, flags *cli.ParseResult) (*int, error) {
-	index := slices.Index(args, "--priority")
-	if index < 0 {
+func listPriority(flags *cli.ParseResult) (*int, error) {
+	if flags.Count("priority") == 0 {
 		return nil, nil
 	}
-	if slices.Contains(args[index+1:], "--priority") {
+	if flags.Count("priority") > 1 {
 		return nil, fmt.Errorf("--priority must be supplied only once")
 	}
 	value := flags.String("priority")

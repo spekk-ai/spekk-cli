@@ -86,7 +86,7 @@ spekk list                          # Table: ID, STATUS, PRI, PARENT, TITLE
 spekk list --long                   # Add the FILE column
 spekk list --status draft           # Only one status
 spekk list --status done --priority 1 # Combine status and priority filters
-spekk list --json                   # Flat JSON array, for jq
+spekk list --json                   # JSON object with an assertions array
 spekk list --tsv                    # Tab-separated, lowercase header
 spekk list --csv                    # RFC 4180 CSV with a header row
 spekk list --specs-dir ./my-specs   # Read a different specs directory
@@ -100,7 +100,7 @@ spekk list --cross-branch --json    # Merge preview across branches
 | `--status <value>` | | Keep only this status: `not_started`, `in_progress`, `done`, `draft`, or `failed` |
 | `--priority <N>` | | Keep only this priority. Requires a nonnegative integer and works with `--status` |
 | `--long` | `-l` | Add the FILE column to the table, TSV, and CSV output |
-| `--json` | | JSON array, one object per assertion |
+| `--json` | | JSON object with an `assertions` array |
 | `--tsv` | | Tab-separated values with a lowercase header |
 | `--csv` | | RFC 4180 CSV with a header row |
 | `--specs-dir <path>` | | Read specs from this directory (default: `specs/` at the git root) |
@@ -110,7 +110,9 @@ spekk list --cross-branch --json    # Merge preview across branches
 
 Rows are sorted by priority, then by id, in every format. The JSON output also contains `branch` and `depends_on`, which the table, TSV, and CSV do not show. `--json`, `--tsv`, and `--csv` exclude each other. `--status`, `--priority`, and `--specs-dir` do not apply to `--cross-branch`.
 
-Supply `--priority` once. It accepts `0` and other nonnegative integers outside the stored range of 1 through 3. These values return no matching assertions. With a priority filter, an empty JSON result contains an empty `assertions` array, TSV and CSV contain their header, and table output reports that no assertions match the filters.
+Supply `--priority` once, with a space before its value. The command rejects `--priority=1` and missing or empty values for `--priority` and `--status`. Priority accepts `0` and other nonnegative integers outside the stored range of 1 through 3. These values return no matching assertions.
+
+Every empty JSON result contains `type: "assertions"` and `assertions: []`, including an empty specs directory and filters with no matches. TSV and CSV contain their header. Table output reports no matches and includes each active filter value.
 
 ## `spekk status`
 

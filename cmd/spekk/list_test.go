@@ -121,7 +121,11 @@ func TestExecList_PriorityFilter(t *testing.T) {
 		{"combined-json", []string{"--priority", "1", "--status", "done", "--json"}, []string{"done-high"}, ""},
 		{"combined-csv", []string{"--priority", "1", "--status", "done", "--csv", "--assertions-only", "--long"}, []string{"done-high"}, ""},
 		{"zero-json", []string{"--priority", "0", "--json"}, nil, ""},
-		{"zero-table", []string{"--priority", "0"}, nil, "No assertions match the requested filters.\n"},
+		{"zero-table", []string{"--priority", "0"}, nil, "No assertions match priority 0.\n"},
+		{"empty-status-table", []string{"--status", "draft"}, nil, "No assertions match status 'draft'.\n"},
+		{"combined-empty-table", []string{"--priority", "2", "--status", "not_started"}, nil, "No assertions match status 'not_started' and priority 2.\n"},
+		{"empty-status-json", []string{"--status", "draft", "--json"}, nil, ""},
+		{"combined-empty-json", []string{"--priority", "2", "--status", "not_started", "--json"}, nil, ""},
 		{"outside-range-tsv", []string{"--priority", "4", "--tsv"}, nil, "id\tstatus\tpri\tparent\ttitle\n"},
 		{"combined-empty-csv", []string{"--priority", "2", "--status", "not_started", "--csv"}, nil, "id,status,pri,parent,title\r\n"},
 	} {
@@ -151,10 +155,12 @@ func TestExecList_PriorityFilter(t *testing.T) {
 func TestExecList_InvalidPriority(t *testing.T) {
 	for _, args := range [][]string{
 		{"--priority"}, {"--priority", "--json"},
+		{"--priority=1"}, {"--priority="}, {"--priority", ""},
 		{"--priority", "text"}, {"--priority", "-1"},
 		{"--priority", "999999999999999999999999999999"},
 		{"--priority", "1", "--cross-branch"},
 		{"--priority", "1", "--priority"},
+		{"--priority", "1", "--priority", "2"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
@@ -165,7 +171,34 @@ func TestExecList_InvalidPriority(t *testing.T) {
 	}
 }
 
+func TestExecList_MissingStatus(t *testing.T) {
+	for _, args := range [][]string{
+		{"--status"}, {"--status", ""}, {"--status", "--priority", "1"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := execList(args, &stdout, &stderr, t.TempDir()); code == 0 || !strings.Contains(stderr.String(), "--status") || stdout.Len() != 0 {
+				t.Fatalf("expected status error without output, got exit %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
 // --- Format-aware empty ---
+
+func TestExecList_EmptyJSON(t *testing.T) {
+	emptyDir := t.TempDir()
+	for _, dir := range []string{emptyDir, filepath.Join(emptyDir, "missing")} {
+		var stdout, stderr bytes.Buffer
+		if code := execList([]string{"--json"}, &stdout, &stderr, dir); code != 0 {
+			t.Fatalf("exit %d: %s", code, stderr.String())
+		}
+		var result parser.AssertionsFlatOutput
+		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.Type != "assertions" || result.Assertions == nil || len(result.Assertions) != 0 {
+			t.Fatalf("expected an empty flat list for %s, got %s (%v)", dir, stdout.String(), err)
+		}
+	}
+}
 
 func TestExecList_EmptyTSV(t *testing.T) {
 	emptyDir := t.TempDir()

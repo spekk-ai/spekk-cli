@@ -106,17 +106,21 @@ func MainRef() (string, error) {
 	return "", fmt.Errorf("observation: no main (or master) branch visible")
 }
 
-// isMainRef reports whether ref names the main (or master) branch, locally
-// or on a remote.
-func isMainRef(ref string) bool {
+// IsMainRef reports whether ref names the complete main or master branch, locally or on a remote.
+func IsMainRef(ref string) bool {
 	name := BranchFromRef(ref)
 	return name == "main" || name == "master"
 }
 
 // IsLiveClaim requires the observation's own branch and a slug absent from main.
-// The rule uses Git state; branch-local status changes do not end a claim.
 func IsLiveClaim(slug, ref string, onMain bool) bool {
+	// The remedy can set status to resolved while its PR is still open.
+	// That status change must not end coverage before the remedy reaches main.
 	return !onMain && BranchFromRef(ref) == BranchName(slug)
+}
+
+func (o *Observation) isLiveClaim(mainSlugs map[string]bool) bool {
+	return IsLiveClaim(o.Slug, o.Ref, mainSlugs[o.Slug])
 }
 
 // OnMain reports whether an observation with the given slug exists on main.
@@ -125,11 +129,21 @@ func IsLiveClaim(slug, ref string, onMain bool) bool {
 // regardless of a lagging frontmatter status.
 func (u *Union) OnMain(slug string) bool {
 	for _, o := range u.Observations {
-		if o.Slug == slug && isMainRef(o.Ref) {
+		if o.Slug == slug && IsMainRef(o.Ref) {
 			return true
 		}
 	}
 	return false
+}
+
+func (u *Union) mainSlugs() map[string]bool {
+	slugs := make(map[string]bool)
+	for _, o := range u.Observations {
+		if IsMainRef(o.Ref) {
+			slugs[o.Slug] = true
+		}
+	}
+	return slugs
 }
 
 // NormalizePath reduces an affected path to the form paths are compared in:
@@ -236,8 +250,9 @@ func BaseSlug(slug string) string {
 // tooling never reads PR state. A covered finding must not produce a new
 // observation or a new branch.
 func (u *Union) FindCovering(typ, slug string) *Observation {
+	mainSlugs := u.mainSlugs()
 	for _, o := range u.Observations {
-		if IsLiveClaim(o.Slug, o.Ref, u.OnMain(o.Slug)) && o.Covers(typ, slug) {
+		if o.Covers(typ, slug) && o.isLiveClaim(mainSlugs) {
 			return o
 		}
 	}
@@ -258,10 +273,11 @@ const DigestCap = 5
 // slug appears at most once, and it is the copy on the branch named after
 // it — the copies other branches inherited are not claims.
 func (u *Union) Digest() []*Observation {
+	mainSlugs := u.mainSlugs()
 	seen := map[string]bool{}
 	var open []*Observation
 	for _, o := range u.Observations {
-		if o.Status != StatusOpen || !IsLiveClaim(o.Slug, o.Ref, u.OnMain(o.Slug)) {
+		if o.Status != StatusOpen || !o.isLiveClaim(mainSlugs) {
 			continue
 		}
 		if seen[o.Slug] {

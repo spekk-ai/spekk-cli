@@ -17,6 +17,7 @@ Announce, deduplication, and digest agree on whether an observation is an active
 
 - All three operations use one shared rule for branch ownership and presence on main.
 - Local and remote-tracking refs for the observation's own branch pass this rule.
+- All three operations recognize main and master by the complete branch name. Remote branches `observer/main` and `observer/master` remain observation branches.
 - A copy on a renamed branch or another finding's branch fails the rule.
 - A copy on another branch cannot displace an eligible copy of the same observation on its own branch.
 - Presence on main ends the claim even if its own branch remains visible and its status is still `open`.
@@ -24,4 +25,4 @@ Announce, deduplication, and digest agree on whether an observation is an active
 
 ## Verification
 
-`internal/observer/announce_test.go` checks agreement between the three operations for local, remote, renamed, and merged findings. It also checks that an inherited copy cannot displace the copy on the observation's own branch. The observer and observation package tests cover the remaining selection rules.
+`internal/observer/announce_test.go` reads Git fixtures through the union and the SQLite index to check agreement for local, remote, renamed, and merged findings, including slugs `main` and `master`. It also checks that an inherited copy cannot displace the copy on the observation's own branch. The observer and observation package tests cover the remaining selection rules.

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
+	"github.com/spekk-ai/spekk-cli/internal/index"
 	"github.com/spekk-ai/spekk-cli/internal/observation"
 )
 
@@ -391,38 +392,53 @@ func TestSelectCandidatesRules(t *testing.T) {
 }
 
 func TestActiveFindingRuleAgreesAcrossOperations(t *testing.T) {
-	const slug = "finding"
 	for _, tc := range []struct {
 		name   string
+		slug   string
 		ref    string
 		onMain bool
 		want   bool
 	}{
-		{"local", "refs/heads/observer/finding", false, true},
-		{"remote", "refs/remotes/origin/observer/finding", false, true},
-		{"renamed-local", "refs/heads/observer/renamed", false, false},
-		{"renamed-remote", "refs/remotes/origin/observer/renamed", false, false},
-		{"merged", "refs/heads/observer/finding", true, false},
+		{"local", "finding", "refs/heads/observer/finding", false, true},
+		{"remote-main", "main", "refs/remotes/origin/observer/main", false, true},
+		{"remote-master", "master", "refs/remotes/origin/observer/master", false, true},
+		{"renamed", "finding", "refs/remotes/origin/observer/renamed", false, false},
+		{"merged", "finding", "refs/heads/observer/finding", true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			obs := &observation.Observation{
-				Slug: slug, Ref: tc.ref, Type: observation.TypeCodeSpecMisalignment,
-				Status: observation.StatusOpen, Severity: observation.SeverityHigh, Affected: []string{"example.go"},
+			clone, _ := newAnnounceRepos(t)
+			addObserverBranch(t, clone, tc.slug, observation.SeverityHigh, false)
+			owningRef := "refs/heads/observer/" + tc.slug
+			if tc.ref != owningRef {
+				gitT(t, clone, "update-ref", tc.ref, owningRef)
+				gitT(t, clone, "update-ref", "-d", owningRef)
 			}
-			u := &observation.Union{Observations: []*observation.Observation{obs}}
 			if tc.onMain {
-				u.Observations = append(u.Observations, &observation.Observation{Slug: slug, Ref: "refs/heads/main"})
+				gitT(t, clone, "merge", "--ff-only", tc.ref)
 			}
-			candidates := SelectCandidates([]Candidate{{
-				Slug: obs.Slug, Ref: obs.Ref, Severity: obs.Severity, Affected: obs.Affected, OnMain: tc.onMain,
-			}})
+			u, err := observation.LoadUnion()
+			if err != nil {
+				t.Fatal(err)
+			}
+			dbPath := filepath.Join(t.TempDir(), "index.db")
+			if _, err := index.BuildIndex(filepath.Join(clone, "specs"), dbPath, false); err != nil {
+				t.Fatal(err)
+			}
+			rows, err := loadCandidates(dbPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(u.Observations) == 0 || len(rows) == 0 {
+				t.Fatal("the union and index must contain the fixture observation")
+			}
+			candidates := SelectCandidates(rows)
 			if got := len(candidates) > 0; got != tc.want {
 				t.Errorf("announce eligibility = %v, want %v", got, tc.want)
 			}
 			if got := len(u.Digest()) > 0; got != tc.want {
 				t.Errorf("digest visibility = %v, want %v", got, tc.want)
 			}
-			if got := u.FindCovering(obs.Type, slug) != nil; got != tc.want {
+			if got := u.FindCovering(observation.TypeCodeSpecMisalignment, tc.slug) != nil; got != tc.want {
 				t.Errorf("deduplication coverage = %v, want %v", got, tc.want)
 			}
 		})

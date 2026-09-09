@@ -6,17 +6,19 @@ priority: 1
 status: done
 ---
 
-# Deduplicate parseFlags Into Shared Utility
+# CLI Commands Share Argument Parsing
 
 ## Description
 
-Two separate `parseFlags` functions exist — one in `src/builder/cli.js` and another in `src/parser/cli.js`. These should be consolidated into a single shared utility.
+CLI commands use `internal/cli.ParseFlags` to recognize flag names and values. Commands can inspect argument errors and presence counts without parsing the argument list again.
 
 ## Success Criteria
 
-- One `parseFlags` function exists as a shared utility (not duplicated across modules)
-- Both `src/builder/cli.js` and `src/parser/cli.js` import from the shared utility
-- No duplicate flag-parsing logic across the codebase
-- Existing tests continue to pass after consolidation
+- Builder and parser commands use the shared argument parser.
+- Parsed results report the count for each recognized flag, including aliases and occurrences with missing values.
+- Parsed results report unknown arguments and missing or empty string values. A later valid occurrence cannot hide an earlier missing value.
+- Negative numeric values reach command-specific value validation.
+- `spekk list` and `spekk observer install-cron` reject reported argument errors, including unsupported `--flag=value` syntax. Both use the shared parser without a separate argument scan.
+- Existing flag values and aliases retain their behavior for other commands.
 
-**Tests:** src/cli/__tests__/parse-flags.test.js
+**Tests:** `internal/cli/flags_test.go`, `internal/agent/observer_cron_test.go`, `cmd/spekk/list_test.go`

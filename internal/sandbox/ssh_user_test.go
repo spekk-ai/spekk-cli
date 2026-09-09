@@ -184,11 +184,15 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 			if want := user + "@9.9.9.9:" + stagedBinary; scpArgs[0] != want {
 				t.Errorf("staged at %q, want %q", scpArgs[0], want)
 			}
+			_, uploadPath, _ := strings.Cut(scpArgs[0], ":")
+			if filepath.Base(uploadPath) != uploadPath {
+				t.Errorf("upload must use a file name in the login user's home: %q", uploadPath)
+			}
 			if got := strings.Contains(sshCommands[0], "| sudo bash"); got != (user != "root") {
 				t.Errorf("incorrect privilege level for %s: %s", user, sshCommands[0])
 			}
-			if !strings.Contains(sshCommands[0], `cd "$HOME"`) {
-				t.Fatalf("installation must start in the upload directory: %s", sshCommands[0])
+			if user == "root" && strings.Contains(sshCommands[0], "sudo") {
+				t.Errorf("root installation must run without sudo: %s", sshCommands[0])
 			}
 		})
 	}
