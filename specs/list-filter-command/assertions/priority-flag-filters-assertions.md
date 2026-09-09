@@ -23,6 +23,7 @@ depends-on: status-flag-filters-assertions
 - A missing, non-integer, negative, or overflowing value causes a nonzero exit with an error that identifies `--priority`.
 - Values must follow a space. The unsupported `--priority=1` form fails with a nonzero exit instead of returning an unfiltered list.
 - The command accepts one `--priority` flag. A repeated flag fails instead of hiding a missing or invalid value.
+- The two kinds of failure print on different streams. A bad value prints as JSON on stdout, the same as an invalid `--status`, so one caller reads both in one format. A malformed command line prints as text on stderr, the same as the mutually exclusive format flags. A missing value, the `=` form, and a repeated flag are all malformed command lines.
 - A nonnegative value outside the stored priority range, including `0`, succeeds with no matching assertions. JSON contains an empty `assertions` array, TSV and CSV contain their header, and the table output reports that no assertions match the filters.
 - `--priority` with `--cross-branch` fails with an error because cross-branch rows describe file changes.
 - Help and the CLI reference describe the flag and its combination with `--status`.
@@ -30,4 +31,4 @@ depends-on: status-flag-filters-assertions
 
 ## Verification
 
-`cmd/spekk/list_test.go` checks priority selection, combined filters, all output formats, empty results, and invalid arguments. The parser tests check the shared filtering behavior.
+`cmd/spekk/list_test.go` checks priority selection, combined filters, all output formats, and empty results. `TestExecList_MalformedPriorityArgs` and `TestExecList_InvalidPriorityValue` check the two failure kinds and the stream each one prints on. The parser tests check the shared filtering behavior.

@@ -152,20 +152,48 @@ func TestExecList_PriorityFilter(t *testing.T) {
 	}
 }
 
-func TestExecList_InvalidPriority(t *testing.T) {
+// A malformed command line prints on stderr, like the mutually exclusive
+// format flags.
+func TestExecList_MalformedPriorityArgs(t *testing.T) {
 	for _, args := range [][]string{
 		{"--priority"}, {"--priority", "--json"},
 		{"--priority=1"}, {"--priority="}, {"--priority", ""},
-		{"--priority", "text"}, {"--priority", "-1"},
-		{"--priority", "999999999999999999999999999999"},
 		{"--priority", "1", "--cross-branch"},
 		{"--priority", "1", "--priority"},
 		{"--priority", "1", "--priority", "2"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			if code := execList(args, &stdout, &stderr, t.TempDir()); code == 0 || !strings.Contains(stderr.String(), "--priority") {
-				t.Fatalf("expected priority error, got exit %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+			if code := execList(args, &stdout, &stderr, t.TempDir()); code == 0 || !strings.Contains(stderr.String(), "--priority") || stdout.Len() != 0 {
+				t.Fatalf("expected a command-line error on stderr, got exit %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+// A bad filter value prints as JSON on stdout, the same as an invalid
+// --status, so one caller reads both in one format.
+func TestExecList_InvalidPriorityValue(t *testing.T) {
+	for _, args := range [][]string{
+		{"--priority", "text"}, {"--priority", "-1"},
+		{"--priority", "999999999999999999999999999999"},
+		{"--json", "--priority", "text"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := execList(args, &stdout, &stderr, t.TempDir())
+			if code == 0 {
+				t.Fatalf("expected a nonzero exit, got stdout %q, stderr %q", stdout.String(), stderr.String())
+			}
+			var out struct {
+				Error   bool   `json:"error"`
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+				t.Fatalf("expected a JSON error on stdout, got %q (%v)", stdout.String(), err)
+			}
+			if !out.Error || !strings.Contains(out.Message, "--priority") {
+				t.Fatalf("expected the message to name --priority, got %q", stdout.String())
 			}
 		})
 	}

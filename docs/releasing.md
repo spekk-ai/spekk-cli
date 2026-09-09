@@ -32,8 +32,6 @@ Cut an experimental build with an `exp-*` tag on the feature branch that holds t
 
 ## Known sharp edges
 
-**A deployed agent may report `version: dev`.** Before 1.26.0 the release build did not stamp the agent binary, so every agent deployed from an earlier release reports `dev`, whatever release it came from. To audit those, compare a SHA-256 sum against the release asset instead of asking the binary. Issue [#214](https://github.com/spekk-ai/spekk-cli/issues/214) tracks the rest of this problem.
-
-**`spekk sandbox deploy` cannot replace a running agent on a root login.** `scp` cannot write a binary that is executing, and the deploy fails with `dest open ... Failure`. Until #214 is closed, replace it by hand: copy the new binary beside the old one, stop the service, move the new binary into place, and start the service. A sandbox with `--ssh-user` does not have this problem, because the deploy stages the binary in the login user's home and `sudo mv` renames it into place.
+**A deployed agent may report `version: dev`.** Before 1.26.0 the release build did not stamp the agent binary, so every agent deployed from an earlier release reports `dev`, whatever release it came from. To audit those, compare a SHA-256 sum against the release asset instead of asking the binary. A deploy from 1.26.0 or later stamps the version, so this applies only to agents that no deploy has replaced since.
 
 **Release notes are generated as well as written.** `generate_release_notes: true` means GitHub appends its own commit summary to the body. The hand-written notes say what the release is for. The generated part is the changelog.

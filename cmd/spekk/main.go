@@ -310,8 +310,7 @@ EXAMPLES:
 	}
 	priority, err := listPriority(flags)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error: %s\n", err)
-		return 1
+		return listError(err, stdout, stderr)
 	}
 
 	// Reject mutually exclusive format flags.
@@ -378,10 +377,7 @@ EXAMPLES:
 	if statusVal != "" {
 		filtered, filterErr := parser.FilterByStatus(result, statusVal)
 		if filterErr != nil {
-			// Use FormatError so machine-readable callers get consistent JSON output.
-			out, _ := parser.FormatError(filterErr.Error())
-			fmt.Fprintln(stdout, string(out))
-			return 1
+			return listError(&filterValueError{filterErr.Error()}, stdout, stderr)
 		}
 		result = filtered
 	}
@@ -443,6 +439,33 @@ EXAMPLES:
 	return 0
 }
 
+// filterValueError is a bad value for a filter flag. A malformed command line
+// is a different kind of failure, and it prints on a different stream. See
+// listError.
+type filterValueError struct{ msg string }
+
+func (e *filterValueError) Error() string { return e.msg }
+
+// listError reports a list failure on the stream that its kind calls for.
+//
+//   - A bad filter value prints as JSON on stdout, so a caller that asked for
+//     machine-readable output can read the error in the same format.
+//   - A malformed command line prints as text on stderr, like the mutually
+//     exclusive format flags.
+//
+// The list command has made this distinction since --status. Send both kinds
+// through this function, or the next filter flag selects a stream by accident.
+func listError(err error, stdout, stderr io.Writer) int {
+	var valueErr *filterValueError
+	if errors.As(err, &valueErr) {
+		out, _ := parser.FormatError(err.Error())
+		fmt.Fprintln(stdout, string(out))
+		return 1
+	}
+	fmt.Fprintf(stderr, "Error: %s\n", err)
+	return 1
+}
+
 func listPriority(flags *cli.ParseResult) (*int, error) {
 	if flags.Count("priority") == 0 {
 		return nil, nil
@@ -453,7 +476,7 @@ func listPriority(flags *cli.ParseResult) (*int, error) {
 	value := flags.String("priority")
 	priority, err := strconv.Atoi(value)
 	if err != nil || priority < 0 {
-		return nil, fmt.Errorf("--priority requires a nonnegative integer, got %q", value)
+		return nil, &filterValueError{fmt.Sprintf("--priority requires a nonnegative integer, got %q", value)}
 	}
 	return &priority, nil
 }

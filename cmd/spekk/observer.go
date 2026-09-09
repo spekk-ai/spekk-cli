@@ -238,6 +238,13 @@ func execObserverScanCheck(args []string, stdout, stderr io.Writer, now time.Tim
 		fmt.Fprint(stdout, observerScanCheckUsage)
 		return 0
 	}
+	// A stray token means the caller lost an argument, most often a path list
+	// written with spaces instead of commas. Without this the command answers
+	// "clear" on partial evidence, and the observer loop sees no error.
+	if flags.Err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", flags.Err)
+		return 1
+	}
 
 	typ := flags.String("type")
 	slug := flags.String("slug")

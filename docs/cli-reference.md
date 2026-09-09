@@ -563,7 +563,7 @@ Announce the open observations on the connected chat surface. This command runs 
 spekk observer announce
 ```
 
-One run: `git fetch` (the only remote read), refresh the index, pick the unannounced open observations with severity high or medium (low never announces), high first and oldest first, from `observer/*` branches on `origin`. It opens one conversation with at most three findings, then commits an `announced:` timestamp to each observer branch and pushes. An observation with no `affected` path never announces. With nothing to announce it prints `nothing to announce` and exits 0.
+One run: `git fetch`, the only remote read, then refresh the index and pick the unannounced open observations with severity high or medium. Low never announces. An observation is eligible only as a live claim: it must sit on the `observer/<slug>` branch named after it, and no observation with that slug may be on main. This is the rule the digest and `scan-check` apply, so the three agree. Ordering is high severity first, then oldest first, then slug. It opens one conversation with at most three findings, then commits an `announced:` timestamp to each observer branch and pushes. An observation with no `affected` path never announces. With nothing to announce it prints `nothing to announce` and exits 0.
 
 When `SPEKK_CONVERSATION_SPOOL` is not set, the command fails, appends a line to `.spekk/observer-conversation.log`, and exits non-zero. Every other failure does the same, and leaves `announced:` unset, so the next run retries.
 
@@ -747,7 +747,7 @@ Download the agent binary from the latest spekk release and install it on a sand
 spekk sandbox deploy my-sandbox
 ```
 
-It copies the binary, writes the `spekk-agent` systemd unit, and restarts the service. On a root login the copy goes straight to `/opt/spekk/agent-client`, and `scp` cannot overwrite a binary that is running. See [Cutting a release](releasing.md#known-sharp-edges).
+It copies the binary, writes the `spekk-agent` systemd unit, and restarts the service. Every login stages the upload in its home directory, then installs it beside the target and renames it into place, so a deploy replaces an agent that is running.
 
 ## `spekk conversation open`
 
