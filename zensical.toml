@@ -56,6 +56,7 @@ nav = [
   { "Advanced" = [
     "advanced/index.md",
     { "Sandbox Agent Architecture" = "advanced/sandbox-architecture.md" },
+    { "A Sandbox on AWS" = "advanced/sandbox-aws.md" },
   ] },
   { "Cutting a Release" = "releasing.md" },
   { "Release Notes" = [

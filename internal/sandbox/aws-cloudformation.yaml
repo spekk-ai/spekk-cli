@@ -1,0 +1,334 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  A spekk sandbox on AWS. One stack creates an isolated VPC, one Ubuntu 24.04
+  instance prepared to the state a spekk droplet reaches, and the command that
+  registers the instance with spekk. Delete the stack to remove everything.
+
+# The UserData below is the cloud-init content from cloud-init.yaml in this
+# directory, with two differences. The agent user's key placeholder is mapped
+# to the AgentPublicKey parameter, and the users list opens with "default",
+# which keeps the image's ubuntu user. Without that entry cloud-init creates
+# the listed users only, and the ubuntu login that KeyName is for never
+# exists. A droplet logs in as root, so cloud-init.yaml does not need it.
+# TestAWSUserDataMatchesCloudInit fails when the files drift in any other
+# way. Edit cloud-init.yaml, then run "go generate ./internal/sandbox" to
+# write the block below from it.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    Description: EC2 instance type. The default runs the agent and a small container workload.
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 key pair. The ubuntu login user accepts it.
+
+  SshCidr:
+    Type: String
+    Description: IPv4 CIDR block that may reach port 22, for example 203.0.113.4/32. There is no default, so nobody opens SSH to the internet by accident.
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+    ConstraintDescription: must be an IPv4 CIDR block, for example 203.0.113.4/32.
+
+  AgentPublicKey:
+    Type: String
+    Description: One OpenSSH public key line that the agent user accepts, for example the output of "ssh-keygen -y -f <private key>".
+    AllowedPattern: '^(ssh-|ecdsa-|sk-)\S+ [A-Za-z0-9+/=]+( .*)?$'
+    ConstraintDescription: must be one OpenSSH public key line, such as "ssh-ed25519 AAAA... comment".
+
+  UbuntuAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Description: SSM parameter that resolves to the latest Canonical Ubuntu 24.04 AMI for this region. Keep the default.
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub spekk-sandbox-${AWS::StackName}
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub spekk-sandbox-${AWS::StackName}
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.0.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub spekk-sandbox-${AWS::StackName}
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub spekk-sandbox-${AWS::StackName}
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref RouteTable
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SSH from one CIDR block, and all outbound traffic
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SshCidr
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub spekk-sandbox-${AWS::StackName}
+
+  Instance:
+    Type: AWS::EC2::Instance
+    # cloud-init installs packages at first boot, so the route to the
+    # internet has to exist before the instance starts.
+    DependsOn:
+      - DefaultRoute
+      - SubnetRouteTableAssociation
+    Properties:
+      ImageId: !Ref UbuntuAmi
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 50
+            VolumeType: gp3
+            DeleteOnTermination: true
+      MetadataOptions:
+        HttpTokens: required
+      Tags:
+        - Key: Name
+          Value: !Sub spekk-sandbox-${AWS::StackName}
+      UserData:
+        Fn::Base64: !Sub |
+          #cloud-config
+          #
+          # Cloud-init template for Spekk sandbox droplets.
+          #
+          # Usage:
+          #   doctl compute droplet create sandbox-agent-1 \
+          #     --image ubuntu-24-04-x64 \
+          #     --size s-2vcpu-4gb \
+          #     --region nyc1 \
+          #     --user-data-file cloud-init.yaml \
+          #     --ssh-keys YOUR_SSH_KEY_FINGERPRINT
+          #
+          # After creation, SSH in and run setup-credentials.sh to inject secrets.
+          # Then run deploy-agent.sh to copy the Go binary and start the service.
+          #
+
+          package_update: true
+          package_upgrade: true
+
+          users:
+            - default
+            - name: agent
+              shell: /bin/bash
+              groups: [docker, sudo, systemd-journal]
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              ssh_authorized_keys:
+                # Replace with your SSH public key
+                - ${AgentPublicKey}
+
+          packages:
+            - git
+            - jq
+            - htop
+            - tmux
+            - vim
+            - unzip
+            - ca-certificates
+            - curl
+            - gnupg
+            - ufw
+            - fail2ban
+
+          write_files:
+            - path: /etc/systemd/system/spekk-agent.service
+              content: |
+                [Unit]
+                Description=Spekk Agent Client
+                After=network-online.target docker.service
+                Wants=network-online.target
+
+                [Service]
+                Type=simple
+                User=agent
+                WorkingDirectory=/workspace
+                EnvironmentFile=/etc/spekk/agent.env
+                ExecStart=/opt/spekk/agent-client
+                Restart=always
+                RestartSec=5
+                StandardOutput=append:/var/log/spekk/agent.log
+                StandardError=append:/var/log/spekk/agent.log
+
+                [Install]
+                WantedBy=multi-user.target
+
+            - path: /etc/spekk/agent.env.example
+              content: |
+                # Required: Agent auth token for WebSocket connection to the control host
+                SPEKK_AGENT_TOKEN=
+                # Required: Control host (e.g., your-control-host.example)
+                SPEKK_HOST=
+                # Required: GitHub PAT for the agent's GitHub identity
+                GITHUB_TOKEN=
+
+                # Model credential: keep exactly one of the two blocks below, matching the
+                # sandbox's auth mode. Claude Code reads whichever it finds, so a file
+                # carrying both leaves the choice to chance.
+
+                # Auth mode "bedrock" (the default): bill through the AWS Bedrock API.
+                AWS_ACCESS_KEY_ID=
+                AWS_SECRET_ACCESS_KEY=
+                AWS_DEFAULT_REGION=
+                CLAUDE_CODE_USE_BEDROCK=1
+
+                # Auth mode "subscription": a Claude subscription token from
+                # `claude setup-token`. Delete the Bedrock block above before using this.
+                #CLAUDE_CODE_OAUTH_TOKEN=
+
+            # fail2ban: ban an address after repeated failed SSH logins.
+            - path: /etc/fail2ban/jail.d/sandbox-sshd.local
+              content: |
+                [sshd]
+                enabled = true
+                maxretry = 5
+                bantime = 1h
+                findtime = 10m
+
+          runcmd:
+            # Docker (official repo)
+            - install -m 0755 -d /etc/apt/keyrings
+            - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+            - chmod a+r /etc/apt/keyrings/docker.asc
+            - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+            - apt-get update -y
+            - apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+            # Host firewall (UFW). Default-deny inbound, so a droplet defends itself from
+            # first boot and does not depend on a network-level firewall. Egress stays
+            # open: the agent needs GitHub, container registries, the model API, and the
+            # control host. SSH stays open for administrative access; a later step in the
+            # hardening plan moves that to a private network and closes public SSH.
+            - ufw default deny incoming
+            - ufw default allow outgoing
+            - ufw allow 22/tcp
+            # Make UFW govern Docker-published ports. Docker inserts its own iptables
+            # rules ahead of UFW's input chain, so a plain "deny incoming" does not stop a
+            # container that publishes a port (for example ports: ["5432:5432"]). This
+            # DOCKER-USER block returns early for private ranges and drops all other new
+            # inbound to published ports. It persists across reboots and Docker restarts,
+            # because UFW re-applies after.rules on every reload.
+            - |
+              cat >> /etc/ufw/after.rules <<'UFW_DOCKER'
+
+              # BEGIN UFW AND DOCKER
+              *filter
+              :ufw-user-forward - [0:0]
+              :ufw-docker-logging-deny - [0:0]
+              :DOCKER-USER - [0:0]
+              -A DOCKER-USER -j ufw-user-forward
+              -A DOCKER-USER -j RETURN -s 10.0.0.0/8
+              -A DOCKER-USER -j RETURN -s 172.16.0.0/12
+              -A DOCKER-USER -j RETURN -s 192.168.0.0/16
+              -A DOCKER-USER -p udp -m udp --sport 53 --dport 1024:65535 -j RETURN
+              -A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 192.168.0.0/16
+              -A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 10.0.0.0/8
+              -A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 172.16.0.0/12
+              -A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 192.168.0.0/16
+              -A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 10.0.0.0/8
+              -A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 172.16.0.0/12
+              -A DOCKER-USER -j RETURN
+              -A ufw-docker-logging-deny -m limit --limit 3/min --limit-burst 10 -j LOG --log-prefix "[UFW DOCKER BLOCK] "
+              -A ufw-docker-logging-deny -j DROP
+              COMMIT
+              # END UFW AND DOCKER
+              UFW_DOCKER
+            - ufw --force enable
+            # Enable the sshd jail written to /etc/fail2ban/jail.d above.
+            - systemctl enable fail2ban
+            - systemctl restart fail2ban
+
+            # Node.js LTS (via NodeSource)
+            - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+            - apt-get install -y nodejs
+
+            # GitHub CLI
+            - curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            - chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+            - echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+            - apt-get update -y
+            - apt-get install -y gh
+
+            # Claude Code CLI
+            - npm install -g @anthropic-ai/claude-code
+
+            # Workspace
+            - mkdir -p /workspace
+            - chown agent:agent /workspace
+
+            # Spekk agent directory
+            - mkdir -p /opt/spekk
+            - mkdir -p /etc/spekk
+            - mkdir -p /var/log/spekk
+            - chown agent:agent /var/log/spekk
+
+            # Git config for agent user
+            - su - agent -c 'git config --global init.defaultBranch main'
+
+            # Mark provisioning complete
+            - touch /opt/spekk/.provisioned
+
+Outputs:
+  PublicIP:
+    Description: Public IPv4 address of the instance
+    Value: !GetAtt Instance.PublicIp
+
+  InstanceId:
+    Description: EC2 instance ID
+    Value: !Ref Instance
+
+  SpekkCommand:
+    Description: Registers the instance with spekk once cloud-init has finished. Edit the key path if the private key is elsewhere.
+    Value: !Sub spekk sandbox create --name ${AWS::StackName} --ip ${Instance.PublicIp} --ssh-key ~/.ssh/${KeyName}.pem --ssh-user ubuntu
