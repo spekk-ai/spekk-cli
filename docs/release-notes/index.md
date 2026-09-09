@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.30.0 -- A Sandbox on AWS, and a Deploy That Replaces a Running Agent](RELEASE-NOTES-1.30.0.md)
+
+One CloudFormation stack now stands up a spekk sandbox on AWS: an isolated VPC, a prepared Ubuntu 24.04 instance, and the command that registers it. `spekk sandbox deploy` replaces an agent that is running, which it could not do before. Announce, dedup, and the digest now share one rule for which findings are still open, and `spekk observer scan-check` refuses a bad type or a stray argument instead of answering `clear`. New `spekk list --priority` filter. Three argument mistakes that used to run anyway now fail.
+
 ## [1.29.0 -- The Spec Explorer on a Phone, and Two New Skills](RELEASE-NOTES-1.29.0.md)
 
 `spekk show` had one layout, and a phone got the desktop one. At 768 pixels wide or less the page now shows each spec as a full-screen card in a snapping deck, a swipe up raises that spec's assertions, and search and the filters apply to the deck. Two built-in skills join it: `spekk coach property-tests` decides whether a promise deserves a property-based test and writes it, and `spekk builder review` reviews what the builder just built through six lenses and fixes what it finds. The docs and the README were read against the code and corrected.
