@@ -45,6 +45,24 @@ func TestParseBuilderFlags_SpecAndAssertion(t *testing.T) {
 	}
 }
 
+func TestParseBuilderFlags_Watch(t *testing.T) {
+	cfg := ParseBuilderFlags([]string{"--watch"})
+	if !cfg.Watch {
+		t.Error("expected Watch to be true")
+	}
+	cfg = ParseBuilderFlags([]string{"-w"})
+	if !cfg.Watch {
+		t.Error("expected Watch to be true with -w shorthand")
+	}
+}
+
+func TestParseBuilderFlags_WatchDefaultFalse(t *testing.T) {
+	cfg := ParseBuilderFlags([]string{"--once"})
+	if cfg.Watch {
+		t.Error("expected Watch to be false by default")
+	}
+}
+
 func TestParseBuilderFlags_AllModes(t *testing.T) {
 	cfg := ParseBuilderFlags([]string{"--once", "--confirm", "-s", "myspec"})
 	if !cfg.Once {

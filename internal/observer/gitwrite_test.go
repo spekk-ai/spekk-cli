@@ -30,7 +30,7 @@ func detachFromAmbientGitIdentity(t *testing.T) {
 	t.Helper()
 
 	empty := filepath.Join(t.TempDir(), "gitconfig")
-	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+	if err := os.WriteFile(empty, []byte("[user]\n\tuseConfigOnly = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("GIT_CONFIG_GLOBAL", empty)
