@@ -8,6 +8,8 @@ Every spekk command, its flags, and what it does. `spekk help` prints the comman
 
 `spekk` with no command runs `spekk next`.
 
+Two rules hold for every command. A flag that takes a value takes it after a space, so `--flag=value` is an unknown argument and fails. A flag that takes a value is supplied once: a repeat fails rather than discard the value you typed. A flag that takes no value may repeat, because a repeat discards nothing.
+
 ## `spekk init`
 
 Set up a project for spec-driven development.
@@ -110,7 +112,9 @@ spekk list --cross-branch --json    # Merge preview across branches
 
 Rows are sorted by priority, then by id, in every format. The JSON output also contains `branch` and `depends_on`, which the table, TSV, and CSV do not show. `--json`, `--tsv`, and `--csv` exclude each other. `--status`, `--priority`, and `--specs-dir` do not apply to `--cross-branch`.
 
-Supply `--priority` once, with a space before its value. The command rejects `--priority=1` and missing or empty values for `--priority` and `--status`. Priority accepts `0` and other nonnegative integers outside the stored range of 1 through 3. These values return no matching assertions.
+A missing or empty value for `--priority` or `--status` fails. Priority accepts `0` and other nonnegative integers outside the stored range of 1 through 3. These values return no matching assertions.
+
+The two kinds of failure print on different streams. A bad filter value prints as JSON on stdout, so a caller that asked for `--json` reads the error in the format it expects. A malformed command line prints as text on stderr, as the mutually exclusive format flags do.
 
 Every empty JSON result contains `type: "assertions"` and `assertions: []`, including an empty specs directory and filters with no matches. TSV and CSV contain their header. Table output reports no matches and includes each active filter value.
 
@@ -552,6 +556,8 @@ The result is one JSON line:
 | `suppressed` | An active entry in `.spekk/dont-flag.yaml`, as committed on `main`, matches an evidence path or the slug. File nothing |
 | `covered` | A live claim with the same type and slug already exists. File nothing |
 | `clear` | File the observation with the returned `slug`. When an observation on `main` already has the plain slug, the returned slug carries a `-YYYYMMDD` suffix |
+
+The command refuses a `--type` outside the two values above, and refuses a stray argument. Both fail before it answers, because a `clear` result followed by an observation the parser drops on read loses the finding with nothing reported. A path list written with spaces instead of commas is the common case.
 
 A malformed `.spekk/dont-flag.yaml` fails the check with a message that names the entry. A broken suppression file is never read as empty. See [Suppressing observations](configuration.md#suppressing-observations) for the file format.
 
