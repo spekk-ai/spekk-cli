@@ -11,7 +11,15 @@ import (
 	"syscall"
 
 	"github.com/spekk-ai/spekk-cli/internal/cli"
+	"github.com/spekk-ai/spekk-cli/internal/install"
 )
+
+// CoachFlags defines the flag set for the coach CLI. The coach takes an
+// optional skill as a positional argument plus the shared --harness selector.
+var CoachFlags = cli.FlagSet{
+	"harness": {Names: []string{"--harness"}, Type: cli.StringFlag},
+	"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+}
 
 // LaunchOptions configures agent launching behavior.
 type LaunchOptions struct {
@@ -85,21 +93,70 @@ func BuildSkillMessage(installDir, agent, subcommand string, args []string) (str
 	return sb.String(), nil
 }
 
-// Launch spawns the `claude` CLI with the given message and inherited stdio.
-// It forwards SIGINT and preserves the exit code.
-func Launch(message string) error {
-	cmd := exec.Command("claude", "--dangerously-skip-permissions", message)
+// Launch spawns the harness binary with message as the interactive prompt and
+// inherited stdio. It forwards SIGINT and preserves the exit code.
+func Launch(profile Profile, message string) error {
+	return spawn(profile, profile.InteractiveArgs(message))
+}
+
+// ensureInteractiveSkill installs (or refreshes) the coach/builder skill for a
+// skill-delivery harness before its interactive session opens, so the session
+// is governed by an installed skill rather than an inline prompt. target is the
+// harness's install target; an empty target (claude-code takes an inline system
+// prompt) is a no-op. The install is idempotent — an up-to-date skill is not
+// rewritten — and writes only the one role skill, no agent shim.
+func ensureInteractiveSkill(target, role string) error {
+	if target == "" {
+		return nil
+	}
+	_, err := install.EnsureRoleSkill(install.Options{Target: target}, role)
+	return err
+}
+
+// runInteractivePlan ensures the skill (for a skill-delivery harness) and then
+// launches, in that order: a skill-governed session must not open before its
+// skill is on disk. ensure and launch are injected so the ordering is testable
+// without spawning a process. For an inline-prompt harness (empty InstallTarget)
+// ensure is skipped and only launch runs.
+func runInteractivePlan(plan InteractivePlan, role string, ensure func(target, role string) error, launch func(argv []string) error) error {
+	if plan.InstallTarget != "" {
+		if err := ensure(plan.InstallTarget, role); err != nil {
+			return fmt.Errorf("ensuring the spekk-%s skill for %s: %w", role, plan.InstallTarget, err)
+		}
+	}
+	return launch(plan.Argv)
+}
+
+// LaunchInteractive opens an interactive coach or builder session under profile.
+// role is "coach" or "builder". inlineArgv is the argv used only for a harness
+// that accepts an inline system prompt (claude-code) — the caller builds it from
+// the full agent prompt (InteractiveArgs or SystemPromptArgs). Every other
+// harness executes any message it receives, so the full prompt is never passed:
+// its role skill is ensured installed and the session opens governed by that
+// skill, seeded only with a short activation message.
+func LaunchInteractive(profile Profile, role string, inlineArgv []string) error {
+	plan := profile.InteractiveLaunch(role, SkillActivationMessage(role), inlineArgv)
+	return runInteractivePlan(plan, role, ensureInteractiveSkill, func(argv []string) error {
+		return spawn(profile, argv)
+	})
+}
+
+// spawn runs the harness binary with the given argv and inherited stdio. It
+// forwards SIGINT and preserves the exit code.
+func spawn(profile Profile, argv []string) error {
+	cmd := exec.Command(profile.Binary, argv...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		if isNotFound(err) {
-			fmt.Fprintln(os.Stderr, "Error: Claude Code CLI not found. Please install Claude Code first.")
-			fmt.Fprintln(os.Stderr, "Visit: https://claude.ai/code for installation instructions.")
+			l1, l2 := profile.notFoundLines()
+			fmt.Fprintln(os.Stderr, "Error: "+l1)
+			fmt.Fprintln(os.Stderr, l2)
 			os.Exit(1)
 		}
-		return fmt.Errorf("Error launching Claude Code: %w", err)
+		return fmt.Errorf("Error launching %s: %w", profile.DisplayName, err)
 	}
 
 	// Forward SIGINT to child process
@@ -191,7 +248,10 @@ func buildHelpText(installDir, agent string) string {
 	}
 
 	extras := agentHelpExtras[agent]
-	optionsBlock := extras.Options + "  --help, -h             Show this help message"
+	optionsBlock := extras.Options + `  --harness <name>       Agent harness: claude-code (default, alias claude),
+                         opencode, hermes, codex, or gemini.
+                         Overrides the ` + HarnessEnvVar + ` env var.
+  --help, -h             Show this help message`
 
 	examplesBlock := extras.Examples
 	if examplesBlock == "" {

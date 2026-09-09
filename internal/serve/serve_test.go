@@ -5,8 +5,51 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/spekk-ai/spekk-cli/internal/agent"
 )
+
+func TestRequireClaudeHarness(t *testing.T) {
+	claude, err := agent.ResolveHarness("claude-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	opencode, err := agent.ResolveHarness("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A zero profile defaults to claude-code and is accepted.
+	if err := requireClaudeHarness(agent.Profile{}); err != nil {
+		t.Errorf("zero profile should be accepted, got %v", err)
+	}
+	if err := requireClaudeHarness(claude); err != nil {
+		t.Errorf("claude-code should be accepted, got %v", err)
+	}
+
+	// A non-claude harness is refused with a message naming claude-code.
+	err = requireClaudeHarness(opencode)
+	if err == nil {
+		t.Fatal("expected non-claude harness to be refused")
+	}
+	if !strings.Contains(err.Error(), claude.DisplayName) {
+		t.Errorf("refusal message should name %q, got %q", claude.DisplayName, err.Error())
+	}
+}
+
+// TestRunRefusesNonClaudeHarness confirms serve refuses to start (returns a
+// non-nil error, before spawning anything) under a non-claude harness.
+func TestRunRefusesNonClaudeHarness(t *testing.T) {
+	opencode, err := agent.ResolveHarness("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(Options{Harness: opencode}, ""); err == nil {
+		t.Fatal("Run should refuse a non-claude harness")
+	}
+}
 
 func TestListenOnPort(t *testing.T) {
 	ln1, err := listenOnPort("127.0.0.1", 0, 0)

@@ -106,3 +106,6 @@ dist/
 # Generated spec-explorer artifact
 .spekk/index.html
 .spekk/index.db
+
+# Local-only PR/branch cache for spekk build loops
+.spekk-pr-cache.txt

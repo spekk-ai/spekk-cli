@@ -802,6 +802,15 @@ func launchCoachAgent(args []string) {
 		return
 	}
 
+	// Resolve the harness (--harness flag > SPEKK_HARNESS env > default) before
+	// building the message, so an unknown name fails fast without spawning.
+	harnessFlag := cli.ParseFlags(args, agent.CoachFlags).String("harness")
+	profile, err := agent.ResolveHarness(harnessFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
 	// Build activation message
 	opts := agent.LaunchOptions{
 		Agent:      "coach",
@@ -830,7 +839,11 @@ func launchCoachAgent(args []string) {
 		os.Exit(1)
 	}
 
-	if err := agent.Launch(message); err != nil {
+	// Interactive delivery. claude-code seeds the full prompt as its first
+	// message and waits; every other harness executes any message it is handed,
+	// so LaunchInteractive ensures the spekk-coach skill is installed and opens a
+	// skill-governed session seeded only with a short activation instead.
+	if err := agent.LaunchInteractive(profile, "coach", profile.InteractiveArgs(message)); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -941,6 +954,7 @@ func launchServe(args []string) {
 		"port":    {Names: []string{"--port", "-p"}, Type: cli.StringFlag},
 		"host":    {Names: []string{"--host"}, Type: cli.StringFlag},
 		"verbose": {Names: []string{"--verbose", "-v"}, Type: cli.BoolFlag},
+		"harness": {Names: []string{"--harness"}, Type: cli.StringFlag},
 		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -955,13 +969,23 @@ OPTIONS:
   --port, -p <port>   Port to listen on (default: 3118)
   --host <host>       Host to bind to (default: localhost)
   --verbose, -v       Enable debug logging for WebSocket messages
+  --harness <name>    Agent harness (only claude-code is supported by serve)
   --help, -h          Show this help message
 `)
 		return
 	}
 
+	// Resolve the harness (--harness flag > SPEKK_HARNESS env > default) so an
+	// unknown name fails fast; serve.Run then refuses any valid non-claude one.
+	profile, err := agent.ResolveHarness(flags.String("harness"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
 	opts := serve.Options{
 		Verbose: flags.Bool("verbose"),
+		Harness: profile,
 	}
 
 	if p := flags.String("port"); p != "" {
@@ -1608,7 +1632,7 @@ Next steps:
   spekk builder    # implement the next ready assertion
 
 Using a different coding assistant? Register the agents with it:
-  spekk install --target claude-code|copilot|cursor|opencode|codex`)
+  spekk install --target claude-code|copilot|cursor|opencode|codex|hermes|gemini`)
 }
 
 // runPrompt prints the layered-resolved prompt for an agent to stdout.
@@ -1714,6 +1738,8 @@ TARGETS:
   cursor                        ~/.cursor/agents/
   opencode                      ~/.config/opencode/agents/
   codex                         ~/.codex/prompts/ (global only)
+  hermes                        ~/.hermes/skills/ (project: .hermes/skills/)
+  gemini                        ~/.gemini/GEMINI.md (project: ./GEMINI.md)
 
 OPTIONS:
   --target <tool>   Host tool to install into (required)
