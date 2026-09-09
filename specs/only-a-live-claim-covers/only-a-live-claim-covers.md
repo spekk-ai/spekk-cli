@@ -52,7 +52,7 @@ Presence on main gives the resolved semantics that the comment asks for, from gi
 
 ## Scope
 
-- In scope: `FindCovering`, `Covers`, the `branch` field of the `scan-check` result, the lifecycle package comment, and the observer prompt text that teaches the old dedup rule.
+- In scope: `FindCovering`, `Covers`, the `branch` field of the `scan-check` result, the shared rule for active findings, announcement eligibility, and the lifecycle documentation.
 - Out of scope, deliberately:
   - **A configurable dedup key.** One rule the reader can state is worth more than a setting each repository tunes differently.
   - **A relation between findings** (supersedes, related-to, a recurrence counter). The union is a set of files in git, and a link field would need a writer, a validator, and a repair path.
@@ -64,11 +64,11 @@ Presence on main gives the resolved semantics that the comment asks for, from gi
 
 Dedup gets narrower, so the same drift re-found under a different name is filed twice. That is the trade the package already makes where it refuses to reduce a directory to the files under it: a duplicate is visible and a person can close it, and a false negative hides real drift and nobody learns of it.
 
-## Known gap: announce still answers differently
+## Shared Active-Finding Rule
 
-`internal/observer/selection.go` is a third surface that answers "which findings are live", and it still asks the old question: any `observer/*` ref, not on main. So an observation filed at a branch other than its own — a rename, or a misfiling the prompt forbids — is invisible to dedup and to the digest while announce still offers it to a person. The team then hears about a finding every other tool says nobody claims, and hears about it again once the re-file lands.
+Announce, deduplication, and digest use the same rule: the observation is on its own branch, and its slug is absent from main. A copy on a renamed or unrelated branch fails this rule in all three operations.
 
-The principle this spec states is that two surfaces answering one question must not answer it differently, and there are three. Closing it means lifting the predicate across a package boundary, which is its own change. Tracked separately rather than folded in here.
+Each operation then applies its own filters. Announce still requires an open, unannounced, high- or medium-severity finding with evidence and a branch visible on origin. See `assertions/announce-uses-live-claim-rule.md` and issue #211.
 
 ## Assertions
 

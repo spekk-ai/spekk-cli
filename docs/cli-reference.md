@@ -85,7 +85,8 @@ List assertions in a table, or as JSON, TSV, or CSV.
 spekk list                          # Table: ID, STATUS, PRI, PARENT, TITLE
 spekk list --long                   # Add the FILE column
 spekk list --status draft           # Only one status
-spekk list --json                   # Flat JSON array, for jq
+spekk list --status done --priority 1 # Combine status and priority filters
+spekk list --json                   # JSON object with an assertions array
 spekk list --tsv                    # Tab-separated, lowercase header
 spekk list --csv                    # RFC 4180 CSV with a header row
 spekk list --specs-dir ./my-specs   # Read a different specs directory
@@ -97,8 +98,9 @@ spekk list --cross-branch --json    # Merge preview across branches
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--status <value>` | | Keep only this status: `not_started`, `in_progress`, `done`, `draft`, or `failed` |
+| `--priority <N>` | | Keep only this priority. Requires a nonnegative integer and works with `--status` |
 | `--long` | `-l` | Add the FILE column to the table, TSV, and CSV output |
-| `--json` | | JSON array, one object per assertion |
+| `--json` | | JSON object with an `assertions` array |
 | `--tsv` | | Tab-separated values with a lowercase header |
 | `--csv` | | RFC 4180 CSV with a header row |
 | `--specs-dir <path>` | | Read specs from this directory (default: `specs/` at the git root) |
@@ -106,7 +108,11 @@ spekk list --cross-branch --json    # Merge preview across branches
 | `--branch-filter <glob>` | | In cross-branch mode, only branches that match the glob |
 | `--assertions-only` | | Accepted for old scripts. It changes nothing: assertions are the default |
 
-Rows are sorted by priority, then by id, in every format. The JSON output also carries `branch` and `depends_on`, which the table, TSV, and CSV do not show. `--json`, `--tsv`, and `--csv` exclude each other. `--status` and `--specs-dir` do not apply to `--cross-branch`.
+Rows are sorted by priority, then by id, in every format. The JSON output also contains `branch` and `depends_on`, which the table, TSV, and CSV do not show. `--json`, `--tsv`, and `--csv` exclude each other. `--status`, `--priority`, and `--specs-dir` do not apply to `--cross-branch`.
+
+Supply `--priority` once, with a space before its value. The command rejects `--priority=1` and missing or empty values for `--priority` and `--status`. Priority accepts `0` and other nonnegative integers outside the stored range of 1 through 3. These values return no matching assertions.
+
+Every empty JSON result contains `type: "assertions"` and `assertions: []`, including an empty specs directory and filters with no matches. TSV and CSV contain their header. Table output reports no matches and includes each active filter value.
 
 ## `spekk status`
 
@@ -557,7 +563,7 @@ Announce the open observations on the connected chat surface. This command runs 
 spekk observer announce
 ```
 
-One run: `git fetch` (the only remote read), refresh the index, pick the unannounced open observations with severity high or medium (low never announces), high first and oldest first, from `observer/*` branches on `origin`. It opens one conversation with at most three findings, then commits an `announced:` timestamp to each observer branch and pushes. An observation with no `affected` path never announces. With nothing to announce it prints `nothing to announce` and exits 0.
+One run: `git fetch`, the only remote read, then refresh the index and pick the unannounced open observations with severity high or medium. Low never announces. An observation is eligible only as a live claim: it must sit on the `observer/<slug>` branch named after it, and no observation with that slug may be on main. This is the rule the digest and `scan-check` apply, so the three agree. Ordering is high severity first, then oldest first, then slug. It opens one conversation with at most three findings, then commits an `announced:` timestamp to each observer branch and pushes. An observation with no `affected` path never announces. With nothing to announce it prints `nothing to announce` and exits 0.
 
 When `SPEKK_CONVERSATION_SPOOL` is not set, the command fails, appends a line to `.spekk/observer-conversation.log`, and exits non-zero. Every other failure does the same, and leaves `announced:` unset, so the next run retries.
 
@@ -741,7 +747,7 @@ Download the agent binary from the latest spekk release and install it on a sand
 spekk sandbox deploy my-sandbox
 ```
 
-It copies the binary, writes the `spekk-agent` systemd unit, and restarts the service. On a root login the copy goes straight to `/opt/spekk/agent-client`, and `scp` cannot overwrite a binary that is running. See [Cutting a release](releasing.md#known-sharp-edges).
+It copies the binary, writes the `spekk-agent` systemd unit, and restarts the service. Every login stages the upload in its home directory, then installs it beside the target and renames it into place, so a deploy replaces an agent that is running.
 
 ## `spekk conversation open`
 

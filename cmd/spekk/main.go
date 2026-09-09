@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	spekk "github.com/spekk-ai/spekk-cli"
@@ -232,6 +233,7 @@ func runList(args []string) {
 func execList(args []string, stdout, stderr io.Writer, specsDir string) int {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"status":         {Names: []string{"--status"}, Type: cli.StringFlag},
+		"priority":       {Names: []string{"--priority"}, Type: cli.StringFlag},
 		"assertionsOnly": {Names: []string{"--assertions-only"}, Type: cli.BoolFlag},
 		"specsDir":       {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
 		"json":           {Names: []string{"--json"}, Type: cli.BoolFlag},
@@ -258,7 +260,8 @@ OUTPUT FORMAT (default: table):
 
 FILTER OPTIONS:
   --status <value>      Filter by assertion status. Valid values:
-                          not_started, in_progress, done, draft, failed
+                           not_started, in_progress, done, draft, failed
+  --priority <N>        Filter by priority (nonnegative integer); combines with --status
   --assertions-only     Accepted for backward compatibility (now a no-op; assertions are the default)
   --specs-dir <path>    Read specs from a specific directory (default: git root specs/)
   --help, -h            Show this help message
@@ -282,6 +285,7 @@ EXAMPLES:
   spekk list --csv
   spekk list --long
   spekk list --status draft
+  spekk list --status not_started --priority 1
   spekk list --status draft --tsv
   spekk list --assertions-only --csv
   spekk list --specs-dir /path/to/specs
@@ -300,6 +304,14 @@ EXAMPLES:
 	useCSV := flags.Bool("csv")
 	showFile := flags.Bool("long")
 	statusVal := flags.String("status")
+	if flags.Err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", flags.Err)
+		return 1
+	}
+	priority, err := listPriority(flags)
+	if err != nil {
+		return listError(err, stdout, stderr)
+	}
 
 	// Reject mutually exclusive format flags.
 	formatCount := 0
@@ -314,6 +326,10 @@ EXAMPLES:
 	}
 
 	if flags.Bool("crossBranch") {
+		if priority != nil {
+			fmt.Fprintln(stderr, "Error: --priority does not apply to --cross-branch output")
+			return 1
+		}
 		if statusVal != "" {
 			fmt.Fprintln(stderr, "Error: --status does not apply to --cross-branch output")
 			return 1
@@ -361,12 +377,24 @@ EXAMPLES:
 	if statusVal != "" {
 		filtered, filterErr := parser.FilterByStatus(result, statusVal)
 		if filterErr != nil {
-			// Use FormatError so machine-readable callers get consistent JSON output.
-			out, _ := parser.FormatError(filterErr.Error())
-			fmt.Fprintln(stdout, string(out))
-			return 1
+			return listError(&filterValueError{filterErr.Error()}, stdout, stderr)
 		}
 		result = filtered
+	}
+	if priority != nil {
+		result = parser.FilterByPriority(result, *priority)
+	}
+
+	// JSON includes branch and dependency fields and follows the table order.
+	if useJSON {
+		out, err := parser.FormatAssertionsFlat(result)
+		if err != nil {
+			out2, _ := parser.FormatError(err.Error())
+			fmt.Fprintln(stdout, string(out2))
+			return 1
+		}
+		fmt.Fprintln(stdout, string(out))
+		return 0
 	}
 
 	// Handle empty results with format-aware output.
@@ -377,28 +405,19 @@ EXAMPLES:
 		case useCSV:
 			fmt.Fprint(stdout, formatter.FormatCSVHeader(opts))
 		default:
-			var out []byte
+			var filters []string
 			if statusVal != "" {
-				out, _ = parser.FormatEmptyFiltered(statusVal)
-			} else {
-				out, _ = parser.FormatEmpty()
+				filters = append(filters, fmt.Sprintf("status '%s'", statusVal))
 			}
-			fmt.Fprintln(stdout, string(out))
+			if priority != nil {
+				filters = append(filters, fmt.Sprintf("priority %d", *priority))
+			}
+			message := "No assertions found in specs/ directory."
+			if len(filters) > 0 {
+				message = "No assertions match " + strings.Join(filters, " and ") + "."
+			}
+			fmt.Fprintln(stdout, message)
 		}
-		return 0
-	}
-
-	// --json: flat assertion JSON, in the same order as the default table.
-	// The JSON is a superset: it also carries branch and depends_on, which the
-	// table, TSV, and CSV columns do not show.
-	if useJSON {
-		out, err := parser.FormatAssertionsFlat(result)
-		if err != nil {
-			out2, _ := parser.FormatError(err.Error())
-			fmt.Fprintln(stdout, string(out2))
-			return 1
-		}
-		fmt.Fprintln(stdout, string(out))
 		return 0
 	}
 
@@ -418,6 +437,48 @@ EXAMPLES:
 		fmt.Fprintln(stdout, formatter.FormatTable(rows, opts))
 	}
 	return 0
+}
+
+// filterValueError is a bad value for a filter flag. A malformed command line
+// is a different kind of failure, and it prints on a different stream. See
+// listError.
+type filterValueError struct{ msg string }
+
+func (e *filterValueError) Error() string { return e.msg }
+
+// listError reports a list failure on the stream that its kind calls for.
+//
+//   - A bad filter value prints as JSON on stdout, so a caller that asked for
+//     machine-readable output can read the error in the same format.
+//   - A malformed command line prints as text on stderr, like the mutually
+//     exclusive format flags.
+//
+// The list command has made this distinction since --status. Send both kinds
+// through this function, or the next filter flag selects a stream by accident.
+func listError(err error, stdout, stderr io.Writer) int {
+	var valueErr *filterValueError
+	if errors.As(err, &valueErr) {
+		out, _ := parser.FormatError(err.Error())
+		fmt.Fprintln(stdout, string(out))
+		return 1
+	}
+	fmt.Fprintf(stderr, "Error: %s\n", err)
+	return 1
+}
+
+func listPriority(flags *cli.ParseResult) (*int, error) {
+	if flags.Count("priority") == 0 {
+		return nil, nil
+	}
+	if flags.Count("priority") > 1 {
+		return nil, fmt.Errorf("--priority must be supplied only once")
+	}
+	value := flags.String("priority")
+	priority, err := strconv.Atoi(value)
+	if err != nil || priority < 0 {
+		return nil, &filterValueError{fmt.Sprintf("--priority requires a nonnegative integer, got %q", value)}
+	}
+	return &priority, nil
 }
 
 // execListCrossBranch renders the cross-branch classification — the same

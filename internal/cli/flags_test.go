@@ -56,6 +56,9 @@ func TestParseFlags_ShortAliases(t *testing.T) {
 	if !result.Bool("dryRun") {
 		t.Error("expected dryRun=true via -d")
 	}
+	if result.Count("spec") != 1 || result.Count("dryRun") != 1 || result.Err != nil {
+		t.Fatalf("invalid alias counts or error: %+v", result)
+	}
 }
 
 func TestParseFlags_Defaults(t *testing.T) {
@@ -74,7 +77,7 @@ func TestParseFlags_Defaults(t *testing.T) {
 	}
 }
 
-func TestParseFlags_UnknownFlagsIgnored(t *testing.T) {
+func TestParseFlags_ReportsUnknownArgumentsAndCollectsKnownFlags(t *testing.T) {
 	flags := FlagSet{
 		"once": {Names: []string{"--once"}, Type: BoolFlag},
 	}
@@ -83,6 +86,9 @@ func TestParseFlags_UnknownFlagsIgnored(t *testing.T) {
 
 	if !result.Bool("once") {
 		t.Error("expected once=true despite unknown flags")
+	}
+	if result.Err == nil || result.Err.Error() != `unknown argument "--unknown"` {
+		t.Fatalf("expected the first unknown argument, got %v", result.Err)
 	}
 }
 
@@ -114,16 +120,14 @@ func TestParseFlags_MixedBoolAndString(t *testing.T) {
 	}
 }
 
-func TestParseFlags_StringFlagAtEnd(t *testing.T) {
+func TestParseFlags_MissingValueSurvivesLaterAlias(t *testing.T) {
 	flags := FlagSet{
-		"spec": {Names: []string{"--spec"}, Type: StringFlag},
+		"spec": {Names: []string{"--spec", "-s"}, Type: StringFlag},
 	}
 
-	// String flag at end with no value — should not panic
-	result := ParseFlags([]string{"--spec"}, flags)
-
-	if got := result.String("spec"); got != "" {
-		t.Errorf("expected spec=\"\" when no value provided, got %q", got)
+	result := ParseFlags([]string{"--spec", "-s", "auth"}, flags)
+	if result.Count("spec") != 2 || result.String("spec") != "auth" || result.Err == nil || result.Err.Error() != "--spec requires a value" {
+		t.Fatalf("missing value was lost across aliases: %+v", result)
 	}
 }
 

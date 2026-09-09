@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -98,7 +100,133 @@ func TestExecList_InvalidStatus(t *testing.T) {
 	}
 }
 
+func TestExecList_PriorityFilter(t *testing.T) {
+	specsDir := makeTmpSpecs(t)
+	for id, priority := range map[string]int{"done-high": 1, "done-medium": 2} {
+		content := fmt.Sprintf("---\nid: %s\nparent: my-spec\ncreated: 2026-01-01T00:00:00Z\npriority: %d\nstatus: done\n---\n# Example\n", id, priority)
+		if err := os.WriteFile(filepath.Join(specsDir, "my-spec", "assertions", id+".md"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, tc := range []struct {
+		name      string
+		args      []string
+		want      []string
+		emptyText string
+	}{
+		{"unfiltered", nil, []string{"done-high", "done-medium", "my-assertion"}, ""},
+		{"high-table", []string{"--priority", "1"}, []string{"done-high", "my-assertion"}, ""},
+		{"medium-tsv", []string{"--priority", "2", "--tsv"}, []string{"done-medium"}, ""},
+		{"combined-json", []string{"--priority", "1", "--status", "done", "--json"}, []string{"done-high"}, ""},
+		{"combined-csv", []string{"--priority", "1", "--status", "done", "--csv", "--assertions-only", "--long"}, []string{"done-high"}, ""},
+		{"zero-json", []string{"--priority", "0", "--json"}, nil, ""},
+		{"zero-table", []string{"--priority", "0"}, nil, "No assertions match priority 0.\n"},
+		{"empty-status-table", []string{"--status", "draft"}, nil, "No assertions match status 'draft'.\n"},
+		{"combined-empty-table", []string{"--priority", "2", "--status", "not_started"}, nil, "No assertions match status 'not_started' and priority 2.\n"},
+		{"empty-status-json", []string{"--status", "draft", "--json"}, nil, ""},
+		{"combined-empty-json", []string{"--priority", "2", "--status", "not_started", "--json"}, nil, ""},
+		{"outside-range-tsv", []string{"--priority", "4", "--tsv"}, nil, "id\tstatus\tpri\tparent\ttitle\n"},
+		{"combined-empty-csv", []string{"--priority", "2", "--status", "not_started", "--csv"}, nil, "id,status,pri,parent,title\r\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := execList(tc.args, &stdout, &stderr, specsDir); code != 0 {
+				t.Fatalf("exit %d: %s", code, stderr.String())
+			}
+			for _, id := range []string{"done-high", "done-medium", "my-assertion"} {
+				if strings.Contains(stdout.String(), id) != slices.Contains(tc.want, id) {
+					t.Errorf("wrong selection for %s: %s", id, stdout.String())
+				}
+			}
+			if slices.Contains(tc.args, "--json") {
+				var result parser.AssertionsFlatOutput
+				if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.Assertions == nil || len(result.Assertions) != len(tc.want) {
+					t.Fatalf("invalid assertion list: %s (%v)", stdout.String(), err)
+				}
+			}
+			if tc.emptyText != "" && stdout.String() != tc.emptyText {
+				t.Fatalf("empty output = %q, want %q", stdout.String(), tc.emptyText)
+			}
+		})
+	}
+}
+
+// A malformed command line prints on stderr, like the mutually exclusive
+// format flags.
+func TestExecList_MalformedPriorityArgs(t *testing.T) {
+	for _, args := range [][]string{
+		{"--priority"}, {"--priority", "--json"},
+		{"--priority=1"}, {"--priority="}, {"--priority", ""},
+		{"--priority", "1", "--cross-branch"},
+		{"--priority", "1", "--priority"},
+		{"--priority", "1", "--priority", "2"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := execList(args, &stdout, &stderr, t.TempDir()); code == 0 || !strings.Contains(stderr.String(), "--priority") || stdout.Len() != 0 {
+				t.Fatalf("expected a command-line error on stderr, got exit %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+// A bad filter value prints as JSON on stdout, the same as an invalid
+// --status, so one caller reads both in one format.
+func TestExecList_InvalidPriorityValue(t *testing.T) {
+	for _, args := range [][]string{
+		{"--priority", "text"}, {"--priority", "-1"},
+		{"--priority", "999999999999999999999999999999"},
+		{"--json", "--priority", "text"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := execList(args, &stdout, &stderr, t.TempDir())
+			if code == 0 {
+				t.Fatalf("expected a nonzero exit, got stdout %q, stderr %q", stdout.String(), stderr.String())
+			}
+			var out struct {
+				Error   bool   `json:"error"`
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+				t.Fatalf("expected a JSON error on stdout, got %q (%v)", stdout.String(), err)
+			}
+			if !out.Error || !strings.Contains(out.Message, "--priority") {
+				t.Fatalf("expected the message to name --priority, got %q", stdout.String())
+			}
+		})
+	}
+}
+
+func TestExecList_MissingStatus(t *testing.T) {
+	for _, args := range [][]string{
+		{"--status"}, {"--status", ""}, {"--status", "--priority", "1"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := execList(args, &stdout, &stderr, t.TempDir()); code == 0 || !strings.Contains(stderr.String(), "--status") || stdout.Len() != 0 {
+				t.Fatalf("expected status error without output, got exit %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
 // --- Format-aware empty ---
+
+func TestExecList_EmptyJSON(t *testing.T) {
+	emptyDir := t.TempDir()
+	for _, dir := range []string{emptyDir, filepath.Join(emptyDir, "missing")} {
+		var stdout, stderr bytes.Buffer
+		if code := execList([]string{"--json"}, &stdout, &stderr, dir); code != 0 {
+			t.Fatalf("exit %d: %s", code, stderr.String())
+		}
+		var result parser.AssertionsFlatOutput
+		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.Type != "assertions" || result.Assertions == nil || len(result.Assertions) != 0 {
+			t.Fatalf("expected an empty flat list for %s, got %s (%v)", dir, stdout.String(), err)
+		}
+	}
+}
 
 func TestExecList_EmptyTSV(t *testing.T) {
 	emptyDir := t.TempDir()

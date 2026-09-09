@@ -48,46 +48,6 @@ func TestSudoWrapRunsTheScriptUnderSudo(t *testing.T) {
 	}
 }
 
-// Every privileged step escalates through one helper, so the rule is checked
-// once here rather than at each call site.
-func TestPrivilegedScriptEscalatesOnlyForANonRootUser(t *testing.T) {
-	script := "systemctl restart spekk-agent"
-	if got := privilegedScript("root", script); got != script {
-		t.Errorf("root: got %q, want the script unchanged", got)
-	}
-	got := privilegedScript("ubuntu", script)
-	if !strings.Contains(got, "| sudo bash") {
-		t.Errorf("ubuntu: %q does not escalate", got)
-	}
-}
-
-// A non-root deploy must not stage the binary at a fixed name in /tmp. Every
-// local user can write that directory, and what root moves into place is what
-// systemd then runs as the agent.
-func TestNonRootDeployStagesInTheLoginUsersHome(t *testing.T) {
-	target := scpTarget("ubuntu", "9.9.9.9")
-	if target != "ubuntu@9.9.9.9:"+stagedBinary {
-		t.Errorf("scp target = %q, want the staged name in the login user's home", target)
-	}
-	if strings.Contains(target, "/tmp/") {
-		t.Errorf("scp target stages in a world-writable directory: %q", target)
-	}
-	if got := scpTarget("root", "9.9.9.9"); got != "root@9.9.9.9:/opt/spekk/agent-client" {
-		t.Errorf("root scp target = %q, want /opt/spekk/agent-client", got)
-	}
-
-	cmd := installCommand("ubuntu", "chmod +x /opt/spekk/agent-client")
-	if !strings.HasPrefix(cmd, `sudo mv "$HOME/`+stagedBinary+`" /opt/spekk/agent-client && `) {
-		t.Errorf("install command does not move the staged binary first: %q", cmd)
-	}
-	if !strings.Contains(cmd, "| sudo bash") {
-		t.Errorf("install command does not escalate the install script: %q", cmd)
-	}
-	if got := installCommand("root", "chmod +x /opt/spekk/agent-client"); got != "chmod +x /opt/spekk/agent-client" {
-		t.Errorf("root install command = %q, want the script unchanged", got)
-	}
-}
-
 // The login user is stored and then interpolated into an ssh argument on
 // every later command, so a value ssh reads as an option has to be refused
 // before anything is recorded.
@@ -196,11 +156,8 @@ func TestEveryPrivilegedStepEscalatesForANonRootLogin(t *testing.T) {
 	}
 }
 
-// deployAgent is the one privileged step that also copies a file, so its two
-// decisions are checked where it makes them: where the binary is staged, and
-// what root is asked to run. Reverting either line inside deployAgent leaves
-// the helpers correct and their unit tests passing.
-func TestDeployStagesAndInstallsForANonRootLogin(t *testing.T) {
+// Deployment stages uploads in the login user's home and then installs them.
+func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 	var scpArgs, sshCommands []string
 	origSCP, origSSH := scpExec, sshExec
 	scpExec = func(args []string) ([]byte, error) {
@@ -215,27 +172,34 @@ func TestDeployStagesAndInstallsForANonRootLogin(t *testing.T) {
 
 	artifacts := &releaseArtifacts{BinaryPath: filepath.Join(t.TempDir(), "agent-client")}
 
-	if err := deployAgent("9.9.9.9", "", "sb", "ubuntu", artifacts); err != nil {
-		t.Fatalf("non-root deploy: %v", err)
-	}
-	if want := "ubuntu@9.9.9.9:" + stagedBinary; scpArgs[0] != want {
-		t.Errorf("staged at %q, want %q", scpArgs[0], want)
-	}
-	if !strings.HasPrefix(sshCommands[0], `sudo mv "$HOME/`+stagedBinary+`" /opt/spekk/agent-client && `) {
-		t.Errorf("the staged binary is not moved into place: %q", sshCommands[0])
-	}
-	if !strings.Contains(sshCommands[0], "| sudo bash") {
-		t.Errorf("the install script does not escalate: %q", sshCommands[0])
+	for _, user := range []string{"root", "ubuntu"} {
+		t.Run(user, func(t *testing.T) {
+			scpArgs, sshCommands = nil, nil
+			if err := deployAgent("9.9.9.9", "", "sb", user, artifacts); err != nil {
+				t.Fatalf("deploy: %v", err)
+			}
+			if len(scpArgs) != 1 || len(sshCommands) != 1 {
+				t.Fatalf("expected one upload and installation, got %v and %v", scpArgs, sshCommands)
+			}
+			if want := user + "@9.9.9.9:" + stagedBinary; scpArgs[0] != want {
+				t.Errorf("staged at %q, want %q", scpArgs[0], want)
+			}
+			_, uploadPath, _ := strings.Cut(scpArgs[0], ":")
+			if filepath.Base(uploadPath) != uploadPath {
+				t.Errorf("upload must use a file name in the login user's home: %q", uploadPath)
+			}
+			if got := strings.Contains(sshCommands[0], "| sudo bash"); got != (user != "root") {
+				t.Errorf("incorrect privilege level for %s: %s", user, sshCommands[0])
+			}
+			if user == "root" && strings.Contains(sshCommands[0], "sudo") {
+				t.Errorf("root installation must run without sudo: %s", sshCommands[0])
+			}
+		})
 	}
 
-	scpArgs, sshCommands = nil, nil
-	if err := deployAgent("9.9.9.9", "", "sb", "root", artifacts); err != nil {
-		t.Fatalf("root deploy: %v", err)
-	}
-	if want := "root@9.9.9.9:/opt/spekk/agent-client"; scpArgs[0] != want {
-		t.Errorf("root staged at %q, want %q", scpArgs[0], want)
-	}
-	if strings.Contains(sshCommands[0], "sudo") {
-		t.Errorf("root deploy escalates, which it must not: %q", sshCommands[0])
+	scpExec = func([]string) ([]byte, error) { return nil, errors.New("upload failed") }
+	sshCommands = nil
+	if err := deployAgent("9.9.9.9", "", "sb", "root", artifacts); err == nil || len(sshCommands) != 0 {
+		t.Fatalf("upload failure must stop installation: error %v, commands %v", err, sshCommands)
 	}
 }

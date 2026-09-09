@@ -366,6 +366,24 @@ func TestScanCheckRejectsAMalformedSlug(t *testing.T) {
 	}
 }
 
+func TestScanCheckRejectsUnsupportedTypeBeforeReadingGit(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var out, errOut bytes.Buffer
+	code := execObserverScanCheck([]string{
+		"--type", "unsupported_type",
+		"--slug", "new-finding",
+		"--affected", "specs/example/example.md",
+	}, &out, &errOut, time.Now())
+	if code == 0 || out.Len() != 0 {
+		t.Fatalf("unsupported type must fail without a result: exit %d, stdout %q", code, out.String())
+	}
+	for _, text := range []string{"--type", "unsupported_type", "code_spec_misalignment", "outdated_specs"} {
+		if !strings.Contains(errOut.String(), text) {
+			t.Errorf("error must contain %q, got %q", text, errOut.String())
+		}
+	}
+}
+
 // runScanCheck runs the command and decodes its JSON result.
 func runScanCheck(t *testing.T, now time.Time, slug, affected string) scanCheckResult {
 	t.Helper()

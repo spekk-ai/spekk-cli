@@ -573,11 +573,7 @@ WantedBy=multi-user.target
 // deployAgent copies the agent binary to /opt/spekk/agent-client, installs the
 // systemd unit, and (re)starts the service. Shared by Create and Deploy.
 func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) error {
-	// Copy the binary up via scp. A non-root user cannot write /opt/spekk,
-	// so it stages in that user's home directory and the install script
-	// moves it up under sudo. Not /tmp: a fixed name in a directory every
-	// local user can write is a file another user can put there first, and
-	// what root then moves into place is what systemd runs.
+	// Upload into the login user's home so SCP cannot overwrite the running executable.
 	scp := sshHostKeyOpts(name)
 	scp = append(scp, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
@@ -591,7 +587,6 @@ func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) er
 	// Install the unit, fix ownership, and start the service. The agent needs to
 	// own /opt/spekk so it can create its WORKSPACE (/opt/spekk/workspace) at runtime.
 	script := fmt.Sprintf(`set -e
-chmod +x /opt/spekk/agent-client
 mkdir -p /opt/spekk/workspace
 chown -R agent:agent /opt/spekk
 mkdir -p /var/log/spekk
@@ -609,9 +604,7 @@ systemctl restart spekk-agent`, spekkAgentUnit)
 	return nil
 }
 
-// stagedBinary is where a non-root deploy puts the agent binary before root
-// moves it into /opt/spekk. scp resolves a relative path against the login
-// user's home directory, which only that user and root can write.
+// stagedBinary is the upload path relative to the SSH login user's home.
 const stagedBinary = "agent-client.staged"
 
 // sshExec runs an ssh command. It is a variable so a test can read what the
@@ -627,34 +620,39 @@ var scpExec = func(args []string) ([]byte, error) {
 	return exec.Command("scp", args...).CombinedOutput()
 }
 
-// privilegedScript returns the remote command that runs script as root. A
-// root login runs it as it is; any other login user escalates. Every
-// privileged step goes through here, so the rule lives in one place rather
-// than in a repeated conditional at each call site.
-func privilegedScript(user, script string) string {
+// privilegedScript runs script directly for root and through sudo for other users.
+// shellArgs are quoted shell expressions expanded by the login shell before escalation.
+func privilegedScript(user, script string, shellArgs ...string) string {
 	if user == "root" {
+		if len(shellArgs) > 0 {
+			return "set -- " + strings.Join(shellArgs, " ") + "\n" + script
+		}
 		return script
 	}
-	return sudoWrap(script)
+	command := sudoWrap(script)
+	if len(shellArgs) > 0 {
+		command += " -s -- " + strings.Join(shellArgs, " ")
+	}
+	return command
 }
 
-// scpTarget is where deployAgent copies the agent binary. root writes
-// /opt/spekk directly; anybody else stages in their own home directory.
+// scpTarget stages each upload in the SSH login user's home.
 func scpTarget(user, ip string) string {
-	if user == "root" {
-		return fmt.Sprintf("root@%s:/opt/spekk/agent-client", ip)
-	}
 	return fmt.Sprintf("%s@%s:%s", user, ip, stagedBinary)
 }
 
-// installCommand is the remote command that installs and starts the agent.
-// A non-root deploy first moves the staged binary into place, because only
-// root can write /opt/spekk.
+// installCommand replaces the executable before it runs the service setup script.
 func installCommand(user, script string) string {
-	if user == "root" {
-		return script
-	}
-	return fmt.Sprintf(`sudo mv "$HOME/%s" /opt/spekk/agent-client && `, stagedBinary) + privilegedScript(user, script)
+	// Prepare on the destination filesystem so the final rename is atomic.
+	install := fmt.Sprintf(`set -e
+next=$(mktemp /opt/spekk/agent-client.XXXXXX)
+trap 'rm -f "$next"' EXIT
+install -m 755 "$1" "$next"
+mv -f "$next" /opt/spekk/agent-client
+rm -f "$1"
+%s`, script)
+	// Resolve the upload path before sudo can change HOME or the working directory.
+	return privilegedScript(user, install, fmt.Sprintf(`"$HOME/%s"`, stagedBinary))
 }
 
 // sudoWrap base64-encodes a script and pipes it through `sudo bash`, running
