@@ -90,6 +90,12 @@ func ParseFlags(args []string, flags FlagSet) *ParseResult {
 			result.Bools[e.key] = true
 		case StringFlag:
 			name := args[i]
+			// One value per flag is all Strings can hold, so a repeat would
+			// discard a value the caller typed. Refuse instead, and refuse it
+			// here, or each command answers the same mistake its own way.
+			if result.Counts[e.key] > 1 {
+				result.recordError(fmt.Errorf("%s must be supplied only once", name))
+			}
 			// Only consume the next token as a value when it does not look like
 			// a flag. Tokens that start with "--" or with "-" followed by a
 			// letter (e.g. "-l") are treated as flags; tokens like "-5" (dash

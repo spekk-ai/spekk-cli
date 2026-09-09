@@ -470,9 +470,6 @@ func listPriority(flags *cli.ParseResult) (*int, error) {
 	if flags.Count("priority") == 0 {
 		return nil, nil
 	}
-	if flags.Count("priority") > 1 {
-		return nil, fmt.Errorf("--priority must be supplied only once")
-	}
 	value := flags.String("priority")
 	priority, err := strconv.Atoi(value)
 	if err != nil || priority < 0 {
