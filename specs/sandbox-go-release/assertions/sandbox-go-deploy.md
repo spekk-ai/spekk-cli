@@ -18,6 +18,8 @@ depends-on: sandbox-release-downloader
 - Every upload stages the binary in the login user's home directory. SCP never writes to the running executable or a fixed name in a shared temporary directory.
 - Installation uses the absolute upload path from the login user's home, even when privilege escalation changes the working directory or `HOME`.
 - Installation prepares an executable file on the destination filesystem, then replaces `/opt/spekk/agent-client` by rename. A running process retains its old executable until the service restart.
+- Installation creates the directory that holds the installed executable before it writes the temporary file there, so a machine that an operator provisioned by hand installs on the first try.
+- The privilege helper builds the escalation pipeline and the script's positional parameters in one expression, because the script arrives on the shell's standard input.
 - Upload or preparation failure leaves the installed binary intact and prevents the service restart. Temporary destination files are removed after success or failure.
 - The installation script creates `/opt/spekk/workspace` and `/var/log/spekk`, sets their required ownership, and writes `/etc/systemd/system/spekk-agent.service`.
 - The systemd unit runs `/opt/spekk/agent-client` and appends stdout and stderr to `/var/log/spekk/agent.log`.
@@ -28,4 +30,4 @@ depends-on: sandbox-release-downloader
 
 ## Verification
 
-`internal/sandbox/deploy_replace_test.go` runs the generated installation command against a copied Go executable. The child answers probes before and after replacement. The test checks failure handling, temporary-file cleanup, and a privilege wrapper that changes the working directory and `HOME`. `internal/sandbox/ssh_user_test.go` checks the production upload and SSH commands for root and non-root users, including upload failure.
+`internal/sandbox/deploy_replace_test.go` runs the generated installation command against a copied Go executable. The child answers probes before and after replacement. The test checks failure handling, temporary-file cleanup, and a privilege wrapper that changes the working directory and `HOME`. `internal/sandbox/ssh_user_test.go` checks the production upload and SSH commands for root and non-root users, including upload failure, and that the privilege helper keeps the positional parameters attached to the shell it starts.
