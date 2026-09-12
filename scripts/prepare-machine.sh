@@ -50,6 +50,17 @@ case "${ID:-}" in
   *)      DOCKER_DISTRO=debian ;;
 esac
 
+# A 64-bit kernel over a 32-bit userland (uname -m reports aarch64, but the
+# userland is armhf) is a common Raspberry Pi setup and a dead end: the arm64
+# agent has no loader here, and Claude Code publishes no 32-bit ARM build. Fail
+# now rather than install a binary that cannot execute.
+if [ "$(uname -m)" = "aarch64" ] && [ "$ARCH" = "armhf" ]; then
+  echo "This machine has a 64-bit kernel but a 32-bit (armhf) userland." >&2
+  echo "Claude Code has no 32-bit ARM build. Install a 64-bit OS (64-bit" >&2
+  echo "Raspberry Pi OS or Debian arm64) and re-run this script." >&2
+  exit 1
+fi
+
 echo "==> Base packages"
 # Drop a Docker repo file a previous run may have left (an earlier version
 # pinned the wrong distro), so this first update does not choke on it. The
