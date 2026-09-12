@@ -144,12 +144,46 @@ func TestRunDevBuild(t *testing.T) {
 	version.Version = "dev"
 	defer func() { version.Version = original }()
 
-	replaced, err := Run(false)
+	replaced, err := Run(false, "")
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("development build")) {
 		t.Errorf("expected dev build error, got: %v", err)
 	}
 	if replaced {
 		t.Errorf("a failed update must not report the binary as replaced")
+	}
+}
+
+// A dev build cannot self-update to "latest", but pinning an explicit --version
+// is exactly how you get onto a prerelease from one, so the dev guard must not
+// block it. The tag is fetched by its own endpoint (not /releases/latest).
+func TestRunVersionBypassesDevGuardAndFetchesByTag(t *testing.T) {
+	original := version.Version
+	version.Version = "dev"
+	defer func() { version.Version = original }()
+
+	origClient := Client
+	defer func() { Client = origClient }()
+
+	var requested string
+	Client = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requested = req.URL.Path
+			body := `{"tag_name":"exp-sandbox-arm64","assets":[]}`
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+		}),
+	}
+
+	// checkOnly avoids touching the running binary; the point is the guard and
+	// the endpoint, not the download.
+	replaced, err := Run(true, "exp-sandbox-arm64")
+	if err != nil {
+		t.Fatalf("explicit --version from a dev build must be allowed, got: %v", err)
+	}
+	if replaced {
+		t.Errorf("checkOnly must not replace the binary")
+	}
+	if !strings.Contains(requested, "/releases/tags/exp-sandbox-arm64") {
+		t.Errorf("expected a fetch by tag, hit %q", requested)
 	}
 }
 

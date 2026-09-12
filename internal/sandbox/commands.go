@@ -45,6 +45,11 @@ type CreateOptions struct {
 	SSHUser string // login user for an existing machine (default: root)
 	Auth    AuthMode
 
+	// Release is the spekk release the cloud-init template and agent binary
+	// come from. Empty means the latest published release; a specific tag
+	// (e.g. an "exp-*" prerelease) pins a build that "latest" does not carry.
+	Release string
+
 	// ProvisionTimeout is how long Create waits for cloud-init to write the
 	// provisioned marker. Zero means DefaultProvisionTimeout.
 	ProvisionTimeout time.Duration
@@ -62,6 +67,18 @@ type ProvisionOptions struct {
 	Auth AuthMode
 	// Force provisions a record whose status is not "provisioning".
 	Force bool
+	// Release pins the spekk release the agent binary comes from. Empty means
+	// the latest published release. See CreateOptions.Release.
+	Release string
+}
+
+// releaseTag is the release the artifacts come from: the tag the operator
+// pinned with --release, or the latest published release when they did not.
+func releaseTag(pinned string) string {
+	if pinned == "" {
+		return "latest"
+	}
+	return pinned
 }
 
 // checkRequiredEnv reports every variable the auth mode needs that is not
@@ -103,11 +120,13 @@ func Create(p Provider, opts CreateOptions) error {
 
 	// Fetch release artifacts before creating billable resources.
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchArtifacts("latest")
+	artifacts, err := fetchArtifacts(releaseTag(opts.Release))
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
-	defer os.Remove(artifacts.BinaryPath)
+	// BinaryPath is filled in later, once the machine's architecture is known,
+	// so remove whatever it ends up as rather than its empty value now.
+	defer func() { os.Remove(artifacts.BinaryPath) }()
 	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
 
 	opts.CloudInit = artifacts.CloudInit
@@ -204,6 +223,13 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	// whatever the operator gave for one they already had.
 	user := sshUser(meta)
 
+	// The agent binary matches the machine's CPU, not the operator's. Create
+	// and Provision have both reached the machine by now, so ask it which
+	// build it needs and fetch that one.
+	if err := fetchAgentBinary(meta, name, artifacts); err != nil {
+		return &stageError{"fetching agent binary", err}
+	}
+
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
 	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, mode); err != nil {
 		return &stageError{"injecting credentials", err}
@@ -219,6 +245,38 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 		return &stageError{"deploying agent", err}
 	}
 	return nil
+}
+
+// fetchAgentBinary detects the sandbox machine's CPU architecture over SSH and
+// downloads the matching agent build into artifacts.BinaryPath. It runs only
+// after the machine is known reachable, because the architecture comes from the
+// machine itself.
+func fetchAgentBinary(meta *SandboxMeta, name string, artifacts *releaseArtifacts) error {
+	arch, err := detectArch(meta, name)
+	if err != nil {
+		return err
+	}
+	return artifacts.downloadAgentBinary(arch)
+}
+
+// detectArch maps `uname -m` on the sandbox to the GOARCH the agent is built
+// for. Only architectures spekk publishes an agent for are accepted; any other
+// is named rather than guessed, because the alternative is deploying a binary
+// the machine cannot run and then reporting success.
+func detectArch(meta *SandboxMeta, name string) (string, error) {
+	out, err := runSSHCombined(meta.IP, meta.SSHKeyPath, name, sshUser(meta), "uname -m")
+	machine := strings.TrimSpace(out)
+	if err != nil {
+		return "", fmt.Errorf("detecting CPU architecture: %w\n%s", err, machine)
+	}
+	switch machine {
+	case "x86_64", "amd64":
+		return "amd64", nil
+	case "aarch64", "arm64":
+		return "arm64", nil
+	default:
+		return "", fmt.Errorf("unsupported CPU architecture %q: spekk publishes an agent for x86_64 and aarch64 only", machine)
+	}
 }
 
 // printRegistration prints the token the operator has to register on the
@@ -281,11 +339,13 @@ func Provision(name string, opts ProvisionOptions) error {
 	}
 
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchArtifacts("latest")
+	artifacts, err := fetchArtifacts(releaseTag(opts.Release))
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
-	defer os.Remove(artifacts.BinaryPath)
+	// BinaryPath is filled in by equipSandbox once the machine's architecture
+	// is known, so remove whatever it ends up as rather than its empty value.
+	defer func() { os.Remove(artifacts.BinaryPath) }()
 
 	agentToken := generateAgentToken()
 	if err := equipSandbox(sandbox, name, agentToken, mode, artifacts); err != nil {
@@ -522,8 +582,9 @@ func machineRef(meta *SandboxMeta) string {
 
 // --- Deploy ---
 
-// Deploy downloads and deploys the agent binary to a sandbox.
-func Deploy(name string) error {
+// Deploy downloads and deploys the agent binary to a sandbox. release pins the
+// spekk release to pull from; empty means the latest published release.
+func Deploy(name, release string) error {
 	sandbox, err := GetSandbox(name)
 	if err != nil {
 		return err
@@ -534,12 +595,17 @@ func Deploy(name string) error {
 
 	fmt.Fprintf(os.Stderr, "Deploying agent to %s...\n", sandbox.IP)
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchReleaseArtifacts("latest")
+	artifacts, err := fetchReleaseArtifacts(releaseTag(release))
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
-	defer os.Remove(artifacts.BinaryPath)
+	// BinaryPath is filled in by fetchAgentBinary below, so remove whatever it
+	// ends up as rather than its empty value now.
+	defer func() { os.Remove(artifacts.BinaryPath) }()
 
+	if err := fetchAgentBinary(sandbox, name, artifacts); err != nil {
+		return fmt.Errorf("fetching agent binary: %w", err)
+	}
 	if err := deployAgent(sandbox.IP, sandbox.SSHKeyPath, name, sshUser(sandbox), artifacts); err != nil {
 		return fmt.Errorf("deploy failed: %w", err)
 	}

@@ -11,13 +11,19 @@ import (
 )
 
 const (
-	releaseRepo     = "spekk-ai/spekk-cli"
-	binaryAssetName = "sandbox-linux-amd64"
+	releaseRepo = "spekk-ai/spekk-cli"
 
 	// cloudInitKeyPlaceholder is the line in the template that is replaced with
 	// the sandbox's generated public key.
 	cloudInitKeyPlaceholder = "ssh-ed25519 AAAA... your-key-here"
 )
+
+// sandboxAssetName is the agent binary published for a given GOARCH. The agent
+// runs on the sandbox machine, so the architecture is the machine's, not the
+// operator's: an amd64 droplet and an arm64 Raspberry Pi need different builds.
+func sandboxAssetName(arch string) string {
+	return "sandbox-linux-" + arch
+}
 
 // githubHTTPClient is used for release downloads. Its default redirect policy
 // strips the Authorization header on cross-host redirects, which is exactly
@@ -31,7 +37,13 @@ var githubHTTPClient = &http.Client{Timeout: 60 * time.Second}
 type releaseArtifacts struct {
 	Version    string
 	CloudInit  []byte
-	BinaryPath string // temp file; caller removes when done
+	BinaryPath string // temp file; set by downloadAgentBinary, caller removes when done
+
+	// Retained so the agent binary can be fetched once the machine's
+	// architecture is known, which is not until create/provision has
+	// reached it over SSH.
+	release *githubRelease
+	token   string
 }
 
 type githubAsset struct {
@@ -48,11 +60,12 @@ type githubRelease struct {
 // test can exercise Create without a network call.
 var fetchArtifacts = fetchReleaseArtifacts
 
-// fetchReleaseArtifacts downloads the sandbox binary and cloud-init template
+// fetchReleaseArtifacts fetches the release metadata and cloud-init template
 // from the GitHub release named by releaseRepo. tag may be empty or "latest"
-// for the latest published release, or a specific tag. The binary is written
-// to a temp file whose path is returned in BinaryPath; callers should
-// os.Remove it when done.
+// for the latest published release, or a specific tag. The agent binary is not
+// downloaded here: which build to fetch depends on the sandbox machine's
+// architecture, which is not known until create/provision reaches it. Call
+// downloadAgentBinary once that architecture is known.
 func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
@@ -64,35 +77,47 @@ func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 		return nil, err
 	}
 
-	binaryID, err := assetID(rel, binaryAssetName)
+	return &releaseArtifacts{
+		Version:   rel.TagName,
+		CloudInit: cloudInitTemplate,
+		release:   rel,
+		token:     token,
+	}, nil
+}
+
+// downloadAgentBinary fetches the agent build for arch and writes it to a temp
+// file, recording the path in BinaryPath; the caller os.Removes it when done.
+// It is separate from fetchReleaseArtifacts because arch comes from the sandbox
+// machine over SSH, so the download can only happen once that machine is
+// reachable.
+func (a *releaseArtifacts) downloadAgentBinary(arch string) error {
+	name := sandboxAssetName(arch)
+	id, err := assetID(a.release, name)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	binary, err := downloadAsset(token, binaryID)
+	binary, err := downloadAsset(a.token, id)
 	if err != nil {
-		return nil, fmt.Errorf("downloading %s: %w", binaryAssetName, err)
+		return fmt.Errorf("downloading %s: %w", name, err)
 	}
 
 	f, err := os.CreateTemp("", "spekk-sandbox-*")
 	if err != nil {
-		return nil, fmt.Errorf("creating temp file for binary: %w", err)
+		return fmt.Errorf("creating temp file for binary: %w", err)
 	}
 	if _, err := f.Write(binary); err != nil {
 		f.Close()
 		os.Remove(f.Name())
-		return nil, fmt.Errorf("writing binary: %w", err)
+		return fmt.Errorf("writing binary: %w", err)
 	}
 	if err := f.Close(); err != nil {
 		os.Remove(f.Name())
-		return nil, fmt.Errorf("closing binary: %w", err)
+		return fmt.Errorf("closing binary: %w", err)
 	}
 
-	return &releaseArtifacts{
-		Version:    rel.TagName,
-		CloudInit:  cloudInitTemplate,
-		BinaryPath: f.Name(),
-	}, nil
+	a.BinaryPath = f.Name()
+	return nil
 }
 
 func fetchRelease(token, tag string) (*githubRelease, error) {
