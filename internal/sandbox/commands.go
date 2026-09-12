@@ -269,6 +269,14 @@ func detectArch(meta *SandboxMeta, name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("detecting CPU architecture: %w\n%s", err, machine)
 	}
+	return archFromUname(machine)
+}
+
+// archFromUname maps the output of `uname -m` to the GOARCH the agent is built
+// for. Only architectures spekk publishes an agent for are accepted; any other
+// is named rather than guessed, because the alternative is deploying a binary
+// the machine cannot run and then reporting success.
+func archFromUname(machine string) (string, error) {
 	switch machine {
 	case "x86_64", "amd64":
 		return "amd64", nil
@@ -595,7 +603,7 @@ func Deploy(name, release string) error {
 
 	fmt.Fprintf(os.Stderr, "Deploying agent to %s...\n", sandbox.IP)
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchReleaseArtifacts(releaseTag(release))
+	artifacts, err := fetchArtifacts(releaseTag(release))
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}

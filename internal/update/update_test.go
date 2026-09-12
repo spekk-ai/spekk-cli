@@ -120,6 +120,32 @@ func TestFetchLatestRelease(t *testing.T) {
 	}
 }
 
+// FetchRelease targets a tag directly, which is how a prerelease (excluded from
+// /releases/latest) is reached.
+func TestFetchReleaseByTag(t *testing.T) {
+	original := Client
+	defer func() { Client = original }()
+
+	var requested string
+	Client = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requested = req.URL.Path
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"tag_name":"exp-x","assets":[]}`))}, nil
+		}),
+	}
+
+	release, err := FetchRelease("exp-x")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if release.TagName != "exp-x" {
+		t.Errorf("TagName = %q, want %q", release.TagName, "exp-x")
+	}
+	if !strings.HasSuffix(requested, "/releases/tags/exp-x") {
+		t.Errorf("expected a fetch by tag, hit %q", requested)
+	}
+}
+
 func TestFetchLatestReleaseAPIError(t *testing.T) {
 	original := Client
 	defer func() { Client = original }()
