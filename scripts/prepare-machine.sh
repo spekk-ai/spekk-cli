@@ -5,11 +5,13 @@
 #
 # spekk does not provision a machine it did not create: on a droplet spekk made,
 # cloud-init runs internal/sandbox/cloud-init.yaml; on a machine you bring, you
-# run the equivalent yourself. This script is that equivalent, kept in step with
-# cloud-init.yaml -- change one and change the other.
+# run the equivalent yourself. This script mirrors the agent-relevant parts of
+# cloud-init.yaml -- keep them in step -- but adapts for a machine you already
+# have: it detects Debian vs Ubuntu (cloud-init assumes an Ubuntu droplet) and
+# installs the Claude Code native binary rather than the npm package.
 #
-# It installs ONLY what the agent needs (the `agent` user, Docker, Node + the
-# Claude Code CLI, git/gh, the spekk directories) and ends by writing
+# It installs ONLY what the agent needs (the `agent` user, Docker, the Claude
+# Code CLI native binary, git/gh, the spekk directories) and ends by writing
 # /opt/spekk/.provisioned. It deliberately leaves out the droplet-only hardening
 # in cloud-init.yaml -- a full `apt upgrade`, a default-deny UFW policy that
 # allows only port 22, and fail2ban -- because on a machine you already use those
@@ -35,8 +37,18 @@ if ! command -v apt-get >/dev/null 2>&1; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
+# shellcheck disable=SC1091
+. /etc/os-release
 ARCH="$(dpkg --print-architecture)"
-CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+CODENAME="${VERSION_CODENAME:-}"
+# Docker publishes separate repos per distro. A droplet is Ubuntu; a Raspberry
+# Pi is Debian (ID=debian, or raspbian on 32-bit) -- so the Ubuntu repo has no
+# Release file for a Debian codename like "trixie". Everything not Ubuntu uses
+# the Debian repo.
+case "${ID:-}" in
+  ubuntu) DOCKER_DISTRO=ubuntu ;;
+  *)      DOCKER_DISTRO=debian ;;
+esac
 
 echo "==> Base packages"
 apt-get update -y
@@ -55,22 +67,37 @@ chmod 0440 /etc/sudoers.d/90-spekk-agent
 echo "==> Docker"
 if ! command -v docker >/dev/null 2>&1; then
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  curl -fsSL "https://download.docker.com/linux/${DOCKER_DISTRO}/gpg" -o /etc/apt/keyrings/docker.asc
   chmod a+r /etc/apt/keyrings/docker.asc
-  echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${CODENAME} stable" \
+  echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${DOCKER_DISTRO} ${CODENAME} stable" \
     > /etc/apt/sources.list.d/docker.list
-  apt-get update -y
-  apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  # Docker CE if the repo carries this codename; otherwise the distro's own
+  # docker.io, so a codename Docker has not published yet (a fresh Debian) still
+  # gets a working engine.
+  if apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin; then
+    :
+  else
+    echo "   Docker CE repo has no release for ${DOCKER_DISTRO}/${CODENAME}; using the distro's docker.io"
+    rm -f /etc/apt/sources.list.d/docker.list
+    apt-get update -y
+    apt-get install -y docker.io
+    apt-get install -y docker-compose-v2 || true # compose plugin, best-effort
+  fi
 fi
 usermod -aG docker agent
 systemctl enable --now docker
 
-echo "==> Node.js LTS + Claude Code CLI"
-if ! command -v node >/dev/null 2>&1; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  apt-get install -y nodejs
+echo "==> Claude Code CLI (native binary)"
+# The native installer, not npm: a self-contained binary with no Node runtime
+# to install or keep patched. Install it as the agent user so it owns its
+# versions directory (~agent/.local/share/claude) and `claude update` works,
+# and so the launcher resolves under the agent service's $HOME at runtime.
+if [ ! -x /home/agent/.local/bin/claude ]; then
+  su - agent -c 'curl -fsSL https://claude.ai/install.sh | bash -s stable'
 fi
-npm install -g @anthropic-ai/claude-code
+# Put it on the system PATH the spekk-agent service uses (systemd's default
+# PATH has /usr/local/bin; a service running as agent does not read ~/.local/bin).
+ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
 
 echo "==> GitHub CLI"
 if ! command -v gh >/dev/null 2>&1; then

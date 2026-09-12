@@ -673,7 +673,7 @@ scp scripts/prepare-machine.sh user@your-machine:
 ssh user@your-machine 'sudo bash prepare-machine.sh'
 ```
 
-It installs the `agent` user, Docker, Node.js and the Claude Code CLI, `git`/`gh`, and the spekk directories, then writes the marker — the same setup a droplet gets from cloud-init, minus the droplet-only hardening (a full package upgrade, a default-deny firewall, fail2ban) that could lock you out of a machine you already use. To provision by hand instead, its steps are the checklist to follow.
+It installs the `agent` user, Docker, the Claude Code CLI (the native binary, no Node runtime), `git`/`gh`, and the spekk directories, then writes the marker — the same setup a droplet gets from cloud-init, minus the droplet-only hardening (a full package upgrade, a default-deny firewall, fail2ban) that could lock you out of a machine you already use. It picks Docker's Debian or Ubuntu repository from the host, so it works on a Debian-based Raspberry Pi as well as an Ubuntu server. To provision by hand instead, its steps are the checklist to follow.
 
 The agent binary spekk deploys matches the machine's CPU architecture, so an arm64 host (a Raspberry Pi, an arm64 droplet) is served an arm64 build. spekk pulls that build from the latest release by default; a release only carries the architectures it published. To use a build that only exists in a prerelease, pin it with `--release <tag>` (e.g. `--release exp-arm64`).
 
