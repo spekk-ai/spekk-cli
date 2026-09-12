@@ -1,28 +1,15 @@
 #!/usr/bin/env bash
 #
-# prepare-machine.sh -- provision a machine you already have so `spekk sandbox
-# create --provider none` (or `spekk sandbox provision`) can equip it.
+# prepare-machine.sh -- provision a machine you already have (`--provider none`)
+# so `spekk sandbox create`/`provision` can equip it. The counterpart to
+# internal/sandbox/cloud-init.yaml; keep them in step.
 #
-# spekk does not provision a machine it did not create: on a droplet spekk made,
-# cloud-init runs internal/sandbox/cloud-init.yaml; on a machine you bring, you
-# run the equivalent yourself. This script mirrors the agent-relevant parts of
-# cloud-init.yaml -- keep them in step -- but adapts for a machine you already
-# have: it detects Debian vs Ubuntu (cloud-init assumes an Ubuntu droplet) and
-# installs the Claude Code native binary rather than the npm package.
+# Installs the agent user, Docker, the Claude Code binary, git/gh, and the spekk
+# dirs, then writes /opt/spekk/.provisioned. Skips cloud-init's droplet-only
+# hardening (apt upgrade, default-deny UFW, fail2ban) that could lock you out.
+# Debian/Ubuntu, amd64/arm64, idempotent.
 #
-# It installs ONLY what the agent needs (the `agent` user, Docker, the Claude
-# Code CLI native binary, git/gh, the spekk directories) and ends by writing
-# /opt/spekk/.provisioned. It deliberately leaves out the droplet-only hardening
-# in cloud-init.yaml -- a full `apt upgrade`, a default-deny UFW policy that
-# allows only port 22, and fail2ban -- because on a machine you already use those
-# can lock you out or disrupt whatever else it serves. Apply your own firewall
-# policy separately if you want one.
-#
-# It is arch-aware (Debian/Ubuntu, amd64 or arm64, e.g. a Raspberry Pi) and safe
-# to re-run.
-#
-# Usage (as root, or via sudo):
-#   sudo ./prepare-machine.sh
+# Usage: sudo ./prepare-machine.sh
 #
 set -euo pipefail
 
@@ -41,19 +28,14 @@ export DEBIAN_FRONTEND=noninteractive
 . /etc/os-release
 ARCH="$(dpkg --print-architecture)"
 CODENAME="${VERSION_CODENAME:-}"
-# Docker publishes separate repos per distro. A droplet is Ubuntu; a Raspberry
-# Pi is Debian (ID=debian, or raspbian on 32-bit) -- so the Ubuntu repo has no
-# Release file for a Debian codename like "trixie". Everything not Ubuntu uses
-# the Debian repo.
+# Docker publishes a repo per distro; Debian's codenames aren't in the Ubuntu repo.
 case "${ID:-}" in
   ubuntu) DOCKER_DISTRO=ubuntu ;;
   *)      DOCKER_DISTRO=debian ;;
 esac
 
-# A 64-bit kernel over a 32-bit userland (uname -m reports aarch64, but the
-# userland is armhf) is a common Raspberry Pi setup and a dead end: the arm64
-# agent has no loader here, and Claude Code publishes no 32-bit ARM build. Fail
-# now rather than install a binary that cannot execute.
+# 64-bit kernel on a 32-bit userland: uname -m says aarch64 but there's no arm64
+# loader, and Claude Code has no 32-bit ARM build. Dead end -- fail now.
 if [ "$(uname -m)" = "aarch64" ] && [ "$ARCH" = "armhf" ]; then
   echo "This machine has a 64-bit kernel but a 32-bit (armhf) userland." >&2
   echo "Claude Code has no 32-bit ARM build. Install a 64-bit OS (64-bit" >&2
@@ -62,16 +44,15 @@ if [ "$(uname -m)" = "aarch64" ] && [ "$ARCH" = "armhf" ]; then
 fi
 
 echo "==> Base packages"
-# Drop a Docker repo file a previous run may have left (an earlier version
-# pinned the wrong distro), so this first update does not choke on it. The
-# Docker section below recreates it for the detected distro.
+# Drop a stale docker.list from a previous run so this update can't choke on it;
+# the Docker section recreates it for the detected distro.
 rm -f /etc/apt/sources.list.d/docker.list
 apt-get update -y
 apt-get install -y git jq htop tmux vim unzip ca-certificates curl gnupg
 
 echo "==> agent user"
-# The service account the agent runs as: a home directory (credentials land in
-# ~agent), passwordless sudo, and the docker + systemd-journal groups.
+# Service account the agent runs as: home dir (credentials land here), docker +
+# systemd-journal groups, passwordless sudo.
 if ! id agent >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash agent
 fi
@@ -86,9 +67,7 @@ if ! command -v docker >/dev/null 2>&1; then
   chmod a+r /etc/apt/keyrings/docker.asc
   echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${DOCKER_DISTRO} ${CODENAME} stable" \
     > /etc/apt/sources.list.d/docker.list
-  # Docker CE if the repo carries this codename; otherwise the distro's own
-  # docker.io, so a codename Docker has not published yet (a fresh Debian) still
-  # gets a working engine.
+  # Docker CE if the repo has this codename, else the distro's docker.io.
   if apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin; then
     :
   else
@@ -103,14 +82,11 @@ usermod -aG docker agent
 systemctl enable --now docker
 
 echo "==> Claude Code CLI (native binary)"
-# Install it as the agent user so it owns its
-# versions directory (~agent/.local/share/claude) and `claude update` works,
-# and so the launcher resolves under the agent service's $HOME at runtime.
+# Install as agent so it owns ~agent/.local/share/claude and `claude update` works.
 if [ ! -x /home/agent/.local/bin/claude ]; then
   su - agent -c 'curl -fsSL https://claude.ai/install.sh | bash -s stable'
 fi
-# Put it on the system PATH the spekk-agent service uses (systemd's default
-# PATH has /usr/local/bin; a service running as agent does not read ~/.local/bin).
+# Onto the system PATH: the spekk-agent service won't read agent's ~/.local/bin.
 ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
 
 echo "==> GitHub CLI"
