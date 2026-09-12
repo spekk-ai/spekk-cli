@@ -107,7 +107,9 @@ func Create(p Provider, opts CreateOptions) error {
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
-	defer os.Remove(artifacts.BinaryPath)
+	// BinaryPath is filled in later, once the machine's architecture is known,
+	// so remove whatever it ends up as rather than its empty value now.
+	defer func() { os.Remove(artifacts.BinaryPath) }()
 	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
 
 	opts.CloudInit = artifacts.CloudInit
@@ -204,6 +206,13 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	// whatever the operator gave for one they already had.
 	user := sshUser(meta)
 
+	// The agent binary matches the machine's CPU, not the operator's. Create
+	// and Provision have both reached the machine by now, so ask it which
+	// build it needs and fetch that one.
+	if err := fetchAgentBinary(meta, name, artifacts); err != nil {
+		return &stageError{"fetching agent binary", err}
+	}
+
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
 	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, mode); err != nil {
 		return &stageError{"injecting credentials", err}
@@ -219,6 +228,38 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 		return &stageError{"deploying agent", err}
 	}
 	return nil
+}
+
+// fetchAgentBinary detects the sandbox machine's CPU architecture over SSH and
+// downloads the matching agent build into artifacts.BinaryPath. It runs only
+// after the machine is known reachable, because the architecture comes from the
+// machine itself.
+func fetchAgentBinary(meta *SandboxMeta, name string, artifacts *releaseArtifacts) error {
+	arch, err := detectArch(meta, name)
+	if err != nil {
+		return err
+	}
+	return artifacts.downloadAgentBinary(arch)
+}
+
+// detectArch maps `uname -m` on the sandbox to the GOARCH the agent is built
+// for. Only architectures spekk publishes an agent for are accepted; any other
+// is named rather than guessed, because the alternative is deploying a binary
+// the machine cannot run and then reporting success.
+func detectArch(meta *SandboxMeta, name string) (string, error) {
+	out, err := runSSHCombined(meta.IP, meta.SSHKeyPath, name, sshUser(meta), "uname -m")
+	machine := strings.TrimSpace(out)
+	if err != nil {
+		return "", fmt.Errorf("detecting CPU architecture: %w\n%s", err, machine)
+	}
+	switch machine {
+	case "x86_64", "amd64":
+		return "amd64", nil
+	case "aarch64", "arm64":
+		return "arm64", nil
+	default:
+		return "", fmt.Errorf("unsupported CPU architecture %q: spekk publishes an agent for x86_64 and aarch64 only", machine)
+	}
 }
 
 // printRegistration prints the token the operator has to register on the
@@ -285,7 +326,9 @@ func Provision(name string, opts ProvisionOptions) error {
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
-	defer os.Remove(artifacts.BinaryPath)
+	// BinaryPath is filled in by equipSandbox once the machine's architecture
+	// is known, so remove whatever it ends up as rather than its empty value.
+	defer func() { os.Remove(artifacts.BinaryPath) }()
 
 	agentToken := generateAgentToken()
 	if err := equipSandbox(sandbox, name, agentToken, mode, artifacts); err != nil {
@@ -538,8 +581,13 @@ func Deploy(name string) error {
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
-	defer os.Remove(artifacts.BinaryPath)
+	// BinaryPath is filled in by fetchAgentBinary below, so remove whatever it
+	// ends up as rather than its empty value now.
+	defer func() { os.Remove(artifacts.BinaryPath) }()
 
+	if err := fetchAgentBinary(sandbox, name, artifacts); err != nil {
+		return fmt.Errorf("fetching agent binary: %w", err)
+	}
 	if err := deployAgent(sandbox.IP, sandbox.SSHKeyPath, name, sshUser(sandbox), artifacts); err != nil {
 		return fmt.Errorf("deploy failed: %w", err)
 	}

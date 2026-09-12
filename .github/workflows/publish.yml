@@ -41,6 +41,9 @@ jobs:
           # release it is running -- and a release build is indistinguishable
           # from one somebody copied up by hand.
           GOOS=linux   GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/sandbox-linux-amd64 ./cmd/sandbox
+          # arm64 too: the agent may land on an arm64 machine (a Raspberry Pi,
+          # an arm64 droplet), and spekk picks the build by the machine's arch.
+          GOOS=linux   GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/sandbox-linux-arm64 ./cmd/sandbox
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
