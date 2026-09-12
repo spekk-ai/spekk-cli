@@ -124,8 +124,7 @@ func Create(p Provider, opts CreateOptions) error {
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
-	// BinaryPath is filled in later, once the machine's architecture is known,
-	// so remove whatever it ends up as rather than its empty value now.
+	// BinaryPath is set later (arch is not known yet), so defer over it.
 	defer func() { os.Remove(artifacts.BinaryPath) }()
 	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
 
@@ -223,9 +222,6 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	// whatever the operator gave for one they already had.
 	user := sshUser(meta)
 
-	// The agent binary matches the machine's CPU, not the operator's. Create
-	// and Provision have both reached the machine by now, so ask it which
-	// build it needs and fetch that one.
 	if err := fetchAgentBinary(meta, name, artifacts); err != nil {
 		return &stageError{"fetching agent binary", err}
 	}
@@ -247,10 +243,8 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	return nil
 }
 
-// fetchAgentBinary detects the sandbox machine's CPU architecture over SSH and
-// downloads the matching agent build into artifacts.BinaryPath. It runs only
-// after the machine is known reachable, because the architecture comes from the
-// machine itself.
+// fetchAgentBinary picks the agent build for the machine's own CPU, so it runs
+// only after create/provision has reached the machine over SSH.
 func fetchAgentBinary(meta *SandboxMeta, name string, artifacts *releaseArtifacts) error {
 	arch, err := detectArch(meta, name)
 	if err != nil {
@@ -259,10 +253,6 @@ func fetchAgentBinary(meta *SandboxMeta, name string, artifacts *releaseArtifact
 	return artifacts.downloadAgentBinary(arch)
 }
 
-// detectArch maps `uname -m` on the sandbox to the GOARCH the agent is built
-// for. Only architectures spekk publishes an agent for are accepted; any other
-// is named rather than guessed, because the alternative is deploying a binary
-// the machine cannot run and then reporting success.
 func detectArch(meta *SandboxMeta, name string) (string, error) {
 	out, err := runSSHCombined(meta.IP, meta.SSHKeyPath, name, sshUser(meta), "uname -m")
 	machine := strings.TrimSpace(out)
@@ -272,10 +262,9 @@ func detectArch(meta *SandboxMeta, name string) (string, error) {
 	return archFromUname(machine)
 }
 
-// archFromUname maps the output of `uname -m` to the GOARCH the agent is built
-// for. Only architectures spekk publishes an agent for are accepted; any other
-// is named rather than guessed, because the alternative is deploying a binary
-// the machine cannot run and then reporting success.
+// archFromUname maps `uname -m` to the GOARCH the agent is built for. An arch
+// spekk publishes no agent for is refused, not guessed: the alternative is
+// deploying a binary the machine cannot run and reporting success.
 func archFromUname(machine string) (string, error) {
 	switch machine {
 	case "x86_64", "amd64":
@@ -351,8 +340,7 @@ func Provision(name string, opts ProvisionOptions) error {
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
-	// BinaryPath is filled in by equipSandbox once the machine's architecture
-	// is known, so remove whatever it ends up as rather than its empty value.
+	// BinaryPath is set later (arch is not known yet), so defer over it.
 	defer func() { os.Remove(artifacts.BinaryPath) }()
 
 	agentToken := generateAgentToken()
@@ -607,8 +595,7 @@ func Deploy(name, release string) error {
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
-	// BinaryPath is filled in by fetchAgentBinary below, so remove whatever it
-	// ends up as rather than its empty value now.
+	// BinaryPath is set later (arch is not known yet), so defer over it.
 	defer func() { os.Remove(artifacts.BinaryPath) }()
 
 	if err := fetchAgentBinary(sandbox, name, artifacts); err != nil {

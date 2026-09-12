@@ -40,14 +40,13 @@ type asset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
-// Run performs the self-update. If checkOnly is true, it prints the available
-// version without installing. It reports whether it replaced the binary.
+// Run performs the self-update. If checkOnly is true, it reports the available
+// version without installing, and returns whether it replaced the binary.
 //
-// targetTag empty means the latest stable release, with the usual guards: a
-// development build cannot self-update, and an already-current binary is left
-// alone. A non-empty targetTag (e.g. an "exp-*" prerelease) is installed
-// exactly as named, skipping both guards, because the operator asked for that
-// specific build rather than "whatever is newest".
+// Empty targetTag means the latest stable release, with the usual guards (a dev
+// build can't update; an already-current binary is left alone). A specific
+// targetTag (e.g. an "exp-*" prerelease) is installed as named, skipping both
+// guards — the operator asked for that build, not "whatever is newest".
 func Run(checkOnly bool, targetTag string) (replaced bool, err error) {
 	current := version.Version
 

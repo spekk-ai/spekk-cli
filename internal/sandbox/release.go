@@ -18,9 +18,8 @@ const (
 	cloudInitKeyPlaceholder = "ssh-ed25519 AAAA... your-key-here"
 )
 
-// sandboxAssetName is the agent binary published for a given GOARCH. The agent
-// runs on the sandbox machine, so the architecture is the machine's, not the
-// operator's: an amd64 droplet and an arm64 Raspberry Pi need different builds.
+// sandboxAssetName is the agent binary published for a given GOARCH — the
+// sandbox machine's arch, not the operator's.
 func sandboxAssetName(arch string) string {
 	return "sandbox-linux-" + arch
 }
@@ -39,9 +38,8 @@ type releaseArtifacts struct {
 	CloudInit  []byte
 	BinaryPath string // temp file; set by downloadAgentBinary, caller removes when done
 
-	// Retained so the agent binary can be fetched once the machine's
-	// architecture is known, which is not until create/provision has
-	// reached it over SSH.
+	// Retained so downloadAgentBinary can fetch the right build once the
+	// machine's arch is known.
 	release *githubRelease
 	token   string
 }
@@ -61,11 +59,9 @@ type githubRelease struct {
 var fetchArtifacts = fetchReleaseArtifacts
 
 // fetchReleaseArtifacts fetches the release metadata and cloud-init template
-// from the GitHub release named by releaseRepo. tag may be empty or "latest"
-// for the latest published release, or a specific tag. The agent binary is not
-// downloaded here: which build to fetch depends on the sandbox machine's
-// architecture, which is not known until create/provision reaches it. Call
-// downloadAgentBinary once that architecture is known.
+// from releaseRepo. tag may be empty/"latest" or a specific tag. The agent
+// binary is downloaded later, by downloadAgentBinary, since which build to
+// fetch depends on the machine's arch — not known until it is reached.
 func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
@@ -85,11 +81,8 @@ func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 	}, nil
 }
 
-// downloadAgentBinary fetches the agent build for arch and writes it to a temp
-// file, recording the path in BinaryPath; the caller os.Removes it when done.
-// It is separate from fetchReleaseArtifacts because arch comes from the sandbox
-// machine over SSH, so the download can only happen once that machine is
-// reachable.
+// downloadAgentBinary fetches the agent build for arch into a temp file and
+// records it in BinaryPath; the caller os.Removes it when done.
 func (a *releaseArtifacts) downloadAgentBinary(arch string) error {
 	name := sandboxAssetName(arch)
 	id, err := assetID(a.release, name)

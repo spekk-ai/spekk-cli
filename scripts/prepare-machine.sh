@@ -51,10 +51,9 @@ case "${ID:-}" in
 esac
 
 echo "==> Base packages"
-# Drop the Docker repo file this script may have written on a previous run. An
-# earlier version pinned the Ubuntu repo, which 404s on Debian and breaks every
-# apt-get update below (this update included) before the Docker section can
-# rewrite it. The Docker section recreates it correctly.
+# Drop a Docker repo file a previous run may have left (an earlier version
+# pinned the wrong distro), so this first update does not choke on it. The
+# Docker section below recreates it for the detected distro.
 rm -f /etc/apt/sources.list.d/docker.list
 apt-get update -y
 apt-get install -y git jq htop tmux vim unzip ca-certificates curl gnupg
