@@ -92,8 +92,7 @@ usermod -aG docker agent
 systemctl enable --now docker
 
 echo "==> Claude Code CLI (native binary)"
-# The native installer, not npm: a self-contained binary with no Node runtime
-# to install or keep patched. Install it as the agent user so it owns its
+# Install it as the agent user so it owns its
 # versions directory (~agent/.local/share/claude) and `claude update` works,
 # and so the launcher resolves under the agent service's $HOME at runtime.
 if [ ! -x /home/agent/.local/bin/claude ]; then
