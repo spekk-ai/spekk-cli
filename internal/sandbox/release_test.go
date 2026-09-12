@@ -131,7 +131,7 @@ func TestCreatePassesReleaseTagToFetch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			isolateConfig(t)
 			useTempStore(t)
-			for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN"} {
+			for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"} {
 				t.Setenv(v, "x")
 			}
 
@@ -156,7 +156,7 @@ func TestCreatePassesReleaseTagToFetch(t *testing.T) {
 func TestProvisionPassesReleaseTagToFetch(t *testing.T) {
 	isolateConfig(t)
 	useTempStore(t)
-	for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN"} {
+	for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"} {
 		t.Setenv(v, "x")
 	}
 	if err := SaveSandbox("box", &SandboxMeta{Provider: "digitalocean", IP: "1.2.3.4", Status: "provisioning", Auth: string(AuthBedrock)}); err != nil {
