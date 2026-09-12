@@ -31,4 +31,6 @@ So spekk does not provision a machine it did not create. The operator prepares i
 
 ## Known gap
 
-Spekk does not yet publish the setup an operator needs to run. The contract is `/opt/spekk/.provisioned` plus the packages and the `agent` user that `cloud-init.yaml` installs, and today that file is readable only as cloud-init YAML. The fix is to make one artifact serve both paths — a plain script that DigitalOcean accepts as user-data and an operator can run by hand — which also deletes `renderCloudInit` and the second copy of the systemd unit. That is follow-up work, not part of this assertion.
+Spekk now publishes the setup an operator needs to run: `scripts/prepare-machine.sh` installs the contract (`/opt/spekk/.provisioned` plus the `agent` user, packages, and directories `cloud-init.yaml` installs), so the setup is no longer readable only as cloud-init YAML. See `prepare-machine-script`.
+
+What remains is the deduplication: the script and `cloud-init.yaml` are still two copies of the same steps, kept in step by hand. Collapsing them into one artifact that DigitalOcean accepts as user-data and an operator can run by hand — which also deletes `renderCloudInit` and the second copy of the systemd unit — is still follow-up work, not part of this assertion.

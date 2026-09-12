@@ -25,12 +25,16 @@ single shared function. No Python, uv, or venv steps remain.
     (ExecStart `/opt/spekk/agent-client`, stdout/stderr appended to
     `/var/log/spekk/agent.log`)
   - runs `systemctl daemon-reload && systemctl enable spekk-agent && systemctl restart spekk-agent`
-- `Create` (in `commands.go`) fetches artifacts via
-  `fetchReleaseArtifacts("latest")`, renders the embedded cloud-init with the
-  sandbox's public key (`renderCloudInit`) and passes it to `createDroplet` as
-  droplet user-data, then calls `deployAgent(ip, keyPath, name, artifacts)` with
-  the already-fetched artifacts
-- `Deploy` (in `commands.go`) fetches artifacts via
-  `fetchReleaseArtifacts("latest")` and calls the same `deployAgent(...)`
+- `Create` (in `commands.go`) fetches release metadata via
+  `fetchArtifacts(releaseTag(opts.Release))`, renders the embedded cloud-init
+  with the sandbox's public key (`renderCloudInit`) and passes it to
+  `createDroplet` as droplet user-data, then equips the machine — which fetches
+  the arch-matched agent binary and calls `deployAgent(...)` with those artifacts
+- `Deploy(name, release string)` (in `commands.go`) fetches release metadata via
+  `fetchReleaseArtifacts(releaseTag(release))`, then `fetchAgentBinary` before
+  the same `deployAgent(...)`
+- The agent binary is downloaded after the machine is reachable, not up front:
+  `fetchAgentBinary` runs `detectArch` then `artifacts.downloadAgentBinary(arch)`,
+  so Create, Provision, and Deploy all deploy the build matching the machine's CPU
 - No calls to `uv`, `pip`, or `websockets`, and no `src/sandbox/**` JS files,
   remain in the sandbox source

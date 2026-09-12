@@ -11,9 +11,14 @@ release, with no package manager and no auth token required. `spekk update
 --check` previews what would happen without touching the filesystem.
 
 ```bash
-spekk update          # download and install the latest release
-spekk update --check  # show current vs. latest version, install nothing
+spekk update                    # download and install the latest release
+spekk update --check            # show current vs. latest version, install nothing
+spekk update --version <tag>    # install a specific release, e.g. an exp-* prerelease
 ```
+
+`--version <tag>` installs the named release exactly, skipping the newer-check
+and dev-build guards — the way onto a prerelease that GitHub's "latest" endpoint
+hides (see `version-flag-installs-specific-tag`).
 
 Shipped in v1.5.0 (PR #107); implementation lives in `internal/update/`
 (`update.go`, tests in `update_test.go`). PR #114 hardened the permission
