@@ -656,6 +656,7 @@ spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --s
 | `--ip <address>` | Address of a machine you already have |
 | `--ssh-key <path>` | Private key that reaches that machine as the login user |
 | `--ssh-user <user>` | SSH login user for that machine (default: `root`). A non-root user must have passwordless sudo |
+| `--release <tag>` | Pull the cloud-init template and agent binary from a specific spekk release instead of the latest, e.g. an `exp-*` prerelease |
 
 The DigitalOcean flags and the existing-machine flags exclude each other. `create` refuses a name that is already recorded: destroy the old sandbox first.
 
@@ -672,7 +673,9 @@ scp scripts/prepare-machine.sh user@your-machine:
 ssh user@your-machine 'sudo bash prepare-machine.sh'
 ```
 
-It installs the `agent` user, Docker, Node.js and the Claude Code CLI, `git`/`gh`, and the spekk directories, then writes the marker — the same setup a droplet gets from cloud-init, minus the droplet-only hardening (a full package upgrade, a default-deny firewall, fail2ban) that could lock you out of a machine you already use. To provision by hand instead, its steps are the checklist to follow. The agent binary spekk deploys matches the machine's CPU architecture, so an arm64 host is served an arm64 build.
+It installs the `agent` user, Docker, Node.js and the Claude Code CLI, `git`/`gh`, and the spekk directories, then writes the marker — the same setup a droplet gets from cloud-init, minus the droplet-only hardening (a full package upgrade, a default-deny firewall, fail2ban) that could lock you out of a machine you already use. To provision by hand instead, its steps are the checklist to follow.
+
+The agent binary spekk deploys matches the machine's CPU architecture, so an arm64 host (a Raspberry Pi, an arm64 droplet) is served an arm64 build. spekk pulls that build from the latest release by default; a release only carries the architectures it published. To use a build that only exists in a prerelease, pin it with `--release <tag>` (e.g. `--release exp-arm64`).
 
 ### `spekk sandbox provision <name>`
 
@@ -689,6 +692,7 @@ spekk sandbox provision my-sandbox --auth subscription  # Change the auth mode
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--auth <mode>` | | `bedrock` or `subscription`. Default: the mode the sandbox was created with |
+| `--release <tag>` | | Pull the agent binary from a specific spekk release instead of the latest, e.g. an `exp-*` prerelease |
 | `--force` | `-f` | Provision a sandbox whose status is not `provisioning` |
 
 `provision` checks that the environment variables for the auth mode are set, checks that `/opt/spekk/.provisioned` exists on the machine, and then runs the same three steps `create` runs after its wait, in the same order and through the same code. It marks the sandbox `active` and prints a new agent token to register. A sandbox recorded before 1.28.0 has no auth mode on record, and reads as `bedrock`.
@@ -884,8 +888,9 @@ Pass `--global` or `--local` to match where the skill is. `--local` is the defau
 Replace the running binary with the latest GitHub release.
 
 ```bash
-spekk update           # Install the latest release
-spekk update --check   # Print the current and latest version, install nothing
+spekk update                          # Install the latest release
+spekk update --check                  # Print the current and latest version, install nothing
+spekk update --version exp-arm64      # Install a specific tag, e.g. a prerelease
 ```
 
 **Flags:**
@@ -893,8 +898,9 @@ spekk update --check   # Print the current and latest version, install nothing
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--check` | `-c` | Report whether an update exists, and install nothing |
+| `--version <tag>` | | Install a specific release tag instead of the latest. GitHub excludes prereleases from "latest", so this is how you get onto an `exp-*` build. It skips the newer-version check, so it can move to an older or a prerelease tag, and it works from a development build |
 
-The update writes to the install directory, so that directory must be writable. See [Install](install.md#updating). A development build (`spekk version` prints `dev`) cannot update. After the check or the install, `spekk update` scans the files `spekk install --target` wrote and reports each one that no longer matches the binary, with the command to run.
+The update writes to the install directory, so that directory must be writable. See [Install](install.md#updating). A development build (`spekk version` prints `dev`) cannot update to the latest, but `--version <tag>` still works from one. After the check or the install, `spekk update` scans the files `spekk install --target` wrote and reports each one that no longer matches the binary, with the command to run.
 
 ## `spekk version`
 

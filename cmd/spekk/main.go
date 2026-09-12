@@ -1009,10 +1009,12 @@ USAGE:
   spekk sandbox provision <name> [options]
 
 OPTIONS:
-  --auth <mode>  bedrock or subscription. Default: the mode the sandbox was
-                 created with
-  --force, -f    Provision a sandbox whose status is not "provisioning"
-  --help, -h     Show this help message
+  --auth <mode>    bedrock or subscription. Default: the mode the sandbox was
+                   created with
+  --release <tag>  Pull the agent from a specific spekk release instead of the
+                   latest, e.g. an exp-* prerelease
+  --force, -f      Provision a sandbox whose status is not "provisioning"
+  --help, -h       Show this help message
 
 When "spekk sandbox create" stops waiting for cloud-init, the machine keeps
 running and the record stays at "provisioning". Once /opt/spekk/.provisioned
@@ -1107,15 +1109,26 @@ func launchSandbox(args []string) {
 			os.Exit(1)
 		}
 	case "deploy":
-		if len(subArgs) == 0 {
-			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox deploy <name>")
+		flags := cli.ParseFlags(subArgs, cli.FlagSet{
+			"release": {Names: []string{"--release"}, Type: cli.StringFlag},
+			"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		})
+		if flags.Bool("help") {
+			fmt.Println("Usage: spekk sandbox deploy <name> [--release <tag>]")
+			fmt.Println("\nRedeploy the agent binary to a sandbox. --release pulls it from a")
+			fmt.Println("specific spekk release (e.g. an exp-* prerelease) instead of the latest.")
+			return
+		}
+		name := sandboxPositional(subArgs, "--release")
+		if name == "" {
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox deploy <name> [--release <tag>]")
 			os.Exit(1)
 		}
-		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
+		if err := sandbox.ValidateSandboxName(name); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Deploy(subArgs[0]); err != nil {
+		if err := sandbox.Deploy(name, flags.String("release")); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1129,16 +1142,17 @@ func launchSandbox(args []string) {
 // provisionSandbox parses arguments for `spekk sandbox provision <name>`.
 func provisionSandbox(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
-		"auth":  {Names: []string{"--auth"}, Type: cli.StringFlag},
-		"force": {Names: []string{"--force", "-f"}, Type: cli.BoolFlag},
-		"help":  {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		"auth":    {Names: []string{"--auth"}, Type: cli.StringFlag},
+		"release": {Names: []string{"--release"}, Type: cli.StringFlag},
+		"force":   {Names: []string{"--force", "-f"}, Type: cli.BoolFlag},
+		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 	if flags.Bool("help") {
 		fmt.Print(sandboxProvisionHelpText)
 		return
 	}
 
-	name := sandboxPositional(args, "--auth")
+	name := sandboxPositional(args, "--auth", "--release")
 	if name == "" {
 		fmt.Fprintln(os.Stderr, "Usage: spekk sandbox provision <name> [--auth <mode>] [--force]")
 		os.Exit(1)
@@ -1160,7 +1174,7 @@ func provisionSandbox(args []string) {
 		auth = mode
 	}
 
-	if err := sandbox.Provision(name, sandbox.ProvisionOptions{Auth: auth, Force: flags.Bool("force")}); err != nil {
+	if err := sandbox.Provision(name, sandbox.ProvisionOptions{Auth: auth, Force: flags.Bool("force"), Release: flags.String("release")}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -1196,6 +1210,7 @@ func createSandbox(args []string) {
 		"ssh-user":          {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
 		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
 		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
+		"release":           {Names: []string{"--release"}, Type: cli.StringFlag},
 		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -1232,6 +1247,11 @@ OPTIONS:
                          bills through the AWS Bedrock API) or subscription
                          (uses CLAUDE_CODE_OAUTH_TOKEN from your environment,
                          minted by "claude setup-token")
+
+  Release:
+  --release <tag>        Pull the cloud-init template and agent binary from a
+                         specific spekk release instead of the latest, e.g. an
+                         exp-* prerelease. Default: the latest published release
 
   spekk does not provision a machine it did not create. The machine must
   already carry /opt/spekk/.provisioned; spekk then injects credentials
@@ -1300,6 +1320,7 @@ OPTIONS:
 		SSHKey:  flags.String("ssh-key"),
 		SSHUser: flags.String("ssh-user"),
 		Auth:    auth,
+		Release: flags.String("release"),
 
 		ProvisionTimeout: provisionTimeout,
 	}
@@ -1440,27 +1461,28 @@ func runSkillsList(args []string) {
 
 // runUpdate performs a self-update check and optional install.
 func runUpdate(args []string) {
-	checkOnly := false
-	for _, a := range args {
-		if a == "--check" || a == "-c" {
-			checkOnly = true
-		}
-		if a == "--help" || a == "-h" {
-			fmt.Print(`
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"check":   {Names: []string{"--check", "-c"}, Type: cli.BoolFlag},
+		"version": {Names: []string{"--version"}, Type: cli.StringFlag},
+		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Print(`
 spekk update - Self-update the spekk CLI binary
 
 USAGE:
   spekk update [OPTIONS]
 
 OPTIONS:
-  --check, -c   Check for available updates without installing
-  --help, -h    Show this help message
+  --check, -c        Check for available updates without installing
+  --version <tag>    Install a specific release tag instead of the latest,
+                     e.g. an exp-* prerelease (skips the newer-version check)
+  --help, -h         Show this help message
 `)
-			return
-		}
+		return
 	}
 
-	replaced, err := update.Run(checkOnly)
+	replaced, err := update.Run(flags.Bool("check"), flags.String("version"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)

@@ -45,6 +45,11 @@ type CreateOptions struct {
 	SSHUser string // login user for an existing machine (default: root)
 	Auth    AuthMode
 
+	// Release is the spekk release the cloud-init template and agent binary
+	// come from. Empty means the latest published release; a specific tag
+	// (e.g. an "exp-*" prerelease) pins a build that "latest" does not carry.
+	Release string
+
 	// ProvisionTimeout is how long Create waits for cloud-init to write the
 	// provisioned marker. Zero means DefaultProvisionTimeout.
 	ProvisionTimeout time.Duration
@@ -62,6 +67,18 @@ type ProvisionOptions struct {
 	Auth AuthMode
 	// Force provisions a record whose status is not "provisioning".
 	Force bool
+	// Release pins the spekk release the agent binary comes from. Empty means
+	// the latest published release. See CreateOptions.Release.
+	Release string
+}
+
+// releaseTag is the release the artifacts come from: the tag the operator
+// pinned with --release, or the latest published release when they did not.
+func releaseTag(pinned string) string {
+	if pinned == "" {
+		return "latest"
+	}
+	return pinned
 }
 
 // checkRequiredEnv reports every variable the auth mode needs that is not
@@ -103,7 +120,7 @@ func Create(p Provider, opts CreateOptions) error {
 
 	// Fetch release artifacts before creating billable resources.
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchArtifacts("latest")
+	artifacts, err := fetchArtifacts(releaseTag(opts.Release))
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
@@ -322,7 +339,7 @@ func Provision(name string, opts ProvisionOptions) error {
 	}
 
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchArtifacts("latest")
+	artifacts, err := fetchArtifacts(releaseTag(opts.Release))
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}
@@ -565,8 +582,9 @@ func machineRef(meta *SandboxMeta) string {
 
 // --- Deploy ---
 
-// Deploy downloads and deploys the agent binary to a sandbox.
-func Deploy(name string) error {
+// Deploy downloads and deploys the agent binary to a sandbox. release pins the
+// spekk release to pull from; empty means the latest published release.
+func Deploy(name, release string) error {
 	sandbox, err := GetSandbox(name)
 	if err != nil {
 		return err
@@ -577,7 +595,7 @@ func Deploy(name string) error {
 
 	fmt.Fprintf(os.Stderr, "Deploying agent to %s...\n", sandbox.IP)
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchReleaseArtifacts("latest")
+	artifacts, err := fetchReleaseArtifacts(releaseTag(release))
 	if err != nil {
 		return fmt.Errorf("fetching release artifacts: %w", err)
 	}

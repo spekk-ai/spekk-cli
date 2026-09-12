@@ -42,33 +42,51 @@ type asset struct {
 
 // Run performs the self-update. If checkOnly is true, it prints the available
 // version without installing. It reports whether it replaced the binary.
-func Run(checkOnly bool) (replaced bool, err error) {
+//
+// targetTag empty means the latest stable release, with the usual guards: a
+// development build cannot self-update, and an already-current binary is left
+// alone. A non-empty targetTag (e.g. an "exp-*" prerelease) is installed
+// exactly as named, skipping both guards, because the operator asked for that
+// specific build rather than "whatever is newest".
+func Run(checkOnly bool, targetTag string) (replaced bool, err error) {
 	current := version.Version
-	if current == "dev" {
-		return false, fmt.Errorf("cannot update a development build; install a released version first")
-	}
 
-	release, err := FetchLatestRelease()
-	if err != nil {
-		return false, fmt.Errorf("failed to check for updates: %w", err)
-	}
+	var release *releaseResponse
+	var target string
 
-	latest := strings.TrimPrefix(release.TagName, "v")
-	if latest == "" {
-		return false, fmt.Errorf("no releases found on GitHub")
+	if targetTag != "" {
+		release, err = FetchRelease(targetTag)
+		if err != nil {
+			return false, fmt.Errorf("failed to fetch release %s: %w", targetTag, err)
+		}
+		target = strings.TrimPrefix(release.TagName, "v")
+		if checkOnly {
+			fmt.Printf("Current version: %s\nWould install:   %s\nRun 'spekk update --version %s' to install\n", current, target, targetTag)
+			return false, nil
+		}
+		fmt.Printf("Installing %s (was %s) ...\n", target, current)
+	} else {
+		if current == "dev" {
+			return false, fmt.Errorf("cannot update a development build; install a released version first, or pin one with --version")
+		}
+		release, err = FetchLatestRelease()
+		if err != nil {
+			return false, fmt.Errorf("failed to check for updates: %w", err)
+		}
+		target = strings.TrimPrefix(release.TagName, "v")
+		if target == "" {
+			return false, fmt.Errorf("no releases found on GitHub")
+		}
+		if !IsNewer(target, current) {
+			fmt.Printf("Already on latest version (%s)\n", current)
+			return false, nil
+		}
+		if checkOnly {
+			fmt.Printf("Current version: %s\nLatest version:  %s\nRun 'spekk update' to install\n", current, target)
+			return false, nil
+		}
+		fmt.Printf("Updating %s → %s ...\n", current, target)
 	}
-
-	if !IsNewer(latest, current) {
-		fmt.Printf("Already on latest version (%s)\n", current)
-		return false, nil
-	}
-
-	if checkOnly {
-		fmt.Printf("Current version: %s\nLatest version:  %s\nRun 'spekk update' to install\n", current, latest)
-		return false, nil
-	}
-
-	fmt.Printf("Updating %s → %s ...\n", current, latest)
 
 	assetName := AssetName(runtime.GOOS, runtime.GOARCH)
 	downloadURL := ""
@@ -95,13 +113,26 @@ func Run(checkOnly bool) (replaced bool, err error) {
 		return false, fmt.Errorf("update failed: %w", err)
 	}
 
-	fmt.Printf("Updated successfully: %s → %s\n", current, latest)
+	fmt.Printf("Updated successfully: %s → %s\n", current, target)
 	return true, nil
 }
 
 // FetchLatestRelease queries the GitHub Releases API for the latest release.
+// GitHub excludes prereleases from this endpoint, so an "exp-*" build is not
+// reachable this way; fetch it by tag with FetchRelease.
 func FetchLatestRelease() (*releaseResponse, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName)
+	return fetchReleaseFrom(url)
+}
+
+// FetchRelease queries the GitHub Releases API for a specific tag, including a
+// prerelease that FetchLatestRelease would skip.
+func FetchRelease(tag string) (*releaseResponse, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", repoOwner, repoName, tag)
+	return fetchReleaseFrom(url)
+}
+
+func fetchReleaseFrom(url string) (*releaseResponse, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
