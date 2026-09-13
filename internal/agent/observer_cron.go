@@ -62,39 +62,6 @@ func isValidCronInterval(minutes int) bool {
 	return minutes <= 60 || minutes%60 == 0
 }
 
-// checkInstallCronArgs refuses any argument install-cron does not
-// understand. The shared parser ignores unknown flags, but install-cron
-// installs a schedule: a mistyped flag, or the unsupported --flag=value
-// form, would otherwise install the default schedule in place of the one
-// the operator asked for, silently.
-func checkInstallCronArgs(args []string) error {
-	valueFlag := ""
-	for _, a := range args {
-		if valueFlag != "" {
-			// The shared parser does not consume a flag-shaped token as a
-			// value, so accepting one here would install the defaults
-			// silently — refuse it. A negative number ("-5") is let through
-			// so the parser's clearer positive-number error can fire.
-			if strings.HasPrefix(a, "--") || (len(a) >= 2 && a[0] == '-' && (a[1] < '0' || a[1] > '9')) {
-				return fmt.Errorf("%s needs a value in minutes, got %q", valueFlag, a)
-			}
-			valueFlag = ""
-			continue
-		}
-		switch a {
-		case "--loop-interval", "--consolidate-interval":
-			valueFlag = a
-		case "--help", "-h":
-		default:
-			return fmt.Errorf("unknown argument %q; install-cron accepts --loop-interval <minutes>, --consolidate-interval <minutes>, and --help (values are space-separated, not --flag=value)", a)
-		}
-	}
-	if valueFlag != "" {
-		return fmt.Errorf("%s needs a value in minutes", valueFlag)
-	}
-	return nil
-}
-
 // ParseInstallCronFlags parses args into an InstallCronConfig.
 func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 	cfg := InstallCronConfig{
@@ -102,11 +69,10 @@ func ParseInstallCronFlags(args []string) (InstallCronConfig, error) {
 		ConsolidateInterval: defaultConsolidateInterval,
 	}
 
-	if err := checkInstallCronArgs(args); err != nil {
-		return cfg, err
-	}
-
 	parsed := cli.ParseFlags(args, InstallCronFlags)
+	if parsed.Err != nil {
+		return cfg, parsed.Err
+	}
 
 	if v := parsed.String("loopInterval"); v != "" {
 		n, err := strconv.Atoi(v)

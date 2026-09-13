@@ -7,3 +7,4 @@ icon: lucide/microscope
 Technical detail for people who integrate with Spekk or extend it.
 
 - [Sandbox Agent Architecture](sandbox-architecture.md): how the agent client on a sandbox connects to the control host, and the message protocol between them.
+- [A Sandbox on AWS](sandbox-aws.md): one CloudFormation stack that creates an isolated network and a prepared instance, and the command that registers it with spekk.

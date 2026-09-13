@@ -11,22 +11,17 @@ depends-on: full-hierarchy-without-flags
 
 ## Description
 
-`spekk list --status <value>` returns a filtered hierarchy containing only
-assertions whose `status` field matches the given value.
+`spekk list --status <value>` returns only assertions whose `status` field matches the given value, in the requested output format.
 
 ## Success Criteria
 
-- `spekk list --status draft` returns a JSON hierarchy where every assertion in
-  every `"assertions"` array has `"status": "draft"`.
+- `spekk list --status draft --json` returns a flat assertion list where every assertion has `"status": "draft"`.
 - Assertions with a different status are absent from the output.
-- Specs that have at least one matching assertion are included in `"specs"`.
-- Specs that have zero matching assertions are excluded from `"specs"`.
-- The rolled-up spec `status` field is NOT used for filtering — a spec is
-  included based solely on whether it has matching assertions.
-- `spekk list --status done` includes only done assertions and their parent specs.
+- The assertion status determines inclusion. The computed parent spec status has no effect on filtering.
+- `spekk list --status done` includes only done assertions.
 - `spekk list --status not_started` includes only not_started assertions.
 - `spekk list --status in_progress` includes only in_progress assertions.
 - `spekk list --status failed` includes only failed assertions.
-- An invalid status value (e.g. `--status bogus`) causes the command to exit
-  non-zero and print a message listing the valid status values.
+- An invalid status value (e.g. `--status bogus`) causes the command to exit with a nonzero status and print a message listing the valid status values.
+- A missing or empty status value causes a nonzero exit with an error that identifies `--status`, including when another flag follows it.
 - Filtering does not affect `spekk next --all` or any other existing command.
