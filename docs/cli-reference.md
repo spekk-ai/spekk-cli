@@ -689,6 +689,34 @@ It installs the `agent` user, Docker, the Claude Code CLI (the native binary, no
 
 The agent binary spekk deploys matches the machine's CPU architecture, so an arm64 host (a Raspberry Pi, an arm64 droplet) is served an arm64 build. spekk pulls that build from the latest release by default; a release only carries the architectures it published. To use a build that only exists in a prerelease, pin it with `--release <tag>` (e.g. `--release exp-arm64`).
 
+**Setup recipes.** Each recipe pairs a provider with an auth mode. Export the variables the mode needs first ([Sandbox provisioning](configuration.md#sandbox-provisioning) lists them all), then run one command.
+
+DigitalOcean droplet, Bedrock (both defaults):
+
+```bash
+export DO_API_TOKEN=... SPEKK_HOST=... GITHUB_TOKEN=...
+export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_DEFAULT_REGION=us-east-1
+spekk sandbox create --name my-sandbox
+```
+
+DigitalOcean droplet, Claude subscription:
+
+```bash
+export DO_API_TOKEN=... SPEKK_HOST=... GITHUB_TOKEN=...
+export CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/spekk/oauth-token)"
+spekk sandbox create --name my-sandbox --auth subscription
+```
+
+A machine you already have (`--provider none`), Bedrock:
+
+```bash
+export SPEKK_HOST=... GITHUB_TOKEN=...
+export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_DEFAULT_REGION=us-east-1
+spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --ssh-user ubuntu
+```
+
+`--ip` implies `--provider none`, so no DigitalOcean token is needed. For a subscription machine, swap in `--auth subscription` and export `CLAUDE_CODE_OAUTH_TOKEN` in place of the AWS keys. To change any of these after the sandbox exists, see [Updating sandbox variables](configuration.md#updating-sandbox-variables).
+
 ### `spekk sandbox provision <name>`
 
 Finish a sandbox that `create` left at `provisioning`.
@@ -708,6 +736,8 @@ spekk sandbox provision my-sandbox --auth subscription  # Change the auth mode
 | `--force` | `-f` | Provision a sandbox whose status is not `provisioning` |
 
 `provision` checks that the environment variables for the auth mode are set, checks that `/opt/spekk/.provisioned` exists on the machine, and then runs the same three steps `create` runs after its wait, in the same order and through the same code. It marks the sandbox `active` and prints a new agent token to register. A sandbox recorded before 1.28.0 has no auth mode on record, and reads as `bedrock`.
+
+`provision` is also how you change a live sandbox's credentials from your machine: re-run it with the variables set in your environment to switch auth mode, rotate a token, or push a new AWS key. See [Updating sandbox variables](configuration.md#updating-sandbox-variables) for that and for the on-machine alternative.
 
 ### `spekk sandbox list`
 

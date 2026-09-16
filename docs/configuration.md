@@ -255,6 +255,34 @@ An assignment on the local side of an `ssh` command is not forwarded, and a secr
 
 > **A subscription's rate limit is shared, and it runs out for everyone at once.** Every session authenticated with the same subscription draws on one quota: each sandbox that uses the token, and the interactive sessions of the person whose subscription it is. Several busy sandboxes contend with each other, and when the quota is spent they all stall until the window resets. Bedrock bills per token and has no such ceiling. Weigh that before you move a sandbox whose work has to finish on demand, and remember that a subscription is one person's seat, not a team credential.
 
+#### Updating sandbox variables
+
+The agent reads its variables from `/etc/spekk/agent.env` on the machine. No `spekk sandbox` subcommand edits one variable in place; you rewrite the file, two ways.
+
+**From your machine, with `spekk sandbox provision`.** [`spekk sandbox provision <name> --auth <mode>`](cli-reference.md#spekk-sandbox-provision-name) re-runs the credential injection: it reads the variables the mode needs from your environment, writes a fresh `agent.env`, and prints a new agent token to register. Use it to switch a live sandbox between `bedrock` and `subscription`, or to push a rotated `GITHUB_TOKEN` or AWS key you have set locally. Pass `--force` for a sandbox that is already `active`.
+
+**On the machine, with `setup-credentials.sh`.** `infrastructure/sandbox/setup-credentials.sh` does the same rewrite from the machine itself, and prompts for whatever you do not supply. Copy it over and run it there:
+
+```bash
+scp infrastructure/sandbox/setup-credentials.sh <user>@<ip>:/tmp/
+ssh -t <user>@<ip> 'SPEKK_AUTH_MODE=subscription bash /tmp/setup-credentials.sh'
+```
+
+`SPEKK_AUTH_MODE` (`bedrock` or `subscription`) selects the mode. Any value the script would prompt for can come from the environment instead, which is how an unattended run avoids stopping for input: set it on the remote side of the `ssh` command, inside the quotes. Pass non-secrets that way. Feed secrets through a root-only file on the machine and source it there, so they stay off both machines' process lists:
+
+```bash
+ssh -t <user>@<ip> 'set -a; . /root/creds; set +a; SPEKK_AUTH_MODE=subscription bash /tmp/setup-credentials.sh; shred -u /root/creds'
+```
+
+The script restarts `spekk-agent` when it finishes.
+
+**What a rewrite keeps, and what it drops.** The file is written whole, never appended to. Everything the auth mode does not own is carried over from the file already there — `GITHUB_TOKEN`, `SPEKK_HOST`, `WORKSPACE`, `SPEKK_AGENT_NAME`, and any variable the script does not recognize. Only the mode's own variables are replaced: the AWS keys and `CLAUDE_CODE_USE_BEDROCK` for `bedrock`, `CLAUDE_CODE_OAUTH_TOKEN` for `subscription`, and `ANTHROPIC_MODEL`.
+
+- **Rotate one variable, same mode.** Re-run in the mode the machine is already in and supply only the value you are changing. `GITHUB_TOKEN=<new> bash /tmp/setup-credentials.sh` rotates the token and keeps everything else, the model credential included.
+- **Switch modes.** Run in the other mode. The previous mode's credentials are dropped, not shadowed, so nothing keeps billing through the old path. You supply the new mode's credentials; everything else carries over.
+- **The model pin does not cross a switch.** `ANTHROPIC_MODEL` names a model for the mode's API, and the names differ: a Bedrock inference profile such as `us.anthropic.claude-sonnet-5` means nothing to the subscription API. On a switch the old pin is reported and dropped. Supply a new `ANTHROPIC_MODEL` in the same run to set one for the new mode.
+- **`SPEKK_AGENT_TOKEN` is the one value you cannot lose.** The control host stores only its hash, so a blank token means re-registering the agent. The rewrite carries it forward; supply it only if the file has lost it.
+
 ### Agent runtime
 
 The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env`. `spekk sandbox create` and `spekk sandbox provision` write that file. You do not set them by hand.
