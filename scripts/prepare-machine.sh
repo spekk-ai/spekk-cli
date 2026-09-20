@@ -10,6 +10,8 @@
 # Debian/Ubuntu, amd64/arm64, idempotent.
 #
 # Usage: sudo ./prepare-machine.sh
+#        sudo SPEKK_SHARE_USER=<login> ./prepare-machine.sh  # also let <login>
+#          read/write /opt/spekk/workspace (a box you use interactively, e.g. a Pi)
 #
 set -euo pipefail
 
@@ -48,7 +50,7 @@ echo "==> Base packages"
 # the Docker section recreates it for the detected distro.
 rm -f /etc/apt/sources.list.d/docker.list
 apt-get update -y
-apt-get install -y git jq htop tmux vim unzip ca-certificates curl gnupg
+apt-get install -y git jq htop tmux vim unzip ca-certificates curl gnupg acl
 
 echo "==> agent user"
 # Service account the agent runs as: home dir (credentials land here), docker +
@@ -89,6 +91,14 @@ fi
 # Onto the system PATH: the spekk-agent service won't read agent's ~/.local/bin.
 ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
 
+echo "==> spekk CLI"
+# Install as agent so it owns ~agent/.local/bin/spekk and `spekk update` works.
+if [ ! -x /home/agent/.local/bin/spekk ]; then
+  su - agent -c 'curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh'
+fi
+# Onto the system PATH, same as claude above.
+ln -sf /home/agent/.local/bin/spekk /usr/local/bin/spekk
+
 echo "==> GitHub CLI"
 if ! command -v gh >/dev/null 2>&1; then
   curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -105,6 +115,25 @@ echo "==> spekk directories"
 mkdir -p /opt/spekk /etc/spekk /var/log/spekk
 chown agent:agent /var/log/spekk
 su - agent -c 'git config --global init.defaultBranch main'
+
+# Optional: let a human login user share the agent's workspace. On a box you also
+# use interactively (e.g. a Raspberry Pi), set SPEKK_SHARE_USER to your login name
+# so you can read/write /opt/spekk/workspace alongside the agent. ACLs, not chgrp:
+# deploy re-runs `chown -R agent:agent /opt/spekk`, which preserves ACLs but would
+# wipe a group change, and a default ACL also grants access to the files the agent
+# creates later, which its umask would otherwise deny.
+if [ -n "${SPEKK_SHARE_USER:-}" ]; then
+  echo "==> Sharing /opt/spekk/workspace with ${SPEKK_SHARE_USER}"
+  if ! id "${SPEKK_SHARE_USER}" >/dev/null 2>&1; then
+    echo "SPEKK_SHARE_USER=${SPEKK_SHARE_USER} is not an existing user." >&2
+    exit 1
+  fi
+  # deploy creates workspace at deploy time; make it now so the ACL is in place.
+  mkdir -p /opt/spekk/workspace
+  chown agent:agent /opt/spekk/workspace
+  setfacl -R    -m "u:${SPEKK_SHARE_USER}:rwX" /opt/spekk/workspace
+  setfacl -R -d -m "u:${SPEKK_SHARE_USER}:rwX" /opt/spekk/workspace
+fi
 
 echo "==> Marking provisioning complete"
 touch /opt/spekk/.provisioned

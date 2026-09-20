@@ -1,11 +1,11 @@
 package sandbox
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"time"
 )
@@ -24,74 +24,87 @@ func sandboxAssetName(arch string) string {
 	return "sandbox-linux-" + arch
 }
 
-// githubHTTPClient is used for release downloads. Its default redirect policy
-// strips the Authorization header on cross-host redirects, which is exactly
-// what we need: the asset endpoint 302s to a presigned objects.githubusercontent.com
-// URL that carries its own auth and rejects a forwarded token.
+// githubHTTPClient downloads release assets. spekk-cli is a public repo, so we
+// fetch from the anonymous release CDN (github.com/<repo>/releases/download/...)
+// rather than the api.github.com asset endpoint: no token, and no exposure to
+// the 60/hr unauthenticated API rate limit. The default redirect policy follows
+// the CDN's 302 to the presigned objects.githubusercontent.com URL, which
+// carries its own auth — nothing of ours to leak across the hop.
 var githubHTTPClient = &http.Client{Timeout: 60 * time.Second}
 
 // releaseArtifacts are the files needed to provision and deploy a sandbox.
 // CloudInit stays in memory because it is sent straight to the DO API as
 // droplet user-data; only the binary is written to disk so scp can copy it.
 type releaseArtifacts struct {
-	Version    string
+	Version    string // concrete tag the binary is pulled from, e.g. "v1.30.0"
 	CloudInit  []byte
 	BinaryPath string // temp file; set by downloadAgentBinary, caller removes when done
-
-	// Retained so downloadAgentBinary can fetch the right build once the
-	// machine's arch is known.
-	release *githubRelease
-	token   string
-}
-
-type githubAsset struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-}
-
-type githubRelease struct {
-	TagName string        `json:"tag_name"`
-	Assets  []githubAsset `json:"assets"`
 }
 
 // fetchArtifacts is the seam Create fetches through. It is a variable so a
 // test can exercise Create without a network call.
 var fetchArtifacts = fetchReleaseArtifacts
 
-// fetchReleaseArtifacts fetches the release metadata and cloud-init template
-// from releaseRepo. tag may be empty/"latest" or a specific tag. The agent
+// fetchReleaseArtifacts resolves tag to a concrete release and pairs it with the
+// cloud-init template. tag may be empty/"latest" or a specific tag. The agent
 // binary is downloaded later, by downloadAgentBinary, since which build to
 // fetch depends on the machine's arch — not known until it is reached.
 func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
-		return nil, fmt.Errorf("GITHUB_TOKEN is not set")
-	}
-
-	rel, err := fetchRelease(token, tag)
+	version, err := resolveReleaseTag(tag)
 	if err != nil {
 		return nil, err
 	}
 
 	return &releaseArtifacts{
-		Version:   rel.TagName,
+		Version:   version,
 		CloudInit: cloudInitTemplate,
-		release:   rel,
-		token:     token,
 	}, nil
+}
+
+// resolveReleaseTag turns "" / "latest" into the concrete tag of the newest
+// release, and returns any other tag unchanged. "latest" is resolved through
+// the CDN's redirect (github.com/<repo>/releases/latest -> .../releases/tag/<tag>),
+// so recording an exact version needs no API call or token.
+func resolveReleaseTag(tag string) (string, error) {
+	if tag != "" && tag != "latest" {
+		return tag, nil
+	}
+
+	// A dedicated client that stops at the redirect so we can read Location; the
+	// shared client follows redirects, which is what downloads need.
+	resolver := &http.Client{
+		Timeout:       githubHTTPClient.Timeout,
+		Transport:     githubHTTPClient.Transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+
+	url := fmt.Sprintf("https://github.com/%s/releases/latest", releaseRepo)
+	resp, err := resolver.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("resolving latest release: %w", err)
+	}
+	defer resp.Body.Close()
+
+	loc := resp.Header.Get("Location")
+	if loc == "" {
+		return "", fmt.Errorf("resolving latest release from %s: HTTP %d without a redirect", releaseRepo, resp.StatusCode)
+	}
+	return path.Base(loc), nil
 }
 
 // downloadAgentBinary fetches the agent build for arch into a temp file and
 // records it in BinaryPath; the caller os.Removes it when done.
 func (a *releaseArtifacts) downloadAgentBinary(arch string) error {
 	name := sandboxAssetName(arch)
-	id, err := assetID(a.release, name)
-	if err != nil {
-		return err
-	}
+	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", releaseRepo, a.Version, name)
 
-	binary, err := downloadAsset(a.token, id)
+	binary, err := downloadReleaseAsset(url)
 	if err != nil {
+		// A release only carries the architectures it published; a 404 means this
+		// one has no build for arch, not a transient failure.
+		if err == errAssetNotFound {
+			return fmt.Errorf("release %q has no asset %q", a.Version, name)
+		}
 		return fmt.Errorf("downloading %s: %w", name, err)
 	}
 
@@ -113,71 +126,24 @@ func (a *releaseArtifacts) downloadAgentBinary(arch string) error {
 	return nil
 }
 
-func fetchRelease(token, tag string) (*githubRelease, error) {
-	var url string
-	if tag == "" || tag == "latest" {
-		url = fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", releaseRepo)
-	} else {
-		url = fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", releaseRepo, tag)
-	}
+// errAssetNotFound is the 404 sentinel: the release exists but has no asset at
+// the requested path (wrong arch, or a tag that was never published).
+var errAssetNotFound = fmt.Errorf("release asset not found")
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "token "+token)
-	req.Header.Set("Accept", "application/vnd.github+json")
-
-	resp, err := githubHTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetching release: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		label := tag
-		if label == "" {
-			label = "latest"
-		}
-		return nil, fmt.Errorf("fetching release %q from %s: HTTP %d", label, releaseRepo, resp.StatusCode)
-	}
-
-	var rel githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return nil, fmt.Errorf("decoding release: %w", err)
-	}
-	return &rel, nil
-}
-
-func downloadAsset(token string, assetID int) ([]byte, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/assets/%d", releaseRepo, assetID)
-
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "token "+token)
-	req.Header.Set("Accept", "application/octet-stream")
-
-	resp, err := githubHTTPClient.Do(req)
+func downloadReleaseAsset(url string) ([]byte, error) {
+	resp, err := githubHTTPClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errAssetNotFound
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return io.ReadAll(resp.Body)
-}
-
-func assetID(rel *githubRelease, name string) (int, error) {
-	for _, a := range rel.Assets {
-		if a.Name == name {
-			return a.ID, nil
-		}
-	}
-	return 0, fmt.Errorf("release %q has no asset %q", rel.TagName, name)
 }
 
 // renderCloudInit substitutes the sandbox's public key into the template's

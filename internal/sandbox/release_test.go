@@ -54,8 +54,9 @@ func TestReleaseTag(t *testing.T) {
 	}
 }
 
-// downloadAgentBinary fetches the build for the target arch, so it must request
-// the sandbox-linux-<arch> asset and write exactly those bytes to BinaryPath.
+// downloadAgentBinary fetches the build for the target arch from the anonymous
+// release CDN, so it must request releases/download/<tag>/sandbox-linux-<arch>
+// (no token) and write exactly those bytes to BinaryPath.
 func TestDownloadAgentBinarySelectsArchAsset(t *testing.T) {
 	orig := githubHTTPClient
 	defer func() { githubHTTPClient = orig }()
@@ -65,27 +66,21 @@ func TestDownloadAgentBinarySelectsArchAsset(t *testing.T) {
 	githubHTTPClient = &http.Client{
 		Transport: sandboxRoundTrip(func(req *http.Request) (*http.Response, error) {
 			requested = req.URL.Path
+			if req.Header.Get("Authorization") != "" {
+				t.Errorf("CDN download must be anonymous, got Authorization header")
+			}
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(payload)), Header: make(http.Header)}, nil
 		}),
 	}
 
-	a := &releaseArtifacts{
-		token: "tok",
-		release: &githubRelease{
-			TagName: "exp-x",
-			Assets: []githubAsset{
-				{ID: 11, Name: "sandbox-linux-amd64"},
-				{ID: 22, Name: "sandbox-linux-arm64"},
-			},
-		},
-	}
+	a := &releaseArtifacts{Version: "exp-x"}
 	if err := a.downloadAgentBinary("arm64"); err != nil {
 		t.Fatalf("downloadAgentBinary: %v", err)
 	}
 	defer os.Remove(a.BinaryPath)
 
-	if !strings.HasSuffix(requested, "/releases/assets/22") {
-		t.Errorf("expected the arm64 asset (id 22) to be fetched, hit %q", requested)
+	if !strings.HasSuffix(requested, "/releases/download/exp-x/sandbox-linux-arm64") {
+		t.Errorf("expected the arm64 CDN asset to be fetched, hit %q", requested)
 	}
 	got, err := os.ReadFile(a.BinaryPath)
 	if err != nil {
@@ -96,14 +91,20 @@ func TestDownloadAgentBinarySelectsArchAsset(t *testing.T) {
 	}
 }
 
-// A release only carries the architectures it published. Asking for one it does
-// not have must fail before deploy, naming the missing asset, rather than fall
-// back to a binary the machine cannot run.
+// A release only carries the architectures it published. A 404 for the asset
+// must fail before deploy, naming the missing asset, rather than fall back to a
+// binary the machine cannot run.
 func TestDownloadAgentBinaryMissingArch(t *testing.T) {
-	a := &releaseArtifacts{
-		token:   "tok",
-		release: &githubRelease{TagName: "v1.0.0", Assets: []githubAsset{{ID: 11, Name: "sandbox-linux-amd64"}}},
+	orig := githubHTTPClient
+	defer func() { githubHTTPClient = orig }()
+
+	githubHTTPClient = &http.Client{
+		Transport: sandboxRoundTrip(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader("Not Found")), Header: make(http.Header)}, nil
+		}),
 	}
+
+	a := &releaseArtifacts{Version: "v1.0.0"}
 	err := a.downloadAgentBinary("arm64")
 	if err == nil {
 		t.Fatal("expected an error for an arch the release does not carry")
@@ -113,6 +114,40 @@ func TestDownloadAgentBinaryMissingArch(t *testing.T) {
 	}
 	if a.BinaryPath != "" {
 		t.Errorf("no file should be written when the asset is missing, got %q", a.BinaryPath)
+	}
+}
+
+// resolveReleaseTag turns ""/"latest" into a concrete tag via the CDN redirect
+// and passes any pinned tag through untouched.
+func TestResolveReleaseTag(t *testing.T) {
+	orig := githubHTTPClient
+	defer func() { githubHTTPClient = orig }()
+
+	var hits int
+	githubHTTPClient = &http.Client{
+		Transport: sandboxRoundTrip(func(req *http.Request) (*http.Response, error) {
+			hits++
+			h := make(http.Header)
+			h.Set("Location", "https://github.com/spekk-ai/spekk-cli/releases/tag/v1.30.0")
+			return &http.Response{StatusCode: 302, Body: io.NopCloser(strings.NewReader("")), Header: h}, nil
+		}),
+	}
+
+	for _, in := range []string{"", "latest"} {
+		got, err := resolveReleaseTag(in)
+		if err != nil {
+			t.Fatalf("resolveReleaseTag(%q): %v", in, err)
+		}
+		if got != "v1.30.0" {
+			t.Errorf("resolveReleaseTag(%q) = %q, want the tag from the redirect", in, got)
+		}
+	}
+
+	if got, _ := resolveReleaseTag("exp-arm64"); got != "exp-arm64" {
+		t.Errorf("a pinned tag must pass through unchanged, got %q", got)
+	}
+	if hits != 2 {
+		t.Errorf("only \"\"/\"latest\" should hit the network; got %d requests", hits)
 	}
 }
 

@@ -20,11 +20,22 @@ same setup a droplet gets, minus the droplet-only hardening.
 
 - `scripts/prepare-machine.sh` installs exactly what the agent needs: the
   `agent` user (home dir, passwordless sudo, `docker` + `systemd-journal`
-  groups), Docker, Node.js + the Claude Code CLI, `git`/`gh`, and the spekk
-  directories (`/opt/spekk`, `/etc/spekk`, `/var/log/spekk`).
+  groups), Docker, Node.js + the Claude Code CLI, the spekk CLI, `git`/`gh`, and
+  the spekk directories (`/opt/spekk`, `/etc/spekk`, `/var/log/spekk`). The
+  Claude Code and spekk CLIs install as the `agent` user (into
+  `~agent/.local/bin`, so each CLI's self-update stays sudo-free) and are
+  symlinked onto the system PATH under `/usr/local/bin`, which the
+  `spekk-agent` service reads.
 - It ends by writing `/opt/spekk/.provisioned` — the marker `create` and
   `provision` check — so a machine it prepared satisfies
   `register-an-existing-machine`.
+- When `SPEKK_SHARE_USER` names an existing login user, it grants that user
+  read/write on `/opt/spekk/workspace` via ACLs (a recursive entry and a default
+  entry, not group ownership) so a human sharing an interactively-used box can
+  edit the agent's files — surviving deploy's `chown -R agent:agent /opt/spekk`
+  and covering files the agent creates later. It fails fast when the named user
+  does not exist. This step is absent from `cloud-init.yaml`, which provisions
+  droplets that have no such login user.
 - It deliberately omits the droplet-only hardening in `cloud-init.yaml` (a full
   `apt upgrade`, a default-deny UFW policy, fail2ban), which on a machine the
   operator already uses could lock them out or disrupt other services.

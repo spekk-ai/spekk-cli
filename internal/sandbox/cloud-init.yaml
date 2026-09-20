@@ -160,6 +160,10 @@ runcmd:
   # Claude Code CLI
   - npm install -g @anthropic-ai/claude-code
 
+  # spekk CLI (install as agent so `spekk update` works, then onto the system PATH)
+  - su - agent -c 'curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh'
+  - ln -sf /home/agent/.local/bin/spekk /usr/local/bin/spekk
+
   # Workspace
   - mkdir -p /workspace
   - chown agent:agent /workspace

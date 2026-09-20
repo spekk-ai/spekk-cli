@@ -202,7 +202,7 @@ There is no flag, environment variable, or prompt instruction that suppresses dr
 
 | Variable | Needed for | Description |
 |----------|------------|-------------|
-| `GITHUB_TOKEN` | every sandbox | Downloads the agent binary and the cloud-init template from the spekk release. On the sandbox, it gives the agent access to your repositories |
+| `GITHUB_TOKEN` | every sandbox | On the sandbox, gives the agent access to your repositories. The agent binary is pulled from the public release CDN, so provisioning itself needs no token |
 | `SPEKK_HOST` | every sandbox | The control host the agent connects to. A scheme and a trailing slash are removed |
 | `DO_API_TOKEN` | `--provider digitalocean` | DigitalOcean API token. `DIGITALOCEAN_TOKEN` is accepted too. Not needed for a machine you already have |
 | `AWS_ACCESS_KEY_ID` | `bedrock` | AWS credential for the Bedrock API |
