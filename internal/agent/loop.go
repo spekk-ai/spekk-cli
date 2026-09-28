@@ -6,9 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
 // gitStageAndCommit stages all changes and commits with the given message.
@@ -61,17 +65,112 @@ func gitStageSpecsAndCommit(message string) (bool, error) {
 	return true, nil
 }
 
+// completionMessage returns the appropriate message for the given assertion count.
+func completionMessage(count int64) string {
+	if count == 0 {
+		return "No assertions to work on."
+	}
+	noun := "assertions"
+	if count == 1 {
+		noun = "assertion"
+	}
+	return fmt.Sprintf("Builder loop complete. %d %s completed.", count, noun)
+}
+
+// LoopFlags defines the flag set for the loop builder CLI.
+var LoopFlags = cli.FlagSet{
+	"watch":       {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
+	"idleTimeout": {Names: []string{"--idle-timeout"}, Type: cli.StringFlag},
+}
+
+// extractAllPositionalArgs returns all positional (non-flag) arguments from the
+// args list, skipping known flags and their values. Any unrecognized flag
+// (a "-"-prefixed token that is not in flags) is an error, so a typo'd flag or
+// its value is never silently treated as a skill name.
+func extractAllPositionalArgs(args []string, flags cli.FlagSet) ([]string, error) {
+	flagStrings := make(map[string]bool)
+	stringFlags := make(map[string]bool)
+
+	for _, def := range flags {
+		for _, f := range def.Names {
+			flagStrings[f] = true
+			if def.Type == cli.StringFlag {
+				stringFlags[f] = true
+			}
+		}
+	}
+
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if flagStrings[arg] {
+			if stringFlags[arg] {
+				i++ // skip value
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			return nil, fmt.Errorf("unknown flag: %s", arg)
+		}
+		positional = append(positional, arg)
+	}
+	return positional, nil
+}
+
+// skillsSummary returns the post-build skills summary line.
+func skillsSummary(succeeded, total int) string {
+	return fmt.Sprintf("Post-build skills: %d/%d completed", succeeded, total)
+}
+
 // RunBuilderLoop runs the continuous builder loop.
-func RunBuilderLoop(installDir string) {
+func RunBuilderLoop(args []string, installDir string) {
+	parsed := cli.ParseFlags(args, LoopFlags)
+	watch := parsed.Bool("watch")
+	skills, err := extractAllPositionalArgs(args, LoopFlags)
+	if err != nil {
+		colorLog(colorRed, "Error: "+err.Error())
+		colorLog(colorBlue, `Run "spekk loop help" for usage.`)
+		os.Exit(1)
+	}
+
+	idleTimeout := 120
+	if s := parsed.String("idleTimeout"); s != "" {
+		val, err := strconv.Atoi(s)
+		if err != nil || val <= 0 {
+			colorLog(colorRed, "Error: --idle-timeout must be a positive integer (seconds)")
+			os.Exit(1)
+		}
+		idleTimeout = val
+	}
+
 	colorLog(colorCyan, "Starting Builder Loop...")
 	colorLog(colorBlue, "This will continuously get next assertions and implement them.")
+	if watch {
+		colorLog(colorYellow, "Watch mode: will poll for new work after completion.")
+	}
+	if len(skills) > 0 {
+		colorLog(colorBlue, fmt.Sprintf("Post-build skills: %s", strings.Join(skills, ", ")))
+	}
+	colorLog(colorBlue, fmt.Sprintf("Idle timeout: %ds", idleTimeout))
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
+
+	var completed int64
+
+	// active holds the currently-running builder child so Ctrl+C can stop it
+	// before we exit. Without this, the PTY child runs in its own session and
+	// never sees the terminal's SIGINT, so exiting would orphan it.
+	active := &processHolder{}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		sig := <-sigCh
-		colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
+		<-sigCh
+		if p := active.get(); p != nil {
+			colorLog(colorYellow, "\nInterrupting current build...")
+			terminateChild(p)
+		}
+		count := atomic.LoadInt64(&completed)
+		colorLog(colorGreen, "\n"+completionMessage(count))
 		os.Exit(0)
 	}()
 
@@ -94,9 +193,13 @@ func RunBuilderLoop(installDir string) {
 		}
 
 		if result.Type == "complete" {
-			colorLog(colorGreen, "All assertions completed. Waiting for new work...")
-			time.Sleep(5 * time.Second)
-			continue
+			count := atomic.LoadInt64(&completed)
+			colorLog(colorGreen, completionMessage(count))
+			if watch {
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			break
 		}
 
 		if result.Type != "assertion" {
@@ -110,7 +213,7 @@ func RunBuilderLoop(installDir string) {
 		colorLog(colorBlue, fmt.Sprintf("   Status: %s", result.Status))
 		colorLog(colorBlue, fmt.Sprintf("   Priority: %d", result.Priority))
 
-		// Launch builder agent
+		// Launch builder agent with PTY and idle timeout
 		colorLog(colorMagenta, "Launching Builder Agent...")
 
 		opts := LaunchOptions{
@@ -123,9 +226,10 @@ func RunBuilderLoop(installDir string) {
 			os.Exit(1)
 		}
 
-		success, launchErr := launchClaude(
+		success, timedOut, launchErr := launchClaudeWithPTY(
 			[]string{"--dangerously-skip-permissions", message},
-			nil,
+			time.Duration(idleTimeout)*time.Second,
+			active,
 		)
 
 		if launchErr != nil {
@@ -133,7 +237,13 @@ func RunBuilderLoop(installDir string) {
 			os.Exit(1)
 		}
 
-		if success {
+		if timedOut {
+			colorLog(colorYellow, "Resetting assertion status to not_started...")
+			if resetErr := resetAssertionStatus(result.File); resetErr != nil {
+				colorLog(colorRed, "Failed to reset assertion status: "+resetErr.Error())
+			}
+		} else if success {
+			atomic.AddInt64(&completed, 1)
 			colorLog(colorGreen, "Builder agent completed work")
 		} else {
 			colorLog(colorRed, "Builder agent exited with error")
@@ -155,6 +265,81 @@ func RunBuilderLoop(installDir string) {
 		colorLog(colorBlue, "Preparing for next iteration...")
 		time.Sleep(500 * time.Millisecond)
 	}
+
+	// Post-build skills pipeline
+	count := atomic.LoadInt64(&completed)
+	if len(skills) > 0 && count > 0 {
+		runPostBuildSkills(skills, installDir, idleTimeout, active)
+	}
+}
+
+// runPostBuildSkills launches each skill as a separate builder agent invocation
+// after all assertions have been completed.
+func runPostBuildSkills(skills []string, installDir string, idleTimeout int, active *processHolder) {
+	colorLog(colorCyan, "\n--- Post-Build Skills Pipeline ---")
+
+	done := make(map[string]bool)
+	succeeded := 0
+
+	for _, skill := range skills {
+		// Display current checklist state
+		for _, s := range skills {
+			if done[s] {
+				colorLog(colorGreen, fmt.Sprintf("[x] %s", s))
+			} else if s == skill {
+				colorLog(colorYellow, fmt.Sprintf("[ ] %s", s))
+			} else {
+				colorLog(colorBlue, fmt.Sprintf("[ ] %s", s))
+			}
+		}
+
+		// Build activation message with skill content
+		opts := LaunchOptions{
+			Agent:      "builder",
+			InstallDir: installDir,
+		}
+		message, err := BuildActivationMessage(opts)
+		if err != nil {
+			colorLog(colorRed, fmt.Sprintf("Skill %s: failed to build message: %s", skill, err))
+			done[skill] = true
+			continue
+		}
+
+		skillMsg, err := BuildSkillMessage(installDir, "builder", skill, []string{skill})
+		if err != nil {
+			colorLog(colorRed, fmt.Sprintf("Skill %s: error: %s", skill, err))
+			done[skill] = true
+			continue
+		}
+		if skillMsg == "" {
+			colorLog(colorYellow, fmt.Sprintf("Skill %q not found, skipping", skill))
+			done[skill] = true
+			continue
+		}
+
+		message += skillMsg
+
+		success, timedOut, launchErr := launchClaudeWithPTY(
+			[]string{"--dangerously-skip-permissions", message},
+			time.Duration(idleTimeout)*time.Second,
+			active,
+		)
+
+		done[skill] = true
+
+		if launchErr != nil {
+			colorLog(colorRed, fmt.Sprintf("Skill %s failed: %s", skill, launchErr))
+		} else if timedOut {
+			colorLog(colorYellow, fmt.Sprintf("Skill %s timed out", skill))
+		} else if success {
+			succeeded++
+			colorLog(colorGreen, fmt.Sprintf("Skill %s completed", skill))
+		} else {
+			colorLog(colorRed, fmt.Sprintf("Skill %s exited with error", skill))
+		}
+	}
+
+	colorLog(colorGreen, skillsSummary(succeeded, len(skills)))
 }
 
 // RunCoachLoop runs the continuous coach loop.
@@ -236,4 +421,36 @@ func getNextAssertionForLoop(spekkBin string) (*AssertionResult, error) {
 		return nil, fmt.Errorf("malformed JSON from parser: %w", err)
 	}
 	return &result, nil
+}
+
+// resetAssertionStatus resets an assertion file's status from in_progress to
+// not_started and removes the locked-by field. Only modifies lines inside the
+// YAML frontmatter (between the opening and closing --- delimiters).
+func resetAssertionStatus(filePath string) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("reading assertion file: %w", err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var result []string
+	delimCount := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "---" {
+			delimCount++
+			result = append(result, line)
+			continue
+		}
+		inFrontmatter := delimCount == 1
+		if inFrontmatter && strings.HasPrefix(trimmed, "status:") && strings.Contains(trimmed, "in_progress") {
+			line = strings.Replace(line, "in_progress", "not_started", 1)
+		}
+		if inFrontmatter && strings.HasPrefix(trimmed, "locked-by:") {
+			continue
+		}
+		result = append(result, line)
+	}
+
+	return os.WriteFile(filePath, []byte(strings.Join(result, "\n")), 0o644)
 }

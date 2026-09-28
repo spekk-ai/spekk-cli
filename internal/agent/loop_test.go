@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spekk-ai/spekk-cli/internal/cli"
 )
 
 func initGitRepo(t *testing.T) string {
@@ -122,5 +124,201 @@ func TestGitStageSpecsAndCommit_NoChanges(t *testing.T) {
 	}
 	if committed {
 		t.Error("expected no commit when there are no changes")
+	}
+}
+
+func TestLoopFlags_WatchParsing(t *testing.T) {
+	tests := []struct {
+		args  []string
+		watch bool
+	}{
+		{nil, false},
+		{[]string{}, false},
+		{[]string{"--watch"}, true},
+		{[]string{"-w"}, true},
+	}
+	for _, tt := range tests {
+		parsed := cli.ParseFlags(tt.args, LoopFlags)
+		got := parsed.Bool("watch")
+		if got != tt.watch {
+			t.Errorf("LoopFlags(%v): watch = %v, want %v", tt.args, got, tt.watch)
+		}
+	}
+}
+
+func TestLoopFlags_IdleTimeoutParsing(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{nil, ""},
+		{[]string{"--idle-timeout", "60"}, "60"},
+		{[]string{"--watch", "--idle-timeout", "300"}, "300"},
+		{[]string{"--idle-timeout", "30", "-w"}, "30"},
+	}
+	for _, tt := range tests {
+		parsed := cli.ParseFlags(tt.args, LoopFlags)
+		got := parsed.String("idleTimeout")
+		if got != tt.want {
+			t.Errorf("LoopFlags(%v): idleTimeout = %q, want %q", tt.args, got, tt.want)
+		}
+	}
+}
+
+func TestResetAssertionStatus(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test-assertion.md")
+
+	content := `---
+id: test-assertion
+parent: test-spec
+created: 2026-01-20T16:00:00Z
+priority: 1
+status: in_progress
+locked-by: builder-macbook-12345-1706210400
+branch: feature/test
+---
+
+# Test Assertion
+
+Some content here.
+`
+	os.WriteFile(filePath, []byte(content), 0o644)
+
+	err := resetAssertionStatus(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(filePath)
+	result := string(data)
+
+	if strings.Contains(result, "in_progress") {
+		t.Error("expected status to be reset from in_progress")
+	}
+	if !strings.Contains(result, "status: not_started") {
+		t.Error("expected status to be not_started")
+	}
+	if strings.Contains(result, "locked-by:") {
+		t.Error("expected locked-by line to be removed")
+	}
+	if !strings.Contains(result, "# Test Assertion") {
+		t.Error("expected body content to be preserved")
+	}
+}
+
+func TestExtractAllPositionalArgs(t *testing.T) {
+	tests := []struct {
+		args    []string
+		want    []string
+		wantErr bool
+	}{
+		{nil, nil, false},
+		{[]string{}, nil, false},
+		{[]string{"skill1"}, []string{"skill1"}, false},
+		{[]string{"skill1", "skill2"}, []string{"skill1", "skill2"}, false},
+		{[]string{"--watch", "skill1"}, []string{"skill1"}, false},
+		{[]string{"skill1", "--watch"}, []string{"skill1"}, false},
+		{[]string{"--idle-timeout", "60", "skill1", "skill2"}, []string{"skill1", "skill2"}, false},
+		{[]string{"--watch", "--idle-timeout", "300", "s1", "s2", "s3"}, []string{"s1", "s2", "s3"}, false},
+		{[]string{"-w"}, nil, false},
+		// Unknown flags are rejected so a typo'd flag (or its value) is never
+		// silently treated as a skill name.
+		{[]string{"--unknown-flag", "skill1"}, nil, true},
+		{[]string{"--idle-timout", "60"}, nil, true},
+	}
+	for _, tt := range tests {
+		got, err := extractAllPositionalArgs(tt.args, LoopFlags)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("extractAllPositionalArgs(%v) err = %v, wantErr %v", tt.args, err, tt.wantErr)
+			continue
+		}
+		if tt.wantErr {
+			continue
+		}
+		if len(got) != len(tt.want) {
+			t.Errorf("extractAllPositionalArgs(%v) = %v, want %v", tt.args, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("extractAllPositionalArgs(%v)[%d] = %q, want %q", tt.args, i, got[i], tt.want[i])
+			}
+		}
+	}
+}
+
+func TestSkillsSummary(t *testing.T) {
+	tests := []struct {
+		succeeded int
+		total     int
+		want      string
+	}{
+		{0, 2, "Post-build skills: 0/2 completed"},
+		{1, 2, "Post-build skills: 1/2 completed"},
+		{2, 2, "Post-build skills: 2/2 completed"},
+		{3, 5, "Post-build skills: 3/5 completed"},
+	}
+	for _, tt := range tests {
+		got := skillsSummary(tt.succeeded, tt.total)
+		if got != tt.want {
+			t.Errorf("skillsSummary(%d, %d) = %q, want %q", tt.succeeded, tt.total, got, tt.want)
+		}
+	}
+}
+
+func TestCompletionMessage(t *testing.T) {
+	tests := []struct {
+		count int64
+		want  string
+	}{
+		{0, "No assertions to work on."},
+		{1, "Builder loop complete. 1 assertion completed."},
+		{5, "Builder loop complete. 5 assertions completed."},
+	}
+	for _, tt := range tests {
+		got := completionMessage(tt.count)
+		if got != tt.want {
+			t.Errorf("completionMessage(%d) = %q, want %q", tt.count, got, tt.want)
+		}
+	}
+}
+
+func TestResetAssertionStatus_FrontmatterOnly(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test-assertion.md")
+
+	content := `---
+id: test-assertion
+status: in_progress
+locked-by: builder-macbook-12345
+---
+
+# Test Assertion
+
+status: in_progress
+locked-by: should-remain
+`
+	os.WriteFile(filePath, []byte(content), 0o644)
+
+	err := resetAssertionStatus(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(filePath)
+	result := string(data)
+
+	// Frontmatter status should be reset
+	if !strings.Contains(result, "status: not_started") {
+		t.Error("expected frontmatter status to be not_started")
+	}
+	// Body "status: in_progress" should be untouched
+	if !strings.Contains(result, "status: in_progress") {
+		t.Error("expected body 'status: in_progress' to be preserved")
+	}
+	// Body "locked-by:" should be untouched
+	if !strings.Contains(result, "locked-by: should-remain") {
+		t.Error("expected body 'locked-by: should-remain' to be preserved")
 	}
 }
