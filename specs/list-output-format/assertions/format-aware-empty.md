@@ -10,24 +10,15 @@ status: done
 
 ## Description
 
-When `spekk list` finds no matching assertions (either because the specs
-directory is empty or because the `--status` filter matched nothing), it must
-emit output in the format the caller requested — not always a JSON blob.
+When `spekk list` finds no matching assertions, it emits output in the requested format. This rule applies to an empty specs directory and to any combination of status and priority filters.
 
 Giving a TSV consumer a JSON object (even a small one) is a contract violation.
 
 ## Success Criteria
 
-- `spekk list --tsv` with no matching assertions outputs a tab-separated header
-  row only (no data rows, no JSON), then exits 0.
-- `spekk list --csv` with no matching assertions outputs a CSV header row only
-  (CRLF terminated per RFC 4180), then exits 0.
-- `spekk list` (table, default) with no matching assertions outputs a meaningful
-  message (the existing `FormatEmpty` JSON blob or a plain text notice), exits 0.
-- `spekk list --json` with no matching assertions outputs the empty JSON message
-  (FormatEmpty or equivalent), exits 0.
-- Both the "no specs directory" path and the "filter produced empty result"
-  path are covered by this format-aware behavior.
-- A unit test (in `cmd/spekk/list_test.go` or similar) exercises `--tsv` and
-  `--csv` with an empty fixture and asserts the output starts with the expected
-  header row (not `{"status"`).
+- `spekk list --tsv` with no matching assertions outputs a tab-separated header row only, then exits 0.
+- `spekk list --csv` with no matching assertions outputs a CSV header row only (CRLF terminated per RFC 4180), then exits 0.
+- `spekk list` (table, default) with no matching assertions outputs a plain text notice and exits 0. The notice includes each active filter value.
+- `spekk list --json` with no matching assertions outputs the usual flat list object with `type: "assertions"` and `assertions: []`, then exits 0. The array is never null or absent.
+- An absent specs directory, an empty directory, and a filter with no matches all follow these rules.
+- Command tests check empty output in each format and JSON results with status, priority, and combined filters.

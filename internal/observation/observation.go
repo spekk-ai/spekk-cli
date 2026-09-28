@@ -125,6 +125,14 @@ func ValidSlug(s string) bool {
 	return slugPattern.MatchString(s)
 }
 
+// ValidateType rejects types outside the observation file format.
+func ValidateType(typ string) error {
+	if !validTypes[typ] {
+		return fmt.Errorf("must be %s or %s, got %q", TypeCodeSpecMisalignment, TypeOutdatedSpecs, typ)
+	}
+	return nil
+}
+
 // SeverityRank orders severities for ranking: high (0) before medium (1)
 // before low (2). Unknown severities sort last.
 func SeverityRank(severity string) int {
@@ -199,9 +207,8 @@ func Parse(path, content string) (*Observation, error) {
 	if !slugPattern.MatchString(o.Slug) {
 		return nil, fmt.Errorf("observation %s: field 'slug' must be kebab-case, got %q", path, o.Slug)
 	}
-	if !validTypes[o.Type] {
-		return nil, fmt.Errorf("observation %s: field 'type' must be %s or %s, got %q",
-			path, TypeCodeSpecMisalignment, TypeOutdatedSpecs, o.Type)
+	if err := ValidateType(o.Type); err != nil {
+		return nil, fmt.Errorf("observation %s: field 'type' %w", path, err)
 	}
 	if !validSeverities[o.Severity] {
 		return nil, fmt.Errorf("observation %s: field 'severity' must be high, medium, or low, got %q", path, o.Severity)

@@ -102,7 +102,7 @@ func TestLoadUnionReadsBranchesAndMain(t *testing.T) {
 	if got["finding-a"] != "refs/heads/observer/finding-a" {
 		t.Fatalf("finding-a ref: %q", got["finding-a"])
 	}
-	if !isMainRef(got["finding-c"]) {
+	if !IsMainRef(got["finding-c"]) {
 		t.Fatalf("finding-c must come from main, got %q", got["finding-c"])
 	}
 	if len(u.Warnings) != 1 || !strings.Contains(u.Warnings[0], "no-evidence.md") {
@@ -161,6 +161,10 @@ func TestOnlyTheOwningBranchCovers(t *testing.T) {
 	claim := u.FindCovering(TypeCodeSpecMisalignment, "unrelated")
 	if claim == nil || claim.Ref != "refs/heads/observer/unrelated" {
 		t.Fatalf("the live finding must be claimed from its own branch, got %+v", claim)
+	}
+	claim.Status = StatusResolved
+	if u.FindCovering(TypeCodeSpecMisalignment, "unrelated") != claim {
+		t.Fatal("a branch-local status change must keep coverage until the remedy reaches main")
 	}
 
 	// A branch merged but never deleted carries the observation at its own

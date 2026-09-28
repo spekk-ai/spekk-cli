@@ -19,6 +19,8 @@ status: done
 - `spekk help` (the `helpText` constant) includes `list` in the COMMANDS table.
 - `spekk list --help` prints a usage line and description of accepted flags
   (`--status`, `--assertions-only`, `--specs-dir`).
-- `spekk list` with no flags exits 0 and produces valid JSON output.
-- Running `spekk list` on an empty specs directory outputs the same "no specs"
-  response as `spekk next --all`.
+- `spekk list` with no flags exits 0 and prints the human-readable table.
+  `spekk list --json` produces valid JSON.
+- `spekk list` on an empty specs directory answers in the format the caller
+  asked for, which `format-aware-empty` owns. It does not copy the response
+  `spekk next --all` gives, because that command has no format flags.

@@ -274,17 +274,6 @@ func FormatEmpty() ([]byte, error) {
 	return marshalJSON(out)
 }
 
-// FormatEmptyFiltered formats an empty-result message that mentions the active
-// status filter, so callers can distinguish "no specs at all" from "filter
-// matched nothing".
-func FormatEmptyFiltered(status string) ([]byte, error) {
-	out := EmptyOutput{
-		Status:  "empty",
-		Message: fmt.Sprintf("No assertions match status '%s'.", status),
-	}
-	return marshalJSON(out)
-}
-
 // FormatError formats an error as JSON.
 func FormatError(msg string) ([]byte, error) {
 	out := ErrorOutput{
@@ -308,10 +297,19 @@ func FilterByStatus(result *ParseResult, status string) (*ParseResult, error) {
 		return nil, fmt.Errorf("invalid status %q — valid values: %s", status, strings.Join(keys, ", "))
 	}
 
+	return filterAssertions(result, func(a Assertion) bool { return a.Status == status }), nil
+}
+
+// FilterByPriority selects assertions with the requested priority and their parent specs.
+func FilterByPriority(result *ParseResult, priority int) *ParseResult {
+	return filterAssertions(result, func(a Assertion) bool { return a.Priority == priority })
+}
+
+func filterAssertions(result *ParseResult, matches func(Assertion) bool) *ParseResult {
 	var matchedAssertions []Assertion
 	matchedParents := make(map[string]bool)
 	for _, a := range result.Assertions {
-		if a.Status == status {
+		if matches(a) {
 			matchedAssertions = append(matchedAssertions, a)
 			matchedParents[a.Parent] = true
 		}
@@ -327,7 +325,8 @@ func FilterByStatus(result *ParseResult, status string) (*ParseResult, error) {
 	return &ParseResult{
 		Specs:      matchedSpecs,
 		Assertions: matchedAssertions,
-	}, nil
+		Warnings:   result.Warnings,
+	}
 }
 
 // AssertionsFlatOutput is the JSON output for `spekk list --assertions-only`.

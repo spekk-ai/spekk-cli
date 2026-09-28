@@ -11,23 +11,13 @@ depends-on: status-flag-filters-assertions
 
 ## Description
 
-`parser.FormatEmpty()` always says "No specifications found in specs/ directory"
-even when specs exist but the `--status` filter matched nothing. A caller running
-`spekk list --status draft` and getting that message would think the specs
-directory is missing, when the real reason is there are no draft assertions.
-
-The message must include the filter value so callers can tell the difference.
+The empty-result notice in table output states which filters found no matches. This distinguishes an empty specs directory from a filter with no matches.
 
 ## Success Criteria
 
-- When `--status <value>` is active and the filter produces zero matching
-  assertions, the empty-result message mentions the filter value (e.g.,
-  "No assertions match status 'draft'.").
-- The contextual message is emitted in the correct format (JSON for default/JSON,
-  header-only for TSV/CSV) — this combines with the format-aware-empty assertion.
-- When no `--status` filter is active, the existing "No specifications found"
-  message is unchanged.
-- A new `FormatEmptyFiltered(status string)` (or equivalent) is added to the
-  `internal/parser` package and returns a JSON object with the contextual message.
-- A unit test in `internal/parser/output_test.go` verifies the returned message
-  contains the status value.
+- When `--status <value>` produces zero matching assertions, the table notice includes the status value (e.g., "No assertions match status 'draft'.").
+- When `--priority <N>` produces zero matching assertions, the table notice includes the priority value.
+- When both filters are active, the table notice includes both values.
+- With no filters, the table notice states that no assertions were found in the specs directory.
+- JSON uses the flat list object with an empty `assertions` array. TSV and CSV output contain their header only, as specified by `format-aware-empty`.
+- Command tests check the notices and the machine-readable output.
