@@ -242,6 +242,7 @@ func execList(args []string, stdout, stderr io.Writer, specsDir string) int {
 		"long":           {Names: []string{"--long", "-l"}, Type: cli.BoolFlag},
 		"crossBranch":    {Names: []string{"--cross-branch"}, Type: cli.BoolFlag},
 		"branchFilter":   {Names: []string{"--branch-filter"}, Type: cli.StringFlag},
+		"sortBy":         {Names: []string{"--sort-by"}, Type: cli.StringFlag},
 		"help":           {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -257,6 +258,12 @@ OUTPUT FORMAT (default: table):
   --tsv         Tab-separated values with lowercase header (for awk/cut/sort)
   --csv         RFC 4180 CSV with header row
   --long, -l    Add FILE column to table/TSV/CSV output (JSON always includes file)
+
+SORT OPTIONS:
+  --sort-by <column>    Sort assertions ascending by column: id, priority,
+                        status, or title. Stable (ties keep parser order).
+                        Combines with all format and filter flags. Default
+                        (omitted) keeps the priority-then-id ordering.
 
 FILTER OPTIONS:
   --status <value>      Filter by assertion status. Valid values:
@@ -286,6 +293,9 @@ EXAMPLES:
   spekk list --long
   spekk list --status draft
   spekk list --status not_started --priority 1
+  spekk list --sort-by id
+  spekk list --sort-by priority --status not_started
+  spekk list --sort-by title --csv
   spekk list --status draft --tsv
   spekk list --assertions-only --csv
   spekk list --specs-dir /path/to/specs
@@ -332,6 +342,10 @@ EXAMPLES:
 		}
 		if statusVal != "" {
 			fmt.Fprintln(stderr, "Error: --status does not apply to --cross-branch output")
+			return 1
+		}
+		if flags.String("sortBy") != "" {
+			fmt.Fprintln(stderr, "Error: --sort-by does not apply to --cross-branch output")
 			return 1
 		}
 		if specsDir != "" || flags.String("specsDir") != "" {
@@ -385,9 +399,27 @@ EXAMPLES:
 		result = parser.FilterByPriority(result, *priority)
 	}
 
+	// Apply --sort-by if requested. This overrides the default priority-then-id
+	// ordering, so downstream formatting must preserve the sorted order.
+	sortBy := flags.String("sortBy")
+	if sortBy != "" {
+		sorted, sortErr := parser.SortAssertions(result, sortBy)
+		if sortErr != nil {
+			fmt.Fprintf(stderr, "Error: %s\n", sortErr)
+			return 1
+		}
+		result = sorted
+	}
+
 	// JSON includes branch and dependency fields and follows the table order.
 	if useJSON {
-		out, err := parser.FormatAssertionsFlat(result)
+		var out []byte
+		var err error
+		if sortBy != "" {
+			out, err = parser.FormatAssertionsFlatInOrder(result)
+		} else {
+			out, err = parser.FormatAssertionsFlat(result)
+		}
 		if err != nil {
 			out2, _ := parser.FormatError(err.Error())
 			fmt.Fprintln(stdout, string(out2))
@@ -421,8 +453,9 @@ EXAMPLES:
 		return 0
 	}
 
-	// Build rows for table/TSV/CSV formats.
-	rows := listRows(result, assertionsOnly)
+	// Build rows for table/TSV/CSV formats. --sort-by has already ordered the
+	// assertions, so keep that order instead of re-sorting by priority-then-id.
+	rows := listRowsOrdered(result, assertionsOnly, sortBy != "")
 
 	switch {
 	case useTSV:
@@ -522,6 +555,13 @@ func execListCrossBranch(branchFilter string, stdout, stderr io.Writer, useJSON,
 // When assertionsOnly is true, rows come from result.Assertions (with Parent set).
 // Otherwise rows come from result.Specs (Parent not set).
 func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
+	return listRowsOrdered(result, assertionsOnly, false)
+}
+
+// listRowsOrdered builds the table rows. When keepOrder is true it preserves
+// the result's assertion order (used once --sort-by has ordered them); when
+// false it applies the default priority-then-id sort.
+func listRowsOrdered(result *parser.ParseResult, assertionsOnly, keepOrder bool) []formatter.Row {
 	var rows []formatter.Row
 	if assertionsOnly {
 		rows = make([]formatter.Row, 0, len(result.Assertions))
@@ -547,12 +587,14 @@ func listRows(result *parser.ParseResult, assertionsOnly bool) []formatter.Row {
 			})
 		}
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Priority != rows[j].Priority {
-			return rows[i].Priority < rows[j].Priority
-		}
-		return rows[i].ID < rows[j].ID
-	})
+	if !keepOrder {
+		sort.Slice(rows, func(i, j int) bool {
+			if rows[i].Priority != rows[j].Priority {
+				return rows[i].Priority < rows[j].Priority
+			}
+			return rows[i].ID < rows[j].ID
+		})
+	}
 	return rows
 }
 
