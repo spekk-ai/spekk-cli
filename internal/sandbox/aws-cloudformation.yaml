@@ -304,9 +304,12 @@ Resources:
             # Claude Code CLI
             - npm install -g @anthropic-ai/claude-code
 
-            # spekk CLI (install as agent so `spekk update` works, then onto the system PATH)
-            - su - agent -c 'curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh'
-            - ln -sf /home/agent/.local/bin/spekk /usr/local/bin/spekk
+            # spekk CLI. Install as agent into a directory agent owns, so `spekk update`
+            # needs no sudo, and outside agent's home, which Ubuntu creates 0750, so the
+            # link on the system PATH works for every user, not only agent and root.
+            - install -d -o agent -g agent -m 0755 /opt/spekk/cli
+            - su - agent -c 'curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | SPEKK_INSTALL_DIR=/opt/spekk/cli sh'
+            - ln -sf /opt/spekk/cli/spekk /usr/local/bin/spekk
 
             # Workspace
             - mkdir -p /workspace
