@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -19,6 +20,28 @@ func (f sandboxRoundTrip) RoundTrip(req *http.Request) (*http.Response, error) {
 // `uname -m`, not the operator's. Deploying the wrong one would report success
 // and then fail to start, so an architecture spekk has no agent for is refused
 // by name rather than guessed at.
+// detectArch must read the machine name from stdout alone. ssh writes its
+// own warnings to stderr, and a host whose sshd has no post-quantum key
+// exchange gets three of them on every connection, so a combined read
+// refuses a supported machine by the text of the warning.
+func TestDetectArchIgnoresSSHWarnings(t *testing.T) {
+	isolateConfig(t)
+	bin := t.TempDir()
+	fake := "#!/bin/sh\n" +
+		"echo '** WARNING: connection is not using a post-quantum key exchange algorithm.' >&2\n" +
+		"echo '** This session may be vulnerable to \"store now, decrypt later\" attacks.' >&2\n" +
+		"echo aarch64\n"
+	if err := os.WriteFile(filepath.Join(bin, "ssh"), []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	arch, err := detectArch(&SandboxMeta{IP: "192.0.2.1", SSHUser: "pi"}, "pi-box")
+	if err != nil || arch != "arm64" {
+		t.Errorf("detectArch() = %q, %v; want arm64", arch, err)
+	}
+}
+
 func TestArchFromUname(t *testing.T) {
 	ok := map[string]string{
 		"x86_64":  "amd64",

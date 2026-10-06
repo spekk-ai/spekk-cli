@@ -23,6 +23,7 @@ binary the machine cannot run and then reports success.
   `x86_64`/`amd64` → `amd64`, `aarch64`/`arm64` → `arm64`.
 - Any other `uname -m` value returns an error naming the unsupported
   architecture, rather than falling back to a default build.
+- `detectArch` reads the machine name from stdout only. ssh writes its own warnings to stderr, for example on a host whose sshd has no post-quantum key exchange, and a combined read refuses a supported machine by the text of the warning.
 - `fetchAgentBinary` runs `detectArch` then `downloadAgentBinary(arch)`, and is
   invoked after the machine is reachable in all three paths: Create and
   Provision (via `equipSandbox`) and `Deploy`.

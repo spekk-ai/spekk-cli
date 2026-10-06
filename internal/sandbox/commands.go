@@ -253,13 +253,26 @@ func fetchAgentBinary(meta *SandboxMeta, name string, artifacts *releaseArtifact
 	return artifacts.downloadAgentBinary(arch)
 }
 
+// detectArch reads `uname -m` from stdout only. ssh writes its own warnings
+// to stderr, for example about a key exchange that is not post-quantum, and
+// those lines would otherwise reach archFromUname as the machine name.
 func detectArch(meta *SandboxMeta, name string) (string, error) {
-	out, err := runSSHCombined(meta.IP, meta.SSHKeyPath, name, sshUser(meta), "uname -m")
-	machine := strings.TrimSpace(out)
-	if err != nil {
-		return "", fmt.Errorf("detecting CPU architecture: %w\n%s", err, machine)
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
+	if meta.SSHKeyPath != "" {
+		args = append(args, "-i", meta.SSHKeyPath)
 	}
-	return archFromUname(machine)
+	args = append(args, fmt.Sprintf("%s@%s", sshUser(meta), meta.IP), "uname -m")
+	out, err := exec.Command("ssh", args...).Output()
+	if err != nil {
+		var stderr []byte
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderr = exitErr.Stderr
+		}
+		return "", fmt.Errorf("detecting CPU architecture: %w\n%s", err, strings.TrimSpace(string(stderr)))
+	}
+	return archFromUname(strings.TrimSpace(string(out)))
 }
 
 // archFromUname maps `uname -m` to the GOARCH the agent is built for. An arch
