@@ -11,7 +11,7 @@ import (
 const ProviderNone = "none"
 
 // ValidProviders lists the values accepted by --provider.
-var ValidProviders = []string{"digitalocean", ProviderNone}
+var ValidProviders = []string{"digitalocean", ProviderGCP, ProviderNone}
 
 // existingMachineFlags name a machine that already exists. Any one of them
 // says the operator is not asking for a new one.
@@ -84,6 +84,12 @@ func ProviderByName(name string) (Provider, error) {
 		// *DOProvider returned into a Provider result is an interface
 		// that is not nil.
 		p, err := NewDOProvider()
+		if err != nil {
+			return nil, err
+		}
+		return p, nil
+	case ProviderGCP:
+		p, err := NewGCPProvider()
 		if err != nil {
 			return nil, err
 		}

@@ -57,6 +57,7 @@ nav = [
     "advanced/index.md",
     { "Sandbox Agent Architecture" = "advanced/sandbox-architecture.md" },
     { "A Sandbox on AWS" = "advanced/sandbox-aws.md" },
+    { "A Sandbox on Google Cloud" = "advanced/sandbox-gcp.md" },
   ] },
   { "Cutting a Release" = "releasing.md" },
   { "Release Notes" = [

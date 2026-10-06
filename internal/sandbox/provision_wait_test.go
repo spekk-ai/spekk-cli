@@ -156,7 +156,7 @@ func TestCreatePassesTheProvisionTimeoutToTheWait(t *testing.T) {
 
 	var got time.Duration
 	orig := waitReady
-	waitReady = func(ip, keyPath, name string, timeout time.Duration) error {
+	waitReady = func(ip, keyPath, name, user string, timeout time.Duration) error {
 		got = timeout
 		return errors.New("stop here")
 	}
