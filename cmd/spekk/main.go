@@ -1281,14 +1281,21 @@ USAGE:
 
 OPTIONS:
   --name <name>          Sandbox name (required)
-  --provider <provider>  digitalocean, or none for a machine you already
-                         have (inferred from --ip / --ssh-key)
+  --provider <provider>  digitalocean (default), gcp, or none for a machine
+                         you already have (inferred from --ip / --ssh-key)
 
   DigitalOcean options:
   --region <region>      DigitalOcean region (default: nyc1)
   --size <size>          Droplet size slug (default: s-2vcpu-4gb)
   --project <project>    Assign to a DigitalOcean project (name or UUID)
   --vpc <uuid>           Place droplet in a specific DigitalOcean VPC
+
+  Google Cloud options (uses the gcloud CLI and its credentials):
+  --region <zone>        Zone (default: gcloud compute/zone, else
+                         us-central1-a)
+  --size <type>          Machine type (default: e2-medium)
+  --project <id>         Project ID (default: gcloud project)
+  --vpc <network>        Network name; it must admit TCP 22 (default: default)
   --provision-timeout <duration>
                          How long to wait for cloud-init (default: 30m).
                          If it runs out, the machine keeps running; finish

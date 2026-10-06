@@ -19,22 +19,25 @@ import (
 // always had, so an old sandboxes.json stays readable and, more importantly,
 // stays destroyable.
 //
-// DropletID and SSHKeyID are DigitalOcean's. The generic layer never reads
-// them; only DOProvider does. Holding them as concrete fields rather than an
-// opaque blob is deliberate while there is one cloud provider: it keeps the
-// on-disk format unchanged and it keeps "no droplet" distinguishable from
-// "droplet id not loaded". A second cloud provider adds its own fields.
+// DropletID and SSHKeyID are DigitalOcean's, and GCPInstance is Google
+// Cloud's. Only their own provider acts on them. Holding them as concrete
+// fields rather than an opaque blob keeps the on-disk format legible, and it
+// keeps "no machine" distinguishable from "identifier not loaded". The GCP
+// provider also reads Project and Region, which hold the project ID and the
+// zone, because those two and the VM name are what locate the VM.
 type SandboxMeta struct {
-	Provider   string `json:"provider,omitempty"`
-	DropletID  int    `json:"dropletId,omitempty"`
-	IP         string `json:"ip"`
-	Region     string `json:"region"`
-	Size       string `json:"size"`
-	CreatedAt  string `json:"createdAt"`
-	Status     string `json:"status"`
-	Project    string `json:"project,omitempty"`
-	SSHKeyID   int    `json:"sshKeyId,omitempty"`
-	SSHKeyPath string `json:"sshKeyPath,omitempty"`
+	Provider  string `json:"provider,omitempty"`
+	DropletID int    `json:"dropletId,omitempty"`
+	// GCPInstance is the Compute Engine VM name.
+	GCPInstance string `json:"gcpInstance,omitempty"`
+	IP          string `json:"ip"`
+	Region      string `json:"region"`
+	Size        string `json:"size"`
+	CreatedAt   string `json:"createdAt"`
+	Status      string `json:"status"`
+	Project     string `json:"project,omitempty"`
+	SSHKeyID    int    `json:"sshKeyId,omitempty"`
+	SSHKeyPath  string `json:"sshKeyPath,omitempty"`
 	// SSHUser is the login user for an existing machine; empty means root.
 	SSHUser string `json:"sshUser,omitempty"`
 	// Auth is the mode the sandbox authenticates Claude with, so `provision`

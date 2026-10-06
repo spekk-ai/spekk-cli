@@ -185,7 +185,7 @@ func Create(p Provider, opts CreateOptions) error {
 		if err := checkReady(meta, opts.Name); err != nil {
 			return fail("checking the machine", err)
 		}
-	} else if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name, opts.ProvisionTimeout); err != nil {
+	} else if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name, sshUser(meta), opts.ProvisionTimeout); err != nil {
 		return fail("waiting for provisioning", err)
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
@@ -418,6 +418,9 @@ func Status(p Provider, name string) error {
 	if sandbox.DropletID != 0 {
 		fmt.Printf("Droplet ID: %d\n", sandbox.DropletID)
 	}
+	if sandbox.GCPInstance != "" {
+		fmt.Printf("VM: %s\n", sandbox.GCPInstance)
+	}
 	fmt.Printf("IP: %s\n", orUnknown(sandbox.IP))
 	fmt.Printf("Region: %s\n", orUnknown(sandbox.Region))
 	fmt.Printf("Size: %s\n", orUnknown(sandbox.Size))
@@ -576,7 +579,7 @@ func destroyMachine(p Provider, meta *SandboxMeta) error {
 
 // namesMachine reports whether meta identifies a machine that exists.
 func namesMachine(meta *SandboxMeta) bool {
-	return meta.DropletID != 0 || meta.IP != ""
+	return meta.DropletID != 0 || meta.GCPInstance != "" || meta.IP != ""
 }
 
 // machineRef describes the machine a command is about to act on, so the
@@ -585,6 +588,9 @@ func machineRef(meta *SandboxMeta) string {
 	ref := "IP " + orUnknown(meta.IP)
 	if meta.DropletID != 0 {
 		ref += fmt.Sprintf(", droplet %d", meta.DropletID)
+	}
+	if meta.GCPInstance != "" {
+		ref += fmt.Sprintf(", VM %s in %s", meta.GCPInstance, meta.Region)
 	}
 	return ref
 }
@@ -930,8 +936,8 @@ func parseProvisionProbe(out string) provisionProbe {
 
 // probeProvisioning is the seam the wait polls through, so a test can drive
 // the loop without a machine.
-var probeProvisioning = func(ip, keyPath, name string) provisionProbe {
-	return parseProvisionProbe(runSSH(ip, keyPath, name, "root", provisionProbeScript))
+var probeProvisioning = func(ip, keyPath, name, user string) provisionProbe {
+	return parseProvisionProbe(runSSH(ip, keyPath, name, user, provisionProbeScript))
 }
 
 // provisionStopped reports why the marker will not appear, or nil while it
@@ -960,7 +966,10 @@ func lastLogOrPlaceholder(p provisionProbe) string {
 	return p.lastLog
 }
 
-func waitForProvisioning(ip, keyPath, name string, timeout time.Duration) error {
+// waitForProvisioning logs in as user, which is the user the provider
+// recorded: root on a droplet, and a sudo user on a cloud whose image does
+// not admit root.
+func waitForProvisioning(ip, keyPath, name, user string, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = DefaultProvisionTimeout
 	}
@@ -976,7 +985,7 @@ func waitForProvisioning(ip, keyPath, name string, timeout time.Duration) error 
 	}
 
 	fmt.Fprintf(os.Stderr, "Waiting up to %s for cloud-init provisioning to complete...\n", timeout)
-	return waitForMarker(deadline, func() provisionProbe { return probeProvisioning(ip, keyPath, name) })
+	return waitForMarker(deadline, func() provisionProbe { return probeProvisioning(ip, keyPath, name, user) })
 }
 
 // waitForMarker polls probe until the marker appears, cloud-init says it
