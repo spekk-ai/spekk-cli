@@ -658,21 +658,21 @@ spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --s
 | Flag | Description |
 |------|-------------|
 | `--name <name>` | Sandbox name (required). Lowercase letters, digits, and hyphens, starting with a letter or a digit |
-| `--provider <provider>` | `digitalocean` (default), or `none` for a machine you already have. `--ip`, `--ssh-key`, or `--ssh-user` implies `none` |
+| `--provider <provider>` | `digitalocean` (default), `gcp` for a Google Cloud VM, or `none` for a machine you already have. `--ip`, `--ssh-key`, or `--ssh-user` implies `none` |
 | `--auth <mode>` | How the agent authenticates Claude: `bedrock` (default) or `subscription` |
-| `--region <region>` | DigitalOcean region (default: `nyc1`) |
-| `--size <size>` | Droplet size slug (default: `s-2vcpu-4gb`) |
-| `--project <project>` | Assign the droplet to a DigitalOcean project, by name or UUID |
-| `--vpc <uuid>` | Place the droplet in a DigitalOcean VPC |
+| `--region <region>` | DigitalOcean region (default: `nyc1`). For `gcp`, the zone |
+| `--size <size>` | Droplet size slug (default: `s-2vcpu-4gb`). For `gcp`, the machine type |
+| `--project <project>` | Assign the droplet to a DigitalOcean project, by name or UUID. For `gcp`, the project ID |
+| `--vpc <uuid>` | Place the droplet in a DigitalOcean VPC. For `gcp`, the network name |
 | `--provision-timeout <duration>` | How long to wait for cloud-init, as a Go duration (default: `30m`) |
 | `--ip <address>` | Address of a machine you already have |
 | `--ssh-key <path>` | Private key that reaches that machine as the login user |
 | `--ssh-user <user>` | SSH login user for that machine (default: `root`). A non-root user must have passwordless sudo |
-| `--release <tag>` | Pull the cloud-init template and agent binary from a specific spekk release instead of the latest, e.g. an `exp-*` prerelease |
+| `--release <tag>` | Pull the agent binary from a specific spekk release instead of the latest, e.g. an `exp-*` prerelease. The cloud-init template always comes from the installed CLI |
 
-The DigitalOcean flags and the existing-machine flags exclude each other. `create` refuses a name that is already recorded: destroy the old sandbox first.
+The cloud flags and the existing-machine flags exclude each other. For the `gcp` defaults and what spekk creates in the project, see [A Sandbox on Google Cloud](advanced/sandbox-gcp.md). `create` refuses a name that is already recorded: destroy the old sandbox first.
 
-**A DigitalOcean sandbox.** `create` checks that the environment variables for the auth mode are set, downloads the agent binary and the cloud-init template from the latest spekk release, generates an SSH key pair under spekk's config directory, creates the droplet with cloud-init, and records it. It then waits for SSH and for cloud-init to write `/opt/spekk/.provisioned`. While it waits, it prints a progress line at most once a minute with the time waited and the last line of `/var/log/cloud-init-output.log`. When `cloud-init status` reports `error`, or `done` without the marker, the wait stops at once. When the marker appears, `create` injects the credentials, configures git for the agent, deploys the agent binary, marks the sandbox `active`, and prints the agent token.
+**A DigitalOcean sandbox.** `create` checks that the environment variables for the auth mode are set, generates an SSH key pair under spekk's config directory, creates the droplet with the cloud-init template that ships in the CLI, and records it. A `gcp` sandbox follows the same steps on a Compute Engine VM. It then waits for SSH and for cloud-init to write `/opt/spekk/.provisioned`. While it waits, it prints a progress line at most once a minute with the time waited and the last line of `/var/log/cloud-init-output.log`. When `cloud-init status` reports `error`, or `done` without the marker, the wait stops at once. When the marker appears, `create` injects the credentials, configures git for the agent, downloads the agent binary for the machine's CPU architecture from the latest spekk release and deploys it, marks the sandbox `active`, and prints the agent token.
 
 When the wait runs out, the droplet keeps running and the record stays at `provisioning`. Nothing is destroyed. Finish it with [`spekk sandbox provision`](#spekk-sandbox-provision-name) when cloud-init is done, or remove it with `destroy`.
 

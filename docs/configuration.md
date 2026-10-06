@@ -210,6 +210,8 @@ There is no flag, environment variable, or prompt instruction that suppresses dr
 | `AWS_DEFAULT_REGION` | `bedrock` | AWS region, for example `us-east-1` |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `subscription` | Claude subscription token. Mint it with `claude setup-token`, which needs a Claude subscription |
 
+`--provider gcp` needs no variable. It runs the `gcloud` CLI, which uses the account you signed in with `gcloud auth login`.
+
 `spekk sandbox create` refuses to start when a variable its mode needs is missing, and it names every missing variable at once, before it creates anything billable. `spekk sandbox provision` makes the same check, for the mode the sandbox was created with, before it touches the machine. `spekk sandbox destroy` for a DigitalOcean sandbox needs `DO_API_TOKEN`. `spekk sandbox status` prints the stored fields without it.
 
 **A model pin belongs to its mode.** `ANTHROPIC_MODEL` names a model for the API the sandbox authenticates against, and the names differ. A Bedrock sandbox pins an inference profile such as `us.anthropic.claude-sonnet-5`, which a subscription rejects. When `infrastructure/sandbox/setup-credentials.sh` moves a sandbox between modes, it drops the pin, reports what it dropped, and writes a new pin only when you supply one for the new mode.
