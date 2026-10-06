@@ -75,18 +75,6 @@ func (p *DOProvider) Create(name string, opts CreateOptions, meta *SandboxMeta) 
 	}
 	fmt.Fprintf(os.Stderr, "SSH key uploaded to DigitalOcean (ID: %d)\n", doKey.ID)
 
-	// Collect all account SSH keys so the user can also SSH in.
-	existingKeys, listErr := p.client.ListSSHKeys()
-	if listErr != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not list existing SSH keys (%s); only the generated key will be authorized\n", listErr)
-	}
-	sshKeyIDs := []int{doKey.ID}
-	for _, k := range existingKeys {
-		if k.ID != doKey.ID {
-			sshKeyIDs = append(sshKeyIDs, k.ID)
-		}
-	}
-
 	// Render cloud-init with the generated public key.
 	cloudInit := ""
 	if len(opts.CloudInit) > 0 {
@@ -97,10 +85,13 @@ func (p *DOProvider) Create(name string, opts CreateOptions, meta *SandboxMeta) 
 	dropletName := "spekk-" + name
 	fmt.Fprintf(os.Stderr, "Creating droplet %q in %s (%s)...\n", dropletName, region, size)
 	droplet, err := p.client.CreateDroplet(CreateDropletRequest{
-		Name:     dropletName,
-		Region:   region,
-		Size:     size,
-		SSHKeys:  sshKeyIDs,
+		Name:   dropletName,
+		Region: region,
+		Size:   size,
+		// Only the generated key. A key from the account would give its
+		// holder root on the droplet, and root reads the credentials
+		// spekk injects. The operator logs in with spekk sandbox ssh.
+		SSHKeys:  []int{doKey.ID},
 		VpcUUID:  opts.VPC,
 		UserData: cloudInit,
 	})

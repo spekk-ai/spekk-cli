@@ -445,15 +445,16 @@ func TestDOProviderCreateFillsMetaWithResolvedValues(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"ssh_key": map[string]any{"id": 10, "name": "test", "fingerprint": "aa:bb"},
 			})
-		case r.Method == "GET" && r.URL.Path == "/v2/account/keys":
-			json.NewEncoder(w).Encode(map[string]any{
-				"ssh_keys": []map[string]any{{"id": 10, "name": "test"}},
-			})
 		case r.Method == "POST" && r.URL.Path == "/v2/droplets":
 			var req map[string]any
 			json.NewDecoder(r.Body).Decode(&req)
 			if req["region"] != "nyc1" || req["size"] != "s-2vcpu-4gb" {
 				t.Errorf("defaults not sent to the API: %v", req)
+			}
+			// Only the generated key: every other key on the account
+			// would get root on the droplet and read its credentials.
+			if keys := fmt.Sprint(req["ssh_keys"]); keys != "[10]" {
+				t.Errorf("droplet trusts keys %s, want only the generated key [10]", keys)
 			}
 			w.WriteHeader(201)
 			json.NewEncoder(w).Encode(map[string]any{
