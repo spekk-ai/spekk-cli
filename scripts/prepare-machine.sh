@@ -92,12 +92,17 @@ fi
 ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
 
 echo "==> spekk CLI"
-# Install as agent so it owns ~agent/.local/bin/spekk and `spekk update` works.
-if [ ! -x /home/agent/.local/bin/spekk ]; then
-  su - agent -c 'curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | sh'
+# Install as agent into a directory agent owns, so `spekk update` needs no sudo,
+# and outside agent's home, which Ubuntu creates 0750, so the link on the system
+# PATH works for every user, not only agent and root.
+install -d -o agent -g agent -m 0755 /opt/spekk/cli
+if [ ! -x /opt/spekk/cli/spekk ]; then
+  su - agent -c 'curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | SPEKK_INSTALL_DIR=/opt/spekk/cli sh'
 fi
-# Onto the system PATH, same as claude above.
-ln -sf /home/agent/.local/bin/spekk /usr/local/bin/spekk
+# An earlier version of this script installed into agent's home. That copy would
+# shadow this one on agent's own PATH and stop receiving updates.
+rm -f /home/agent/.local/bin/spekk
+ln -sf /opt/spekk/cli/spekk /usr/local/bin/spekk
 
 echo "==> GitHub CLI"
 if ! command -v gh >/dev/null 2>&1; then

@@ -22,10 +22,7 @@ same setup a droplet gets, minus the droplet-only hardening.
   `agent` user (home dir, passwordless sudo, `docker` + `systemd-journal`
   groups), Docker, Node.js + the Claude Code CLI, the spekk CLI, `git`/`gh`, and
   the spekk directories (`/opt/spekk`, `/etc/spekk`, `/var/log/spekk`). The
-  Claude Code and spekk CLIs install as the `agent` user (into
-  `~agent/.local/bin`, so each CLI's self-update stays sudo-free) and are
-  symlinked onto the system PATH under `/usr/local/bin`, which the
-  `spekk-agent` service reads.
+  Claude Code and spekk CLIs install as the `agent` user, so each CLI's self-update stays sudo-free, and are symlinked onto the system PATH under `/usr/local/bin`, which the `spekk-agent` service reads. Claude Code installs into `~agent/.local/bin`, and the spekk CLI into `/opt/spekk/cli`, so that every user can run it (see `sandbox-cli-for-every-user`).
 - It ends by writing `/opt/spekk/.provisioned` — the marker `create` and
   `provision` check — so a machine it prepared satisfies
   `register-an-existing-machine`.
