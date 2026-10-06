@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.31.0 -- A Sandbox on Google Cloud, and an Agent for arm64](RELEASE-NOTES-1.31.0.md)
+
+`spekk sandbox create --provider gcp` makes a Compute Engine VM that spekk provisions and destroys, with no service account and no project SSH keys. Each release now publishes the agent for arm64, and spekk deploys the build that matches the machine. `--release` and `spekk update --version` pin a release, and `scripts/prepare-machine.sh` prepares a machine you already have. A new droplet trusts only the key spekk generated for it, not every key on the account.
+
 ## [1.30.0 -- A Sandbox on AWS, and a Deploy That Replaces a Running Agent](RELEASE-NOTES-1.30.0.md)
 
 One CloudFormation stack now stands up a spekk sandbox on AWS: an isolated VPC, a prepared Ubuntu 24.04 instance, and the command that registers it. `spekk sandbox deploy` replaces an agent that is running, which it could not do before. Announce, dedup, and the digest now share one rule for which findings are still open, and `spekk observer scan-check` refuses a bad type or a stray argument instead of answering `clear`. New `spekk list --priority` filter. Three argument mistakes that used to run anyway now fail.
