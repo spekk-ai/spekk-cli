@@ -297,25 +297,16 @@ func pathKey(path string) string {
 	return filepath.Join(dirKey(filepath.Dir(path)), filepath.Base(path))
 }
 
-// reconcile drives the managed files in dirs to the desired set. desired maps a
-// destination path to its unstamped body.
-//
-//   - A desired path belongs to spekk. reconcile stamps the body and writes it.
-//   - It keeps a .bak of what it replaced, unless the file was a pristine
-//     managed file.
-//   - It removes an owned file that is not desired. An owned file the user
-//     edited is backed up and left in place instead.
-//   - It leaves a symlinked path alone. Another tool owns that one.
-//   - Each backup and each path left alone is one warning in the Result.
-func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
+// writeDesired writes (or refreshes) every desired file, stamping each body and
+// keeping a .bak of a non-pristine file it replaces. Unlike reconcile it prunes
+// nothing: a caller that only wants to add or refresh specific files — not
+// reconcile a whole directory — uses this directly, so other managed files that
+// share a directory (codex keeps every skill and the observer shim in one
+// prompts/ dir) are left untouched. A write to an already-correct file is a
+// no-op, so repeated calls are idempotent.
+func writeDesired(desired map[string][]byte) (Result, error) {
 	var res Result
 
-	owned, err := scanOwned(dirs)
-	if err != nil {
-		return res, err
-	}
-
-	// Write or update the desired files.
 	paths := make([]string, 0, len(desired))
 	for p := range desired {
 		paths = append(paths, p)
@@ -361,6 +352,31 @@ func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
 			return res, fmt.Errorf("writing %s: %w", path, err)
 		}
 		res.Written = append(res.Written, path)
+	}
+
+	return res, nil
+}
+
+// reconcile drives the managed files in dirs to the desired set. desired maps a
+// destination path to its unstamped body.
+//
+//   - A desired path belongs to spekk. reconcile stamps the body and writes it.
+//   - It keeps a .bak of what it replaced, unless the file was a pristine
+//     managed file.
+//   - It removes an owned file that is not desired. An owned file the user
+//     edited is backed up and left in place instead.
+//   - It leaves a symlinked path alone. Another tool owns that one.
+//   - Each backup and each path left alone is one warning in the Result.
+func reconcile(desired map[string][]byte, dirs []string) (Result, error) {
+	owned, err := scanOwned(dirs)
+	if err != nil {
+		return Result{}, err
+	}
+
+	// Write or update the desired files.
+	res, err := writeDesired(desired)
+	if err != nil {
+		return res, err
 	}
 
 	// Prune owned files that are not desired.

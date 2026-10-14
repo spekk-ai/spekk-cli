@@ -37,6 +37,7 @@ var ObserverFlags = cli.FlagSet{
 	"quiet":      {Names: []string{"--quiet"}, Type: cli.BoolFlag},
 	"headless":   {Names: []string{"--headless"}, Type: cli.BoolFlag},
 	"claudePath": {Names: []string{"--claude-path"}, Type: cli.StringFlag},
+	"harness":    {Names: []string{"--harness"}, Type: cli.StringFlag},
 	"help":       {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
@@ -45,6 +46,7 @@ type ObserverConfig struct {
 	Quiet      bool
 	Headless   bool
 	ClaudePath string
+	Harness    string
 	InstallDir string
 }
 
@@ -82,6 +84,7 @@ func ParseObserverFlags(args []string) ObserverConfig {
 		Quiet:      parsed.Bool("quiet"),
 		Headless:   parsed.Bool("headless"),
 		ClaudePath: parsed.String("claudePath"),
+		Harness:    parsed.String("harness"),
 	}
 }
 
@@ -122,6 +125,8 @@ func RunObserver(args []string, installDir string) {
 		os.Exit(1)
 	}
 
+	profile := resolveHarnessOrExit(ParseObserverFlags(args).Harness)
+
 	// Skill subcommand: check the first positional arg against the observer skill resolver
 	// before parsing flags as monitoring options.
 	skillName := ExtractSkillArgFromFlagSet(args, ObserverFlags)
@@ -159,12 +164,12 @@ func RunObserver(args []string, installDir string) {
 			if cfg.Headless {
 				wd, _ := os.Getwd()
 				lockFile := ObserverLockFile(wd, skill.Name)
-				if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
+				if err := LaunchHeadless(profile, cfg.ClaudePath, lockFile, message); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 					os.Exit(1)
 				}
 			} else {
-				if err := Launch(message); err != nil {
+				if err := Launch(profile, message); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 					os.Exit(1)
 				}
@@ -177,7 +182,7 @@ func RunObserver(args []string, installDir string) {
 	cfg.InstallDir = installDir
 
 	if !cfg.Headless {
-		fmt.Println("Launching Observer Agent with Claude Code...")
+		fmt.Println("Launching Observer Agent with " + profile.DisplayName + "...")
 		wd, _ := os.Getwd()
 		fmt.Println("Working directory:", wd)
 		fmt.Println("Press Ctrl+C to exit the observation session.")
@@ -199,12 +204,12 @@ func RunObserver(args []string, installDir string) {
 	if cfg.Headless {
 		wd, _ := os.Getwd()
 		lockFile := ObserverLockFile(wd, "")
-		if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
+		if err := LaunchHeadless(profile, cfg.ClaudePath, lockFile, message); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 	} else {
-		if err := Launch(message); err != nil {
+		if err := Launch(profile, message); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}

@@ -75,6 +75,7 @@ func RunBuilderLoop(installDir string) {
 		os.Exit(0)
 	}()
 
+	profile := resolveHarnessOrExit("")
 	spekkBin := findSpekkBin()
 	iteration := 0
 
@@ -123,8 +124,9 @@ func RunBuilderLoop(installDir string) {
 			os.Exit(1)
 		}
 
-		success, launchErr := launchClaude(
-			[]string{"--dangerously-skip-permissions", message},
+		success, launchErr := launchHarness(
+			profile,
+			profile.InteractiveArgs(message),
 			nil,
 		)
 
@@ -171,6 +173,7 @@ func RunCoachLoop(installDir string) {
 		os.Exit(0)
 	}()
 
+	profile := resolveHarnessOrExit("")
 	session := 0
 
 	for {
@@ -190,8 +193,9 @@ func RunCoachLoop(installDir string) {
 			os.Exit(1)
 		}
 
-		success, launchErr := launchClaude(
-			[]string{"--dangerously-skip-permissions", message},
+		success, launchErr := launchHarness(
+			profile,
+			profile.InteractiveArgs(message),
 			nil,
 		)
 

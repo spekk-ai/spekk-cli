@@ -56,6 +56,7 @@ var BuilderFlags = cli.FlagSet{
 	"interactive": {Names: []string{"--interactive", "-i"}, Type: cli.BoolFlag},
 	"spec":        {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
 	"assertion":   {Names: []string{"--assertion"}, Type: cli.StringFlag},
+	"harness":     {Names: []string{"--harness"}, Type: cli.StringFlag},
 	"help":        {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
@@ -67,6 +68,7 @@ type BuilderConfig struct {
 	Interactive bool
 	Spec        string
 	Assertion   string
+	Harness     string
 	InstallDir  string
 }
 
@@ -80,6 +82,7 @@ func ParseBuilderFlags(args []string) BuilderConfig {
 		Interactive: parsed.Bool("interactive"),
 		Spec:        parsed.String("spec"),
 		Assertion:   parsed.String("assertion"),
+		Harness:     parsed.String("harness"),
 	}
 }
 
@@ -236,22 +239,23 @@ func (ph *processHolder) isSet() bool {
 	return ph.process != nil
 }
 
-// launchClaude spawns the claude CLI with the given args and inherited stdio.
-// Returns true if claude exited successfully.
+// launchHarness spawns the harness binary with the given args and inherited
+// stdio. Returns true if the harness exited successfully.
 // holder receives the started process for SIGINT forwarding.
-func launchClaude(claudeArgs []string, holder *processHolder) (bool, error) {
-	cmd := exec.Command("claude", claudeArgs...)
+func launchHarness(profile Profile, harnessArgs []string, holder *processHolder) (bool, error) {
+	cmd := exec.Command(profile.Binary, harnessArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		if isNotFound(err) {
-			colorLog(colorRed, "Error: Claude Code CLI not found. Please install Claude Code first.")
-			colorLog(colorBlue, "Visit: https://claude.ai/code for installation instructions.")
+			l1, l2 := profile.notFoundLines()
+			colorLog(colorRed, "Error: "+l1)
+			colorLog(colorBlue, l2)
 			os.Exit(1)
 		}
-		return false, fmt.Errorf("error launching Claude Code: %w", err)
+		return false, fmt.Errorf("error launching %s: %w", profile.DisplayName, err)
 	}
 
 	if holder != nil {
@@ -266,7 +270,7 @@ func launchClaude(claudeArgs []string, holder *processHolder) (bool, error) {
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			colorLog(colorYellow, fmt.Sprintf("Claude Code exited with code %d", exitErr.ExitCode()))
+			colorLog(colorYellow, fmt.Sprintf("%s exited with code %d", profile.DisplayName, exitErr.ExitCode()))
 			return false, nil
 		}
 		return false, err
@@ -279,6 +283,8 @@ func launchClaude(claudeArgs []string, holder *processHolder) (bool, error) {
 func RunBuilder(args []string, installDir string) {
 	cfg := ParseBuilderFlags(args)
 	cfg.InstallDir = installDir
+
+	profile := resolveHarnessOrExit(cfg.Harness)
 
 	// Validate spec/assertion flags before any interpolation
 	if err := ValidateSpecOrAssertionID("--spec", cfg.Spec); err != nil {
@@ -321,7 +327,7 @@ func RunBuilder(args []string, installDir string) {
 			}
 			message += skillMsg
 
-			success, err := launchClaude([]string{"--dangerously-skip-permissions", message}, nil)
+			success, err := launchHarness(profile, profile.InteractiveArgs(message), nil)
 			if err != nil {
 				colorLog(colorRed, fmt.Sprintf("Error: %s", err))
 				os.Exit(1)
@@ -448,7 +454,7 @@ func RunBuilder(args []string, installDir string) {
 		}
 
 		// Build the assertion
-		colorLog(colorMagenta, "Launching Claude Code Builder Agent...")
+		colorLog(colorMagenta, fmt.Sprintf("Launching %s Builder Agent...", profile.DisplayName))
 
 		opts := LaunchOptions{
 			Agent:      "builder",
@@ -468,8 +474,9 @@ func RunBuilder(args []string, installDir string) {
 			message = override + message
 		}
 
-		success, launchErr := launchClaude(
-			[]string{"--dangerously-skip-permissions", message},
+		success, launchErr := launchHarness(
+			profile,
+			profile.InteractiveArgs(message),
 			active,
 		)
 
@@ -522,19 +529,16 @@ func launchInteractiveBuilder(cfg BuilderConfig) {
 		message = hint + message
 	}
 
-	// Interactive mode: use --system-prompt so claude waits for user input
-	success, launchErr := launchClaude(
-		[]string{"--dangerously-skip-permissions", "--system-prompt", message},
-		nil,
-	)
-
-	if launchErr != nil {
-		colorLog(colorRed, fmt.Sprintf("Error: %s", launchErr))
+	// Interactive delivery. claude-code seeds the full prompt as a system prompt
+	// and waits; every other harness executes any message it is handed, so
+	// LaunchInteractive ensures the spekk-builder skill is installed and opens a
+	// skill-governed session seeded only with a short activation instead.
+	profile := resolveHarnessOrExit(cfg.Harness)
+	if err := LaunchInteractive(profile, "builder", profile.SystemPromptArgs(message)); err != nil {
+		colorLog(colorRed, fmt.Sprintf("Error: %s", err))
 		os.Exit(1)
 	}
-	if success {
-		colorLog(colorGreen, "Builder agent session ended")
-	}
+	colorLog(colorGreen, "Builder agent session ended")
 }
 
 func hasHelp(args []string) bool {
