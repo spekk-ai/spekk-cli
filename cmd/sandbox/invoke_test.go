@@ -9,7 +9,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spekk-ai/spekk-cli/internal/claudecode"
 )
+
+// claudeVersionAnswer makes a fake claude answer the version check that the
+// client runs before each turn, with a version above the minimum.
+const claudeVersionAnswer = "[ \"$1\" = --version ] && { echo '2.1.301 (Claude Code)'; exit 0; }\n"
 
 // fakeFailingClaude puts an executable named claude on PATH that fails the way
 // the real binary does when the model API is down: it gives up after its
@@ -21,8 +27,7 @@ func fakeFailingClaude(t *testing.T) {
 		t.Skip("the fake claude is a shell script")
 	}
 	dir := t.TempDir()
-	script := `#!/bin/sh
-cat > /dev/null
+	script := "#!/bin/sh\n" + claudeVersionAnswer + `cat > /dev/null
 echo '{"type":"system","subtype":"init","session_id":"sess-1"}'
 echo '{"type":"system","subtype":"api_retry","attempt":10,"max_retries":10,"error_status":503,"error":"overloaded"}'
 echo '{"type":"result","subtype":"success","is_error":true,"api_error_status":503,"session_id":"sess-1","result":"API Error: 503 Bedrock is unable to process your request."}'
@@ -101,7 +106,7 @@ func fakeReplayClaude(t *testing.T, path string) {
 		t.Skip("the fake claude is a shell script")
 	}
 	dir := t.TempDir()
-	script := "#!/bin/sh\ncat > /dev/null\ncat '" + path + "'\n"
+	script := "#!/bin/sh\n" + claudeVersionAnswer + "cat > /dev/null\ncat '" + path + "'\n"
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake claude: %v", err)
 	}
@@ -161,5 +166,43 @@ func TestResultFrameDeclaresTerminal(t *testing.T) {
 				t.Errorf("terminal = %v, want %v", terminal, want)
 			}
 		})
+	}
+}
+
+// A turn on a Claude Code older than the minimum is refused before claude
+// starts. 2.1.197 kills a background task seconds after the result, and the
+// person sees a failed turn with no cause. The refusal names the version, the
+// minimum and the remedy, all in the error field, because the control host
+// reads no other field of the frame.
+func TestTurnRefusedOnOldClaudeCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake claude is a shell script")
+	}
+	dir := t.TempDir()
+	ran := filepath.Join(dir, "ran")
+	script := "#!/bin/sh\n[ \"$1\" = --version ] && { echo '2.1.197 (Claude Code)'; exit 0; }\ntouch '" + ran + "'\n"
+	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake claude: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	host := newTestControlHost(t)
+	client := NewAgentClient(Config{Token: "t", Host: host.host(), Workspace: t.TempDir()})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go client.Run(ctx)
+
+	dispatchTurn(t, host.nextConn(t))
+	got := host.awaitFrame(t, MessageTypeError, 20*time.Second)
+
+	want := "Claude Code 2.1.197 is older than " + claudecode.MinVersion + ", the minimum for this sandbox. Run `spekk sandbox deploy` for this sandbox to install a current version."
+	if got.frame["error"] != want {
+		t.Errorf("error = %q, want %q", got.frame["error"], want)
+	}
+	if got.frame["agent_session_id"] != "agent-session-1" {
+		t.Errorf("error agent_session_id = %v, want agent-session-1", got.frame["agent_session_id"])
+	}
+	if _, err := os.Stat(ran); err == nil {
+		t.Error("claude ran a turn on a version older than the minimum")
 	}
 }

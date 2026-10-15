@@ -15,6 +15,14 @@ import (
 )
 
 func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg Message) {
+	// Each turn reads the version again: a self-update or a deploy can change
+	// it while the client runs, and the read takes about 20 ms.
+	if status, ok := checkClaudeCode(); !ok {
+		log.Printf("Refusing a turn: %s", status)
+		sendError(ctx, conns, msg.AgentSessionID, status)
+		return
+	}
+
 	args := []string{
 		"-p", "-",
 		"--output-format", "stream-json",

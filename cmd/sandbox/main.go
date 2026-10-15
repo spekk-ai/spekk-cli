@@ -32,6 +32,11 @@ func main() {
 
 	cfg := loadConfig()
 	log.Printf("Starting agent client (host=%s workspace=%s)", cfg.Host, cfg.Workspace)
+	if status, ok := checkClaudeCode(); ok {
+		log.Print(status)
+	} else {
+		log.Printf("WARNING: %s Every turn is refused until then.", status)
+	}
 
 	if err := os.MkdirAll(cfg.Workspace, 0755); err != nil {
 		log.Fatalf("Failed to create workspace: %v", err)
