@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -260,6 +261,22 @@ func (c *Client) AssignToProject(projectID string, resourceURNs []string) error 
 		"resources": resourceURNs,
 	}
 	return c.doRequest("POST", fmt.Sprintf("/v2/projects/%s/resources", projectID), payload, nil)
+}
+
+// --- Tag operations ---
+
+// TagDroplet puts a tag on a droplet. It creates the tag first, because the
+// API tags a resource only with a tag that exists. A tag that exists already
+// is not an error.
+func (c *Client) TagDroplet(tag string, dropletID int) error {
+	err := c.doRequest("POST", "/v2/tags", map[string]string{"name": tag}, nil)
+	if apiErr, ok := err.(*APIError); err != nil && !(ok && apiErr.StatusCode == http.StatusUnprocessableEntity) {
+		return err
+	}
+	payload := map[string]any{
+		"resources": []map[string]string{{"resource_id": strconv.Itoa(dropletID), "resource_type": "droplet"}},
+	}
+	return c.doRequest("POST", "/v2/tags/"+url.PathEscape(tag)+"/resources", payload, nil)
 }
 
 // --- HTTP helper ---

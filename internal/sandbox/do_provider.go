@@ -1,10 +1,14 @@
 package sandbox
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 )
+
+// DOProvider can label its machines.
+var _ Labeler = (*DOProvider)(nil)
 
 // DOProvider implements Provider using the DigitalOcean API.
 type DOProvider struct {
@@ -173,4 +177,18 @@ func (p *DOProvider) Status(meta *SandboxMeta) (string, error) {
 		return "unknown", nil
 	}
 	return droplet.Status, nil
+}
+
+// Label puts each label on the droplet as a DigitalOcean tag key:value.
+func (p *DOProvider) Label(meta *SandboxMeta, labels map[string]string) error {
+	if meta.DropletID == 0 {
+		return fmt.Errorf("no droplet recorded")
+	}
+	var errs []error
+	for _, tag := range sortedLabels(labels, ":") {
+		if err := p.client.TagDroplet(tag, meta.DropletID); err != nil {
+			errs = append(errs, fmt.Errorf("tag %s: %w", tag, err))
+		}
+	}
+	return errors.Join(errs...)
 }

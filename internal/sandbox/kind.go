@@ -1,6 +1,14 @@
 package sandbox
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+)
 
 // The kinds of sandbox. A one-off sandbox is for one task and then a
 // destroy. A persistent sandbox runs a long-lived agent.
@@ -8,6 +16,14 @@ const (
 	KindOneOff     = "one-off"
 	KindPersistent = "persistent"
 )
+
+// DefaultOneOffExpiry is how long a one-off sandbox lives when --expires
+// does not say. Expiry is a reminder in list, never a destroy.
+const DefaultOneOffExpiry = 48 * time.Hour
+
+// sandboxMarker is the file on the machine that says what kind of sandbox
+// it is, for whoever logs in. Credential injection writes it.
+const sandboxMarker = "/opt/spekk/sandbox.json"
 
 // KindOf returns the kind of a sandbox. A record with no kind was written
 // before the field existed, when every sandbox was persistent.
@@ -27,4 +43,145 @@ func (m *SandboxMeta) Expired(now time.Time) bool {
 	}
 	t, err := time.Parse(time.RFC3339, m.ExpiresAt)
 	return err == nil && t.Before(now)
+}
+
+// ResolveKind turns the create flags into a kind and an expiry. A one-off
+// sandbox expires DefaultOneOffExpiry after now unless expires says when.
+// A persistent sandbox has no expiry, so --expires without --one-off is an
+// error rather than a sandbox with two meanings.
+func ResolveKind(oneOff bool, expires string, now time.Time) (string, time.Time, error) {
+	if !oneOff {
+		if expires != "" {
+			return "", time.Time{}, fmt.Errorf("--expires needs --one-off: a persistent sandbox does not expire")
+		}
+		return KindPersistent, time.Time{}, nil
+	}
+	if expires == "" {
+		return KindOneOff, now.Add(DefaultOneOffExpiry).UTC(), nil
+	}
+	t, err := ParseExpiry(expires, now)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return KindOneOff, t, nil
+}
+
+// ParseExpiry reads an --expires value: a Go duration (36h), a number of
+// days (3d), a date (2026-10-17, which means 00:00 UTC on that day), or an
+// RFC 3339 time. The result is in UTC and must be after now.
+func ParseExpiry(s string, now time.Time) (time.Time, error) {
+	var t time.Time
+	if d, err := time.ParseDuration(s); err == nil {
+		t = now.Add(d)
+	} else if n, err := strconv.Atoi(strings.TrimSuffix(s, "d")); err == nil && strings.HasSuffix(s, "d") {
+		t = now.Add(time.Duration(n) * 24 * time.Hour)
+	} else if d, err := time.Parse(time.DateOnly, s); err == nil {
+		t = d
+	} else if d, err := time.Parse(time.RFC3339, s); err == nil {
+		t = d
+	} else {
+		return time.Time{}, fmt.Errorf("invalid --expires %q: use a duration (36h), days (3d), a date (2026-10-17) or an RFC 3339 time", s)
+	}
+	if !t.After(now) {
+		return time.Time{}, fmt.Errorf("--expires %q is not in the future", s)
+	}
+	return t.UTC(), nil
+}
+
+// Labeler is a Provider that can put labels on its machines. It is optional:
+// Create finds it with a type assertion, and a provider that cannot label
+// does not implement it. Labels let a machine that did not create a sandbox
+// see its kind in the cloud.
+type Labeler interface {
+	// Label puts labels on the machine meta names. Each key and value is
+	// already lowercase [a-z0-9_-] and 63 characters or fewer, so the same
+	// label means the same thing on every provider. An error is a warning
+	// to the caller, never a failed create.
+	Label(meta *SandboxMeta, labels map[string]string) error
+}
+
+// The label keys spekk puts on a machine.
+const (
+	labelKind    = "spekk-kind"
+	labelExpires = "spekk-expires"
+	labelHost    = "spekk-host"
+)
+
+// sandboxLabels returns the labels for a sandbox. The expiry label is the
+// date only, rounded up to the next day, so a list that reads the label
+// flags a sandbox late rather than early.
+func sandboxLabels(meta *SandboxMeta) map[string]string {
+	labels := map[string]string{labelKind: labelValue(meta.KindOf())}
+	if meta.CreatedBy != "" {
+		labels[labelHost] = labelValue(meta.CreatedBy)
+	}
+	if t, err := time.Parse(time.RFC3339, meta.ExpiresAt); err == nil {
+		t = t.UTC()
+		day := t.Truncate(24 * time.Hour)
+		if day.Before(t) {
+			day = day.Add(24 * time.Hour)
+		}
+		labels[labelExpires] = day.Format(time.DateOnly)
+	}
+	return labels
+}
+
+// labelValue makes s a valid label value under the strictest rules, which
+// are GCP's: lowercase [a-z0-9_-], 63 characters or fewer. Any other
+// character becomes "-".
+func labelValue(s string) string {
+	b := []byte(strings.ToLower(s))
+	for i, c := range b {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			b[i] = '-'
+		}
+	}
+	if len(b) > 63 {
+		b = b[:63]
+	}
+	return string(b)
+}
+
+// sortedLabels returns the labels as key<sep>value strings, sorted by key,
+// so a provider sends them in a stable order.
+func sortedLabels(labels map[string]string, sep string) []string {
+	out := make([]string, 0, len(labels))
+	for k, v := range labels {
+		out = append(out, k+sep+v)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// labelMachine labels the machine when the provider can. A failure is a
+// warning: the record and the marker still carry the kind.
+func labelMachine(p Provider, meta *SandboxMeta) {
+	l, ok := p.(Labeler)
+	if !ok {
+		return
+	}
+	if err := l.Label(meta, sandboxLabels(meta)); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not label %s: %s\n", machineRef(meta), err)
+	}
+}
+
+// markerContent is the JSON that credential injection writes to
+// sandboxMarker. It holds no secret.
+func markerContent(meta *SandboxMeta) []byte {
+	data, _ := json.MarshalIndent(struct {
+		Kind      string `json:"kind"`
+		Purpose   string `json:"purpose"`
+		ExpiresAt string `json:"expiresAt"`
+		CreatedBy string `json:"createdBy"`
+	}{meta.KindOf(), meta.Purpose, meta.ExpiresAt, meta.CreatedBy}, "", "  ")
+	return append(data, '\n')
+}
+
+// hostname is the name recorded as createdBy. A seam for tests.
+var hostname = func() string {
+	h, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return h
 }

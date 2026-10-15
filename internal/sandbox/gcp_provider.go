@@ -60,6 +60,9 @@ func gcloudCannotExist(err error) bool {
 	return gcloudNotFound(err) || strings.Contains(err.Error(), "Invalid value for field")
 }
 
+// GCPProvider can label its machines.
+var _ Labeler = (*GCPProvider)(nil)
+
 // GCPProvider implements Provider for Google Compute Engine through the
 // gcloud CLI, which brings the operator's credentials and configuration.
 type GCPProvider struct{}
@@ -232,4 +235,13 @@ func (p *GCPProvider) Status(meta *SandboxMeta) (string, error) {
 		return "", nil
 	}
 	return runGcloud(append(instanceArgs("describe", meta), "--format", "value(status)")...)
+}
+
+// Label puts the labels on the VM as GCP labels key=value.
+func (p *GCPProvider) Label(meta *SandboxMeta, labels map[string]string) error {
+	if meta.GCPInstance == "" {
+		return fmt.Errorf("no VM recorded")
+	}
+	_, err := runGcloud(append(instanceArgs("add-labels", meta), "--labels", strings.Join(sortedLabels(labels, "="), ","))...)
+	return err
 }

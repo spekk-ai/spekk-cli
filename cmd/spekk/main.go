@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	spekk "github.com/spekk-ai/spekk-cli"
 	"github.com/spekk-ai/spekk-cli/internal/agent"
@@ -1329,6 +1330,9 @@ func createSandbox(args []string) {
 		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
 		"release":           {Names: []string{"--release"}, Type: cli.StringFlag},
 		"organization":      {Names: []string{"--organization"}, Type: cli.StringFlag},
+		"one-off":           {Names: []string{"--one-off"}, Type: cli.BoolFlag},
+		"expires":           {Names: []string{"--expires"}, Type: cli.StringFlag},
+		"purpose":           {Names: []string{"--purpose"}, Type: cli.StringFlag},
 		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -1416,6 +1420,12 @@ OPTIONS:
 		os.Exit(1)
 	}
 
+	kind, expiresAt, err := sandbox.ResolveKind(flags.Bool("one-off"), flags.String("expires"), time.Now())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
 	setFlags := map[string]bool{
 		"--region":   flags.String("region") != "",
 		"--size":     flags.String("size") != "",
@@ -1458,6 +1468,10 @@ OPTIONS:
 
 		Organization:     flags.String("organization"),
 		ProvisionTimeout: provisionTimeout,
+
+		Kind:      kind,
+		ExpiresAt: expiresAt,
+		Purpose:   flags.String("purpose"),
 	}
 	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)

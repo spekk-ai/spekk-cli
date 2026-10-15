@@ -61,6 +61,14 @@ type CreateOptions struct {
 	// provisioned marker. Zero means DefaultProvisionTimeout.
 	ProvisionTimeout time.Duration
 
+	// Kind is KindOneOff or KindPersistent; empty means persistent.
+	// ExpiresAt is when a one-off sandbox expires; zero means never.
+	// Purpose says why the sandbox exists. ResolveKind fills Kind and
+	// ExpiresAt from the flags.
+	Kind      string
+	ExpiresAt time.Time
+	Purpose   string
+
 	// CloudInit is the provisioning payload from the release artifacts.
 	// Create fills it in; no flag sets it. A provider that does not use
 	// cloud-init ignores it.
@@ -153,6 +161,15 @@ func Create(p Provider, opts CreateOptions) (err error) {
 		Auth:      string(opts.Auth),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 		AgentID:   agentID,
+		Kind:      opts.Kind,
+		Purpose:   opts.Purpose,
+		CreatedBy: hostname(),
+	}
+	if meta.Kind == "" {
+		meta.Kind = KindPersistent
+	}
+	if !opts.ExpiresAt.IsZero() {
+		meta.ExpiresAt = opts.ExpiresAt.UTC().Format(time.RFC3339)
 	}
 	defer func() {
 		if err != nil && meta.AgentID != "" && revokeAbandoned(meta.AgentID, opts.Name) {
@@ -197,6 +214,7 @@ func Create(p Provider, opts CreateOptions) (err error) {
 		}
 		return createErr
 	}
+	labelMachine(p, meta)
 
 	// --- Generic provisioning (provider-agnostic) ---
 
@@ -262,7 +280,7 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	}
 
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, mode); err != nil {
+	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, mode, markerContent(meta)); err != nil {
 		return &stageError{"injecting credentials", err}
 	}
 
@@ -1237,7 +1255,9 @@ func sshCheck(sandbox *SandboxMeta, name, command string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode) error {
+// injectCredentials writes the env file, and in the same command the
+// sandbox marker, which holds no secret.
+func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode, marker []byte) error {
 	envVars := map[string]string{
 		"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
 		"AWS_SECRET_ACCESS_KEY": os.Getenv("AWS_SECRET_ACCESS_KEY"),
@@ -1248,7 +1268,7 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 	spekkHost := os.Getenv("SPEKK_HOST")
 
 	envContent := buildEnvContent(mode, envVars, name, agentToken, spekkHost)
-	script := privilegedScript(user, buildInjectScript(envContent))
+	script := privilegedScript(user, buildInjectScript(envContent, marker))
 
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")
@@ -1278,13 +1298,15 @@ func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken,
 	return strings.Join(envLines, "\n") + "\n"
 }
 
-// buildInjectScript produces the SSH command string for injecting credentials.
-// It base64-encodes the content to prevent shell injection. Exported for testing.
-func buildInjectScript(envContent string) string {
+// buildInjectScript produces the SSH command string for injecting credentials
+// and writing the sandbox marker. It base64-encodes both to prevent shell
+// injection. Exported for testing.
+func buildInjectScript(envContent string, marker []byte) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(envContent))
+	encodedMarker := base64.StdEncoding.EncodeToString(marker)
 	return fmt.Sprintf(
-		`echo '%s' | base64 -d > /etc/spekk/agent.env && chown agent:agent /etc/spekk/agent.env && chmod 600 /etc/spekk/agent.env`,
-		encoded,
+		`echo '%s' | base64 -d > /etc/spekk/agent.env && chown agent:agent /etc/spekk/agent.env && chmod 600 /etc/spekk/agent.env && echo '%s' | base64 -d > %s && chmod 644 %s`,
+		encoded, encodedMarker, sandboxMarker, sandboxMarker,
 	)
 }
 
