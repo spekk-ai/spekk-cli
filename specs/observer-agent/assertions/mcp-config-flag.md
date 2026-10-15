@@ -3,13 +3,15 @@ id: mcp-config-flag
 parent: observer-agent
 created: 2026-10-15T23:00:00Z
 priority: 2
-status: not_started
+status: done
 branch: feat/observer-mcp-config
 ---
 
 # `--mcp-config` Gives One Observer Run Its Own MCP Servers
 
 A scheduled observer skill can need tools that no other session has, for example a browser. Claude Code loads such MCP servers with `--mcp-config <file>`. Before this change, `spekk observer` accepted `--mcp-config` without an error and did not give it to `claude`, so the run started without those tools and nothing said so.
+
+**Tests:** internal/agent/observer_mcp_test.go
 
 `claude --mcp-config` takes one or more values. When `--mcp-config <file>` comes before the message, `claude` reads the message as a second config file and fails. The observer must give the flag as one token, `--mcp-config=<file>`.
 

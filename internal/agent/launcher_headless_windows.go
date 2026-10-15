@@ -9,17 +9,19 @@ import (
 )
 
 // LaunchHeadless spawns `claude -p` (print/non-interactive mode) with the given
-// message. It does not inherit stdin and does not forward signals — suitable for
-// background invocations where no TTY is present.
+// message. extraArgs go before the message. It does not inherit stdin and does
+// not forward signals — suitable for background invocations where no TTY is
+// present.
 //
 // On Windows the overlap guard (flock) is not available; the lockFile parameter
 // is accepted for API compatibility but ignored.
-func LaunchHeadless(claudePath, lockFile, message string) error {
+func LaunchHeadless(claudePath, lockFile, message string, extraArgs ...string) error {
 	if claudePath == "" {
 		claudePath = "claude"
 	}
 
-	cmd := exec.Command(claudePath, "-p", "--dangerously-skip-permissions", message)
+	args := append([]string{"-p", "--dangerously-skip-permissions"}, extraArgs...)
+	cmd := exec.Command(claudePath, append(args, message)...)
 	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

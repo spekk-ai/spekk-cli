@@ -505,6 +505,7 @@ spekk observer uninstall-cron     # Remove the crontab entries
 | `--quiet` | Ask the agent for less output. The agent decides what that means |
 | `--headless` | Run Claude Code with `-p`, with no terminal. `install-cron` sets this |
 | `--claude-path <path>` | The `claude` binary to run. `install-cron` sets this, because cron has a short `PATH` |
+| `--mcp-config <file>` | Load the MCP servers in `<file>` for this run only, for example a browser that one skill needs. The observer gives `claude` the flag as `--mcp-config=<file>`. A missing value, or a path that is not a file, stops the run before `claude` starts |
 
 `--interval` is no longer a flag. Passing it is an error that names the replacement, `install-cron --loop-interval`.
 

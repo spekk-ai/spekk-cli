@@ -37,6 +37,7 @@ var ObserverFlags = cli.FlagSet{
 	"quiet":      {Names: []string{"--quiet"}, Type: cli.BoolFlag},
 	"headless":   {Names: []string{"--headless"}, Type: cli.BoolFlag},
 	"claudePath": {Names: []string{"--claude-path"}, Type: cli.StringFlag},
+	"mcpConfig":  {Names: []string{"--mcp-config"}, Type: cli.StringFlag},
 	"help":       {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
@@ -45,7 +46,12 @@ type ObserverConfig struct {
 	Quiet      bool
 	Headless   bool
 	ClaudePath string
+	MCPConfig  string
 	InstallDir string
+
+	// mcpConfigGiven is true when --mcp-config is present, also with no
+	// value, so that mcpArgs can refuse a flag that has no file.
+	mcpConfigGiven bool
 }
 
 // removedObserverFlags names flags that were accepted once, mapped to what to
@@ -74,15 +80,34 @@ func RemovedObserverFlag(args []string) (flag, message string) {
 	return "", ""
 }
 
-// ParseObserverFlags parses args into an ObserverConfig. No flag can fail to
-// parse, so there is no error to return.
+// ParseObserverFlags parses args into an ObserverConfig. It returns no
+// error: mcpArgs checks --mcp-config before the launch.
 func ParseObserverFlags(args []string) ObserverConfig {
 	parsed := cli.ParseFlags(args, ObserverFlags)
 	return ObserverConfig{
-		Quiet:      parsed.Bool("quiet"),
-		Headless:   parsed.Bool("headless"),
-		ClaudePath: parsed.String("claudePath"),
+		Quiet:          parsed.Bool("quiet"),
+		Headless:       parsed.Bool("headless"),
+		ClaudePath:     parsed.String("claudePath"),
+		MCPConfig:      parsed.String("mcpConfig"),
+		mcpConfigGiven: parsed.Count("mcpConfig") > 0,
 	}
+}
+
+// mcpArgs returns the --mcp-config argument for claude, so that one run can
+// load MCP servers that no other session sees. claude reads --mcp-config as
+// a list, so a separate value token would also take the message that comes
+// after it. The "=" form is one token and ends the list.
+func (c ObserverConfig) mcpArgs() ([]string, error) {
+	if !c.mcpConfigGiven {
+		return nil, nil
+	}
+	if c.MCPConfig == "" {
+		return nil, fmt.Errorf("--mcp-config requires a file")
+	}
+	if info, err := os.Stat(c.MCPConfig); err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("--mcp-config file not found: %s", c.MCPConfig)
+	}
+	return []string{"--mcp-config=" + c.MCPConfig}, nil
 }
 
 // BuildObserverOptionsMessage builds the CLI options suffix for the activation message.
@@ -139,6 +164,11 @@ func RunObserver(args []string, installDir string) {
 			// Flags still apply in skill mode (`spekk observer <skill> [flags]`),
 			// so parse them and pass the preferences along with the skill content.
 			cfg := ParseObserverFlags(args)
+			mcpArgs, err := cfg.mcpArgs()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				os.Exit(1)
+			}
 
 			skillMsg, err := BuildSkillMessage(installDir, "observer", skillName, args)
 			if err != nil {
@@ -159,12 +189,12 @@ func RunObserver(args []string, installDir string) {
 			if cfg.Headless {
 				wd, _ := os.Getwd()
 				lockFile := ObserverLockFile(wd, skill.Name)
-				if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
+				if err := LaunchHeadless(cfg.ClaudePath, lockFile, message, mcpArgs...); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 					os.Exit(1)
 				}
 			} else {
-				if err := Launch(message); err != nil {
+				if err := Launch(message, mcpArgs...); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 					os.Exit(1)
 				}
@@ -175,6 +205,11 @@ func RunObserver(args []string, installDir string) {
 
 	cfg := ParseObserverFlags(args)
 	cfg.InstallDir = installDir
+	mcpArgs, err := cfg.mcpArgs()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 
 	if !cfg.Headless {
 		fmt.Println("Launching Observer Agent with Claude Code...")
@@ -199,12 +234,12 @@ func RunObserver(args []string, installDir string) {
 	if cfg.Headless {
 		wd, _ := os.Getwd()
 		lockFile := ObserverLockFile(wd, "")
-		if err := LaunchHeadless(cfg.ClaudePath, lockFile, message); err != nil {
+		if err := LaunchHeadless(cfg.ClaudePath, lockFile, message, mcpArgs...); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 	} else {
-		if err := Launch(message); err != nil {
+		if err := Launch(message, mcpArgs...); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
