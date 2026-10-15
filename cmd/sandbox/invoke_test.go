@@ -206,3 +206,35 @@ func TestTurnRefusedOnOldClaudeCode(t *testing.T) {
 		t.Error("claude ran a turn on a version older than the minimum")
 	}
 }
+
+// A turn runs when the client cannot read the Claude Code version. A later
+// Claude Code can print its version in a form that the parse does not know,
+// and a refusal would then stop every turn on every sandbox.
+func TestTurnRunsOnUnreadableClaudeCodeVersion(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake claude is a shell script")
+	}
+	dir := t.TempDir()
+	script := `#!/bin/sh
+[ "$1" = --version ] && { echo 'Claude Code (next build)'; exit 0; }
+cat > /dev/null
+echo '{"type":"system","subtype":"init","session_id":"sess-1"}'
+echo '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-1","result":"done"}'
+`
+	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake claude: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	host := newTestControlHost(t)
+	client := NewAgentClient(Config{Token: "t", Host: host.host(), Workspace: t.TempDir()})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go client.Run(ctx)
+
+	dispatchTurn(t, host.nextConn(t))
+	got := host.awaitFrame(t, MessageTypeResult, 20*time.Second)
+	if got.frame["agent_session_id"] != "agent-session-1" {
+		t.Errorf("result agent_session_id = %v, want agent-session-1", got.frame["agent_session_id"])
+	}
+}

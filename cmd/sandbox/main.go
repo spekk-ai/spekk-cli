@@ -32,9 +32,12 @@ func main() {
 
 	cfg := loadConfig()
 	log.Printf("Starting agent client (host=%s workspace=%s)", cfg.Host, cfg.Workspace)
-	if status, ok := checkClaudeCode(); ok {
+	switch status, check := checkClaudeCode(); check {
+	case claudeCodeCurrent:
 		log.Print(status)
-	} else {
+	case claudeCodeUnreadable:
+		log.Printf("WARNING: %s Turns run with no version check.", status)
+	case claudeCodeOld:
 		log.Printf("WARNING: %s Every turn is refused until then.", status)
 	}
 

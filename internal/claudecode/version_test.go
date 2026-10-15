@@ -2,13 +2,28 @@ package claudecode
 
 import "testing"
 
+// A later Claude Code can print its version in another form, so the parse
+// knows the likely forms. Text with no version, and an IP address in an ssh
+// warning, are not versions.
 func TestParseVersion(t *testing.T) {
-	got, err := ParseVersion("** WARNING: connection is not using a post-quantum key exchange algorithm.\n2.1.301 (Claude Code)\n")
-	if err != nil || got != "2.1.301" {
-		t.Errorf("ParseVersion = %q, %v; want 2.1.301", got, err)
+	for _, out := range []string{
+		"2.1.301 (Claude Code)\n",
+		"Claude Code v2.1.301\n",
+		"claude 2.1.301\n",
+		"Warning: Permanently added '10.1.2.3' (ED25519) to the list of known hosts.\n2.1.301 (Claude Code)\n",
+	} {
+		if got, err := ParseVersion(out); err != nil || got != "2.1.301" {
+			t.Errorf("ParseVersion(%q) = %q, %v; want 2.1.301", out, got, err)
+		}
 	}
-	if got, err := ParseVersion("bash: line 1: claude: command not found\n"); err == nil {
-		t.Errorf("ParseVersion of a missing claude = %q, want an error", got)
+	for _, out := range []string{
+		"bash: line 1: claude: command not found\n",
+		"Warning: Permanently added '10.1.2.3' (ED25519) to the list of known hosts.\n",
+		"",
+	} {
+		if got, err := ParseVersion(out); err == nil {
+			t.Errorf("ParseVersion(%q) = %q, want an error", out, got)
+		}
 	}
 }
 

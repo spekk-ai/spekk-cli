@@ -3,7 +3,7 @@ id: claude-code-minimum-version-defined-once
 parent: sandbox-claude-code-version
 created: 2026-10-15T21:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: fix/claude-code-version
 ---
 

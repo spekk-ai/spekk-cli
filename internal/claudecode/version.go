@@ -16,18 +16,20 @@ import (
 // specs/sandbox-claude-code-version/.
 const MinVersion = "2.1.292"
 
-// versionRe matches the version at the start of a line of `claude --version`
-// output, such as "2.1.301 (Claude Code)".
-var versionRe = regexp.MustCompile(`(?m)^(\d+)\.(\d+)\.(\d+)`)
+// versionRe matches a version in a line of `claude --version` output: at the
+// start of the line, as in "2.1.301 (Claude Code)", or after "claude" in any
+// case, as in "Claude Code v2.2.0" or "claude 2.2.0". A later Claude Code can
+// change the form, and an IP address in an ssh warning is not a version.
+var versionRe = regexp.MustCompile(`(?im)^(?:.*claude\b.*?)?\bv?(\d+\.\d+\.\d+)\b`)
 
 // ParseVersion returns the version in the output of `claude --version`. Other
 // lines, such as an ssh warning, are skipped.
 func ParseVersion(out string) (string, error) {
-	m := versionRe.FindString(out)
-	if m == "" {
+	m := versionRe.FindStringSubmatch(out)
+	if m == nil {
 		return "", fmt.Errorf("no Claude Code version in %q", strings.TrimSpace(out))
 	}
-	return m, nil
+	return m[1], nil
 }
 
 // BelowMinimum reports whether version is older than MinVersion. version

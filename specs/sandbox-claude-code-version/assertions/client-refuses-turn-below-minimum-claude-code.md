@@ -3,7 +3,7 @@ id: client-refuses-turn-below-minimum-claude-code
 parent: sandbox-claude-code-version
 created: 2026-10-15T21:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: fix/claude-code-version
 depends-on: claude-code-minimum-version-defined-once
 ---
@@ -19,4 +19,4 @@ depends-on: claude-code-minimum-version-defined-once
 - The `error` text is fewer than 300 characters and is the whole message, because the control host keeps only `error`, and a place that shows it can cut it at 300 characters. The frame has no new field, so the protocol version does not change.
 - Tests: a fake `claude` that reports an old version gets an `error` frame with the found version and the minimum, and the fake records that no turn ran; a fake `claude` that reports a current version runs the turn as before; a fake `claude` whose `--version` output has no version runs the turn.
 
-**Tests:** `cmd/sandbox/invoke_test.go` (`TestTurnRefusedOnOldClaudeCode`, `TestTurnRunsOnUnreadableClaudeCodeVersion`; every other client test runs a turn with a fake that reports 2.1.301). Live check (2026-10-15): the built client logged `Claude Code 2.1.301 at <home>/.local/bin/claude (minimum 2.1.292)` with the native binary first on `PATH`, a refusal warning that names `/usr/bin/claude` 2.1.197, and a not-installed warning with no `claude` on `PATH`.
+**Tests:** `cmd/sandbox/invoke_test.go` (`TestTurnRefusedOnOldClaudeCode`, `TestTurnRunsOnUnreadableClaudeCodeVersion`; every other client test runs a turn with a fake that reports 2.1.301). Live check (2026-10-15): the built client logged `Claude Code 2.1.301 at <home>/.local/bin/claude (minimum 2.1.292)` with the native binary first on `PATH`, a refusal warning that names `/usr/bin/claude` 2.1.197, a `WARNING:` line that says turns run with no version check when `--version` printed `Claude Code (next build)`, and the same when no `claude` was on `PATH`.
