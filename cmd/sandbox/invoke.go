@@ -113,6 +113,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 
 	// Stream stdout line by line
 	var lastSessionID, lastResultText string
+	var lastResultIsError bool
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 10*1024*1024), 10*1024*1024)
 	for scanner.Scan() {
@@ -135,6 +136,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 			if event["type"] == "result" {
 				lastSessionID, _ = event["session_id"].(string)
 				lastResultText, _ = event["result"].(string)
+				lastResultIsError, _ = event["is_error"].(bool)
 			}
 		}
 
@@ -154,13 +156,14 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		if len(detail) > 2000 {
 			detail = detail[:2000]
 		}
+		reason := failureReason(waitErr, lastResultText, lastResultIsError)
 		reportTurnEnd(ctx, conns, msg.AgentSessionID, map[string]any{
 			"type":             "error",
-			"error":            fmt.Sprintf("claude exited: %v", waitErr),
+			"error":            reason,
 			"detail":           detail,
 			"agent_session_id": msg.AgentSessionID,
 		})
-		log.Printf("Claude failed: %v", waitErr)
+		log.Printf("Claude failed: %s", reason)
 		return
 	}
 
@@ -171,6 +174,26 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		"output":           lastResultText,
 	})
 	log.Printf("Claude finished: session=%s", lastSessionID)
+}
+
+// maxFailureCauseLen caps the cause that failureReason adds. An API error
+// result is one or two sentences, so the cap only stops a long result from
+// filling the control host's log line.
+const maxFailureCauseLen = 500
+
+// failureReason says why claude exited non-zero. When the model API fails,
+// claude writes the cause to the result event on stdout, with is_error set,
+// and writes nothing useful to stderr. Without that text the report is only
+// "exit status 1", which does not tell an API outage from any other failure.
+func failureReason(waitErr error, resultText string, resultIsError bool) string {
+	reason := fmt.Sprintf("claude exited: %v", waitErr)
+	if !resultIsError || resultText == "" {
+		return reason
+	}
+	if len(resultText) > maxFailureCauseLen {
+		resultText = resultText[:maxFailureCauseLen]
+	}
+	return reason + ": " + resultText
 }
 
 // sendError reports a turn that failed before claude produced anything. Every
