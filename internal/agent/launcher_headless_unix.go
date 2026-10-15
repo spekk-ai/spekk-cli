@@ -11,8 +11,8 @@ import (
 )
 
 // LaunchHeadless spawns `claude -p` (print/non-interactive mode) with the given
-// message. It does not inherit stdin and does not forward signals — suitable for
-// cron jobs where no TTY is present.
+// message. extraArgs go before the message. It does not inherit stdin and does
+// not forward signals — suitable for cron jobs where no TTY is present.
 //
 // claudePath is the absolute path to the claude binary; if empty, "claude" is
 // used (relies on PATH).
@@ -23,7 +23,7 @@ import (
 // running), it prints one skip line and exits 0. The lock is released
 // automatically when the process exits; the fd is kept alive for the lifetime
 // of the call.
-func LaunchHeadless(claudePath, lockFile, message string) error {
+func LaunchHeadless(claudePath, lockFile, message string, extraArgs ...string) error {
 	if claudePath == "" {
 		claudePath = "claude"
 	}
@@ -45,7 +45,8 @@ func LaunchHeadless(claudePath, lockFile, message string) error {
 		lockF = f
 	}
 
-	cmd := exec.Command(claudePath, "-p", "--dangerously-skip-permissions", message)
+	args := append([]string{"-p", "--dangerously-skip-permissions"}, extraArgs...)
+	cmd := exec.Command(claudePath, append(args, message)...)
 	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
