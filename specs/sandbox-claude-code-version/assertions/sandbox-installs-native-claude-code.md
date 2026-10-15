@@ -3,7 +3,7 @@ id: sandbox-installs-native-claude-code
 parent: sandbox-claude-code-version
 created: 2026-10-15T21:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: fix/claude-code-version
 depends-on: claude-code-minimum-version-defined-once
 ---
@@ -17,3 +17,5 @@ depends-on: claude-code-minimum-version-defined-once
 - No path runs `npm install -g @anthropic-ai/claude-code`.
 - The install line and the link line are each defined once in Go, and the deploy upgrade (`deploy-upgrades-outdated-claude-code`) uses the same lines. A test fails when `cloud-init.yaml` or `prepare-machine.sh` does not contain them, or contains the npm install.
 - `TestAWSUserDataMatchesCloudInit` passes, so the CloudFormation template carries the same lines.
+
+**Tests:** `internal/sandbox/claude_code_test.go` (`TestProvisioningInstallsNativeClaudeCode`), `internal/sandbox/aws_cloudformation_test.go` (`TestAWSUserDataMatchesCloudInit`)
