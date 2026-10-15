@@ -88,7 +88,7 @@ echo "==> Claude Code CLI (native binary)"
 # An install that is already here stays; `spekk sandbox deploy` upgrades it when
 # it is older than the minimum in internal/claudecode.
 if [ ! -x /home/agent/.local/bin/claude ]; then
-  su - agent -c 'curl -fsSL https://claude.ai/install.sh | bash -s stable'
+  su - agent -c 'curl -fsSL -o claude-install.sh https://claude.ai/install.sh && bash claude-install.sh stable && rm claude-install.sh'
 fi
 # Onto the system PATH: the spekk-agent service won't read agent's ~/.local/bin.
 ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude

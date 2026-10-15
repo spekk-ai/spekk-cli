@@ -3,7 +3,7 @@ id: deploy-upgrades-outdated-claude-code
 parent: sandbox-claude-code-version
 created: 2026-10-15T21:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: fix/claude-code-version
 depends-on: sandbox-installs-native-claude-code
 ---
@@ -20,4 +20,4 @@ depends-on: sandbox-installs-native-claude-code
 - The check and the install happen before the service restart, and they do not stop a `claude` process. The native installer writes a new version file and moves the link, and a process that already runs keeps its old file. A deploy stops a running turn only where it did before: at the restart.
 - Tests, with the SSH seam: a current version installs nothing and restarts; an old version installs, reads again, and restarts; a version that stays old fails the deploy, and no command after the failure (the agent install or the restart) runs; a version that cannot be read after the install gives a warning and a restart.
 
-**Tests:** `internal/sandbox/claude_code_test.go` (`TestDeployKeepsClaudeCodeAtTheMinimum`), `internal/sandbox/ssh_user_test.go` (`TestDeployStagesAndInstallsForEachLogin`). Live check (2026-10-15): the version line, the install line, and the link line ran as root in an `ubuntu:24.04` container with an `agent` user and an old `claude` in `/usr/bin`. The version read gave 2.1.197 before the install and 2.1.292 after it.
+**Tests:** `internal/sandbox/claude_code_test.go` (`TestDeployKeepsClaudeCodeAtTheMinimum`, `TestClaudeVersionLineMatchesAgentUnit`), `internal/sandbox/ssh_user_test.go` (`TestDeployStagesAndInstallsForEachLogin`). Live check (2026-10-15), in an `ubuntu:24.04` container that runs systemd, with an `agent` user: the version line failed with `claude: not found` before the install; with `PATH=/opt/custom/bin:/usr/bin:/bin` in `agent.env`, it found the `claude` in `/opt/custom/bin`; with no `PATH` in `agent.env`, it read 2.1.292 through `/usr/local/bin/claude` after the install.
