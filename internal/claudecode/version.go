@@ -1,5 +1,5 @@
-// Package claudecode holds what a sandbox needs to know about the Claude Code
-// CLI it runs: the oldest version it accepts, and how to install it.
+// Package claudecode holds the oldest Claude Code version that a sandbox
+// runs, and the comparison against it.
 package claudecode
 
 import (

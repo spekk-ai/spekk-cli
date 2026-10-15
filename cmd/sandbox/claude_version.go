@@ -20,7 +20,7 @@ const claudeCodeRemedy = "Run `spekk sandbox deploy` for this sandbox to install
 // true when the version is at or above claudecode.MinVersion. Otherwise
 // status is the reason to refuse the turn, written for the person who
 // dispatched it. The control host keeps only the error text of an error
-// frame, and an alert shows its first 300 characters, so status is short and
+// frame, and a display can cut it at 300 characters, so status is short and
 // says everything.
 func checkClaudeCode() (status string, ok bool) {
 	path, err := exec.LookPath("claude")
@@ -38,7 +38,7 @@ func checkClaudeCode() (status string, ok bool) {
 		return fmt.Sprintf("Cannot read the Claude Code version: %s --version printed no version. %s", path, claudeCodeRemedy), false
 	}
 	if claudecode.BelowMinimum(version) {
-		return fmt.Sprintf("Claude Code %s is older than %s, the minimum for this sandbox. %s", version, claudecode.MinVersion, claudeCodeRemedy), false
+		return fmt.Sprintf("Claude Code %s at %s is older than %s, the minimum for this sandbox. %s", version, path, claudecode.MinVersion, claudeCodeRemedy), false
 	}
 	return fmt.Sprintf("Claude Code %s at %s (minimum %s)", version, path, claudecode.MinVersion), true
 }

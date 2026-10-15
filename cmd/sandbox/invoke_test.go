@@ -195,7 +195,7 @@ func TestTurnRefusedOnOldClaudeCode(t *testing.T) {
 	dispatchTurn(t, host.nextConn(t))
 	got := host.awaitFrame(t, MessageTypeError, 20*time.Second)
 
-	want := "Claude Code 2.1.197 is older than " + claudecode.MinVersion + ", the minimum for this sandbox. Run `spekk sandbox deploy` for this sandbox to install a current version."
+	want := "Claude Code 2.1.197 at " + filepath.Join(dir, "claude") + " is older than " + claudecode.MinVersion + ", the minimum for this sandbox. Run `spekk sandbox deploy` for this sandbox to install a current version."
 	if got.frame["error"] != want {
 		t.Errorf("error = %q, want %q", got.frame["error"], want)
 	}

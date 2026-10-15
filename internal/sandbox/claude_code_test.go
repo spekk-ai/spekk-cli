@@ -51,9 +51,9 @@ func TestDeployKeepsClaudeCodeAtTheMinimum(t *testing.T) {
 		wantErr  string
 	}{
 		"current":      {versions: []string{"2.1.301"}, want: []string{read, restart}},
-		"old":          {versions: []string{"2.1.197", "2.1.292"}, want: []string{read, install, read, restart}},
-		"not found":    {versions: []string{"", "2.1.292"}, want: []string{read, install, read, restart}},
-		"still old":    {versions: []string{"2.1.197", "2.1.291"}, want: []string{read, install, read}, wantErr: "Claude Code is 2.1.291 after the install, and the minimum is " + claudecode.MinVersion},
+		"old":          {versions: []string{"2.1.197", claudecode.MinVersion}, want: []string{read, install, read, restart}},
+		"not found":    {versions: []string{"", claudecode.MinVersion}, want: []string{read, install, read, restart}},
+		"still old":    {versions: []string{"2.1.197", "2.1.197"}, want: []string{read, install, read}, wantErr: "Claude Code is 2.1.197 after the install, and the minimum is " + claudecode.MinVersion},
 		"still absent": {versions: []string{"", ""}, want: []string{read, install, read}, wantErr: "Claude Code is not found after the install"},
 	} {
 		t.Run(name, func(t *testing.T) {

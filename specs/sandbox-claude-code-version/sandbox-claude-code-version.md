@@ -41,4 +41,4 @@ The minimum is the oldest version that has both behaviors that a sandbox needs. 
 
 ## The refusal reaches the person
 
-The control host keeps only the `error` field of an `error` frame. It stores that text as the reason the turn failed, shows it in the web chat and to the sender of a dispatch, and puts its first 300 characters in the no-reply alert. It does not read `detail`. So the refusal puts the whole message in `error`, in fewer than 300 characters, and the frame has no other new field. The frame shape is unchanged, so the protocol version does not change.
+The control host keeps only the `error` field of an `error` frame. It records that text as the reason the turn failed and shows it to the person, and a place that shows it can cut it at 300 characters. It does not read `detail`. So the refusal puts the whole message in `error`, in fewer than 300 characters, and the frame has no other new field. The frame shape is unchanged, so the protocol version does not change.

@@ -12,17 +12,24 @@ func TestParseVersion(t *testing.T) {
 	}
 }
 
-func TestBelowMinimum(t *testing.T) {
-	for version, want := range map[string]bool{
-		"2.1.197":  true,
-		"2.1.291":  true,
-		"2.1.292":  false,
-		"2.1.1000": false,
-		"2.10.0":   false,
-		"3.0.0":    false,
+// The comparison is numeric for each part. A comparison of the text puts
+// 2.1.1000 before 2.1.292.
+func TestCompare(t *testing.T) {
+	for _, tc := range []struct {
+		a, b string
+		want int
+	}{
+		{"2.1.291", "2.1.292", -1},
+		{"2.1.292", "2.1.292", 0},
+		{"2.1.1000", "2.1.292", 1},
+		{"2.10.0", "2.9.9", 1},
+		{"3.0.0", "2.99.99", 1},
 	} {
-		if got := BelowMinimum(version); got != want {
-			t.Errorf("BelowMinimum(%q) = %v, want %v", version, got, want)
+		if got := compare(tc.a, tc.b); got != tc.want {
+			t.Errorf("compare(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
 		}
+	}
+	if BelowMinimum(MinVersion) {
+		t.Errorf("BelowMinimum(MinVersion) = true, want false")
 	}
 }
