@@ -2,7 +2,7 @@
 
 Before this release, you registered each sandbox agent on the control host by hand, and `destroy` left that agent live. Scheduled tasks had no command in the CLI. On a sandbox from cloud-init or the AWS template, Claude Code came from npm at version 2.1.197, which stops a background task a few seconds after the turn gives its result. The agent then never saw how that task ended.
 
-This release registers the agent through the control host API with your own API token, revokes it on `destroy`, and adds `spekk schedule`. Every sandbox now runs Claude Code 2.1.292 or newer. The `result` frame tells the control host if a turn ended its work or only yielded.
+This release registers the agent through the control host API with your own API token, revokes it on `destroy`, and adds `spekk schedule`. Every sandbox now runs Claude Code 2.1.292 or newer. The `result` frame tells the control host if a turn ended its work or only yielded. `spekk observer --mcp-config` now gives its MCP servers to Claude Code.
 
 ## A sandbox registers itself
 
@@ -49,6 +49,16 @@ The cloud-init template and the AWS template now install the native Claude Code 
 The agent now declares protocol `1.1`. The only change is a new `terminal` field, a JSON boolean, on each `result` frame. It is `false` when a background task that the turn started was still live at the last `result` event of Claude, so the turn only yielded. It is `true` in all other cases. The agent reads this from structured fields of the Claude stream only, never from the words of the agent.
 
 The change is additive. A control host that speaks `1.0` has the same major version, so it accepts a `1.1` agent, and the agent shows no warning. A control host reads an absent `terminal` field as `true`, so an old agent and a new control host also work together. Either side can update first. The `turn_keepalive` frame type is reserved for protocol `1.2`, and this agent does not send it. See [Sandbox Agent Architecture](../advanced/sandbox-architecture.md#turn-progress).
+
+## `spekk observer --mcp-config`
+
+Before this release, `spekk observer` accepted `--mcp-config <file>` and did not give it to Claude Code. The run started without those MCP servers, and showed no error. Now the observer gives the file to Claude Code for that run only. This applies to a headless run and to an interactive run, and to the default scan and to a skill:
+
+```bash
+spekk observer my-skill --headless --mcp-config browser-mcp.json
+```
+
+Use it to give one scheduled skill a tool that no other session loads, for example a browser. A missing value, or a path that is not a file, stops the run before Claude Code starts. See the [CLI reference](../cli-reference.md#spekk-observer).
 
 ## Upgrading
 

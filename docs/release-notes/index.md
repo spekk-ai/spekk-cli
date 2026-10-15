@@ -10,7 +10,7 @@ What's new in each version of Spekk CLI.
 
 ## [1.33.0 -- A Sandbox Registers Itself, and Sees Its Background Tasks End](RELEASE-NOTES-1.33.0.md)
 
-With `SPEKK_API_TOKEN`, `spekk sandbox create` registers the agent on the control host, and `destroy` revokes it first (`--ignore-revoke-failure` continues after a failed revoke). New `spekk sandbox register`, `spekk schedule`, and `--organization`. Every sandbox runs Claude Code 2.1.292 or newer, which keeps a turn alive while its background task runs, and `spekk sandbox deploy` upgrades an older one. Protocol `1.1` adds `terminal` to the `result` frame, and works with a control host on `1.0`.
+With `SPEKK_API_TOKEN`, `spekk sandbox create` registers the agent on the control host, and `destroy` revokes it first (`--ignore-revoke-failure` continues after a failed revoke). New `spekk sandbox register`, `spekk schedule`, and `--organization`. Every sandbox runs Claude Code 2.1.292 or newer, which keeps a turn alive while its background task runs, and `spekk sandbox deploy` upgrades an older one. Protocol `1.1` adds `terminal` to the `result` frame, and works with a control host on `1.0`. `spekk observer --mcp-config` now gives its MCP servers to Claude Code.
 
 ## [1.32.0 -- Each Stream Frame Names Its Session](RELEASE-NOTES-1.32.0.md)
 
