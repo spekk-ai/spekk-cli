@@ -10,7 +10,7 @@ depends-on: control-host-client
 
 # A Refused Organization Tells the User How to Choose One
 
-`POST /api/agents/` answers `400` with an `organization` key when the control host cannot choose the organization of the agent. The usual cause is a user who belongs to more than one organization and gave no `--organization`. The real body is `{"organization": ["You belong to several organizations. Specify one."]}`.
+`POST /api/agents/` answers `400` with an `organization` key when the control host cannot choose the organization of the agent. The usual cause is a user who belongs to more than one organization and gave no `--organization`. The body is `{"organization": ["You belong to several organizations. Specify one."]}`, or the same text as a plain string, which is what the control host sends today.
 
 **Tests:** internal/sandbox/controlhost_test.go
 
@@ -22,4 +22,4 @@ depends-on: control-host-client
 
 ## Verification
 
-- `go test ./internal/sandbox` answers a registration with the real body above and checks the hint, and answers with a `sandbox_id` error and checks that there is no hint.
+- `go test ./internal/sandbox` answers a registration with both forms of the body above and checks the hint, and answers with a `sandbox_id` error and checks that there is no hint.

@@ -565,7 +565,6 @@ type DestroyOptions struct {
 // Destroy tears down a sandbox using the Provider for remote resource cleanup
 // and then removes local files and metadata.
 func Destroy(p Provider, name string, opts DestroyOptions) error {
-	force := opts.Force
 	sandbox, err := GetSandbox(name)
 	if err != nil {
 		return err
@@ -574,14 +573,15 @@ func Destroy(p Provider, name string, opts DestroyOptions) error {
 		return fmt.Errorf("sandbox %q not found", name)
 	}
 
-	// Without the API token the revoke cannot even start. Say so before
-	// the prompt, not after the user has said yes.
-	noAPIToken := sandbox.AgentID != "" && strings.TrimSpace(os.Getenv(apiTokenVar)) == ""
-	if noAPIToken && !opts.IgnoreRevokeFailure {
-		return fmt.Errorf("sandbox %q has agent %s on the control host, and %s is not set, so destroy cannot revoke it.\nNothing was destroyed. Set %s, or use --ignore-revoke-failure to destroy the sandbox and leave the agent live", name, sandbox.AgentID, apiTokenVar, apiTokenVar)
+	// Without SPEKK_API_TOKEN or SPEKK_HOST the revoke cannot even start.
+	// Say so before the prompt, not after the user has said yes.
+	if sandbox.AgentID != "" && !opts.IgnoreRevokeFailure {
+		if _, err := newControlHost(); err != nil {
+			return fmt.Errorf("cannot revoke agent %s of sandbox %q: %w\nNothing was destroyed. Use --ignore-revoke-failure to destroy the sandbox and leave the agent live", sandbox.AgentID, name, err)
+		}
 	}
 
-	if !force {
+	if !opts.Force {
 		fmt.Fprintf(os.Stderr, "Destroy sandbox %q (%s)? [y/N] ", name, machineRef(sandbox))
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
@@ -611,7 +611,7 @@ func Destroy(p Provider, name string, opts DestroyOptions) error {
 	// A cloud machine is about to be deleted whole, so this does not apply.
 	if sandbox.Provider == ProviderNone {
 		if err := stopAgent(sandbox, name); err != nil {
-			if !force {
+			if !opts.Force {
 				return fmt.Errorf("stopping the agent on %s: %w\nThe machine may still be running it. Use --force to remove the record anyway", machineRef(sandbox), err)
 			}
 			fmt.Fprintf(os.Stderr, "Warning: could not stop the agent on %s: %s; removing the local record anyway because --force was given.\n", machineRef(sandbox), err)
@@ -626,7 +626,7 @@ func Destroy(p Provider, name string, opts DestroyOptions) error {
 		// A record that names no machine is normally a lost identifier,
 		// and removing it would hide a running machine. With --force the
 		// operator has said they checked; let them clear the entry.
-		if !errors.Is(err, ErrNoMachineRecorded) || !force {
+		if !errors.Is(err, ErrNoMachineRecorded) || !opts.Force {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "Warning: %s; removing the local record anyway because --force was given.\n", err)

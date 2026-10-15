@@ -326,6 +326,9 @@ func TestRegisterHintsAtOrganization(t *testing.T) {
 		hint       bool
 	}{
 		{"several organizations", `{"organization": ["You belong to several organizations. Specify one."]}`, true},
+		// The control host raises the error from its view, and today it
+		// sends the text as a string, not a list.
+		{"several organizations, string form", `{"organization": "You belong to several organizations. Specify one."}`, true},
 		{"another field", `{"sandbox_id": ["agent with this sandbox id already exists."]}`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

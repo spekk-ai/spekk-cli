@@ -816,7 +816,7 @@ spekk sandbox destroy my-sandbox --ignore-revoke-failure   # Destroy even if the
 | `--force` | `-f` | Skip the confirmation prompt, and remove the record when the teardown cannot run |
 | `--ignore-revoke-failure` | | Destroy the sandbox when its agent cannot be revoked on the control host |
 
-When the record has an agent id, `destroy` first revokes the agent on the control host (`POST /api/agents/<id>/revoke/`), before it touches the machine. This needs `SPEKK_API_TOKEN`: without it, `destroy` stops before the confirmation prompt and says so. A failed revoke stops `destroy`, and the machine and the record stay. `--force` does not change this. With `--ignore-revoke-failure`, `destroy` prints a warning that names the agent id and continues; revoke that agent on the control host.
+When the record has an agent id, `destroy` first revokes the agent on the control host (`POST /api/agents/<id>/revoke/`), before it touches the machine. This needs `SPEKK_API_TOKEN` and `SPEKK_HOST`: without them, `destroy` stops before the confirmation prompt and says so. A failed revoke stops `destroy`, and the machine and the record stay. `--force` does not change this. With `--ignore-revoke-failure`, `destroy` prints a warning that names the agent id and continues; revoke that agent on the control host.
 
 For a DigitalOcean sandbox, `destroy` deletes the droplet and its SSH key on DigitalOcean, then removes the local record. When the record names no droplet, `destroy` refuses, because the droplet may still be running and billing. `--force` removes the record anyway.
 

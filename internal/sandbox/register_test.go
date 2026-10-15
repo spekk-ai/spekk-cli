@@ -310,10 +310,9 @@ func TestRegister(t *testing.T) {
 		if strings.Contains(script, agent.Token) {
 			t.Error("the token must travel base64-encoded, not as plain text")
 		}
-		for _, want := range []string{base64.StdEncoding.EncodeToString([]byte(agent.Token)), "grep -v '^SPEKK_AGENT_TOKEN='", "chmod 600", "systemctl restart spekk-agent"} {
-			if !strings.Contains(script, want) {
-				t.Errorf("script lacks %q:\n%s", want, script)
-			}
+		// TestTokenScriptRestoresTheOldFile runs the script itself.
+		if !strings.Contains(script, base64.StdEncoding.EncodeToString([]byte(agent.Token))) {
+			t.Errorf("script lacks the encoded token:\n%s", script)
 		}
 		if !host.agent(old).Revoked {
 			t.Error("the old agent stays live, but its token is no longer on the machine")
