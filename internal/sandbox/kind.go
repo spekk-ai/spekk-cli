@@ -3,6 +3,7 @@ package sandbox
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -98,6 +99,83 @@ type Labeler interface {
 	// label means the same thing on every provider. An error is a warning
 	// to the caller, never a failed create.
 	Label(meta *SandboxMeta, labels map[string]string) error
+
+	// ListLabeled returns the machines of this provider that carry spekk
+	// labels, whoever created them. Each one has the provider's own
+	// identifiers, so list can match it to a local record, and the kind,
+	// expiry and host that its labels say.
+	ListLabeled() ([]RemoteSandbox, error)
+}
+
+// RemoteSandbox is a machine that a provider reports from its labels.
+type RemoteSandbox struct {
+	Name string
+	Meta SandboxMeta
+}
+
+// metaFromLabels fills the kind fields of meta from a machine's labels.
+// The expiry label is a date, which reads as 00:00 UTC on that day.
+func metaFromLabels(meta *SandboxMeta, labels map[string]string) {
+	meta.Kind = labels[labelKind]
+	meta.CreatedBy = labels[labelHost]
+	if t, err := time.Parse(time.DateOnly, labels[labelExpires]); err == nil {
+		meta.ExpiresAt = t.Format(time.RFC3339)
+	}
+}
+
+// sameMachine reports whether a local record and a remote machine are the
+// same machine: the same provider and the same provider identifier.
+func sameMachine(local, remote *SandboxMeta) bool {
+	if providerName(local) != providerName(remote) {
+		return false
+	}
+	switch {
+	case remote.DropletID != 0:
+		return local.DropletID == remote.DropletID
+	case remote.GCPInstance != "":
+		return local.GCPInstance == remote.GCPInstance && local.Project == remote.Project && local.Region == remote.Region
+	}
+	return false
+}
+
+// providerByName is the seam list --all-hosts builds providers through, so
+// a test can use fake providers and no cloud API.
+var providerByName = ProviderByName
+
+// remoteRows asks each provider that labels for its machines, and returns
+// those that no local record names. For each provider it cannot ask, it
+// writes one line to errOut, so no provider is left out silently.
+func remoteRows(local map[string]*SandboxMeta, errOut io.Writer) []listRow {
+	var rows []listRow
+	for _, name := range ValidProviders {
+		p, err := providerByName(name)
+		if err != nil {
+			fmt.Fprintf(errOut, "%s: cannot query: %s\n", name, err)
+			continue
+		}
+		l, ok := p.(Labeler)
+		if !ok {
+			fmt.Fprintf(errOut, "%s: cannot query: this provider does not label its machines\n", name)
+			continue
+		}
+		found, err := l.ListLabeled()
+		if err != nil {
+			fmt.Fprintf(errOut, "%s: cannot query: %s\n", name, err)
+			continue
+		}
+	machines:
+		for _, r := range found {
+			for _, meta := range local {
+				if sameMachine(meta, &r.Meta) {
+					continue machines
+				}
+			}
+			meta := r.Meta
+			meta.Status = "remote"
+			rows = append(rows, listRow{r.Name, &meta})
+		}
+	}
+	return rows
 }
 
 // The label keys spekk puts on a machine.

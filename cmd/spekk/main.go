@@ -1052,7 +1052,7 @@ SUBCOMMANDS:
   create      Create a sandbox, or register a machine you already have
   provision   Finish a sandbox that create left at "provisioning"
   register    Register a sandbox on the control host with your API token
-  list        List all sandboxes
+  list        List sandboxes, their kind and their expiry
   status      Show status of a sandbox
   ssh         SSH into a sandbox
   destroy     Destroy a sandbox, or deregister a machine you own
@@ -1112,6 +1112,51 @@ If the sandbox had an agent before, register revokes it. Use this for a
 sandbox that was created without SPEKK_API_TOKEN.
 `
 
+// sandboxListHelpText is the help for `spekk sandbox list`.
+const sandboxListHelpText = `
+spekk sandbox list - List sandboxes
+
+USAGE:
+  spekk sandbox list [options]
+
+OPTIONS:
+  --expired     Show only the sandboxes whose expiry is in the past
+  --all-hosts   Also ask DigitalOcean and GCP for the labeled sandboxes
+                that this machine did not create, shown as "remote"
+  --help, -h    Show this help message
+
+The table shows each sandbox's kind (one-off or persistent) and its
+expiry. An expired sandbox shows EXPIRED. Expiry is a reminder only:
+spekk never destroys a sandbox because it expired.
+
+With --all-hosts, a provider that cannot be asked (no token, no gcloud,
+an API error, or a provider that does not label) gets one line on stderr
+that says why. DigitalOcean lists the droplets tagged spekk-sandbox. GCP
+lists the VMs with a spekk-kind label in the default gcloud project.
+`
+
+// listSandboxes runs `spekk sandbox list`.
+func listSandboxes(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"expired":   {Names: []string{"--expired"}, Type: cli.BoolFlag},
+		"all-hosts": {Names: []string{"--all-hosts"}, Type: cli.BoolFlag},
+		"help":      {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Print(sandboxListHelpText)
+		return
+	}
+	if flags.Err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", flags.Err)
+		os.Exit(1)
+	}
+	opts := sandbox.ListOptions{Expired: flags.Bool("expired"), AllHosts: flags.Bool("all-hosts")}
+	if err := sandbox.List(opts); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
 // launchSandbox manages cloud sandbox environments.
 // Subcommands: create, provision, register, list, status, ssh, destroy, deploy.
 func launchSandbox(args []string) {
@@ -1131,10 +1176,7 @@ func launchSandbox(args []string) {
 	case "register":
 		registerSandbox(subArgs)
 	case "list":
-		if err := sandbox.List(sandbox.ListOptions{}); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
-		}
+		listSandboxes(subArgs)
 	case "status":
 		if len(subArgs) == 0 {
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox status <name>")

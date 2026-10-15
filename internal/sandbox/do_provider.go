@@ -192,3 +192,26 @@ func (p *DOProvider) Label(meta *SandboxMeta, labels map[string]string) error {
 	}
 	return errors.Join(errs...)
 }
+
+// ListLabeled lists the droplets with the spekk-sandbox tag, which every
+// droplet spekk creates carries. A droplet without a spekk-kind tag was
+// created before labels existed, and reads as persistent.
+func (p *DOProvider) ListLabeled() ([]RemoteSandbox, error) {
+	droplets, err := p.client.ListDroplets("spekk-sandbox")
+	if err != nil {
+		return nil, err
+	}
+	var found []RemoteSandbox
+	for _, d := range droplets {
+		labels := map[string]string{}
+		for _, tag := range d.Tags {
+			if k, v, ok := strings.Cut(tag, ":"); ok {
+				labels[k] = v
+			}
+		}
+		meta := SandboxMeta{Provider: p.Name(), DropletID: d.ID, IP: d.PublicIP(), Region: d.Region.Slug, CreatedAt: d.CreatedAt}
+		metaFromLabels(&meta, labels)
+		found = append(found, RemoteSandbox{Name: strings.TrimPrefix(d.Name, "spekk-"), Meta: meta})
+	}
+	return found, nil
+}

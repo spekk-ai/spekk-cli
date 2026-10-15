@@ -466,6 +466,9 @@ func Provision(name string, opts ProvisionOptions) error {
 type ListOptions struct {
 	// Expired shows only the sandboxes whose expiry is in the past.
 	Expired bool
+	// AllHosts also lists the labeled machines that the providers report
+	// and no local record names, for example those another machine made.
+	AllHosts bool
 }
 
 // listRow is one sandbox in the list table.
@@ -476,20 +479,26 @@ type listRow struct {
 
 // List displays the sandboxes in a table, sorted by name.
 func List(opts ListOptions) error {
-	return list(os.Stdout, opts, time.Now())
+	return list(os.Stdout, os.Stderr, opts, time.Now())
 }
 
-func list(out io.Writer, opts ListOptions, now time.Time) error {
+func list(out, errOut io.Writer, opts ListOptions, now time.Time) error {
 	sandboxes, err := LoadSandboxes()
 	if err != nil {
 		return err
 	}
-	var rows []listRow
+	var all []listRow
 	for name, meta := range sandboxes {
-		if opts.Expired && !meta.Expired(now) {
-			continue
+		all = append(all, listRow{name, meta})
+	}
+	if opts.AllHosts {
+		all = append(all, remoteRows(sandboxes, errOut)...)
+	}
+	var rows []listRow
+	for _, r := range all {
+		if !opts.Expired || r.meta.Expired(now) {
+			rows = append(rows, r)
 		}
-		rows = append(rows, listRow{name, meta})
 	}
 	if len(rows) == 0 {
 		if opts.Expired {

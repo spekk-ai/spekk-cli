@@ -53,7 +53,7 @@ func TestLegacyRegistryListsAsPersistentAndSavesUnchanged(t *testing.T) {
 	before := readRecords(t, path)
 
 	var out bytes.Buffer
-	if err := list(&out, ListOptions{}, time.Now()); err != nil {
+	if err := list(&out, io.Discard, ListOptions{}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"borrowed-box", "do-box", "gcp-box"} {
@@ -141,17 +141,22 @@ func TestSandboxLabels(t *testing.T) {
 	}
 }
 
-// labelingProvider is a fake cloud that records the labels it gets.
+// labelingProvider is a fake cloud that records the labels it gets and
+// reports the machines it was given.
 type labelingProvider struct {
 	recordingProvider
 	labels   map[string]string
 	labelErr error
+	machines []RemoteSandbox
+	listErr  error
 }
 
 func (l *labelingProvider) Label(meta *SandboxMeta, labels map[string]string) error {
 	l.labels = labels
 	return l.labelErr
 }
+
+func (l *labelingProvider) ListLabeled() ([]RemoteSandbox, error) { return l.machines, l.listErr }
 
 // stubHostname makes createdBy the same on every machine that runs a test.
 func stubHostname(t *testing.T) {
@@ -304,5 +309,158 @@ func TestCreateOneOffOnAnExistingMachine(t *testing.T) {
 	}
 	if strings.Contains(strings.ToLower(out), "label") {
 		t.Errorf("an existing machine has no labels, but create said:\n%s", out)
+	}
+}
+
+// list shows the kind and the expiry, --expired filters, and --all-hosts
+// adds the labeled machines that no local record names. A provider that
+// cannot be asked gets one line, and the list still prints.
+func TestListExpiredAndAllHosts(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	for name, meta := range map[string]*SandboxMeta{
+		"agent-box":  {Provider: "digitalocean", DropletID: 1, Status: "active"},
+		"old-task":   {Provider: "digitalocean", DropletID: 2, Status: "active", Kind: KindOneOff, ExpiresAt: "2026-10-19T00:00:00Z"},
+		"fresh-task": {Provider: ProviderNone, IP: "203.0.113.10", Status: "active", Kind: KindOneOff, ExpiresAt: "2026-10-22T00:00:00Z"},
+	} {
+		if err := SaveSandbox(name, meta); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	do := &labelingProvider{machines: []RemoteSandbox{
+		// The same droplet as the local old-task: not listed twice.
+		{Name: "old-task", Meta: SandboxMeta{Provider: "digitalocean", DropletID: 2, Kind: KindOneOff}},
+		{Name: "their-task", Meta: SandboxMeta{Provider: "digitalocean", DropletID: 3, Kind: KindOneOff, ExpiresAt: "2026-10-18T00:00:00Z", CreatedBy: "build-host"}},
+		{Name: "their-agent", Meta: SandboxMeta{Provider: "digitalocean", DropletID: 4}},
+	}}
+	orig := providerByName
+	providerByName = func(name string) (Provider, error) {
+		switch name {
+		case "digitalocean":
+			return do, nil
+		case ProviderGCP:
+			return nil, errors.New("gcloud is not on PATH")
+		}
+		return nil, nil
+	}
+	t.Cleanup(func() { providerByName = orig })
+
+	run := func(opts ListOptions) (string, string) {
+		t.Helper()
+		var out, errOut bytes.Buffer
+		if err := list(&out, &errOut, opts, now); err != nil {
+			t.Fatal(err)
+		}
+		return out.String(), errOut.String()
+	}
+
+	out, _ := run(ListOptions{})
+	if !strings.Contains(lineWith(out, "old-task"), "EXPIRED 2026-10-19T00:00:00Z") {
+		t.Errorf("old-task is not flagged expired:\n%s", out)
+	}
+	if line := lineWith(out, "fresh-task"); !strings.Contains(line, " one-off ") || strings.Contains(line, "EXPIRED") {
+		t.Errorf("fresh-task row = %q", line)
+	}
+	if strings.Index(out, "agent-box") > strings.Index(out, "fresh-task") {
+		t.Errorf("rows are not sorted by name:\n%s", out)
+	}
+	if strings.Contains(out, "their-") {
+		t.Errorf("list without --all-hosts shows remote machines:\n%s", out)
+	}
+
+	out, _ = run(ListOptions{Expired: true})
+	if lineWith(out, "old-task") == "" || lineWith(out, "fresh-task") != "" || lineWith(out, "agent-box") != "" {
+		t.Errorf("--expired shows the wrong rows:\n%s", out)
+	}
+
+	out, errOut := run(ListOptions{AllHosts: true})
+	if line := lineWith(out, "their-task"); !strings.Contains(line, " remote ") || !strings.Contains(line, "EXPIRED") {
+		t.Errorf("their-task row = %q, want remote and expired", line)
+	}
+	if line := lineWith(out, "their-agent"); !strings.Contains(line, " persistent ") || !strings.Contains(line, " remote ") {
+		t.Errorf("their-agent row = %q, want persistent and remote", line)
+	}
+	if strings.Count(out, "old-task") != 1 {
+		t.Errorf("a remote machine that a local record names is listed twice:\n%s", out)
+	}
+	for _, want := range []string{"gcp: cannot query: gcloud is not on PATH", "none: cannot query:"} {
+		if !strings.Contains(errOut, want) {
+			t.Errorf("no line for a provider that cannot be asked: want %q in:\n%s", want, errOut)
+		}
+	}
+
+	out, _ = run(ListOptions{AllHosts: true, Expired: true})
+	if lineWith(out, "their-task") == "" || lineWith(out, "their-agent") != "" || lineWith(out, "agent-box") != "" {
+		t.Errorf("--all-hosts --expired shows the wrong rows:\n%s", out)
+	}
+
+	do.listErr = errors.New("401 Unauthorized")
+	out, errOut = run(ListOptions{AllHosts: true})
+	if !strings.Contains(errOut, "digitalocean: cannot query: 401 Unauthorized") || lineWith(out, "agent-box") == "" {
+		t.Errorf("a failed provider must print one line and leave the local list:\nout:\n%s\nerr:\n%s", out, errOut)
+	}
+}
+
+// DigitalOcean reports every droplet with the spekk-sandbox tag, across
+// pages, and reads the kind fields from its tags.
+func TestDOProviderListLabeled(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/droplets" || r.URL.Query().Get("tag_name") != "spekk-sandbox" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL)
+		}
+		var droplets []map[string]any
+		if r.URL.Query().Get("page") == "1" {
+			for i := 0; i < 200; i++ {
+				droplets = append(droplets, map[string]any{"id": 1000 + i, "name": fmt.Sprintf("spekk-filler-%d", i)})
+			}
+		} else {
+			droplets = append(droplets, map[string]any{
+				"id": 42, "name": "spekk-their-task", "created_at": "2026-10-15T08:00:00Z",
+				"region":   map[string]any{"slug": "ams3"},
+				"tags":     []string{"spekk-sandbox", "spekk-kind:one-off", "spekk-expires:2026-10-18", "spekk-host:build-host"},
+				"networks": map[string]any{"v4": []map[string]any{{"ip_address": "198.51.100.9", "type": "public"}}},
+			})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"droplets": droplets})
+	}))
+	defer ts.Close()
+
+	found, err := (&DOProvider{client: NewClientWithToken("tok", ts.URL)}).ListLabeled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 201 {
+		t.Fatalf("found %d droplets, want 201 across two pages", len(found))
+	}
+	got := found[200]
+	want := RemoteSandbox{Name: "their-task", Meta: SandboxMeta{Provider: "digitalocean", DropletID: 42, IP: "198.51.100.9", Region: "ams3", CreatedAt: "2026-10-15T08:00:00Z", Kind: KindOneOff, ExpiresAt: "2026-10-18T00:00:00Z", CreatedBy: "build-host"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("droplet = %+v, want %+v", got, want)
+	}
+}
+
+// GCP reports the labeled VMs in the default project.
+func TestGCPProviderListLabeled(t *testing.T) {
+	fakeGcloud(t, func(cmd string) (string, error) {
+		switch cmd {
+		case "config get-value project":
+			return "proj-a", nil
+		case "compute instances list --project proj-a --filter labels.spekk-kind:* --format json":
+			return `[{"name": "spekk-their-task", "zone": "https://www.googleapis.com/compute/v1/projects/proj-a/zones/us-east1-b",
+				"creationTimestamp": "2026-10-15T01:00:00.000-07:00",
+				"labels": {"spekk-kind": "one-off", "spekk-expires": "2026-10-18", "spekk-host": "build-host"},
+				"networkInterfaces": [{"accessConfigs": [{"natIP": "192.0.2.50"}]}]}]`, nil
+		}
+		return "", fmt.Errorf("unexpected gcloud %s", cmd)
+	})
+	found, err := (&GCPProvider{}).ListLabeled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []RemoteSandbox{{Name: "their-task", Meta: SandboxMeta{Provider: ProviderGCP, GCPInstance: "spekk-their-task", Project: "proj-a", Region: "us-east1-b", IP: "192.0.2.50", CreatedAt: "2026-10-15T08:00:00Z", Kind: KindOneOff, ExpiresAt: "2026-10-18T00:00:00Z", CreatedBy: "build-host"}}}
+	if !reflect.DeepEqual(found, want) {
+		t.Errorf("found %+v, want %+v", found, want)
 	}
 }
