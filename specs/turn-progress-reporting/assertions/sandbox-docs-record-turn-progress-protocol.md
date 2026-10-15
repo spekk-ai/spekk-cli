@@ -3,7 +3,7 @@ id: sandbox-docs-record-turn-progress-protocol
 parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 2
-status: not_started
+status: done
 branch: feat/turn-progress-client
 depends-on: sandbox-protocol-version-1-1
 ---
@@ -23,3 +23,5 @@ depends-on: sandbox-protocol-version-1-1
 - The document records the rollout order — the control host accepts and attributes `turn_keepalive` before any agent emits it — and notes that the `terminal` field carries no such requirement because absent means `true`.
 - The control-host responsibilities table gains the two matching obligations: attribute `turn_keepalive` to a turn, and read `terminal` from the `result` frame.
 - Nothing in the document names the control host's implementation stack, its repository, a specific private hostname, or its internal admin URL structure, per `specs/sandbox-public-boundary/`.
+
+**Done note (2026-10-15).** The document lists `turn_keepalive` in the frame table, and it states that the agent does not send the frame yet, because the control host does not accept it yet.
