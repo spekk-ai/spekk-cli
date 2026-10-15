@@ -3,8 +3,8 @@ id: claude-stream-shapes-pinned-by-fixtures
 parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 1
-status: not_started
-branch: feature/turn-progress-reporting
+status: done
+branch: feat/turn-progress-client
 ---
 
 # The Claude Event Shapes This Client Depends On Are Pinned by Captured Fixtures
@@ -28,3 +28,5 @@ This assertion establishes the decoding layer and its safe fallback. Nothing her
 - The decoder recognises **no** top-level `tool_use` or `tool_result` event type. A fixture-backed test asserts that no captured stream contains either, so the dead shape in `internal/serve/serve.go` is not reproduced here.
 - Decoding is a pure function of one line plus prior state. It performs no I/O and writes no frames, so it is testable without a websocket or a claude process.
 - Tests replay each fixture end to end and assert the decoded event sequence, so an upstream shape change fails the build with a message naming the event that stopped being recognised.
+
+**Tests:** `cmd/sandbox/turn_test.go`

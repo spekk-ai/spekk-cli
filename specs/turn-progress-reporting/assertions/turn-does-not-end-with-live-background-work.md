@@ -4,7 +4,7 @@ parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 3
 status: draft
-branch: feature/turn-progress-reporting
+branch: feat/turn-progress-client
 depends-on: result-frame-declares-terminal
 ---
 

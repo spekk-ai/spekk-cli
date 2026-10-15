@@ -4,7 +4,7 @@ parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 1
 status: in_progress
-branch: feature/turn-progress-reporting
+branch: feat/turn-progress-client
 depends-on: turn-inflight-tool-calls-tracked
 ---
 

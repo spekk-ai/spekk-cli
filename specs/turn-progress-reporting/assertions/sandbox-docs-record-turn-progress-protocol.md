@@ -4,7 +4,7 @@ parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 2
 status: not_started
-branch: feature/turn-progress-reporting
+branch: feat/turn-progress-client
 depends-on: sandbox-protocol-version-1-1
 ---
 
