@@ -35,10 +35,10 @@ The token comes from the `SPEKK_AGENT_TOKEN` environment variable on the sandbox
 
 ## Protocol version
 
-The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. The version is `1.0`.
+The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. This agent declares `1.1`.
 
-1. **The client declares.** Every dial sends an `X-Spekk-Protocol: 1.0` header next to the `Authorization` header.
-2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field:
+1. **The client declares.** Every dial sends an `X-Spekk-Protocol: 1.1` header next to the `Authorization` header.
+2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field. That version can be different from the agent's version. For example, a control host that speaks `1.0` replies to a `1.1` agent with:
 
 ```json
 {
@@ -53,6 +53,8 @@ The agent and the control host share one WebSocket contract: the message types, 
 Either side can update first. An old agent sends no header, and the control host accepts it as a legacy client. A new agent against an old control host receives no `welcome` frame and continues.
 
 **Version rules:** a change that breaks a message type, a frame field, or a close code bumps the major. An addition bumps the minor.
+
+Version `1.1` is additive. It adds only the `terminal` field to the `result` frame (see [Turn progress](#turn-progress)). No existing frame loses a field or changes its meaning, so a `1.0` side and a `1.1` side work together. The `turn_keepalive` frame type is reserved for version `1.2`.
 
 ## Message protocol
 
@@ -88,8 +90,8 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 
 | Type | Purpose | Fields |
 |------|---------|--------|
-| `stream` | One line of Claude's streaming JSON output | `data` |
-| `result` | Claude finished with exit code 0 | `session_id`, `agent_session_id`, `output` |
+| `stream` | One line of Claude's streaming JSON output | `data`, `agent_session_id` |
+| `result` | Claude finished with exit code 0 | `session_id`, `agent_session_id`, `output`, `terminal` |
 | `error` | Something went wrong | `error`, `detail`, `agent_session_id` |
 | `heartbeat` | Keep-alive, every 30 seconds | none |
 | `conversation_open` | Ask for a conversation with a person (from the spool) | `session_id`, `title`, `body`, `severity` |
@@ -129,8 +131,24 @@ claude -p - --output-format stream-json --verbose --include-partial-messages --d
 - When the frame has a `session_id`, the agent appends `--resume <session_id>` to continue that Claude session.
 - The working directory is the configured workspace (default: `/opt/spekk/workspace`).
 - Each line of stdout goes back to the control host as a `stream` frame.
-- When Claude exits with code 0, the agent sends a `result` frame with the session id and the output text.
+- When Claude exits with code 0, the agent sends a `result` frame with the session id, the output text, and `terminal`.
 - When Claude exits with an error, the agent sends an `error` frame with up to 2000 characters of stderr.
+
+## Turn progress
+
+Two facts about a turn are visible only to the agent: whether the turn is still working, and whether it ended the task or only yielded. The agent reads both from structured fields of Claude's stream. It never reads the agent's words, and it never asks the agent about itself.
+
+### `terminal` on the result frame
+
+The `result` frame always carries `terminal`, a JSON boolean. It is `false` when a background task that the turn started was still live at the last `result` event of the Claude process, and `true` otherwise. `false` means the turn yielded: the agent gave its last word while work that it started was still live, and no later result shows that it saw how that work ended. The agent always sends the field. A control host reads an absent field as `true`, which is what an agent older than `1.1` means.
+
+The `terminal` field needs no rollout order, because an absent field means `true`. Either side can update first.
+
+### `turn_keepalive` (reserved for version 1.2)
+
+The agent heartbeat is connection-scoped and says nothing about a turn, so without a turn-scoped signal a long tool call is indistinguishable from a hang. A planned `turn_keepalive` frame will fill that gap. It will carry the `agent_session_id` of the turn, and the agent will send it only while a tool call of that turn is in flight. It comes with version `1.2`.
+
+The control host must accept and attribute `turn_keepalive` before any agent sends it. A control host that does not know a frame type logs it and replies with an `error` frame. This agent does not send `turn_keepalive`.
 
 ## Conversation spool
 
@@ -184,6 +202,7 @@ A control host that works with the agent must provide:
 | **Authentication** | Validate the `Authorization: Bearer <token>` header |
 | **Protocol handshake** | Read the `X-Spekk-Protocol` header, send a `welcome` frame with its own version, and close with code `4004` on a major-version mismatch. A dial with no header is a legacy client |
 | **Inbound frames** | Handle `stream`, `result`, `error`, `heartbeat`, and `conversation_open` from the agent |
+| **Turn result** | Read `terminal` from the `result` frame. An absent field means `true` |
 | **Outbound frames** | Send `welcome`, `message`, `cancel`, `heartbeat_ack`, and `error` to the agent |
 | **Attachments** | Serve `GET /api/agents/attachments/<id>/download/` with Bearer authentication, when attachments are used |
 | **Session routing** | Assign unique `agent_session_id` values and track which sessions are active |

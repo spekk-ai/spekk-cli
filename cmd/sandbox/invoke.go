@@ -114,6 +114,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	// Stream stdout line by line
 	var lastSessionID, lastResultText string
 	var lastResultIsError bool
+	var progress turnProgress
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 10*1024*1024), 10*1024*1024)
 	for scanner.Scan() {
@@ -131,6 +132,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 
 		var event map[string]any
 		if json.Unmarshal([]byte(line), &event) == nil {
+			progress.observe(event)
 			if sessionID == "" {
 				if sid, ok := event["session_id"].(string); ok && sid != "" {
 					sessionID = sid
@@ -170,11 +172,14 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		return
 	}
 
+	// terminal is always sent, as a JSON boolean. The control host reads an
+	// absent field as true only for clients that predate it.
 	reportTurnEnd(ctx, conns, msg.AgentSessionID, map[string]any{
 		"type":             "result",
 		"session_id":       lastSessionID,
 		"agent_session_id": msg.AgentSessionID,
 		"output":           lastResultText,
+		"terminal":         progress.terminal(),
 	})
 	log.Printf("Claude finished: session=%s", lastSessionID)
 }
