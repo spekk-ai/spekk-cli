@@ -57,4 +57,5 @@ The writable schedule fields are `slug`, `cron_expression`, `timezone`, `task_te
 7. [destroy-revokes-first](assertions/destroy-revokes-first.md) - `destroy` revokes the agent before it touches the machine
 8. [schedule-commands](assertions/schedule-commands.md) - `spekk schedule list|create|update|delete|run <agent>`
 9. [no-cloud-credential-to-control-host](assertions/no-cloud-credential-to-control-host.md) - No request to the control host carries a cloud or model credential
-10. [docs-self-register](assertions/docs-self-register.md) - The CLI reference and the configuration page describe the new behavior
+10. [organization-hint](assertions/organization-hint.md) - A refused organization tells the user to pass `--organization <id>`, and where to find the id
+11. [docs-self-register](assertions/docs-self-register.md) - The CLI reference and the configuration page describe the new behavior
