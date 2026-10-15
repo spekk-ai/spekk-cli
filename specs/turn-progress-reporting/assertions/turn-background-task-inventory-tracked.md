@@ -24,8 +24,7 @@ The process tree cannot answer this question. Claude Code's `Bash` tool `setsid(
 - The count is derived from snapshots only. It is never computed by adding starts and subtracting finishes, because a dropped event in that scheme is permanent.
 - A turn that never starts a background task has a count of zero throughout.
 - No inspection of prose decides the count. In particular the tool-result text that announces a background command, and any `output_file` path, are never parsed. `run_in_background` in a tool input and `backgroundTaskId` in a tool result are structured fields and may be read, but the inventory snapshot is what the count comes from.
-- A fixture replay of the yielding scenario shows the count non-empty at the turn's `result` event and back to zero only after Claude Code kills the task.
-- A fixture replay of the completing scenario shows the count non-empty at the first `result` event and zero at the second.
-- Tests cover: no background task at all; one task started and still live at stream end; one task started and finished before stream end; a snapshot arriving with an empty `tasks[]` array after a non-empty one.
+- A fixture replay of each background scenario shows the count non-empty at the first `result` event and zero at the second. In one scenario the task completes. In the other, Claude Code stops it at its time limit.
+- Tests cover: no background task at all (the foreground fixture); one task started and finished before stream end (the background fixtures); a snapshot arriving with an empty `tasks[]` array after a non-empty one (a unit test). A task still live at a `result` is covered by the fixture replays and by `TestResultFrameDeclaresTerminal`.
 
 **Tests:** `cmd/sandbox/turn_test.go`

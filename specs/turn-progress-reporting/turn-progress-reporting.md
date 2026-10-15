@@ -45,11 +45,12 @@ The contrasting case resolves correctly under the same rule. A turn that started
 
 ### Re-measured on Claude Code 2.1.301 (2026-10-15)
 
-The fixtures in `cmd/sandbox/testdata/` come from Claude Code 2.1.301. The shapes this spec reads did not change. Three details are new:
+The fixtures in `cmd/sandbox/testdata/` are complete, logged-in `claude -p` runs of Claude Code 2.1.301. The shapes this spec reads did not change. The behavior after a `result` did change:
 
-- A long foreground `Bash` call now emits `task_started` with `"is_backgrounded": false` when it starts, and `task_notification` when it ends. Nothing comes between them, so the call is still silent while it runs. The `background_tasks_changed` inventory never lists a foreground call. This confirms that the count must come from the inventory snapshot and not from `task_started` events.
+- **Claude Code no longer kills a background task right after the `result`.** The process stays alive while the task runs. When the task ends, Claude Code sends an empty inventory, starts a new turn in the same process (a second `init` event), and the agent sends a second `result`. A task that runs too long is stopped at a 600-second background limit (`task_updated` with `patch.status: "killed"`, then `task_notification` with `status: "stopped"`), and the agent reports the stop in the second `result`. In all three recorded scenarios, the inventory is empty at the last `result`, so the client sends `terminal: true`. The rule in this spec is unchanged, and on this version the agent sees how each task ended.
+- Claude Code 2.1.197 kills the task about 5 seconds after the `result` and sends no second `result`, as 2.1.226 did. It sends no `background_tasks_changed` event, so the inventory reads zero and the client sends `terminal: true`. This is the safe fallback: the client reports less, not a wrong verdict.
+- A long foreground `Bash` call emits `task_started` with `"is_backgrounded": false` when it starts, and `task_notification` when it ends. Nothing comes between them, so the call is still silent while it runs. The `background_tasks_changed` inventory never lists a foreground call. This confirms that the count must come from the inventory snapshot and not from `task_started` events.
 - The `result` event carries `result_index`, which counts the results of one process from zero.
-- A stopped background task emits `task_updated` with `patch.status: "killed"`, then `task_notification` with `status: "stopped"`, then an empty inventory.
 
 ## Decision
 
@@ -83,7 +84,7 @@ The control host accepts an absent `terminal` as `true`, so that half is backwar
 
 The keepalive frame is not covered by that guarantee, and the order is not negotiable. The control host must accept and attribute a `turn_keepalive` frame **before** any client emits one. A new frame type sent to a host that does not know it is at best ignored and at worst an error, and this project has already taken one production outage — 2026-08-07, on the control host — from deploying one side of a contract change ahead of the other. The safe order is: control host accepts and attributes the frame, then the client emits it.
 
-Both changes are additive — one new frame type, one new optional field, no change to any existing frame's meaning. The protocol major stays at `1` and the minor moves to `1.1`. No breaking change is needed and none is proposed.
+Both changes are additive: one new frame type, one new optional field, and no change to the meaning of an existing frame. The protocol major stays at `1`. Each change gets its own minor, because they ship at different times: `1.1` adds the `terminal` field only, and `1.2` adds `turn_keepalive`. One minor for both would give a client that sends the keepalive and a control host that does not accept it the same version. No breaking change is needed and none is proposed.
 
 ## Rejected
 

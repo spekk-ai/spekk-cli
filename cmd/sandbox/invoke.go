@@ -114,7 +114,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	// Stream stdout line by line
 	var lastSessionID, lastResultText string
 	var lastResultIsError bool
-	progress := newTurnProgress()
+	var progress turnProgress
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 10*1024*1024), 10*1024*1024)
 	for scanner.Scan() {
@@ -130,10 +130,9 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		// additive, and the protocol version does not change.
 		conns.send(ctx, map[string]any{"type": "stream", "data": line, "agent_session_id": msg.AgentSessionID})
 
-		progress.observe([]byte(line))
-
 		var event map[string]any
 		if json.Unmarshal([]byte(line), &event) == nil {
+			progress.observe(event)
 			if sessionID == "" {
 				if sid, ok := event["session_id"].(string); ok && sid != "" {
 					sessionID = sid

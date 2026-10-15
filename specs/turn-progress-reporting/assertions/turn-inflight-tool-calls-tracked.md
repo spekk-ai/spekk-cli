@@ -3,7 +3,7 @@ id: turn-inflight-tool-calls-tracked
 parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 1
-status: done
+status: not_started
 branch: feat/turn-progress-client
 depends-on: claude-stream-shapes-pinned-by-fixtures
 ---
@@ -18,6 +18,7 @@ This assertion establishes the fact. Sending it to the control host is a separat
 
 ## Success Criteria
 
+- The decoder recognizes a tool call starting as an `assistant` event that carries a `message.content[]` block of `"type": "tool_use"`, and captures the block's `id`. It recognizes a tool call ending as a `user` event that carries a `message.content[]` block of `"type": "tool_result"`, and captures the block's `tool_use_id`. A block with no id, or an id that is not a string, observes nothing.
 - The client maintains, per invocation, the set of tool-call ids that have started and not yet ended.
 - A decoded tool-call start adds its `id` to the set. A decoded tool-call end removes the id matching its `tool_use_id`.
 - Pairing is by id only. Neither counting nor ordering is used, because several tool calls may be in flight at once and their results may return in any order.
@@ -30,4 +31,4 @@ This assertion establishes the fact. Sending it to the control host is a separat
 
 **Tests:** `cmd/sandbox/turn_test.go`
 
-The per-invocation scope has no unit test, because a test of it only creates a new value. `invoke` holds the `turnProgress` in a local variable, so each invocation starts with an empty set and drops it when the stream ends.
+**Status note (2026-10-15) - moved out of the first pull request.** Only `turn-keepalive-frame-sent-during-tool-calls` reads the in-flight set, and that frame waits for a control-host change. A review of the first pull request asked to keep code that production does not use out of it. The tool-call decoding, the in-flight set, and `working()` were therefore removed before merge. Build them again together with the keepalive, in the same pull request.

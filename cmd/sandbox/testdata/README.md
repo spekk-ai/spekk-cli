@@ -1,22 +1,28 @@
 # Claude Code stream fixtures
 
-These files pin the Claude Code `stream-json` shapes that the sandbox client reads (`specs/turn-progress-reporting/`). `turn_test.go` replays each file. A change in a shape upstream makes a test fail and name the event that is no longer recognized.
+These files pin the Claude Code `stream-json` shapes that the sandbox client reads (`specs/turn-progress-reporting/`). `turn_test.go` replays each file. A change in a shape upstream makes a test fail and name the event that is no longer recognized. `invoke_test.go` replays the `.partial.jsonl` files through the whole client.
 
-Every line is a real line from Claude Code 2.1.301. The first line of each file is the `init` event, and its `claude_code_version` field records the version. A new capture must keep this rule.
+Each file is one complete, logged-in run of Claude Code 2.1.301, with the order of the lines unchanged:
 
-| File | Scenario |
-|------|----------|
-| `foreground-tool-calls.jsonl` | A 20-second foreground `Bash` call, with two shorter calls that overlap it and end in reverse order. Nothing comes between the start and the end of the long call, other than its own `task_started` and `task_notification`. |
-| `background-task-outlives-turn.jsonl` | A background task that is still in the inventory at the `result` event. The task is killed after the result. |
-| `background-task-finishes-before-second-result.jsonl` | A background task that finishes after the first `result` event, and a second `result` event with an empty inventory. |
+```
+claude -p - --output-format stream-json --verbose --dangerously-skip-permissions
+```
 
-## How the files were made
+The `.partial.jsonl` file of each scenario is a second run with `--include-partial-messages` added. These are the flags that the client passes to claude.
 
-The build machine had no Claude login, so it could not run a complete `claude -p` turn. The lines come from two sources on that machine:
+| Scenario | Prompt | What the run shows |
+|------|---------|--------|
+| `foreground-tool-calls` | Run `sleep 20`, `sleep 6`, and `sleep 1` as three parallel foreground `Bash` calls. | No inventory snapshot, and one `result`. |
+| `background-task-stopped-at-time-limit` | Start `sleep 600` in the background, end the turn, and do not wait. | A `result` while the task is in the inventory. Claude Code keeps the process alive, stops the task at its 600-second background limit (`task_updated` with `patch.status: "killed"`, `task_notification` with `status: "stopped"`), sends an empty inventory, and starts a new turn. The agent reports the stop in a second `result`. |
+| `background-task-finishes-before-second-result` | Start `sleep 15` in the background, end the turn, and reply again when it finishes. | A `result` while the task is in the inventory. The task completes, the inventory is empty, and a second `result` follows. |
 
-- The tool call, tool result, and `system` task lines come in their original order from a logged-in Claude Code 2.1.301 session that ran with `--output-format stream-json --verbose`. The commands in them are neutral `sleep` commands.
-- The `init` and `result` lines come from `claude -p - --output-format stream-json --verbose` runs of the same binary without a login. Their `result` text is the login error. The client reads only the `type` of a `result` event, so this does not change what the tests prove. The two `result` lines in the last file come from two different runs, so their `session_id` values are different.
+## Edits
 
-The only edit is the home directory: `/home/<user>` is replaced with `/home/user`.
+The only edits are these replacements:
 
-These captures do not include `--include-partial-messages`, which the client passes to claude. That flag adds `stream_event` lines. The decoder does not read them, and a test asserts that such a line observes nothing.
+- The home directory is `/home/user`, and the working directory is `/tmp/fixture-work`.
+- Each `msg_` message id and `req_` request id is a fake id, such as `msg_fixture0001`. The same real id always gets the same fake id.
+
+## A shape that these files do not show
+
+Claude Code 2.1.226 killed a background task a few seconds after the `result` and exited with no second `result`. Claude Code 2.1.197 does the same, and it also sends no `background_tasks_changed` event. 2.1.301 does not show that shape, so no file here records it. `TestResultFrameDeclaresTerminal` tests it with a short stream that it writes itself.

@@ -17,16 +17,17 @@ This assertion establishes the decoding layer and its safe fallback. Nothing her
 
 ## Success Criteria
 
-- Captured `stream-json` fixtures live under `cmd/sandbox/testdata/`, made of real lines from a real `claude --output-format stream-json --verbose` run, one file per scenario: a turn with a long foreground tool call; a turn that starts a background task and ends while it is still running; a turn that starts a background task and reports a second `result` after it finishes. `cmd/sandbox/testdata/README.md` records where each line comes from.
-- Each fixture records the Claude Code version it was captured from.
-- A decoder in `cmd/sandbox` turns one raw stream line into a typed value naming only the events this client needs: a tool call starting, a tool call ending, a background-task inventory snapshot, and a turn result.
-- A tool call starting is recognised as an `assistant` event carrying a `message.content[]` block of `"type": "tool_use"`, and the block's `id` is captured.
-- A tool call ending is recognised as a `user` event carrying a `message.content[]` block of `"type": "tool_result"`, and the block's `tool_use_id` is captured.
+- Captured `stream-json` fixtures live under `cmd/sandbox/testdata/`. Each file is one complete, logged-in `claude -p --output-format stream-json --verbose` run, with its lines in their original order, one file per scenario: a turn with a long foreground tool call; a turn that starts a background task that outlives the first `result`; a turn that starts a background task and reports a second `result` after it finishes. Each scenario is recorded a second time with `--include-partial-messages`, because the client passes that flag. `cmd/sandbox/testdata/README.md` records the command, the prompt, and the edits.
+- The only edits to a fixture are fake values for home paths, the working directory, `request_id`, and message ids.
+- Each fixture records the Claude Code version it was captured from, in its `init` event.
+- A decoder in `cmd/sandbox` turns one decoded stream line into a typed value naming only the events this client needs: a background-task inventory snapshot and a turn result. Each stream line is decoded as JSON once, in `invoke`, and the decoder reads that value.
 - A background-task inventory snapshot is recognised as a `system` event of `subtype: "background_tasks_changed"`, and the length of its `tasks[]` array is captured.
 - A turn result is recognised as a top-level `result` event.
 - **Unrecognised input degrades to silence, never to a verdict.** A line that is not valid JSON, an event of an unknown `type` or `subtype`, an event missing an expected field, and a field of an unexpected JSON type each decode to "nothing observed". The decoder never returns an error that ends the turn and never panics. This is what keeps a future Claude Code release from turning a working sandbox into one that reports wrong outcomes.
-- The decoder recognises **no** top-level `tool_use` or `tool_result` event type. A fixture-backed test asserts that no captured stream contains either, so the dead shape in `internal/serve/serve.go` is not reproduced here.
-- Decoding is a pure function of one line plus prior state. It performs no I/O and writes no frames, so it is testable without a websocket or a claude process.
+- The decoder recognises **no** top-level `tool_use` or `tool_result` event type, so the dead shape in `internal/serve/serve.go` is not reproduced here.
+- Decoding is a pure function of one decoded line. It performs no I/O and writes no frames, so it is testable without a websocket or a claude process.
 - Tests replay each fixture end to end and assert the decoded event sequence, so an upstream shape change fails the build with a message naming the event that stopped being recognised.
 
 **Tests:** `cmd/sandbox/turn_test.go`
+
+**Note (2026-10-15).** The decoding of tool-call starts and ends moved to `turn-inflight-tool-calls-tracked`, because only the keepalive reads it. The first fixtures were assembled from lines of several runs. They were replaced with complete runs.
