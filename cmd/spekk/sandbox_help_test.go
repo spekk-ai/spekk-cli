@@ -25,6 +25,21 @@ func TestSandboxHelpListsEverySubcommand(t *testing.T) {
 	}
 }
 
+// TestSandboxHelpNamesKindFlags pins the create and list help to the flags
+// that mark and find one-off sandboxes.
+func TestSandboxHelpNamesKindFlags(t *testing.T) {
+	for _, want := range []string{"--one-off", "--expires", "--purpose"} {
+		if !strings.Contains(sandboxCreateHelpText, "\n  "+want+" ") {
+			t.Errorf("sandboxCreateHelpText missing %q", want)
+		}
+	}
+	for _, want := range []string{"--expired", "--all-hosts"} {
+		if !strings.Contains(sandboxListHelpText, "\n  "+want+" ") {
+			t.Errorf("sandboxListHelpText missing %q", want)
+		}
+	}
+}
+
 // TestScheduleHelpListsEverySubcommand pins the schedule help to the
 // subcommands RunSchedule accepts, and to the API field names.
 func TestScheduleHelpListsEverySubcommand(t *testing.T) {

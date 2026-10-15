@@ -1357,29 +1357,9 @@ func sandboxPositional(args []string, valueFlags ...string) string {
 	return ""
 }
 
-func createSandbox(args []string) {
-	flags := cli.ParseFlags(args, cli.FlagSet{
-		"name":              {Names: []string{"--name"}, Type: cli.StringFlag},
-		"provider":          {Names: []string{"--provider"}, Type: cli.StringFlag},
-		"region":            {Names: []string{"--region"}, Type: cli.StringFlag},
-		"size":              {Names: []string{"--size"}, Type: cli.StringFlag},
-		"project":           {Names: []string{"--project"}, Type: cli.StringFlag},
-		"vpc":               {Names: []string{"--vpc"}, Type: cli.StringFlag},
-		"ip":                {Names: []string{"--ip"}, Type: cli.StringFlag},
-		"ssh-key":           {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
-		"ssh-user":          {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
-		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
-		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
-		"release":           {Names: []string{"--release"}, Type: cli.StringFlag},
-		"organization":      {Names: []string{"--organization"}, Type: cli.StringFlag},
-		"one-off":           {Names: []string{"--one-off"}, Type: cli.BoolFlag},
-		"expires":           {Names: []string{"--expires"}, Type: cli.StringFlag},
-		"purpose":           {Names: []string{"--purpose"}, Type: cli.StringFlag},
-		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
-	})
-
-	if flags.Bool("help") {
-		fmt.Print(`
+// sandboxCreateHelpText is the help for `spekk sandbox create`.
+const sandboxCreateHelpText = `
+spekk sandbox create - Create a new sandbox
 spekk sandbox create - Create a new sandbox
 
 USAGE:
@@ -1424,6 +1404,22 @@ OPTIONS:
                          specific spekk release instead of the latest, e.g. an
                          exp-* prerelease. Default: the latest published release
 
+  Sandbox kind:
+  --one-off              One task, then destroy. Expires 48h after create
+                         unless --expires says when. Default: persistent,
+                         with no expiry
+  --expires <when>       Expiry of a one-off sandbox: a duration (36h),
+                         days (3d), a date (2026-10-17, 00:00 UTC), or an
+                         RFC 3339 time. Needs --one-off
+  --purpose <text>       Why the sandbox exists, kept in its record
+
+  create records the kind, purpose, expiry and host in sandboxes.json and
+  in /opt/spekk/sandbox.json on the machine. On DigitalOcean and GCP it
+  also labels the machine (spekk-kind, spekk-expires, spekk-host), so
+  "spekk sandbox list --all-hosts" on a different machine finds it. A
+  failed label is a warning. Expiry is a reminder in "spekk sandbox list";
+  spekk never destroys a sandbox because it expired.
+
   Control host registration:
   --organization <id>    Control host organization for the agent. Needed only
                          when you belong to more than one
@@ -1436,7 +1432,31 @@ OPTIONS:
   spekk does not provision a machine it did not create. The machine must
   already carry /opt/spekk/.provisioned; spekk then injects credentials
   and deploys the agent onto it.
-`)
+`
+
+func createSandbox(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"name":              {Names: []string{"--name"}, Type: cli.StringFlag},
+		"provider":          {Names: []string{"--provider"}, Type: cli.StringFlag},
+		"region":            {Names: []string{"--region"}, Type: cli.StringFlag},
+		"size":              {Names: []string{"--size"}, Type: cli.StringFlag},
+		"project":           {Names: []string{"--project"}, Type: cli.StringFlag},
+		"vpc":               {Names: []string{"--vpc"}, Type: cli.StringFlag},
+		"ip":                {Names: []string{"--ip"}, Type: cli.StringFlag},
+		"ssh-key":           {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
+		"ssh-user":          {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
+		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
+		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
+		"release":           {Names: []string{"--release"}, Type: cli.StringFlag},
+		"organization":      {Names: []string{"--organization"}, Type: cli.StringFlag},
+		"one-off":           {Names: []string{"--one-off"}, Type: cli.BoolFlag},
+		"expires":           {Names: []string{"--expires"}, Type: cli.StringFlag},
+		"purpose":           {Names: []string{"--purpose"}, Type: cli.StringFlag},
+		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(sandboxCreateHelpText)
 		return
 	}
 

@@ -225,6 +225,38 @@ Without `SPEKK_API_TOKEN`, `create` makes the token itself and prints it with a 
 
 A control host that supports this registration serves `POST /api/agents/`, `POST /api/agents/<id>/revoke/`, and the schedule routes under `/api/agents/<id>/schedules/`, with `Authorization: Token <key>` authentication.
 
+## Sandbox kinds
+
+A sandbox is one of two kinds:
+
+- **persistent** runs a long-lived agent. This is the default.
+- **one-off** is for one task, then a destroy. `spekk sandbox create --one-off` makes one, with an expiry 48 hours after the create. `--expires <duration|date>` changes the expiry, and `--purpose <text>` records why the sandbox exists.
+
+The local registry (`sandboxes.json`) is the source of truth. Registration with a control host is not necessary for any of this. Each record has four optional fields:
+
+| Field | Meaning |
+|-------|---------|
+| `kind` | `one-off` or `persistent`. Empty means `persistent`, so a record from an older CLI does not change |
+| `purpose` | The `--purpose` text |
+| `expiresAt` | The expiry, as an RFC 3339 time in UTC |
+| `createdBy` | The hostname of the machine that ran `create` |
+
+**Marker on the machine.** Credential injection also writes `/opt/spekk/sandbox.json` with the same four fields. It works on every provider, and it holds no secret.
+
+**Provider labels.** A provider that can label its machines implements the optional `Labeler` interface next to `Provider`. `create` finds it with a type assertion, and labels the machine after the provider creates it. A labeling failure is a warning, never a failed create.
+
+| Provider | Labels |
+|----------|--------|
+| DigitalOcean | Tags: `spekk-kind:one-off`, `spekk-expires:2026-10-18`, `spekk-host:<host>` |
+| GCP | Native labels: `spekk-kind=one-off`, `spekk-expires=2026-10-18`, `spekk-host=<host>` |
+| A machine you already have (`--ip`) | None. This also covers the AWS CloudFormation path, because spekk never calls AWS |
+
+Every label value obeys GCP's rules, the strictest: lowercase `[a-z0-9_-]`, 63 characters or fewer. Other characters become `-`. The expiry label is a date, rounded up to the next day, so a list that reads it never flags a sandbox early.
+
+**List.** `spekk sandbox list` shows the kind and the expiry, and marks an expired sandbox `EXPIRED`. `--expired` shows only the expired ones. `--all-hosts` also asks each labeling provider for its labeled machines, and shows those that no local record names with the status `remote`. For each provider that it cannot ask, it prints one line with the reason.
+
+**No auto-destroy.** Expiry is a reminder only. spekk never destroys a sandbox because it expired.
+
 ## Environment variables
 
 The agent binary reads its configuration from `/etc/spekk/agent.env` on the sandbox:
