@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.32.0 -- Each Stream Frame Names Its Session](RELEASE-NOTES-1.32.0.md)
+
+Each `stream` frame from the sandbox agent now carries the turn's `agent_session_id`, so a control host can attribute a line when several sessions stream at the same time.
+
 ## [1.31.1 -- A Failed Turn Says Why](RELEASE-NOTES-1.31.1.md)
 
 When `claude` fails on a sandbox, the agent's error frame and its log line now carry the cause from the final `result` event, for example a model API 503, and not only `exit status 1`.
