@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.31.1 -- A Failed Turn Says Why](RELEASE-NOTES-1.31.1.md)
+
+When `claude` fails on a sandbox, the agent's error frame and its log line now carry the cause from the final `result` event, for example a model API 503, and not only `exit status 1`.
+
 ## [1.31.0 -- A Sandbox on Google Cloud, and an Agent for arm64](RELEASE-NOTES-1.31.0.md)
 
 `spekk sandbox create --provider gcp` makes a Compute Engine VM that spekk provisions and destroys, with no service account and no project SSH keys. Each release now publishes the agent for arm64, and spekk deploys the build that matches the machine. `--release` and `spekk update --version` pin a release, and `scripts/prepare-machine.sh` prepares a machine you already have. A new droplet trusts only the key spekk generated for it, not every key on the account.
