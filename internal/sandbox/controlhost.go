@@ -89,8 +89,7 @@ func isLoopback(hostport string) bool {
 }
 
 // authorize is the one place that puts a credential on a control host
-// request. The control host will change its token model, and this is the
-// line that changes with it.
+// request, so a change to the token scheme changes this line only.
 func (c *controlHost) authorize(req *http.Request) {
 	req.Header.Set("Authorization", "Token "+c.token)
 }

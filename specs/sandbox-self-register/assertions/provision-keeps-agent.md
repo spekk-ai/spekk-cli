@@ -18,7 +18,7 @@ depends-on: register-command
 
 - When the record has an agent id, `provision` reads the current `SPEKK_AGENT_TOKEN` from `/etc/spekk/agent.env` over SSH and writes the same token back. It makes no call to the control host.
 - If it cannot read a token, it stops before it changes the machine, and it tells the user to run `spekk sandbox register <name>`.
-- When the record has no agent id and `SPEKK_API_TOKEN` is set, `provision` registers a new agent as `create` does, and revokes it if a later step fails.
+- When the record has no agent id and `SPEKK_API_TOKEN` is set, `provision` registers a new agent as `create` does, and revokes it if a later step fails. `--organization <id>` selects the organization, as it does for `create`.
 - When the record has no agent id and `SPEKK_API_TOKEN` is empty, `provision` keeps its behavior from before this spec, and also prints how to register later.
 
 ## Verification

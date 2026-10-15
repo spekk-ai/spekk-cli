@@ -156,7 +156,9 @@ func Create(p Provider, opts CreateOptions) (err error) {
 		if err != nil && meta.AgentID != "" && revokeAbandoned(meta.AgentID, opts.Name) {
 			meta.AgentID = ""
 			if namesMachine(meta) {
-				SaveSandbox(opts.Name, meta)
+				if saveErr := SaveSandbox(opts.Name, meta); saveErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not record that the agent is revoked: %s\n", saveErr)
+				}
 			}
 		}
 	}()

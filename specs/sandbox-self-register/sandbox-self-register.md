@@ -25,7 +25,7 @@ The control host never receives a cloud credential or a model credential of the 
 
 ## Contract with the control host
 
-All calls use `Authorization: Token <SPEKK_API_TOKEN>`. One function sets this header, because the control host will change its token model.
+All calls use `Authorization: Token <SPEKK_API_TOKEN>`. One function sets this header, so a change to the token scheme changes one place.
 
 | Call | Request | Response |
 |------|---------|----------|
@@ -43,7 +43,6 @@ The writable schedule fields are `slug`, `cron_expression`, `timezone`, `task_te
 
 ## Rejected
 
-- A registration-token flow in which the sandbox registers itself with a one-time token. It is out of scope, and the API token of the user already does the job.
 - A config file or a keychain for the API token. The environment variable is enough, and a stored token is one more place for a credential to leak.
 - A rename or an update of the agent from the CLI. The control host has `PATCH /api/agents/<id>/`, but no step of the sandbox life needs it.
 
