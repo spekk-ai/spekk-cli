@@ -29,3 +29,5 @@ This assertion establishes the fact. Sending it to the control host is a separat
 - Tests cover: one call in flight then closed; two overlapping calls closing in reverse order; a result for an unknown id; a stream that ends with a call still open. A fixture replay asserts the set is non-empty across the whole silent span of the long foreground tool call.
 
 **Tests:** `cmd/sandbox/turn_test.go`
+
+The per-invocation scope has no unit test, because a test of it only creates a new value. `invoke` holds the `turnProgress` in a local variable, so each invocation starts with an empty set and drops it when the stream ends.

@@ -224,13 +224,6 @@ func TestInFlightToolCalls(t *testing.T) {
 			t.Fatal("an unknown result closed call a")
 		}
 	})
-	t.Run("a call open at stream end does not reach the next turn", func(t *testing.T) {
-		p := newTurnProgress()
-		observeAll(p, toolStart("a"))
-		if next := newTurnProgress(); next.working() {
-			t.Fatal("a new turn starts busy")
-		}
-	})
 }
 
 // The long foreground call is silent from its start to its end. The set must
