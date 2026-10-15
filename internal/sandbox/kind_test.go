@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -261,5 +262,47 @@ func TestInjectScriptWritesTheMarker(t *testing.T) {
 	script := buildInjectScript("AWS_SECRET_ACCESS_KEY=s3cret\n", marker)
 	if !strings.Contains(script, "echo '"+base64.StdEncoding.EncodeToString(marker)+"' | base64 -d > "+sandboxMarker) {
 		t.Errorf("the inject script does not write the marker: %s", script)
+	}
+}
+
+// A machine you already have gets the four fields and the marker. It has no
+// provider to label it, and that is not a warning or an error.
+func TestCreateOneOffOnAnExistingMachine(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	stubCreateEnv(t)
+	stubHostname(t)
+
+	key := filepath.Join(t.TempDir(), "id_ed25519")
+	if err := os.WriteFile(key, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	origCheck := checkReady
+	checkReady = func(meta *SandboxMeta, name string) error { return nil }
+	t.Cleanup(func() { checkReady = origCheck })
+	var marker []byte
+	origEquip := equip
+	equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, artifacts *releaseArtifacts) *stageError {
+		marker = markerContent(meta)
+		return &stageError{"injecting credentials", errors.New("stop here")}
+	}
+	t.Cleanup(func() { equip = origEquip })
+
+	stderr := captureStderr(t)
+	err := Create(nil, CreateOptions{Name: "borrowed", IP: "203.0.113.10", SSHKey: key, Kind: KindOneOff, ExpiresAt: time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC), Purpose: "x"})
+	out := stderr()
+	if err == nil || !strings.Contains(err.Error(), "stop here") {
+		t.Fatalf("create stopped at %v, want the stubbed equip step", err)
+	}
+
+	got, _ := GetSandbox("borrowed")
+	if got == nil || got.Kind != KindOneOff || got.Purpose != "x" || got.ExpiresAt != "2026-10-17T00:00:00Z" || got.CreatedBy != "ops-laptop" {
+		t.Fatalf("record = %+v, want the four kind fields", got)
+	}
+	if !strings.Contains(string(marker), `"kind": "one-off"`) || !strings.Contains(string(marker), `"purpose": "x"`) {
+		t.Errorf("marker for the existing machine = %s", marker)
+	}
+	if strings.Contains(strings.ToLower(out), "label") {
+		t.Errorf("an existing machine has no labels, but create said:\n%s", out)
 	}
 }
