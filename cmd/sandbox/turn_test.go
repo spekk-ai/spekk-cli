@@ -317,3 +317,20 @@ func TestFixtureInventoryAtResults(t *testing.T) {
 		t.Errorf("completion: tasks at results = %v, at end = %d; want [1 0] and 0", at, end)
 	}
 }
+
+func TestFixtureTerminal(t *testing.T) {
+	cases := map[string]bool{
+		"foreground-tool-calls.jsonl":                         true,
+		"background-task-outlives-turn.jsonl":                 false,
+		"background-task-finishes-before-second-result.jsonl": true,
+	}
+	for name, want := range cases {
+		p := newTurnProgress()
+		for _, line := range fixtureLines(t, name) {
+			p.observe(line)
+		}
+		if got := p.terminal(); got != want {
+			t.Errorf("%s: terminal = %v, want %v", name, got, want)
+		}
+	}
+}

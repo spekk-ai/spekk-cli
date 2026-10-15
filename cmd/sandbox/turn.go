@@ -114,3 +114,20 @@ func (p *turnProgress) observe(line []byte) {
 func (p *turnProgress) working() bool {
 	return len(p.inFlight) > 0
 }
+
+// terminal reports whether the turn ended the task, for the terminal field of
+// the result frame. It is false when a background task was still in the
+// inventory at the last result event, so the agent yielded with work that
+// Claude Code kills soon after.
+//
+// The LAST result counts, not the first. A turn can emit more than one: Claude
+// Code can wait for a background task after a result, and then emit a second
+// result when the task ends. The first result of such a turn shows a live task
+// for a turn that did complete.
+//
+// Only the inventory decides. The result text, subtype, stop_reason, and
+// terminal_reason are never read: terminal_reason "completed" was seen on a
+// turn that left a background task running.
+func (p *turnProgress) terminal() bool {
+	return p.tasksAtResult == 0
+}

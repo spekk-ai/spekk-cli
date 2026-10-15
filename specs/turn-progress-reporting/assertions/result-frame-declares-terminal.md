@@ -3,7 +3,7 @@ id: result-frame-declares-terminal
 parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/turn-progress-client
 depends-on: turn-background-task-inventory-tracked
 ---
@@ -27,3 +27,5 @@ The control host already reads a `terminal` field from the `result` frame and tr
 - Tests cover, by fixture replay: a turn with no background work reports `terminal: true`; a turn that ends with a live background task reports `terminal: false`; a turn whose background task finishes before a second `result` reports `terminal: true`. A test asserts the JSON encodes a bare boolean.
 
 **Note — this direction is backward compatible, the keepalive is not.** The control host accepts an absent `terminal` as `true`, so shipping this ahead of anything else strands nobody. That guarantee covers this field only. It does not cover the new frame type in `turn-keepalive-frame-sent-during-tool-calls`, which has its own ordering requirement.
+
+**Tests:** `cmd/sandbox/turn_test.go`, `cmd/sandbox/invoke_test.go`
