@@ -31,13 +31,12 @@ func TestProvisioningInstallsNativeClaudeCode(t *testing.T) {
 		"cloud-init.yaml":    {string(cloudInitTemplate), []string{claudeInstallLine + " && " + claudeLinkLine}},
 		"prepare-machine.sh": {string(prepare), []string{"set -euo pipefail", claudeInstallLine, claudeLinkLine}},
 	} {
-		content := tc.content
 		for _, line := range tc.lines {
-			if !strings.Contains(content, line) {
+			if !strings.Contains(tc.content, line) {
 				t.Errorf("%s does not contain %q", name, line)
 			}
 		}
-		if strings.Contains(content, "npm install -g @anthropic-ai/claude-code") {
+		if strings.Contains(tc.content, "npm install -g @anthropic-ai/claude-code") {
 			t.Errorf("%s installs Claude Code from npm", name)
 		}
 	}
