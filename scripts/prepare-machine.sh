@@ -85,6 +85,8 @@ systemctl enable --now docker
 
 echo "==> Claude Code CLI (native binary)"
 # Install as agent so it owns ~agent/.local/share/claude and `claude update` works.
+# An install that is already here stays; `spekk sandbox deploy` upgrades it when
+# it is older than the minimum in internal/claudecode.
 if [ ! -x /home/agent/.local/bin/claude ]; then
   su - agent -c 'curl -fsSL https://claude.ai/install.sh | bash -s stable'
 fi

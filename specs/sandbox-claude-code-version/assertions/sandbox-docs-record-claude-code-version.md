@@ -3,7 +3,7 @@ id: sandbox-docs-record-claude-code-version
 parent: sandbox-claude-code-version
 created: 2026-10-15T21:30:00Z
 priority: 2
-status: not_started
+status: done
 branch: fix/claude-code-version
 depends-on: deploy-upgrades-outdated-claude-code
 ---
