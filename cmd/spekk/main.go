@@ -1130,7 +1130,7 @@ func launchSandbox(args []string) {
 	case "register":
 		registerSandbox(subArgs)
 	case "list":
-		if err := sandbox.List(); err != nil {
+		if err := sandbox.List(sandbox.ListOptions{}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}

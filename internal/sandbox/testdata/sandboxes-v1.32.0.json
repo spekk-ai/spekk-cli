@@ -1,0 +1,38 @@
+{
+  "borrowed-box": {
+    "provider": "none",
+    "ip": "203.0.113.10",
+    "region": "",
+    "size": "",
+    "createdAt": "2026-09-20T09:15:00Z",
+    "status": "active",
+    "sshKeyPath": "/home/operator/.ssh/borrowed-box",
+    "sshUser": "ubuntu",
+    "auth": "subscription"
+  },
+  "do-box": {
+    "provider": "digitalocean",
+    "dropletId": 512345678,
+    "ip": "198.51.100.7",
+    "region": "nyc1",
+    "size": "s-2vcpu-4gb",
+    "createdAt": "2026-09-18T14:02:11Z",
+    "status": "active",
+    "project": "sandboxes",
+    "sshKeyId": 44556677,
+    "sshKeyPath": "/home/operator/.config/spekk/keys/do-box",
+    "auth": "bedrock"
+  },
+  "gcp-box": {
+    "provider": "gcp",
+    "gcpInstance": "spekk-gcp-box",
+    "ip": "192.0.2.44",
+    "region": "us-central1-a",
+    "size": "e2-medium",
+    "createdAt": "2026-09-19T08:30:00Z",
+    "status": "provisioning",
+    "project": "example-project-123",
+    "sshKeyPath": "/home/operator/.config/spekk/keys/gcp-box",
+    "sshUser": "spekk"
+  }
+}

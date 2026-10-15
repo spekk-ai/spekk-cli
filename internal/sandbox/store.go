@@ -49,6 +49,14 @@ type SandboxMeta struct {
 	// Empty means the sandbox is not registered through the API. The record
 	// holds no credential: the agent token lives on the machine only.
 	AgentID string `json:"agentId,omitempty"`
+	// Kind is KindOneOff or KindPersistent. Empty means persistent, the
+	// kind every record had before the field existed. Purpose, ExpiresAt
+	// (RFC 3339) and CreatedBy (the hostname that ran create) are empty on
+	// such a record too. See KindOf.
+	Kind      string `json:"kind,omitempty"`
+	Purpose   string `json:"purpose,omitempty"`
+	ExpiresAt string `json:"expiresAt,omitempty"`
+	CreatedBy string `json:"createdBy,omitempty"`
 }
 
 // sandboxesFile returns the path to the sandboxes metadata file.

@@ -3,7 +3,7 @@ id: registry-fields-default-persistent
 parent: sandbox-kind
 created: 2026-10-15T23:40:00Z
 priority: 1
-status: not_started
+status: done
 branch: sandbox-kind
 ---
 

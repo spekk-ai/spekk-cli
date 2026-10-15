@@ -6,11 +6,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -442,31 +444,68 @@ func Provision(name string, opts ProvisionOptions) error {
 
 // --- List ---
 
-// List displays all sandboxes in a table.
-func List() error {
+// ListOptions holds flags for the list subcommand.
+type ListOptions struct {
+	// Expired shows only the sandboxes whose expiry is in the past.
+	Expired bool
+}
+
+// listRow is one sandbox in the list table.
+type listRow struct {
+	name string
+	meta *SandboxMeta
+}
+
+// List displays the sandboxes in a table, sorted by name.
+func List(opts ListOptions) error {
+	return list(os.Stdout, opts, time.Now())
+}
+
+func list(out io.Writer, opts ListOptions, now time.Time) error {
 	sandboxes, err := LoadSandboxes()
 	if err != nil {
 		return err
 	}
-	if len(sandboxes) == 0 {
-		fmt.Println("No sandboxes found.")
+	var rows []listRow
+	for name, meta := range sandboxes {
+		if opts.Expired && !meta.Expired(now) {
+			continue
+		}
+		rows = append(rows, listRow{name, meta})
+	}
+	if len(rows) == 0 {
+		if opts.Expired {
+			fmt.Fprintln(out, "No expired sandboxes found.")
+		} else {
+			fmt.Fprintln(out, "No sandboxes found.")
+		}
 		return nil
 	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
 
-	header := padRow("Name", "IP", "Region", "Status", "Created")
-	fmt.Println(header)
-	fmt.Println(strings.Repeat("-", len(header)))
-
-	for name, data := range sandboxes {
-		fmt.Println(padRow(
-			name,
-			orDash(data.IP),
-			orDash(data.Region),
-			orDash(data.Status),
-			orDash(data.CreatedAt),
+	header := padRow("Name", "Kind", "IP", "Region", "Status", "Created", "Expires")
+	fmt.Fprintln(out, header)
+	fmt.Fprintln(out, strings.Repeat("-", len(header)))
+	for _, r := range rows {
+		fmt.Fprintln(out, padRow(
+			r.name,
+			r.meta.KindOf(),
+			orDash(r.meta.IP),
+			orDash(r.meta.Region),
+			orDash(r.meta.Status),
+			orDash(r.meta.CreatedAt),
+			expiresCell(r.meta, now),
 		))
 	}
 	return nil
+}
+
+// expiresCell is the Expires column: the expiry, marked when it is past.
+func expiresCell(meta *SandboxMeta, now time.Time) string {
+	if meta.Expired(now) {
+		return "EXPIRED " + meta.ExpiresAt
+	}
+	return orDash(meta.ExpiresAt)
 }
 
 // --- Status ---
@@ -1309,8 +1348,8 @@ func generateAgentToken() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func padRow(name, ip, region, status, created string) string {
-	return fmt.Sprintf("%-20s  %-18s  %-10s  %-12s  %s", name, ip, region, status, created)
+func padRow(name, kind, ip, region, status, created, expires string) string {
+	return fmt.Sprintf("%-20s  %-10s  %-18s  %-14s  %-12s  %-20s  %s", name, kind, ip, region, status, created, expires)
 }
 
 func orDash(s string) string {
