@@ -3,7 +3,7 @@ id: turn-keepalive-frame-sent-during-tool-calls
 parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 1
-status: not_started
+status: in_progress
 branch: feature/turn-progress-reporting
 depends-on: turn-inflight-tool-calls-tracked
 ---
@@ -28,3 +28,5 @@ The control host derives abandonment from silence on a turn. That is only sound 
 - Tests cover: a keepalive is emitted during a silent in-flight span; none is emitted when the set is empty; none is emitted while stream lines are flowing; a write failure leaves the turn's reported outcome unchanged; the frame carries the dispatch's `agent_session_id`.
 
 **Note — rollout order is not negotiable.** This is a new frame type and it is not covered by the control host's absent-means-true guarantee. The control host must accept and attribute `turn_keepalive` **before** any client emits one. This project has already taken one production outage — 2026-08-07, on the control host — from shipping one side of a contract change ahead of the other. The companion change lives in the control host repository and is a dependency of this assertion's value, not of the code here.
+
+**Status note (2026-10-15) - waits for a control-host change.** The control host on `main` does not accept `turn_keepalive`. Its `receive_json` handles only `stream`, `result`, `error`, `conversation_open`, and `heartbeat`. For any other type it logs a warning and replies with an `error` frame. The client therefore does not send this frame and contains no code that sends it. The in-flight set that this assertion reads is done (`turn-inflight-tool-calls-tracked`). The control host must first accept `turn_keepalive`, attribute it to the turn of its `agent_session_id`, and advance that turn's activity without a `stream` relay. After that change is live in production, implement the sender here.

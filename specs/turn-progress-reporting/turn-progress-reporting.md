@@ -43,6 +43,14 @@ The failing sequence is fully legible in those events. A turn that started a 40-
 
 The contrasting case resolves correctly under the same rule. A turn that started an 8-second background job emitted its first `result` with the inventory non-empty, then Claude Code waited, the task finished, and a **second** `result` event was emitted with the inventory empty. Evaluating the inventory at the **last** `result` event before the process exits gives "yielded" for the first case and "completed" for the second, which is the right answer in both.
 
+### Re-measured on Claude Code 2.1.301 (2026-10-15)
+
+The fixtures in `cmd/sandbox/testdata/` come from Claude Code 2.1.301. The shapes this spec reads did not change. Three details are new:
+
+- A long foreground `Bash` call now emits `task_started` with `"is_backgrounded": false` when it starts, and `task_notification` when it ends. Nothing comes between them, so the call is still silent while it runs. The `background_tasks_changed` inventory never lists a foreground call. This confirms that the count must come from the inventory snapshot and not from `task_started` events.
+- The `result` event carries `result_index`, which counts the results of one process from zero.
+- A stopped background task emits `task_updated` with `patch.status: "killed"`, then `task_notification` with `status: "stopped"`, then an empty inventory.
+
 ## Decision
 
 The client reports two things it alone can see, and nothing it has to judge.

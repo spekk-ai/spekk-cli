@@ -3,7 +3,7 @@ id: stream-frame-carries-session-id
 parent: turn-progress-reporting
 created: 2026-08-08T04:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/turn-progress-reporting
 ---
 
@@ -26,3 +26,5 @@ The keepalive frame already carries `agent_session_id` for this reason. The stre
 - Tests cover: a frame emitted mid-invocation carries the dispatch's `agent_session_id`; two workers serving different sessions emit frames carrying their own session ids and never each other's.
 
 **Note — rollout order.** Unlike `turn_keepalive`, this one is safe in either order: an added field on an existing frame is ignored by a control host that does not read it, and a control host that does read it must treat the field as optional until every client sends it. The control host change is therefore a follow-up, not a prerequisite. Until the control host reads the field it must keep advancing nothing rather than guessing when more than one turn is in flight, which is what it does today.
+
+**Done on `main` (2026-10-15).** Pull request #258 shipped this field under its own spec, `specs/stream-frames-name-their-session/` (assertion `stream-frame-carries-agent-session-id`). `invoke.go` sends `agent_session_id` on every `stream` frame, and `TestStreamFramesNameTheirSession` covers it.

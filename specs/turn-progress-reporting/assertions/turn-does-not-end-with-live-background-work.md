@@ -3,7 +3,7 @@ id: turn-does-not-end-with-live-background-work
 parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 3
-status: not_started
+status: draft
 branch: feature/turn-progress-reporting
 depends-on: result-frame-declares-terminal
 ---
@@ -28,3 +28,10 @@ This is the goal, deliberately ranked behind the reporting work. Ship the report
 - Tests cover: a turn whose background task finishes within the bound reports `terminal: true`; a turn whose background task is still live when the bound expires reports `error` naming the count; a turn with no background work is unaffected and takes no extra time.
 
 **Note — what the client cannot do.** A `claude -p` invocation is one-shot: the prompt is written to stdin, stdin is closed, and the turn cannot be extended in place. The client also cannot stop Claude Code from killing its own background tasks — measured, a task was killed 5 seconds after the turn reported success, so by the time the process exits the inventory has already emptied itself. Both facts mean resolution must be decided from the inventory observed **at the result event** and acted on by continuing the session, not by watching the process afterwards. An implementation that waits on the process tree will observe nothing.
+
+**Design gap (2026-10-15) - this assertion is `draft` until a person decides it.** Two questions have no answer in this spec, and a wrong answer changes what agents do in production:
+
+1. **What the resumed turn receives.** `claude -p --resume` needs a prompt on stdin. The spec forbids a prompt that asks the agent to confirm completion, but it names no other prompt. Any text is an instruction to the agent.
+2. **What happens to the killed work.** Claude Code kills the background task seconds after the result. A resumed session can only start that command again. A command with side effects (a deploy, a migration, a message) then runs two times.
+
+One option that needs no prompt: run claude with `--input-format stream-json` and keep stdin open while the inventory is non-empty, so Claude Code itself continues when the task ends, then close stdin at a `result` with an empty inventory. This changes how every turn is started, and it was not possible to verify it on the build machine, which has no Claude login. `result-frame-declares-terminal` ships first, so the `YIELDED` count can measure the size of the problem before this is built.

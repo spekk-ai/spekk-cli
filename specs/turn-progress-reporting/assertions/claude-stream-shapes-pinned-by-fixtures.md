@@ -17,7 +17,7 @@ This assertion establishes the decoding layer and its safe fallback. Nothing her
 
 ## Success Criteria
 
-- Captured `stream-json` fixtures live under `cmd/sandbox/testdata/`, recorded from a real `claude -p - --output-format stream-json --verbose` run, one file per scenario: a turn with a single long foreground tool call; a turn that starts a background task and ends while it is still running; a turn that starts a background task and reports a second `result` after it finishes.
+- Captured `stream-json` fixtures live under `cmd/sandbox/testdata/`, made of real lines from a real `claude --output-format stream-json --verbose` run, one file per scenario: a turn with a long foreground tool call; a turn that starts a background task and ends while it is still running; a turn that starts a background task and reports a second `result` after it finishes. `cmd/sandbox/testdata/README.md` records where each line comes from.
 - Each fixture records the Claude Code version it was captured from.
 - A decoder in `cmd/sandbox` turns one raw stream line into a typed value naming only the events this client needs: a tool call starting, a tool call ending, a background-task inventory snapshot, and a turn result.
 - A tool call starting is recognised as an `assistant` event carrying a `message.content[]` block of `"type": "tool_use"`, and the block's `id` is captured.
