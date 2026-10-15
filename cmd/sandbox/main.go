@@ -32,6 +32,14 @@ func main() {
 
 	cfg := loadConfig()
 	log.Printf("Starting agent client (host=%s workspace=%s)", cfg.Host, cfg.Workspace)
+	switch status, check := checkClaudeCode(); check {
+	case claudeCodeCurrent:
+		log.Print(status)
+	case claudeCodeUnreadable:
+		log.Printf("WARNING: %s Turns run with no version check.", status)
+	case claudeCodeOld:
+		log.Printf("WARNING: %s Every turn is refused until then.", status)
+	}
 
 	if err := os.MkdirAll(cfg.Workspace, 0755); err != nil {
 		log.Fatalf("Failed to create workspace: %v", err)

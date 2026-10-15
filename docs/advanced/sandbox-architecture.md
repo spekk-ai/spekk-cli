@@ -134,6 +134,14 @@ claude -p - --output-format stream-json --verbose --include-partial-messages --d
 - When Claude exits with code 0, the agent sends a `result` frame with the session id, the output text, and `terminal`.
 - When Claude exits with an error, the agent sends an `error` frame with up to 2000 characters of stderr.
 
+### Claude Code version
+
+The agent runs the native Claude Code, which every provisioning path installs as the `agent` user from the `stable` release and links to `/usr/local/bin/claude`. The installer also sets `autoUpdatesChannel` to `stable` in `~agent/.claude/settings.json`, so the self-updater stays on `stable`. The service has the systemd default `PATH` (unless `agent.env` sets one), so it finds that link before an npm copy in `/usr/bin`. The minimum version is the constant `MinVersion` in `internal/claudecode`. It is the oldest version that keeps the `claude -p` process alive while a background task runs, and reports again when the task ends. An older version kills the task a few seconds after the `result` and exits, so the agent never sees how the task ended.
+
+- At start, the agent logs the path and the version of `claude`, or a warning when the version is older than the minimum or cannot be read.
+- Before each turn, the agent runs `claude --version` again. When it reads a version older than the minimum, the agent does not start the turn. It sends an `error` frame whose `error` text names the version that it found, the minimum, and the remedy: run `spekk sandbox deploy`, which installs a current version.
+- When the agent cannot read a version (`claude` is missing, or `--version` prints a form that it does not know), it logs a warning and runs the turn. A later Claude Code can print its version in a new form, and a refusal would then stop every turn.
+
 ## Turn progress
 
 Two facts about a turn are visible only to the agent: whether the turn is still working, and whether it ended the task or only yielded. The agent reads both from structured fields of Claude's stream. It never reads the agent's words, and it never asks the agent about itself.

@@ -141,8 +141,7 @@ func fakeClaude(t *testing.T) turnMarkers {
 
 	// The trap runs between sleeps, so the loop below is also the signal
 	// window. cat drains the message invoke writes to stdin.
-	script := fmt.Sprintf(`#!/bin/sh
-trap 'touch %q; exit 143' TERM
+	script := "#!/bin/sh\n" + claudeVersionAnswer + fmt.Sprintf(`trap 'touch %q; exit 143' TERM
 cat > /dev/null
 touch %q
 while [ ! -f %q ]; do sleep 0.05; done

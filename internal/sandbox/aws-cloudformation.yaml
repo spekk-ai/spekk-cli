@@ -301,8 +301,11 @@ Resources:
             - apt-get update -y
             - apt-get install -y gh
 
-            # Claude Code CLI
-            - npm install -g @anthropic-ai/claude-code
+            # Claude Code CLI, the native binary. Install as agent, so agent owns it and
+            # it can update itself. The link puts it on the service's PATH, ahead of any
+            # npm copy in /usr/bin. `spekk sandbox deploy` upgrades it when it is older
+            # than the minimum in internal/claudecode. The link follows only a good install.
+            - su - agent -c 'curl -fsSL -o claude-install.sh https://claude.ai/install.sh && bash claude-install.sh stable && rm claude-install.sh' && ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
 
             # spekk CLI. Install as agent into a directory agent owns, so `spekk update`
             # needs no sudo, and outside agent's home, which Ubuntu creates 0750, so the

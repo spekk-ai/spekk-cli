@@ -3,8 +3,7 @@ id: turn-does-not-end-with-live-background-work
 parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 3
-status: draft
-branch: feat/turn-progress-client
+status: done
 depends-on: result-frame-declares-terminal
 ---
 
@@ -12,28 +11,14 @@ depends-on: result-frame-declares-terminal
 
 ## Description
 
-Reporting a yield accurately is second best. The end state is one where a yield cannot happen: turn-end means task-end by construction, and `COMPLETED` is honest without anyone trusting anything. Under this assertion `terminal: false` becomes a transitional path that production stops exercising, and the control host's `YIELDED` count trends to zero.
+Reporting a yield accurately is second best. The end state is one where a yield cannot happen: turn-end means task-end by construction, and `COMPLETED` is honest without anyone trusting anything.
 
-This is the goal, deliberately ranked behind the reporting work. Ship the reporting first — a `YIELDED` count is the only way to know whether this assertion is working.
+**Closed (2026-10-15): Claude Code does this, and the sandbox makes sure that it runs a version that does.** See `specs/sandbox-claude-code-version/`. From 2.1.292, a `claude -p` process does not exit while a background task runs. It waits until the task ends or reaches its 600-second limit, starts a new turn, and the agent sends a later `result` with an empty inventory. 2.1.291 and older versions kill the task seconds after the `result` and exit. The measurements are in the parent spec of `sandbox-claude-code-version`, and the 2.1.301 runs are recorded in `cmd/sandbox/testdata/` (`background-task-finishes-before-second-result`, `background-task-stopped-at-time-limit`).
+
+The client mechanism that this assertion first described (resume the session until the inventory is empty, with a bound) is not built, and it is not needed. Its two design gaps (what prompt the resumed turn gets, and a killed command with side effects that runs two times) do not occur, because Claude Code continues the turn itself. The first version of this assertion is in the git history before this change.
 
 ## Success Criteria
 
-- A turn that reaches its last `result` event with a non-empty background-task inventory does not report `terminal: true`, and does not report a `result` frame that the control host would record as `COMPLETED`.
-- Such a turn resolves rather than reports. The client continues the turn — the session resume it already uses is the available lever — until the background-task inventory is empty, then reports the resolved outcome.
-- Resolution is bounded by a named constant. When the bound expires with work still live, the turn reports `FAILED` via an `error` frame naming the number of unfinished background tasks. An unresolvable turn is a failure, not a success and not a silent yield.
-- The bound is a distinct named constant with a comment recording that it caps how long one dispatch may be extended, and that expiry is reported as a failure rather than swallowed.
-- No prose is read to decide whether to continue. Only the inventory count does, exactly as in `result-frame-declares-terminal`.
-- The agent is never asked whether it is finished, and no text is appended to the prompt asking it to confirm completion. Self-assessment is the failure mode this spec exists to remove, and it must not re-enter through the resolution path.
-- Once this holds, a turn reports exactly one of: `COMPLETED` with an empty inventory, or `FAILED`. `terminal: false` remains implemented and remains correct, and stops occurring in practice.
-- Tests cover: a turn whose background task finishes within the bound reports `terminal: true`; a turn whose background task is still live when the bound expires reports `error` naming the count; a turn with no background work is unaffected and takes no extra time.
-
-**Note — what the client cannot do.** A `claude -p` invocation is one-shot: the prompt is written to stdin, stdin is closed, and the turn cannot be extended in place. The client also cannot stop Claude Code from killing its own background tasks — measured, a task was killed 5 seconds after the turn reported success, so by the time the process exits the inventory has already emptied itself. Both facts mean resolution must be decided from the inventory observed **at the result event** and acted on by continuing the session, not by watching the process afterwards. An implementation that waits on the process tree will observe nothing.
-
-**Design gap (2026-10-15) - this assertion is `draft` until a person decides it.** Two questions have no answer in this spec, and a wrong answer changes what agents do in production:
-
-1. **What the resumed turn receives.** `claude -p --resume` needs a prompt on stdin. The spec forbids a prompt that asks the agent to confirm completion, but it names no other prompt. Any text is an instruction to the agent.
-2. **What happens to the killed work.** Claude Code kills the background task seconds after the result. A resumed session can only start that command again. A command with side effects (a deploy, a migration, a message) then runs two times.
-
-One option that needs no prompt: run claude with `--input-format stream-json` and keep stdin open while the inventory is non-empty, so Claude Code itself continues when the task ends, then close stdin at a `result` with an empty inventory. This changes how every turn is started, and it was not possible to verify it on the build machine, which has no Claude login. `result-frame-declares-terminal` ships first, so the `YIELDED` count can measure the size of the problem before this is built.
-
-**Note (2026-10-15) - Claude Code 2.1.301 already does most of this.** In the recorded runs (`cmd/sandbox/testdata/`), the `claude -p` process does not exit while a background task runs. It waits, starts a new turn when the task ends, and the agent sends a second `result`. A task that runs longer than 600 seconds is stopped, and the agent reports the stop. Before you design a client mechanism here, find out which Claude Code version the sandboxes run. The sandbox install does not pin a version.
+- The sandbox client starts no turn on a Claude Code version older than `claudecode.MinVersion` (`client-refuses-turn-below-minimum-claude-code`), and that minimum is a version that keeps `claude -p` alive while a background task runs.
+- The client adds no mechanism of its own: it does not resume a session to wait for a task, and it adds no text to the prompt.
+- `terminal: false` remains implemented and remains correct (`result-frame-declares-terminal`). On a version at or above the minimum, the last `result` has an empty inventory in every recorded run, so `terminal` is `true`.

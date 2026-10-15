@@ -164,9 +164,11 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 		scpArgs = append(scpArgs, args[len(args)-1])
 		return nil, nil
 	}
+	// Every command reads a current Claude Code, so the deploy reads the
+	// version and installs the agent, and nothing else.
 	sshExec = func(args []string) ([]byte, error) {
 		sshCommands = append(sshCommands, args[len(args)-1])
-		return nil, nil
+		return []byte("2.1.301 (Claude Code)\n"), nil
 	}
 	t.Cleanup(func() { scpExec, sshExec = origSCP, origSSH })
 
@@ -178,8 +180,8 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 			if err := deployAgent("9.9.9.9", "", "sb", user, artifacts); err != nil {
 				t.Fatalf("deploy: %v", err)
 			}
-			if len(scpArgs) != 1 || len(sshCommands) != 1 {
-				t.Fatalf("expected one upload and installation, got %v and %v", scpArgs, sshCommands)
+			if len(scpArgs) != 1 || len(sshCommands) != 2 {
+				t.Fatalf("expected one upload, a version read and an installation, got %v and %v", scpArgs, sshCommands)
 			}
 			if want := user + "@9.9.9.9:" + stagedBinary; scpArgs[0] != want {
 				t.Errorf("staged at %q, want %q", scpArgs[0], want)
@@ -188,11 +190,13 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 			if filepath.Base(uploadPath) != uploadPath {
 				t.Errorf("upload must use a file name in the login user's home: %q", uploadPath)
 			}
-			if got := strings.Contains(sshCommands[0], "| sudo bash"); got != (user != "root") {
-				t.Errorf("incorrect privilege level for %s: %s", user, sshCommands[0])
-			}
-			if user == "root" && strings.Contains(sshCommands[0], "sudo") {
-				t.Errorf("root installation must run without sudo: %s", sshCommands[0])
+			for _, cmd := range sshCommands {
+				if got := strings.Contains(cmd, "| sudo bash"); got != (user != "root") {
+					t.Errorf("incorrect privilege level for %s: %s", user, cmd)
+				}
+				if user == "root" && strings.Contains(cmd, "sudo") {
+					t.Errorf("root installation must run without sudo: %s", cmd)
+				}
 			}
 		})
 	}

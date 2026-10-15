@@ -751,8 +751,9 @@ StandardError=append:/var/log/spekk/agent.log
 WantedBy=multi-user.target
 `
 
-// deployAgent copies the agent binary to /opt/spekk/agent-client, installs the
-// systemd unit, and (re)starts the service. Shared by Create and Deploy.
+// deployAgent copies the agent binary to /opt/spekk/agent-client, upgrades
+// Claude Code when it is older than the minimum, installs the systemd unit,
+// and (re)starts the service. Shared by Create and Deploy.
 func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) error {
 	// Upload into the login user's home so SCP cannot overwrite the running executable.
 	scp := sshHostKeyOpts(name)
@@ -763,6 +764,12 @@ func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) er
 	scp = append(scp, artifacts.BinaryPath, scpTarget(user, ip))
 	if out, err := scpExec(scp); err != nil {
 		return fmt.Errorf("copying binary: %s\n%s", err, string(out))
+	}
+
+	// Before the restart: a new agent refuses every turn on an older Claude
+	// Code, so a deploy that cannot upgrade it keeps the agent that runs.
+	if err := ensureClaudeCode(ip, keyPath, name, user); err != nil {
+		return err
 	}
 
 	// Install the unit, fix ownership, and start the service. The agent needs to
