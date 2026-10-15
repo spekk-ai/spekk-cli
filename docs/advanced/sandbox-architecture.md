@@ -35,15 +35,15 @@ The token comes from the `SPEKK_AGENT_TOKEN` environment variable on the sandbox
 
 ## Protocol version
 
-The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. The version is `1.1`.
+The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. This agent declares `1.1`.
 
 1. **The client declares.** Every dial sends an `X-Spekk-Protocol: 1.1` header next to the `Authorization` header.
-2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field:
+2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field. That version can be different from the agent's version. For example, a control host that speaks `1.0` replies to a `1.1` agent with:
 
 ```json
 {
   "type":     "welcome",
-  "protocol": "1.1"
+  "protocol": "1.0"
 }
 ```
 
@@ -54,7 +54,7 @@ Either side can update first. An old agent sends no header, and the control host
 
 **Version rules:** a change that breaks a message type, a frame field, or a close code bumps the major. An addition bumps the minor.
 
-Version `1.1` is additive. It adds the `terminal` field to the `result` frame and the `turn_keepalive` frame type (see [Turn progress](#turn-progress)). No existing frame loses a field or changes its meaning, so a `1.0` side and a `1.1` side work together.
+Version `1.1` is additive. It adds only the `terminal` field to the `result` frame (see [Turn progress](#turn-progress)). No existing frame loses a field or changes its meaning, so a `1.0` side and a `1.1` side work together. The `turn_keepalive` frame type is reserved for version `1.2`.
 
 ## Message protocol
 
@@ -94,7 +94,6 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 | `result` | Claude finished with exit code 0 | `session_id`, `agent_session_id`, `output`, `terminal` |
 | `error` | Something went wrong | `error`, `detail`, `agent_session_id` |
 | `heartbeat` | Keep-alive, every 30 seconds | none |
-| `turn_keepalive` | A tool call of the turn is in flight. Sent only while a tool call is in flight. **Not sent yet**: see [Rollout order](#rollout-order) | `agent_session_id` |
 | `conversation_open` | Ask for a conversation with a person (from the spool) | `session_id`, `title`, `body`, `severity` |
 
 ### Routing
@@ -141,17 +140,15 @@ Two facts about a turn are visible only to the agent: whether the turn is still 
 
 ### `terminal` on the result frame
 
-The `result` frame always carries `terminal`, a JSON boolean. It is `false` when a background task that the turn started was still live at the last `result` event of the Claude process, and `true` otherwise. `false` means the turn yielded: the agent said it will continue later, but Claude Code ends the background task soon after the turn ends. The agent always sends the field. A control host reads an absent field as `true`, which is what an agent older than `1.1` means.
+The `result` frame always carries `terminal`, a JSON boolean. It is `false` when a background task that the turn started was still live at the last `result` event of the Claude process, and `true` otherwise. `false` means the turn yielded: the agent gave its last word while work that it started was still live, and no later result shows that it saw how that work ended. The agent always sends the field. A control host reads an absent field as `true`, which is what an agent older than `1.1` means.
 
-### `turn_keepalive`
+The `terminal` field needs no rollout order, because an absent field means `true`. Either side can update first.
 
-The agent heartbeat is connection-scoped and says nothing about a turn, so without a turn-scoped signal a long tool call is indistinguishable from a hang. A tool call emits no output while it runs. The `turn_keepalive` frame fills that gap. It carries the `agent_session_id` of the turn, and the agent sends it only while a tool call of that turn is in flight, so silence on a turn means that nothing is running.
+### `turn_keepalive` (reserved for version 1.2)
 
-### Rollout order
+The agent heartbeat is connection-scoped and says nothing about a turn, so without a turn-scoped signal a long tool call is indistinguishable from a hang. A planned `turn_keepalive` frame will fill that gap. It will carry the `agent_session_id` of the turn, and the agent will send it only while a tool call of that turn is in flight. It comes with version `1.2`.
 
-The control host must accept and attribute `turn_keepalive` before any agent sends it. A control host that does not know the frame type logs it and replies with an `error` frame. This agent does not send `turn_keepalive` yet, for this reason.
-
-The `terminal` field has no such requirement, because an absent field means `true`. Either side can update first.
+The control host must accept and attribute `turn_keepalive` before any agent sends it. A control host that does not know a frame type logs it and replies with an `error` frame. This agent does not send `turn_keepalive`.
 
 ## Conversation spool
 
@@ -206,7 +203,6 @@ A control host that works with the agent must provide:
 | **Protocol handshake** | Read the `X-Spekk-Protocol` header, send a `welcome` frame with its own version, and close with code `4004` on a major-version mismatch. A dial with no header is a legacy client |
 | **Inbound frames** | Handle `stream`, `result`, `error`, `heartbeat`, and `conversation_open` from the agent |
 | **Turn result** | Read `terminal` from the `result` frame. An absent field means `true` |
-| **Turn keepalive** | Accept `turn_keepalive` and attribute it to the turn of its `agent_session_id`, before any agent sends it |
 | **Outbound frames** | Send `welcome`, `message`, `cancel`, `heartbeat_ack`, and `error` to the agent |
 | **Attachments** | Serve `GET /api/agents/attachments/<id>/download/` with Bearer authentication, when attachments are used |
 | **Session routing** | Assign unique `agent_session_id` values and track which sessions are active |
