@@ -44,6 +44,11 @@ type SandboxMeta struct {
 	// can finish a record with the credential `create` chose for it. Empty
 	// means bedrock, the mode every record had before the field existed.
 	Auth string `json:"auth,omitempty"`
+	// AgentID is the id of the agent the control host registered for this
+	// sandbox, so destroy can revoke it and schedule commands can find it.
+	// Empty means the sandbox is not registered through the API. The record
+	// holds no credential: the agent token lives on the machine only.
+	AgentID string `json:"agentId,omitempty"`
 }
 
 // sandboxesFile returns the path to the sandboxes metadata file.

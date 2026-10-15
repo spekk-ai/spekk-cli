@@ -105,6 +105,9 @@ func main() {
 	case "sandbox":
 		launchSandbox(args[1:])
 
+	case "schedule":
+		runSchedule(args[1:])
+
 	case "conversation":
 		runConversation(args[1:])
 
@@ -1047,6 +1050,7 @@ USAGE:
 SUBCOMMANDS:
   create      Create a sandbox, or register a machine you already have
   provision   Finish a sandbox that create left at "provisioning"
+  register    Register a sandbox on the control host with your API token
   list        List all sandboxes
   status      Show status of a sandbox
   ssh         SSH into a sandbox
@@ -1072,18 +1076,43 @@ OPTIONS:
   --release <tag>  Pull the agent from a specific spekk release instead of the
                    latest, e.g. an exp-* prerelease
   --force, -f      Provision a sandbox whose status is not "provisioning"
+  --organization <id>
+                   Control host organization, when provision registers a new
+                   agent and you belong to more than one
   --help, -h       Show this help message
 
 When "spekk sandbox create" stops waiting for cloud-init, the machine keeps
 running and the record stays at "provisioning". Once /opt/spekk/.provisioned
 exists on the machine, this command injects the credentials, configures git
 for the agent, deploys the agent binary, and marks the sandbox active. It
-needs the same environment variables as create, and it prints a new agent
-token to register on the control host.
+needs the same environment variables as create.
+
+A registered sandbox keeps its agent: provision writes back the agent token
+that is already on the machine. A sandbox with no agent gets a new token,
+registered on the control host when SPEKK_API_TOKEN is set.
+`
+
+// sandboxRegisterHelpText is the help for `spekk sandbox register`.
+const sandboxRegisterHelpText = `
+spekk sandbox register - Register a sandbox on the control host
+
+USAGE:
+  spekk sandbox register <name> [--organization <id>]
+
+OPTIONS:
+  --organization <id>  Control host organization for the agent. Needed only
+                       when you belong to more than one
+  --help, -h           Show this help message
+
+Registers a new agent for the sandbox with your spekk API token
+(SPEKK_API_TOKEN) on the control host (SPEKK_HOST). Then it writes the new
+agent token to /etc/spekk/agent.env on the machine and restarts the agent.
+If the sandbox had an agent before, register revokes it. Use this for a
+sandbox that was created without SPEKK_API_TOKEN.
 `
 
 // launchSandbox manages cloud sandbox environments.
-// Subcommands: create, provision, list, status, ssh, destroy, deploy.
+// Subcommands: create, provision, register, list, status, ssh, destroy, deploy.
 func launchSandbox(args []string) {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
 		fmt.Print(sandboxHelpText)
@@ -1098,6 +1127,8 @@ func launchSandbox(args []string) {
 		createSandbox(subArgs)
 	case "provision":
 		provisionSandbox(subArgs)
+	case "register":
+		registerSandbox(subArgs)
 	case "list":
 		if err := sandbox.List(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -1141,16 +1172,18 @@ func launchSandbox(args []string) {
 		}
 	case "destroy":
 		name := ""
-		force := false
+		var opts sandbox.DestroyOptions
 		for _, a := range subArgs {
 			if a == "--force" || a == "-f" {
-				force = true
+				opts.Force = true
+			} else if a == "--ignore-revoke-failure" {
+				opts.IgnoreRevokeFailure = true
 			} else if !strings.HasPrefix(a, "-") && name == "" {
 				name = a
 			}
 		}
 		if name == "" {
-			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force]")
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force] [--ignore-revoke-failure]")
 			os.Exit(1)
 		}
 		if err := sandbox.ValidateSandboxName(name); err != nil {
@@ -1162,7 +1195,7 @@ func launchSandbox(args []string) {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Destroy(p, name, force); err != nil {
+		if err := sandbox.Destroy(p, name, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1203,6 +1236,7 @@ func provisionSandbox(args []string) {
 		"auth":    {Names: []string{"--auth"}, Type: cli.StringFlag},
 		"release": {Names: []string{"--release"}, Type: cli.StringFlag},
 		"force":   {Names: []string{"--force", "-f"}, Type: cli.BoolFlag},
+		"org":     {Names: []string{"--organization"}, Type: cli.StringFlag},
 		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 	if flags.Bool("help") {
@@ -1210,7 +1244,7 @@ func provisionSandbox(args []string) {
 		return
 	}
 
-	name := sandboxPositional(args, "--auth", "--release")
+	name := sandboxPositional(args, "--auth", "--release", "--organization")
 	if name == "" {
 		fmt.Fprintln(os.Stderr, "Usage: spekk sandbox provision <name> [--auth <mode>] [--force]")
 		os.Exit(1)
@@ -1232,7 +1266,32 @@ func provisionSandbox(args []string) {
 		auth = mode
 	}
 
-	if err := sandbox.Provision(name, sandbox.ProvisionOptions{Auth: auth, Force: flags.Bool("force"), Release: flags.String("release")}); err != nil {
+	if err := sandbox.Provision(name, sandbox.ProvisionOptions{Auth: auth, Force: flags.Bool("force"), Release: flags.String("release"), Organization: flags.String("org")}); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+// registerSandbox parses arguments for `spekk sandbox register <name>`.
+func registerSandbox(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"org":  {Names: []string{"--organization"}, Type: cli.StringFlag},
+		"help": {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Print(sandboxRegisterHelpText)
+		return
+	}
+	name := sandboxPositional(args, "--organization")
+	if name == "" {
+		fmt.Fprintln(os.Stderr, "Usage: spekk sandbox register <name> [--organization <id>]")
+		os.Exit(1)
+	}
+	if err := sandbox.ValidateSandboxName(name); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	if err := sandbox.Register(name, flags.String("org")); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -1269,6 +1328,7 @@ func createSandbox(args []string) {
 		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
 		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
 		"release":           {Names: []string{"--release"}, Type: cli.StringFlag},
+		"organization":      {Names: []string{"--organization"}, Type: cli.StringFlag},
 		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -1317,6 +1377,15 @@ OPTIONS:
   --release <tag>        Pull the cloud-init template and agent binary from a
                          specific spekk release instead of the latest, e.g. an
                          exp-* prerelease. Default: the latest published release
+
+  Control host registration:
+  --organization <id>    Control host organization for the agent. Needed only
+                         when you belong to more than one
+
+  With SPEKK_API_TOKEN set, create registers the agent on the control host
+  (SPEKK_HOST) before it creates the machine, and revokes it if a later step
+  fails. Without it, create prints the agent token to register by hand, or
+  register later with "spekk sandbox register <name>".
 
   spekk does not provision a machine it did not create. The machine must
   already carry /opt/spekk/.provisioned; spekk then injects credentials
@@ -1387,6 +1456,7 @@ OPTIONS:
 		Auth:    auth,
 		Release: flags.String("release"),
 
+		Organization:     flags.String("organization"),
 		ProvisionTimeout: provisionTimeout,
 	}
 	if err := sandbox.Create(p, opts); err != nil {
@@ -1914,7 +1984,8 @@ COMMANDS:
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to find spec-code drift
-  sandbox   Manage cloud sandbox environments (create, provision, list, status, ssh, destroy, deploy)
+  sandbox   Manage cloud sandbox environments (create, provision, register, list, status, ssh, destroy, deploy)
+  schedule  Manage the scheduled tasks of a sandbox agent (list, create, update, delete, run)
   conversation  Request a conversation on the connected chat surface (open)
   install   Install a skill for an agent (coach/builder/observer)
   uninstall Remove an installed skill from local or global scope

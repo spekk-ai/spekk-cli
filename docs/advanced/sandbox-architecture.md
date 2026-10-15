@@ -209,11 +209,13 @@ A control host that works with the agent must provide:
 
 ## Registration after creation
 
-After `spekk sandbox create` provisions the machine and deploys the agent binary, one manual step remains: register the agent's token on the control host. The agent cannot connect until the control host knows its token.
+The agent cannot connect until the control host knows its token. With `SPEKK_API_TOKEN` set, `spekk sandbox create` registers the agent through the control host API before it creates the machine, and writes the token that the control host returns to the machine. There is no manual step. `spekk sandbox destroy` revokes the agent before it deletes the machine.
 
-`create` prints the token and a reminder to register it. Until you register it, the agent tries to connect and fails authentication, on the usual backoff.
+Without `SPEKK_API_TOKEN`, `create` makes the token itself and prints it with a reminder to register it. Until you register it, the agent tries to connect and fails authentication, on the usual backoff. `spekk sandbox register <name>` registers it later with your API token.
 
-`create` waits for cloud-init for `--provision-timeout` (default 30 minutes) and then stops, with the machine still running and the record at status `provisioning`. `spekk sandbox provision <name>` finishes that sandbox when `/opt/spekk/.provisioned` exists. It runs the same credential injection, git configuration, and agent deploy that `create` runs, marks the record `active`, and prints a new token to register. See [`spekk sandbox`](../cli-reference.md#spekk-sandbox).
+`create` waits for cloud-init for `--provision-timeout` (default 30 minutes) and then stops, with the machine still running and the record at status `provisioning`. `spekk sandbox provision <name>` finishes that sandbox when `/opt/spekk/.provisioned` exists. It runs the same credential injection, git configuration, and agent deploy that `create` runs, and marks the record `active`. A registered sandbox keeps its agent token. See [`spekk sandbox`](../cli-reference.md#spekk-sandbox).
+
+A control host that supports this registration serves `POST /api/agents/`, `POST /api/agents/<id>/revoke/`, and the schedule routes under `/api/agents/<id>/schedules/`, with `Authorization: Token <key>` authentication.
 
 ## Environment variables
 

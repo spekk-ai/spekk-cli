@@ -45,6 +45,11 @@ type CreateOptions struct {
 	SSHUser string // login user for an existing machine (default: root)
 	Auth    AuthMode
 
+	// Organization is the control host organization the agent is registered
+	// in. Empty lets the control host choose, which works for a user who
+	// belongs to one organization.
+	Organization string
+
 	// Release is the spekk release the cloud-init template and agent binary
 	// come from. Empty means the latest published release; a specific tag
 	// (e.g. an "exp-*" prerelease) pins a build that "latest" does not carry.
@@ -67,6 +72,9 @@ type ProvisionOptions struct {
 	Auth AuthMode
 	// Force provisions a record whose status is not "provisioning".
 	Force bool
+	// Organization is used only when provision registers a new agent. See
+	// CreateOptions.Organization.
+	Organization string
 	// Release pins the spekk release the agent binary comes from. Empty means
 	// the latest published release. See CreateOptions.Release.
 	Release string
@@ -101,7 +109,7 @@ func checkRequiredEnv(mode AuthMode) error {
 
 // Create provisions a sandbox using the given Provider for VM lifecycle and
 // then runs generic provisioning (SSH wait, credential injection, agent deploy).
-func Create(p Provider, opts CreateOptions) error {
+func Create(p Provider, opts CreateOptions) (err error) {
 	if err := checkRequiredEnv(opts.Auth); err != nil {
 		return err
 	}
@@ -116,8 +124,6 @@ func Create(p Provider, opts CreateOptions) error {
 			opts.Name, machineRef(existing), opts.Name)
 	}
 
-	agentToken := generateAgentToken()
-
 	// Fetch release artifacts before creating billable resources.
 	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
 	artifacts, err := fetchArtifacts(releaseTag(opts.Release))
@@ -130,6 +136,13 @@ func Create(p Provider, opts CreateOptions) error {
 
 	opts.CloudInit = artifacts.CloudInit
 
+	// Register before anything billable exists, so a refused registration
+	// costs nothing. From here on, a failure revokes the agent again.
+	agentToken, agentID, err := newAgentToken(opts.Name, opts.Organization)
+	if err != nil {
+		return err
+	}
+
 	// Delegate machine creation to the provider, which fills in the fields
 	// of meta that it owns. A nil provider means no cloud owns this
 	// machine: it already exists, and spekk only registers and equips it.
@@ -137,6 +150,22 @@ func Create(p Provider, opts CreateOptions) error {
 		Provider:  ProviderNone,
 		Auth:      string(opts.Auth),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		AgentID:   agentID,
+	}
+	defer func() {
+		if err != nil && meta.AgentID != "" && revokeAbandoned(meta.AgentID, opts.Name) {
+			meta.AgentID = ""
+			if namesMachine(meta) {
+				if saveErr := SaveSandbox(opts.Name, meta); saveErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not record that the agent is revoked: %s\n", saveErr)
+				}
+			}
+		}
+	}()
+	if agentID != "" {
+		// Deferred after the revoke above, so it runs first: once the
+		// watch stops, only the normal path decides about the agent.
+		defer revokeOnSignal(agentID, opts.Name)()
 	}
 	if p != nil {
 		meta.Provider = p.Name()
@@ -190,7 +219,7 @@ func Create(p Provider, opts CreateOptions) error {
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
 
-	if err := equipSandbox(meta, opts.Name, agentToken, opts.Auth, artifacts); err != nil {
+	if err := equip(meta, opts.Name, agentToken, opts.Auth, artifacts); err != nil {
 		return fail(err.stage, err.err)
 	}
 
@@ -199,9 +228,13 @@ func Create(p Provider, opts CreateOptions) error {
 		return fmt.Errorf("saving metadata: %w", err)
 	}
 
-	printRegistration("Sandbox created successfully", opts.Name, meta.IP, agentToken)
+	printResult("Sandbox created successfully", opts.Name, meta, agentToken)
 	return nil
 }
+
+// equip is the seam Create and Provision equip through, so a test can reach
+// the steps around it without an SSH connection.
+var equip = equipSandbox
 
 // stageError is a failure from one step of equipSandbox, with the step it
 // came from, so Create and Provision can say which step stopped them.
@@ -289,6 +322,17 @@ func archFromUname(machine string) (string, error) {
 	}
 }
 
+// printResult reports a finished sandbox. A registered sandbox needs nothing
+// more, and its token stays off the terminal. An unregistered one prints the
+// token for the manual path, as create always did.
+func printResult(headline, name string, meta *SandboxMeta, agentToken string) {
+	if meta.AgentID != "" {
+		fmt.Fprintf(os.Stderr, "\n%s:\n  Name:   spekk-%s\n  IP:     %s\n  Agent:  %s (registered on the control host)\n", headline, name, meta.IP, meta.AgentID)
+		return
+	}
+	printRegistration(headline, name, meta.IP, agentToken)
+}
+
 // printRegistration prints the token the operator has to register on the
 // control host. The agent cannot connect until they do, so the message is
 // the same whichever command finished the sandbox.
@@ -305,7 +349,11 @@ Next: Register this agent on the control host admin at https://%s/
   - Name: %s
   - Sandbox ID: spekk-%s
   - Auth token: %s
-`, headline, name, ip, agentToken, bareHost, name, name, agentToken)
+
+Or register it with your spekk API token, with no admin step:
+  export %s=<your API token>
+  spekk sandbox register %s
+`, headline, name, ip, agentToken, bareHost, name, name, agentToken, apiTokenVar, name)
 }
 
 // --- Provision ---
@@ -356,18 +404,39 @@ func Provision(name string, opts ProvisionOptions) error {
 	// BinaryPath is set later (arch is not known yet), so defer over it.
 	defer func() { os.Remove(artifacts.BinaryPath) }()
 
-	agentToken := generateAgentToken()
-	if err := equipSandbox(sandbox, name, agentToken, mode, artifacts); err != nil {
+	// A registered sandbox keeps its agent: a new token would disconnect
+	// it, and a new agent would lose its schedules and its history. Only a
+	// sandbox with no agent gets a new token, registered when it can be.
+	var agentToken, agentID string
+	if sandbox.AgentID != "" {
+		if agentToken, err = readAgentToken(sandbox, name); err != nil {
+			return fmt.Errorf("reading the agent token on %s: %w\nRegister a new agent with: spekk sandbox register %s", machineRef(sandbox), err, name)
+		}
+		agentID = sandbox.AgentID
+	} else if agentToken, agentID, err = newAgentToken(name, opts.Organization); err != nil {
+		return err
+	}
+	if err := equip(sandbox, name, agentToken, mode, artifacts); err != nil {
+		if sandbox.AgentID == "" && agentID != "" {
+			revokeAbandoned(agentID, name)
+		}
 		return err
 	}
 
+	registered := sandbox.AgentID == "" && agentID != ""
 	sandbox.Auth = string(mode)
 	sandbox.Status = "active"
+	sandbox.AgentID = agentID
 	if err := SaveSandbox(name, sandbox); err != nil {
+		if registered {
+			// The machine runs the new agent, so revoking it would be
+			// wrong. Name it, because no record does.
+			return fmt.Errorf("saving metadata: %w (agent %s is registered and running on the machine)", err, agentID)
+		}
 		return fmt.Errorf("saving metadata: %w", err)
 	}
 
-	printRegistration("Sandbox provisioned successfully", name, sandbox.IP, agentToken)
+	printResult("Sandbox provisioned successfully", name, sandbox, agentToken)
 	return nil
 }
 
@@ -482,9 +551,20 @@ func SSH(name string, extraArgs []string) error {
 
 // --- Destroy ---
 
+// DestroyOptions holds the flags of `spekk sandbox destroy`.
+type DestroyOptions struct {
+	// Force skips the confirmation, and removes a record whose machine
+	// teardown failed or that names no machine.
+	Force bool
+	// IgnoreRevokeFailure continues when the agent cannot be revoked on the
+	// control host. Force does not, because a live agent with no machine
+	// is a credential that nothing points at.
+	IgnoreRevokeFailure bool
+}
+
 // Destroy tears down a sandbox using the Provider for remote resource cleanup
 // and then removes local files and metadata.
-func Destroy(p Provider, name string, force bool) error {
+func Destroy(p Provider, name string, opts DestroyOptions) error {
 	sandbox, err := GetSandbox(name)
 	if err != nil {
 		return err
@@ -493,13 +573,34 @@ func Destroy(p Provider, name string, force bool) error {
 		return fmt.Errorf("sandbox %q not found", name)
 	}
 
-	if !force {
+	// Without SPEKK_API_TOKEN or SPEKK_HOST the revoke cannot even start.
+	// Say so before the prompt, not after the user has said yes.
+	if sandbox.AgentID != "" && !opts.IgnoreRevokeFailure {
+		if _, err := newControlHost(); err != nil {
+			return fmt.Errorf("cannot revoke agent %s of sandbox %q: %w\nNothing was destroyed. Use --ignore-revoke-failure to destroy the sandbox and leave the agent live", sandbox.AgentID, name, err)
+		}
+	}
+
+	if !opts.Force {
 		fmt.Fprintf(os.Stderr, "Destroy sandbox %q (%s)? [y/N] ", name, machineRef(sandbox))
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
 		if strings.TrimSpace(strings.ToLower(answer)) != "y" {
 			fmt.Println("Aborted.")
 			return nil
+		}
+	}
+
+	// Revoke first. A machine that is gone with its agent still live on the
+	// control host leaves a credential that nothing points at any more.
+	if sandbox.AgentID != "" {
+		if err := revokeRecordedAgent(sandbox.AgentID); err != nil {
+			if !opts.IgnoreRevokeFailure {
+				return fmt.Errorf("revoking agent %s on the control host: %w\nNothing was destroyed. Use --ignore-revoke-failure to destroy the sandbox anyway", sandbox.AgentID, err)
+			}
+			fmt.Fprintf(os.Stderr, "Warning: could not revoke agent %s on the control host: %s; destroying anyway because --ignore-revoke-failure was given. Revoke it on the control host.\n", sandbox.AgentID, err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Revoked agent %s on the control host.\n", sandbox.AgentID)
 		}
 	}
 
@@ -510,7 +611,7 @@ func Destroy(p Provider, name string, force bool) error {
 	// A cloud machine is about to be deleted whole, so this does not apply.
 	if sandbox.Provider == ProviderNone {
 		if err := stopAgent(sandbox, name); err != nil {
-			if !force {
+			if !opts.Force {
 				return fmt.Errorf("stopping the agent on %s: %w\nThe machine may still be running it. Use --force to remove the record anyway", machineRef(sandbox), err)
 			}
 			fmt.Fprintf(os.Stderr, "Warning: could not stop the agent on %s: %s; removing the local record anyway because --force was given.\n", machineRef(sandbox), err)
@@ -525,7 +626,7 @@ func Destroy(p Provider, name string, force bool) error {
 		// A record that names no machine is normally a lost identifier,
 		// and removing it would hide a running machine. With --force the
 		// operator has said they checked; let them clear the entry.
-		if !errors.Is(err, ErrNoMachineRecorded) || !force {
+		if !errors.Is(err, ErrNoMachineRecorded) || !opts.Force {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "Warning: %s; removing the local record anyway because --force was given.\n", err)
@@ -1026,6 +1127,17 @@ func checkTCPPort(ip string, port int) bool {
 // runSSH runs command on the host as user and returns trimmed stdout, or ""
 // on error.
 func runSSH(ip, keyPath, name, user, command string) string {
+	out, err := runSSHStdout(ip, keyPath, name, user, command)
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
+// runSSHStdout runs command on the host as user and returns its stdout only,
+// so an ssh warning cannot become part of the output. A failure carries
+// what ssh or the command wrote to stderr.
+func runSSHStdout(ip, keyPath, name, user, command string) (string, error) {
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
@@ -1034,9 +1146,15 @@ func runSSH(ip, keyPath, name, user, command string) string {
 	args = append(args, fmt.Sprintf("%s@%s", user, ip), command)
 	out, err := exec.Command("ssh", args...).Output()
 	if err != nil {
-		return ""
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+				return "", fmt.Errorf("%w: %s", err, stderr)
+			}
+		}
+		return "", err
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(string(out)), nil
 }
 
 // runSSHCombined runs command on the host as user, returning combined output
