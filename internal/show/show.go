@@ -217,11 +217,39 @@ func buildShowData(specsDir string, result *parser.ParseResult) showData {
 		}
 	}
 
-	return showData{
+	data := showData{
 		ProjectName: projectName,
 		Specs:       showSpecs,
 		Assertions:  showAssertions,
 	}
+	sortListOrder(&data)
+	return data
+}
+
+// sortListOrder sorts specs and assertions in the order `spekk list` uses:
+// priority ascending, then ID. The file path breaks ties (assertion IDs are
+// unique only within a spec), so the order is total and every run over the
+// same input gives the same output.
+func sortListOrder(data *showData) {
+	sort.Slice(data.Specs, func(i, j int) bool {
+		a, b := data.Specs[i], data.Specs[j]
+		return listLess(a.Priority, b.Priority, a.ID, b.ID, a.File, b.File)
+	})
+	sort.Slice(data.Assertions, func(i, j int) bool {
+		a, b := data.Assertions[i], data.Assertions[j]
+		return listLess(a.Priority, b.Priority, a.ID, b.ID, a.File, b.File)
+	})
+}
+
+// listLess compares two items by priority, then ID, then file path.
+func listLess(pa, pb int, ida, idb, fa, fb string) bool {
+	if pa != pb {
+		return pa < pb
+	}
+	if ida != idb {
+		return ida < idb
+	}
+	return fa < fb
 }
 
 // rollupPrecedence ranks cross-branch states for the spec-level rollup badge.
@@ -383,6 +411,10 @@ func foldCrossBranch(data *showData, states []crossbranch.FileState, supported b
 	}
 	sort.Strings(branches)
 	data.Branches = branches
+
+	// Phase 3 appended foreign items in map order. Sort again so they take their
+	// list-order place among the local items.
+	sortListOrder(data)
 }
 
 // normalizePath makes a file path comparable across the parser (which stores
