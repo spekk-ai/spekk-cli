@@ -10,7 +10,7 @@ import (
 
 // TestProtocolVersionPinned makes a version change a deliberate diff.
 func TestProtocolVersionPinned(t *testing.T) {
-	if ProtocolVersion != "1.0" {
+	if ProtocolVersion != "1.1" {
 		t.Fatalf("ProtocolVersion changed to %q — bump deliberately and update the companion control-host PR", ProtocolVersion)
 	}
 }
@@ -45,6 +45,17 @@ func TestWelcomeFrameIsNotUnknown(t *testing.T) {
 	}
 	if strings.Contains(out, "WARNING") {
 		t.Fatalf("same major must not warn:\n%s", out)
+	}
+}
+
+// The control host still speaks 1.0. A minor bump is additive, so the 1.1
+// client must connect to it without a warning.
+func TestWelcomeOlderMinorDoesNotWarn(t *testing.T) {
+	c := &AgentClient{}
+	buf := captureLog(t)
+	c.handleWelcome(Message{Type: MessageTypeWelcome, Protocol: "1.0"})
+	if out := buf.String(); strings.Contains(out, "WARNING") {
+		t.Fatalf("a 1.0 control host must not warn a %s client:\n%s", ProtocolVersion, out)
 	}
 }
 
