@@ -3,7 +3,7 @@ id: no-cloud-credential-to-control-host
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 depends-on: schedule-commands
 ---
@@ -11,6 +11,8 @@ depends-on: schedule-commands
 # No Request to the Control Host Carries a Cloud or Model Credential
 
 The control host never receives, stores, or logs a cloud credential or a model credential of the user. These credentials go from the user's machine to the user's sandbox only.
+
+**Tests:** internal/sandbox/credential_boundary_test.go
 
 ## Success Criteria
 

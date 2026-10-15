@@ -3,13 +3,15 @@ id: record-stores-agent-id
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 ---
 
 # The Sandbox Record Stores the Agent Id and No Credential
 
 `~/.config/spekk/sandboxes.json` records which agent on the control host belongs to each sandbox, so `destroy`, `provision`, and `spekk schedule` can find it.
+
+**Tests:** internal/sandbox/register_test.go (TestCreateRegistersBeforeItProvisions)
 
 ## Success Criteria
 

@@ -36,6 +36,9 @@ func stubCreateEnv(t *testing.T) {
 	for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"} {
 		t.Setenv(v, "x")
 	}
+	// No API token unless a test asks for one, so no test registers an
+	// agent on whatever control host the developer's shell points at.
+	t.Setenv(apiTokenVar, "")
 	origArtifacts := fetchArtifacts
 	fetchArtifacts = func(tag string) (*releaseArtifacts, error) {
 		return &releaseArtifacts{Version: "test", CloudInit: []byte("#cloud-config")}, nil

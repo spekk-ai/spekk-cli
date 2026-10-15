@@ -3,7 +3,7 @@ id: create-without-api-token
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 depends-on: create-registers-agent
 ---
@@ -11,6 +11,8 @@ depends-on: create-registers-agent
 # `create` Without an API Token Keeps the Manual Path
 
 A user who has no API token can still create a sandbox, as before.
+
+**Tests:** internal/sandbox/register_test.go
 
 ## Success Criteria
 

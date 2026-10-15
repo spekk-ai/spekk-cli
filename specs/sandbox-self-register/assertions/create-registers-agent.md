@@ -3,7 +3,7 @@ id: create-registers-agent
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 depends-on: control-host-client
 ---
@@ -11,6 +11,8 @@ depends-on: control-host-client
 # `create` Registers the Agent Before It Provisions
 
 When `SPEKK_API_TOKEN` is set, `spekk sandbox create` registers the agent on the control host before it creates or equips a machine. The agent token on the machine is the one the control host made.
+
+**Tests:** internal/sandbox/register_test.go
 
 ## Success Criteria
 

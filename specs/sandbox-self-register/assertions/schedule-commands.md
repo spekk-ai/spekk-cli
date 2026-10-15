@@ -3,12 +3,14 @@ id: schedule-commands
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 depends-on: control-host-client
 ---
 
 # `spekk schedule` Manages the Scheduled Tasks of an Agent
+
+**Tests:** internal/sandbox/schedule_test.go, cmd/spekk/sandbox_help_test.go
 
 ## Success Criteria
 

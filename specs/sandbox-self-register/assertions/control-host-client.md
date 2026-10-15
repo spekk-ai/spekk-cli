@@ -3,13 +3,15 @@ id: control-host-client
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 ---
 
 # The CLI Calls the Control Host With the User's API Token
 
 One client in `internal/sandbox` makes every call from the CLI to the control host. It reads its two settings from the environment, and it keeps every credential out of logs and stdout.
+
+**Tests:** internal/sandbox/controlhost_test.go
 
 ## Success Criteria
 

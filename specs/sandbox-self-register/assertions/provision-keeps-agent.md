@@ -3,7 +3,7 @@ id: provision-keeps-agent
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 depends-on: register-command
 ---
@@ -11,6 +11,8 @@ depends-on: register-command
 # `provision` Keeps the Agent That the Sandbox Already Has
 
 `spekk sandbox provision` rewrites `/etc/spekk/agent.env`. Users run it to change the auth mode or to push new credentials. A new token in that file would disconnect a registered agent, and a new agent would lose its schedules and its history.
+
+**Tests:** internal/sandbox/register_test.go
 
 ## Success Criteria
 

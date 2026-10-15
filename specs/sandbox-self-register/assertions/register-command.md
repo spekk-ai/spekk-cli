@@ -3,12 +3,14 @@ id: register-command
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 depends-on: create-registers-agent
 ---
 
 # `spekk sandbox register <name>` Registers a Sandbox Later
+
+**Tests:** internal/sandbox/register_test.go, cmd/spekk/sandbox_help_test.go
 
 ## Success Criteria
 
