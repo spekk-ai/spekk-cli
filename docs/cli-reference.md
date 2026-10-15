@@ -834,7 +834,7 @@ spekk sandbox deploy my-sandbox
 
 It copies the binary, writes the `spekk-agent` systemd unit, and restarts the service. Every login stages the upload in its home directory, then installs it beside the target and renames it into place, so a deploy replaces an agent that is running.
 
-Before the restart, it reads the version of the `claude` that the service runs. When the version is older than the minimum (`MinVersion` in `internal/claudecode`), or `claude` is not found, it installs the `stable` release as `agent` with the native installer, and reads the version again. When the version is still older, the deploy fails and does not restart the agent, because the new agent refuses every turn on an older Claude Code. A `claude` process that runs keeps its own binary, so this step stops no turn. `create` and `provision` run the same step when they deploy the agent.
+Before the restart, it reads the version of the `claude` that the service runs, with the service's user and `agent.env`. When the version is older than the minimum (`MinVersion` in `internal/claudecode`), or cannot be read, it installs the `stable` release as `agent` with the native installer, and reads the version again. When the version is still older, the deploy fails and does not restart the agent, because the new agent refuses every turn on an older Claude Code. When the version still cannot be read, the deploy prints a warning and continues. A `claude` process that runs keeps its own binary, so this step stops no turn. `create` and `provision` run the same step when they deploy the agent.
 
 ## `spekk schedule`
 
