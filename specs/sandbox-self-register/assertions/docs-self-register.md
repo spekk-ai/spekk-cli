@@ -3,7 +3,7 @@ id: docs-self-register
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 depends-on: no-cloud-credential-to-control-host
 ---

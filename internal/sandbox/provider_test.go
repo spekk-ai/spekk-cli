@@ -108,7 +108,7 @@ func TestDestroyLegacyMetadataDeletesDroplet(t *testing.T) {
 	}
 
 	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
-	if err := Destroy(p, "old-box", true); err != nil {
+	if err := Destroy(p, "old-box", DestroyOptions{Force: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !dropletDeleted {
@@ -188,7 +188,7 @@ func TestDestroyGuards(t *testing.T) {
 		}
 		p := &recordingProvider{destroyErr: fmt.Errorf("DO API is down")}
 		// Even --force must not clear a record whose machine may live.
-		if err := Destroy(p, "stuck", true); err == nil {
+		if err := Destroy(p, "stuck", DestroyOptions{Force: true}); err == nil {
 			t.Fatal("a failed teardown must fail the command")
 		}
 		if got, _ := GetSandbox("stuck"); got == nil {
@@ -203,7 +203,7 @@ func TestDestroyGuards(t *testing.T) {
 			t.Fatal(err)
 		}
 		p := &recordingProvider{destroyErr: fmt.Errorf("%w: gone", ErrNoMachineRecorded)}
-		if err := Destroy(p, "ghost", true); err != nil {
+		if err := Destroy(p, "ghost", DestroyOptions{Force: true}); err != nil {
 			t.Fatalf("--force must clear a record naming no machine: %v", err)
 		}
 		if got, _ := GetSandbox("ghost"); got != nil {
@@ -302,7 +302,7 @@ func TestDestroyRemovesOnlyGeneratedKeys(t *testing.T) {
 		}
 
 		stderr := captureStderr(t)
-		if err := Destroy(&recordingProvider{}, "box", true); err != nil {
+		if err := Destroy(&recordingProvider{}, "box", DestroyOptions{Force: true}); err != nil {
 			t.Fatal(err)
 		}
 		for _, p := range []string{key, key + ".pub"} {
@@ -327,7 +327,7 @@ func TestDestroyRemovesOnlyGeneratedKeys(t *testing.T) {
 		}
 
 		stderr := captureStderr(t)
-		if err := Destroy(&recordingProvider{}, "box", true); err != nil {
+		if err := Destroy(&recordingProvider{}, "box", DestroyOptions{Force: true}); err != nil {
 			t.Fatal(err)
 		}
 		for _, p := range []string{key, key + ".pub"} {

@@ -84,7 +84,7 @@ func TestDestroyUnmanagedMachine(t *testing.T) {
 		save(t, key)
 		stubStopAgent(t, nil)
 
-		if err := Destroy(nil, "box", true); err != nil {
+		if err := Destroy(nil, "box", DestroyOptions{Force: true}); err != nil {
 			t.Fatal(err)
 		}
 		for _, p := range []string{key, key + ".pub"} {
@@ -116,7 +116,7 @@ func TestDestroyUnmanagedMachine(t *testing.T) {
 		if p != nil {
 			t.Fatalf("provider = %T, want nil", p)
 		}
-		if err := Destroy(p, "box", true); err != nil {
+		if err := Destroy(p, "box", DestroyOptions{Force: true}); err != nil {
 			t.Fatal(err)
 		}
 		if got, _ := GetSandbox("box"); got != nil {
@@ -131,7 +131,7 @@ func TestDestroyUnmanagedMachine(t *testing.T) {
 		stubStopAgent(t, errors.New("host unreachable"))
 
 		answerPrompt(t, "y\n")
-		if err := Destroy(nil, "box", false); err == nil {
+		if err := Destroy(nil, "box", DestroyOptions{}); err == nil {
 			t.Fatal("destroy must fail when the agent cannot be stopped")
 		}
 		if got, _ := GetSandbox("box"); got == nil {

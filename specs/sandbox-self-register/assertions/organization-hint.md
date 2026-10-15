@@ -3,7 +3,7 @@ id: organization-hint
 parent: sandbox-self-register
 created: 2026-10-15T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-self-register
 depends-on: control-host-client
 ---

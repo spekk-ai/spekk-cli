@@ -4,7 +4,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 )
 
 // newAgentToken decides the agent token for a sandbox that has no agent yet.
@@ -47,6 +49,53 @@ func revokeAbandoned(id, name string) bool {
 	}
 	fmt.Fprintf(os.Stderr, "Revoked agent %s on the control host, because the command failed.\n", id)
 	return true
+}
+
+// exit is the seam the signal handler exits through, so a test can see the
+// status without losing the test process.
+var exit = os.Exit
+
+// revokeOnSignal revokes the agent that create registered when SIGINT or
+// SIGTERM arrives, and then exits. Without it, Ctrl-C during a long create
+// leaves a live agent that no record names. The handler takes the agent id
+// out of the record on disk, so the record and the control host agree.
+//
+// The returned stop ends the watch. Call it before the normal path decides
+// what happens to the agent. When a signal came first, stop waits for the
+// handler, which exits: Ctrl-C also stops the ssh children, and the failure
+// that follows must not race the handler to the revoke.
+func revokeOnSignal(id, name string) (stop func()) {
+	signals := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	finished := make(chan struct{})
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		defer close(finished)
+		select {
+		case sig := <-signals:
+			signal.Stop(signals)
+			fmt.Fprintf(os.Stderr, "\nInterrupted (%s).\n", sig)
+			if revokeAbandoned(id, name) {
+				if meta, err := GetSandbox(name); err == nil && meta != nil && meta.AgentID == id {
+					meta.AgentID = ""
+					if err := SaveSandbox(name, meta); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: could not record that the agent is revoked: %s\n", err)
+					}
+				}
+			}
+			code := 130
+			if sig == syscall.SIGTERM {
+				code = 143
+			}
+			exit(code)
+		case <-done:
+		}
+	}()
+	return func() {
+		signal.Stop(signals)
+		close(done)
+		<-finished
+	}
 }
 
 // Register registers a recorded sandbox on the control host: one created
@@ -105,6 +154,11 @@ func Register(name, organization string) error {
 // credentials that only the user's machine had. The token travels
 // base64-encoded, so no character of it can change the script, and umask
 // keeps the new file private before chmod runs.
+//
+// The old file is kept as agent.env.bak until the restart succeeds. If any
+// step fails, the trap puts it back and restarts the agent with the old
+// token. Register then revokes the new agent, so the machine and the record
+// both still name the old one.
 func buildTokenScript(token string) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(token))
 	return fmt.Sprintf(`set -e
@@ -113,24 +167,30 @@ f=/etc/spekk/agent.env
 token=$(echo '%s' | base64 -d)
 mkdir -p /etc/spekk
 touch "$f"
+cp -p "$f" "$f.bak"
+trap 'rc=$?; if [ "$rc" -ne 0 ]; then rm -f "$f.new"; mv -f "$f.bak" "$f"; systemctl restart spekk-agent || true; fi; exit "$rc"' EXIT
 grep -v '^SPEKK_AGENT_TOKEN=' "$f" > "$f.new" || true
 printf 'SPEKK_AGENT_TOKEN=%%s\n' "$token" >> "$f.new"
 chown agent:agent "$f.new"
 chmod 600 "$f.new"
 mv -f "$f.new" "$f"
-systemctl restart spekk-agent`, encoded)
+systemctl restart spekk-agent
+rm -f "$f.bak"`, encoded)
 }
 
 // readAgentToken is the seam Provision reads the machine's current agent
 // token through. It reads stdout only, so an ssh warning on stderr cannot
-// become part of the token. The last assignment wins, as it does for
-// systemd.
+// become part of the token. A failed connection and a file with no token
+// are different errors. The last assignment wins, as it does for systemd.
 var readAgentToken = func(meta *SandboxMeta, name string) (string, error) {
 	user := sshUser(meta)
-	out := runSSH(meta.IP, meta.SSHKeyPath, name, user, privilegedScript(user, `sed -n 's/^SPEKK_AGENT_TOKEN=//p' /etc/spekk/agent.env`))
+	out, err := runSSHStdout(meta.IP, meta.SSHKeyPath, name, user, privilegedScript(user, `sed -n 's/^SPEKK_AGENT_TOKEN=//p' /etc/spekk/agent.env`))
+	if err != nil {
+		return "", fmt.Errorf("reading /etc/spekk/agent.env over SSH: %w", err)
+	}
 	lines := strings.Fields(out)
 	if len(lines) == 0 {
-		return "", fmt.Errorf("no SPEKK_AGENT_TOKEN in /etc/spekk/agent.env, or the connection failed")
+		return "", fmt.Errorf("no SPEKK_AGENT_TOKEN in /etc/spekk/agent.env")
 	}
 	return lines[len(lines)-1], nil
 }

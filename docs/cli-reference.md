@@ -677,7 +677,7 @@ The cloud flags and the existing-machine flags exclude each other. For the `gcp`
 
 **A DigitalOcean sandbox.** `create` checks that the environment variables for the auth mode are set, generates an SSH key pair under spekk's config directory, creates the droplet with the cloud-init template that ships in the CLI, and records it. A `gcp` sandbox follows the same steps on a Compute Engine VM. It then waits for SSH and for cloud-init to write `/opt/spekk/.provisioned`. While it waits, it prints a progress line at most once a minute with the time waited and the last line of `/var/log/cloud-init-output.log`. When `cloud-init status` reports `error`, or `done` without the marker, the wait stops at once. When the marker appears, `create` injects the credentials, configures git for the agent, downloads the agent binary for the machine's CPU architecture from the latest spekk release and deploys it, marks the sandbox `active`, and prints the result.
 
-**Registration.** With `SPEKK_API_TOKEN` set, `create` registers the agent on the control host (`POST /api/agents/`) after it fetches the release artifacts and before it asks the provider for a machine. A refused registration costs nothing. The token that the control host returns is the `SPEKK_AGENT_TOKEN` that `create` writes to the machine, and the record stores the agent id. When a later step fails, `create` revokes the agent again and says so. If that revoke also fails, the record keeps the agent id, so `destroy` can revoke it. On success, `create` prints the agent id and not the token. Without `SPEKK_API_TOKEN`, `create` makes the token itself, prints it to register by hand, and tells you how to run `spekk sandbox register` later.
+**Registration.** With `SPEKK_API_TOKEN` set, `create` registers the agent on the control host (`POST /api/agents/`) after it fetches the release artifacts and before it asks the provider for a machine. A refused registration costs nothing. The token that the control host returns is the `SPEKK_AGENT_TOKEN` that `create` writes to the machine, and the record stores the agent id. When a later step fails, or when you press Ctrl-C (`SIGINT`) or the process gets `SIGTERM`, `create` revokes the agent again and says so. If that revoke also fails, the record keeps the agent id, so `destroy` can revoke it. On success, `create` prints the agent id and not the token. Without `SPEKK_API_TOKEN`, `create` makes the token itself, prints it to register by hand, and tells you how to run `spekk sandbox register` later. When you belong to more than one organization and give no `--organization`, the control host refuses the registration, and the error tells you to pass `--organization <id>`. The id is in the `organization` field of an agent you already have (`GET /api/agents/` on the control host), or an admin of the organization can give it to you.
 
 When the wait runs out, the droplet keeps running and the record stays at `provisioning`. Nothing is destroyed. Finish it with [`spekk sandbox provision`](#spekk-sandbox-provision-name) when cloud-init is done, or remove it with `destroy`.
 
@@ -747,8 +747,8 @@ spekk sandbox provision my-sandbox --auth subscription  # Change the auth mode
 
 The agent token follows the record:
 
-- **A registered sandbox** (the record has an agent id) keeps its agent. `provision` reads `SPEKK_AGENT_TOKEN` from `/etc/spekk/agent.env` on the machine and writes the same token back, so the agent keeps its connection, its schedules, and its history. If it cannot read a token, it stops before it changes the machine, and tells you to run `spekk sandbox register`.
-- **A sandbox with no agent** gets a new token. With `SPEKK_API_TOKEN` set, `provision` registers it as `create` does. Without it, `provision` prints the token to register by hand.
+- **A registered sandbox** (the record has an agent id) keeps its agent. `provision` reads `SPEKK_AGENT_TOKEN` from `/etc/spekk/agent.env` on the machine and writes the same token back, so the agent keeps its connection, its schedules, and its history. If it cannot read a token, it stops before it changes the machine, and tells you to run `spekk sandbox register`. The error shows the SSH failure, or says that the file has no token.
+- **A sandbox with no agent** gets a new token. With `SPEKK_API_TOKEN` set, `provision` registers it as `create` does. If the record cannot be saved after that, the error names the new agent id. Without it, `provision` prints the token to register by hand.
 
 `provision` is also how you change a live sandbox's credentials from your machine: re-run it with the variables set in your environment to switch auth mode, rotate a token, or push a new AWS key. See [Updating sandbox variables](configuration.md#updating-sandbox-variables) for that and for the on-machine alternative.
 
@@ -767,7 +767,7 @@ spekk sandbox register my-sandbox --organization <id>
 |------|-------------|
 | `--organization <id>` | The control host organization to register the agent in. Needed only when you belong to more than one |
 
-`register` needs `SPEKK_API_TOKEN` and `SPEKK_HOST`. It registers a new agent, then, over SSH, replaces the `SPEKK_AGENT_TOKEN` line in `/etc/spekk/agent.env`, keeps every other line, and restarts `spekk-agent`. If the SSH step fails, it revokes the new agent. On success, the record stores the new agent id. If the record named an agent before, `register` revokes that old agent, because its token is no longer on the machine.
+`register` needs `SPEKK_API_TOKEN` and `SPEKK_HOST`. It registers a new agent, then, over SSH, replaces the `SPEKK_AGENT_TOKEN` line in `/etc/spekk/agent.env`, keeps every other line, and restarts `spekk-agent`. The script keeps a copy of the old file as `agent.env.bak` until the restart succeeds. If a step fails, it puts the old file back and restarts the agent with the old token. Then `register` revokes the new agent, and the record keeps the old agent id, so the machine and the record agree. On success, the record stores the new agent id. If the record named an agent before, `register` revokes that old agent, because its token is no longer on the machine.
 
 Use it for a sandbox that was created without `SPEKK_API_TOKEN`, or to replace the agent of a sandbox. A new agent starts with no schedules.
 
@@ -806,15 +806,17 @@ Tear down a sandbox and remove its local record.
 ```bash
 spekk sandbox destroy my-sandbox
 spekk sandbox destroy my-sandbox --force   # No confirmation prompt
+spekk sandbox destroy my-sandbox --ignore-revoke-failure   # Destroy even if the agent cannot be revoked
 ```
 
 **Flags:**
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--force` | `-f` | Skip the confirmation prompt, and remove the record when the teardown cannot run or the agent cannot be revoked |
+| `--force` | `-f` | Skip the confirmation prompt, and remove the record when the teardown cannot run |
+| `--ignore-revoke-failure` | | Destroy the sandbox when its agent cannot be revoked on the control host |
 
-When the record has an agent id, `destroy` first revokes the agent on the control host (`POST /api/agents/<id>/revoke/`), before it touches the machine. This needs `SPEKK_API_TOKEN`. A failed revoke stops `destroy`, and the machine and the record stay. With `--force`, `destroy` prints a warning that names the agent id and continues; revoke that agent on the control host.
+When the record has an agent id, `destroy` first revokes the agent on the control host (`POST /api/agents/<id>/revoke/`), before it touches the machine. This needs `SPEKK_API_TOKEN`: without it, `destroy` stops before the confirmation prompt and says so. A failed revoke stops `destroy`, and the machine and the record stay. `--force` does not change this. With `--ignore-revoke-failure`, `destroy` prints a warning that names the agent id and continues; revoke that agent on the control host.
 
 For a DigitalOcean sandbox, `destroy` deletes the droplet and its SSH key on DigitalOcean, then removes the local record. When the record names no droplet, `destroy` refuses, because the droplet may still be running and billing. `--force` removes the record anyway.
 

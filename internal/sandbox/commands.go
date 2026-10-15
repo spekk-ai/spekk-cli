@@ -162,6 +162,11 @@ func Create(p Provider, opts CreateOptions) (err error) {
 			}
 		}
 	}()
+	if agentID != "" {
+		// Deferred after the revoke above, so it runs first: once the
+		// watch stops, only the normal path decides about the agent.
+		defer revokeOnSignal(agentID, opts.Name)()
+	}
 	if p != nil {
 		meta.Provider = p.Name()
 	}
@@ -418,10 +423,16 @@ func Provision(name string, opts ProvisionOptions) error {
 		return err
 	}
 
+	registered := sandbox.AgentID == "" && agentID != ""
 	sandbox.Auth = string(mode)
 	sandbox.Status = "active"
 	sandbox.AgentID = agentID
 	if err := SaveSandbox(name, sandbox); err != nil {
+		if registered {
+			// The machine runs the new agent, so revoking it would be
+			// wrong. Name it, because no record does.
+			return fmt.Errorf("saving metadata: %w (agent %s is registered and running on the machine)", err, agentID)
+		}
 		return fmt.Errorf("saving metadata: %w", err)
 	}
 
@@ -540,15 +551,34 @@ func SSH(name string, extraArgs []string) error {
 
 // --- Destroy ---
 
+// DestroyOptions holds the flags of `spekk sandbox destroy`.
+type DestroyOptions struct {
+	// Force skips the confirmation, and removes a record whose machine
+	// teardown failed or that names no machine.
+	Force bool
+	// IgnoreRevokeFailure continues when the agent cannot be revoked on the
+	// control host. Force does not, because a live agent with no machine
+	// is a credential that nothing points at.
+	IgnoreRevokeFailure bool
+}
+
 // Destroy tears down a sandbox using the Provider for remote resource cleanup
 // and then removes local files and metadata.
-func Destroy(p Provider, name string, force bool) error {
+func Destroy(p Provider, name string, opts DestroyOptions) error {
+	force := opts.Force
 	sandbox, err := GetSandbox(name)
 	if err != nil {
 		return err
 	}
 	if sandbox == nil {
 		return fmt.Errorf("sandbox %q not found", name)
+	}
+
+	// Without the API token the revoke cannot even start. Say so before
+	// the prompt, not after the user has said yes.
+	noAPIToken := sandbox.AgentID != "" && strings.TrimSpace(os.Getenv(apiTokenVar)) == ""
+	if noAPIToken && !opts.IgnoreRevokeFailure {
+		return fmt.Errorf("sandbox %q has agent %s on the control host, and %s is not set, so destroy cannot revoke it.\nNothing was destroyed. Set %s, or use --ignore-revoke-failure to destroy the sandbox and leave the agent live", name, sandbox.AgentID, apiTokenVar, apiTokenVar)
 	}
 
 	if !force {
@@ -565,10 +595,10 @@ func Destroy(p Provider, name string, force bool) error {
 	// control host leaves a credential that nothing points at any more.
 	if sandbox.AgentID != "" {
 		if err := revokeRecordedAgent(sandbox.AgentID); err != nil {
-			if !force {
-				return fmt.Errorf("revoking agent %s on the control host: %w\nNothing was destroyed. Use --force to destroy the sandbox anyway", sandbox.AgentID, err)
+			if !opts.IgnoreRevokeFailure {
+				return fmt.Errorf("revoking agent %s on the control host: %w\nNothing was destroyed. Use --ignore-revoke-failure to destroy the sandbox anyway", sandbox.AgentID, err)
 			}
-			fmt.Fprintf(os.Stderr, "Warning: could not revoke agent %s on the control host: %s; destroying anyway because --force was given. Revoke it on the control host.\n", sandbox.AgentID, err)
+			fmt.Fprintf(os.Stderr, "Warning: could not revoke agent %s on the control host: %s; destroying anyway because --ignore-revoke-failure was given. Revoke it on the control host.\n", sandbox.AgentID, err)
 		} else {
 			fmt.Fprintf(os.Stderr, "Revoked agent %s on the control host.\n", sandbox.AgentID)
 		}
@@ -1097,6 +1127,17 @@ func checkTCPPort(ip string, port int) bool {
 // runSSH runs command on the host as user and returns trimmed stdout, or ""
 // on error.
 func runSSH(ip, keyPath, name, user, command string) string {
+	out, err := runSSHStdout(ip, keyPath, name, user, command)
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
+// runSSHStdout runs command on the host as user and returns its stdout only,
+// so an ssh warning cannot become part of the output. A failure carries
+// what ssh or the command wrote to stderr.
+func runSSHStdout(ip, keyPath, name, user, command string) (string, error) {
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")
 	if keyPath != "" {
@@ -1105,9 +1146,15 @@ func runSSH(ip, keyPath, name, user, command string) string {
 	args = append(args, fmt.Sprintf("%s@%s", user, ip), command)
 	out, err := exec.Command("ssh", args...).Output()
 	if err != nil {
-		return ""
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+				return "", fmt.Errorf("%w: %s", err, stderr)
+			}
+		}
+		return "", err
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(string(out)), nil
 }
 
 // runSSHCombined runs command on the host as user, returning combined output

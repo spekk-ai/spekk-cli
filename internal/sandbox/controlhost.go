@@ -39,7 +39,13 @@ func newControlHost() (*controlHost, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &controlHost{base: base, token: token, http: &http.Client{Timeout: 30 * time.Second}}, nil
+	// A redirect is not followed, so the Authorization header goes to
+	// SPEKK_HOST only. The 3xx answer becomes an error like any other.
+	client := &http.Client{
+		Timeout:       30 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	return &controlHost{base: base, token: token, http: client}, nil
 }
 
 // controlHostBase turns SPEKK_HOST into a base URL. A bare host gets https,
@@ -123,7 +129,7 @@ func (c *controlHost) do(method, path string, body, out any) error {
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return &apiError{Method: method, Path: path, Status: resp.StatusCode, Detail: errorDetail(data)}
+		return &apiError{Method: method, Path: path, Status: resp.StatusCode, Detail: errorDetail(data), body: data}
 	}
 	if out == nil || len(data) == 0 {
 		return nil
@@ -139,6 +145,18 @@ type apiError struct {
 	Method, Path string
 	Status       int
 	Detail       string
+	body         []byte
+}
+
+// hasField reports whether the error body is a JSON object with the key
+// name, as a validation error for that field is.
+func (e *apiError) hasField(name string) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(e.body, &fields) != nil {
+		return false
+	}
+	_, ok := fields[name]
+	return ok
 }
 
 func (e *apiError) Error() string {
@@ -190,6 +208,12 @@ func (c *controlHost) registerAgent(name, organization string) (*registeredAgent
 	}
 	var agent registeredAgent
 	if err := c.do(http.MethodPost, "/api/agents/", body, &agent); err != nil {
+		// The control host could not choose the organization: the user
+		// belongs to several, or is not a member of the one given.
+		var apiErr *apiError
+		if errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && apiErr.hasField("organization") {
+			return nil, fmt.Errorf("%w\nPass --organization <id> to choose the organization. The id is in the \"organization\" field of an agent you already have (GET /api/agents/ on the control host), or ask an admin of the organization", err)
+		}
 		return nil, err
 	}
 	if agent.ID == "" || agent.AuthToken == "" {

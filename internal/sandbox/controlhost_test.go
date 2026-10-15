@@ -291,3 +291,72 @@ func TestControlHostErrorCarriesDetailNotToken(t *testing.T) {
 		t.Errorf("Authorization = %q", got)
 	}
 }
+
+// A redirect could send the API token to an address the user never chose,
+// so the client does not follow one.
+func TestControlHostDoesNotFollowRedirects(t *testing.T) {
+	var reached bool
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true }))
+	t.Cleanup(other.Close)
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(host.Close)
+	t.Setenv("SPEKK_HOST", host.URL)
+	t.Setenv(apiTokenVar, testAPIToken)
+
+	c, err := newControlHost()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = c.revokeAgent("agent-1")
+	if err == nil || !strings.Contains(err.Error(), "307") {
+		t.Errorf("want an error with the 307 status, got %v", err)
+	}
+	if reached {
+		t.Error("the client followed the redirect with the API token")
+	}
+}
+
+// A user in several organizations must say which one the agent joins. The
+// error says how, with the body the control host really sends.
+func TestRegisterHintsAtOrganization(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		hint       bool
+	}{
+		{"several organizations", `{"organization": ["You belong to several organizations. Specify one."]}`, true},
+		{"another field", `{"sandbox_id": ["agent with this sandbox id already exists."]}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				io.WriteString(w, tc.body)
+			}))
+			t.Cleanup(host.Close)
+			t.Setenv("SPEKK_HOST", host.URL)
+			t.Setenv(apiTokenVar, testAPIToken)
+			c, err := newControlHost()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = c.registerAgent("box", "")
+			if err == nil {
+				t.Fatal("a 400 must be an error")
+			}
+			if !strings.Contains(err.Error(), "400") {
+				t.Errorf("error %q lacks the status", err)
+			}
+			for _, want := range []string{"--organization <id>", `"organization" field`, "GET /api/agents/"} {
+				if got := strings.Contains(err.Error(), want); got != tc.hint {
+					t.Errorf("hint %q present = %v, want %v:\n%s", want, got, tc.hint, err)
+				}
+			}
+			if tc.hint && !strings.Contains(err.Error(), "You belong to several organizations") {
+				t.Errorf("error %q drops the text of the control host", err)
+			}
+		})
+	}
+}

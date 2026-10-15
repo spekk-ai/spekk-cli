@@ -1172,16 +1172,18 @@ func launchSandbox(args []string) {
 		}
 	case "destroy":
 		name := ""
-		force := false
+		var opts sandbox.DestroyOptions
 		for _, a := range subArgs {
 			if a == "--force" || a == "-f" {
-				force = true
+				opts.Force = true
+			} else if a == "--ignore-revoke-failure" {
+				opts.IgnoreRevokeFailure = true
 			} else if !strings.HasPrefix(a, "-") && name == "" {
 				name = a
 			}
 		}
 		if name == "" {
-			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force]")
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force] [--ignore-revoke-failure]")
 			os.Exit(1)
 		}
 		if err := sandbox.ValidateSandboxName(name); err != nil {
@@ -1193,7 +1195,7 @@ func launchSandbox(args []string) {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Destroy(p, name, force); err != nil {
+		if err := sandbox.Destroy(p, name, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}

@@ -42,7 +42,7 @@ func TestNoCloudCredentialReachesTheControlHost(t *testing.T) {
 		{"schedule update", func() error { _, err := runSchedule(t, "update", "box", "job", "--role", "coach"); return err }},
 		{"schedule run", func() error { _, err := runSchedule(t, "run", "box", "job"); return err }},
 		{"schedule delete", func() error { _, err := runSchedule(t, "delete", "box", "job"); return err }},
-		{"destroy", func() error { return Destroy(nil, "box", true) }},
+		{"destroy", func() error { return Destroy(nil, "box", DestroyOptions{Force: true}) }},
 	}
 	for _, s := range steps {
 		if err := s.run(); err != nil {
