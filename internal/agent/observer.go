@@ -104,8 +104,12 @@ func (c ObserverConfig) mcpArgs() ([]string, error) {
 	if c.MCPConfig == "" {
 		return nil, fmt.Errorf("--mcp-config requires a file")
 	}
-	if info, err := os.Stat(c.MCPConfig); err != nil || !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("--mcp-config file not found: %s", c.MCPConfig)
+	info, err := os.Stat(c.MCPConfig)
+	if err != nil {
+		return nil, fmt.Errorf("--mcp-config: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("--mcp-config: %s is not a file", c.MCPConfig)
 	}
 	return []string{"--mcp-config=" + c.MCPConfig}, nil
 }

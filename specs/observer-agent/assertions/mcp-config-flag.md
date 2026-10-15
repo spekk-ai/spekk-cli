@@ -19,7 +19,7 @@ A scheduled observer skill can need tools that no other session has, for example
 
 - `spekk observer [skill] --mcp-config <file>` gives `--mcp-config=<file>` to `claude` as one argument, and the message is still the last argument. This applies to `--headless` and to an interactive run, and to the default scan and to a skill run.
 - Without `--mcp-config`, the arguments to `claude` do not change.
-- `--mcp-config` with no value, or with a path that is not a regular file, stops the run with an error that names the flag and the path, and exits non-zero. `claude` does not start.
+- `--mcp-config` with no value, or with a path that is not a regular file, stops the run with an error that names the flag, and the path and the cause when there is a path, and exits non-zero. `claude` does not start.
 - `docs/cli-reference.md` lists the flag in the observer flag table.
 
 ## Verification

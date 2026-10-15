@@ -114,9 +114,9 @@ func TestRunObserver_RefusesBadMCPConfig(t *testing.T) {
 		message string
 	}{
 		{"missing file", "--headless --claude-path " + claude + " --mcp-config " + filepath.Join(bin, "absent.json"),
-			"--mcp-config file not found: " + filepath.Join(bin, "absent.json")},
+			"--mcp-config: stat " + filepath.Join(bin, "absent.json") + ": no such file or directory"},
 		{"directory", "--headless --claude-path " + claude + " --mcp-config " + bin,
-			"--mcp-config file not found: " + bin},
+			"--mcp-config: " + bin + " is not a file"},
 		{"missing value", "--headless --claude-path " + claude + " --mcp-config",
 			"--mcp-config requires a file"},
 		{"missing value in a skill run", "coverage-gap --headless --claude-path " + claude + " --mcp-config",
