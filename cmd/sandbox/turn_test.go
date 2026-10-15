@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -159,5 +160,160 @@ func TestUnrecognizedLinesObserveNothing(t *testing.T) {
 		if got := decodeStreamLine([]byte(line)); !reflect.DeepEqual(got, streamEvent{}) {
 			t.Errorf("%s: decoded %+v, want nothing observed", name, got)
 		}
+	}
+}
+
+func toolStart(id string) string {
+	return `{"type":"assistant","message":{"content":[{"type":"tool_use","id":"` + id + `","name":"Bash"}]}}`
+}
+
+func toolEnd(id string) string {
+	return `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"` + id + `"}]}}`
+}
+
+func snapshot(tasks int) string {
+	list := make([]string, tasks)
+	for i := range list {
+		list[i] = fmt.Sprintf(`{"task_id":"t%d"}`, i)
+	}
+	return `{"type":"system","subtype":"background_tasks_changed","tasks":[` + strings.Join(list, ",") + `]}`
+}
+
+const resultLine = `{"type":"result","subtype":"success","result":"done"}`
+
+func observeAll(p *turnProgress, lines ...string) {
+	for _, l := range lines {
+		p.observe([]byte(l))
+	}
+}
+
+func TestInFlightToolCalls(t *testing.T) {
+	t.Run("one call in flight, then closed", func(t *testing.T) {
+		p := newTurnProgress()
+		if p.working() {
+			t.Fatal("a new turn is working before any line")
+		}
+		observeAll(p, toolStart("a"))
+		if !p.working() {
+			t.Fatal("not working with a call in flight")
+		}
+		observeAll(p, toolEnd("a"))
+		if p.working() {
+			t.Fatal("working after the call ended")
+		}
+	})
+	t.Run("two overlapping calls close in reverse order", func(t *testing.T) {
+		p := newTurnProgress()
+		observeAll(p, toolStart("a"), toolStart("b"), toolEnd("b"))
+		if !p.working() {
+			t.Fatal("not working while call a is still in flight")
+		}
+		observeAll(p, toolEnd("a"))
+		if p.working() {
+			t.Fatal("working after both calls ended")
+		}
+	})
+	t.Run("a result for an unknown id changes nothing", func(t *testing.T) {
+		p := newTurnProgress()
+		observeAll(p, toolEnd("x"))
+		if p.working() || len(p.inFlight) != 0 {
+			t.Fatal("an unknown result changed the set")
+		}
+		observeAll(p, toolStart("a"), toolEnd("x"))
+		if !p.working() {
+			t.Fatal("an unknown result closed call a")
+		}
+	})
+	t.Run("a call open at stream end does not reach the next turn", func(t *testing.T) {
+		p := newTurnProgress()
+		observeAll(p, toolStart("a"))
+		if next := newTurnProgress(); next.working() {
+			t.Fatal("a new turn starts busy")
+		}
+	})
+}
+
+// The long foreground call is silent from its start to its end. The set must
+// say "working" for every line of that span.
+func TestFixtureLongToolCallIsInFlightAcrossItsSilentSpan(t *testing.T) {
+	const long = "toolu_01H7qpvvQrT4qwC81ypoD4id"
+	p := newTurnProgress()
+	started, ended := false, false
+	for _, line := range fixtureLines(t, "foreground-tool-calls.jsonl") {
+		p.observe(line)
+		_, open := p.inFlight[long]
+		switch {
+		case open:
+			started = true
+			if !p.working() {
+				t.Fatal("not working while the long call is in flight")
+			}
+		case started:
+			ended = true
+		}
+	}
+	if !started || !ended {
+		t.Fatalf("the fixture did not open and close the long call (started=%v ended=%v)", started, ended)
+	}
+	if p.working() {
+		t.Fatal("working at the end of a stream where every call ended")
+	}
+}
+
+func TestBackgroundTaskInventory(t *testing.T) {
+	t.Run("no background task", func(t *testing.T) {
+		p := newTurnProgress()
+		observeAll(p, toolStart("a"), toolEnd("a"), resultLine)
+		if p.tasks != 0 || p.tasksAtResult != 0 {
+			t.Fatalf("tasks = %d, at result = %d, want 0 and 0", p.tasks, p.tasksAtResult)
+		}
+	})
+	t.Run("a task still live at stream end", func(t *testing.T) {
+		p := newTurnProgress()
+		observeAll(p, snapshot(1), resultLine)
+		if p.tasks != 1 || p.tasksAtResult != 1 {
+			t.Fatalf("tasks = %d, at result = %d, want 1 and 1", p.tasks, p.tasksAtResult)
+		}
+	})
+	t.Run("a task that finishes before stream end", func(t *testing.T) {
+		p := newTurnProgress()
+		observeAll(p, snapshot(1), snapshot(0), resultLine)
+		if p.tasks != 0 || p.tasksAtResult != 0 {
+			t.Fatalf("tasks = %d, at result = %d, want 0 and 0", p.tasks, p.tasksAtResult)
+		}
+	})
+	t.Run("the latest snapshot replaces the count", func(t *testing.T) {
+		p := newTurnProgress()
+		observeAll(p, snapshot(2), snapshot(0))
+		if p.tasks != 0 {
+			t.Fatalf("tasks = %d after an empty snapshot, want 0", p.tasks)
+		}
+		observeAll(p, snapshot(3))
+		if p.tasks != 3 {
+			t.Fatalf("tasks = %d, want 3", p.tasks)
+		}
+	})
+}
+
+// tasksAtEachResult replays a fixture and returns the inventory size at each
+// result event, and at the end of the stream.
+func tasksAtEachResult(t *testing.T, name string) (atResults []int, atEnd int) {
+	t.Helper()
+	p := newTurnProgress()
+	for _, line := range fixtureLines(t, name) {
+		p.observe(line)
+		if decodeStreamLine(line).result {
+			atResults = append(atResults, p.tasksAtResult)
+		}
+	}
+	return atResults, p.tasks
+}
+
+func TestFixtureInventoryAtResults(t *testing.T) {
+	if at, end := tasksAtEachResult(t, "background-task-outlives-turn.jsonl"); !reflect.DeepEqual(at, []int{1}) || end != 0 {
+		t.Errorf("yield: tasks at results = %v, at end = %d; want [1] and 0 after the kill", at, end)
+	}
+	if at, end := tasksAtEachResult(t, "background-task-finishes-before-second-result.jsonl"); !reflect.DeepEqual(at, []int{1, 0}) || end != 0 {
+		t.Errorf("completion: tasks at results = %v, at end = %d; want [1 0] and 0", at, end)
 	}
 }

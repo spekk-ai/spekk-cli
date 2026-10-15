@@ -3,7 +3,7 @@ id: turn-inflight-tool-calls-tracked
 parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/turn-progress-client
 depends-on: claude-stream-shapes-pinned-by-fixtures
 ---
@@ -27,3 +27,5 @@ This assertion establishes the fact. Sending it to the control host is a separat
 - When the stream ends, the set is discarded. A tool call still open at stream end does not leak into the next turn.
 - No inspection of a tool's name, its input, or any text decides whether work is in flight. Only the presence of unmatched ids does.
 - Tests cover: one call in flight then closed; two overlapping calls closing in reverse order; a result for an unknown id; a stream that ends with a call still open. A fixture replay asserts the set is non-empty across the whole silent span of the long foreground tool call.
+
+**Tests:** `cmd/sandbox/turn_test.go`

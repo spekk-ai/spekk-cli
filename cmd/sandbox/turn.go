@@ -71,3 +71,46 @@ func decodeStreamLine(line []byte) streamEvent {
 	}
 	return ev
 }
+
+// turnProgress is what the client has seen of the work of one invocation. A
+// new one starts for each invocation and is dropped when the stream ends, so
+// nothing from one turn can carry into the next.
+type turnProgress struct {
+	// inFlight holds the ids of the tool calls that started and did not end.
+	// A start and an end pair by id only, because several calls can be in
+	// flight at a time and their results can return in any order.
+	inFlight map[string]struct{}
+	// tasks is the size of the most recent background-task inventory. Each
+	// snapshot replaces it. It is never counted up from starts and down from
+	// ends, because one missed event in that scheme is a permanent error.
+	tasks int
+	// tasksAtResult is tasks at the most recent result event.
+	tasksAtResult int
+}
+
+func newTurnProgress() *turnProgress {
+	return &turnProgress{inFlight: map[string]struct{}{}}
+}
+
+// observe updates the progress from one line of claude's stream-json output.
+func (p *turnProgress) observe(line []byte) {
+	ev := decodeStreamLine(line)
+	for _, id := range ev.toolStarts {
+		p.inFlight[id] = struct{}{}
+	}
+	for _, id := range ev.toolEnds {
+		delete(p.inFlight, id)
+	}
+	if ev.snapshot {
+		p.tasks = ev.tasks
+	}
+	if ev.result {
+		p.tasksAtResult = p.tasks
+	}
+}
+
+// working reports whether a tool call is in flight. It is read from the set
+// each time, not stored, so a missed event cannot leave it stale.
+func (p *turnProgress) working() bool {
+	return len(p.inFlight) > 0
+}

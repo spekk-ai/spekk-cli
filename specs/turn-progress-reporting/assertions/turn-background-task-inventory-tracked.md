@@ -3,7 +3,7 @@ id: turn-background-task-inventory-tracked
 parent: turn-progress-reporting
 created: 2026-08-07T23:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/turn-progress-client
 depends-on: claude-stream-shapes-pinned-by-fixtures
 ---
@@ -27,3 +27,5 @@ The process tree cannot answer this question. Claude Code's `Bash` tool `setsid(
 - A fixture replay of the yielding scenario shows the count non-empty at the turn's `result` event and back to zero only after Claude Code kills the task.
 - A fixture replay of the completing scenario shows the count non-empty at the first `result` event and zero at the second.
 - Tests cover: no background task at all; one task started and still live at stream end; one task started and finished before stream end; a snapshot arriving with an empty `tasks[]` array after a non-empty one.
+
+**Tests:** `cmd/sandbox/turn_test.go`
