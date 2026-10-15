@@ -69,3 +69,23 @@ func TestFailureReasonIgnoresANonErrorResult(t *testing.T) {
 		t.Errorf("failureReason = %q, want the exit status alone", got)
 	}
 }
+
+// TestStreamFramesNameTheirSession verifies that every stream frame carries
+// the turn's agent_session_id, so the control host can attribute a line when
+// several sessions stream at once.
+func TestStreamFramesNameTheirSession(t *testing.T) {
+	fakeFailingClaude(t)
+	host := newTestControlHost(t)
+	client := NewAgentClient(Config{Token: "t", Host: host.host(), Workspace: t.TempDir()})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go client.Run(ctx)
+
+	dispatchTurn(t, host.nextConn(t))
+	got := host.awaitFrame(t, MessageTypeStream, 20*time.Second)
+
+	if got.frame["agent_session_id"] != "agent-session-1" {
+		t.Errorf("stream frame agent_session_id = %v, want agent-session-1", got.frame["agent_session_id"])
+	}
+}

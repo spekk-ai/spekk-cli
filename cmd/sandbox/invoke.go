@@ -124,7 +124,10 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		// Dropped when no connection is live. A stream frame drives a live
 		// display, so a late one has no value, and waiting here would stall
 		// the read of the child's stdout.
-		conns.send(ctx, map[string]any{"type": "stream", "data": line})
+		// agent_session_id names the turn's session, so the control host can
+		// attribute the line when several sessions stream at once. The field is
+		// additive, and the protocol version does not change.
+		conns.send(ctx, map[string]any{"type": "stream", "data": line, "agent_session_id": msg.AgentSessionID})
 
 		var event map[string]any
 		if json.Unmarshal([]byte(line), &event) == nil {
