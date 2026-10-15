@@ -18,9 +18,9 @@ const (
 	KindPersistent = "persistent"
 )
 
-// DefaultOneOffExpiry is how long a one-off sandbox lives when --expires
+// defaultOneOffExpiry is how long a one-off sandbox lives when --expires
 // does not say. Expiry is a reminder in list, never a destroy.
-const DefaultOneOffExpiry = 48 * time.Hour
+const defaultOneOffExpiry = 48 * time.Hour
 
 // sandboxMarker is the file on the machine that says what kind of sandbox
 // it is, for whoever logs in. Credential injection writes it.
@@ -47,7 +47,7 @@ func (m *SandboxMeta) Expired(now time.Time) bool {
 }
 
 // ResolveKind turns the create flags into a kind and an expiry. A one-off
-// sandbox expires DefaultOneOffExpiry after now unless expires says when.
+// sandbox expires defaultOneOffExpiry after now unless expires says when.
 // A persistent sandbox has no expiry, so --expires without --one-off is an
 // error rather than a sandbox with two meanings.
 func ResolveKind(oneOff bool, expires string, now time.Time) (string, time.Time, error) {
@@ -58,19 +58,19 @@ func ResolveKind(oneOff bool, expires string, now time.Time) (string, time.Time,
 		return KindPersistent, time.Time{}, nil
 	}
 	if expires == "" {
-		return KindOneOff, now.Add(DefaultOneOffExpiry).UTC(), nil
+		return KindOneOff, now.Add(defaultOneOffExpiry).UTC(), nil
 	}
-	t, err := ParseExpiry(expires, now)
+	t, err := parseExpiry(expires, now)
 	if err != nil {
 		return "", time.Time{}, err
 	}
 	return KindOneOff, t, nil
 }
 
-// ParseExpiry reads an --expires value: a Go duration (36h), a number of
+// parseExpiry reads an --expires value: a Go duration (36h), a number of
 // days (3d), a date (2026-10-17, which means 00:00 UTC on that day), or an
 // RFC 3339 time. The result is in UTC and must be after now.
-func ParseExpiry(s string, now time.Time) (time.Time, error) {
+func parseExpiry(s string, now time.Time) (time.Time, error) {
 	var t time.Time
 	if d, err := time.ParseDuration(s); err == nil {
 		t = now.Add(d)
@@ -259,7 +259,7 @@ func markerContent(meta *SandboxMeta) []byte {
 var hostname = func() string {
 	h, err := os.Hostname()
 	if err != nil {
-		return ""
+		fmt.Fprintf(os.Stderr, "Warning: could not read the hostname, so the record has no createdBy: %s\n", err)
 	}
 	return h
 }
