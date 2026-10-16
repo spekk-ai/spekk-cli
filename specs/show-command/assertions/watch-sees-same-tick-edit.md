@@ -3,7 +3,7 @@ id: watch-sees-same-tick-edit
 parent: show-command
 created: 2026-10-16T00:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # `spekk show --watch` Sees an Edit That Keeps the Same mtime
