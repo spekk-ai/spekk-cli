@@ -965,35 +965,72 @@ func showStatus() {
 	}
 }
 
+// showUsage is the help text for `spekk show`.
+const showUsage = `
+spekk show - Open the Spec Explorer in the browser
+
+USAGE:
+  spekk show [OPTIONS]
+
+OPTIONS:
+  --watch, -w              Watch specs and live-reload the explorer
+  --cross-branch           Merge-preview mode: show spec/assertion state across all branches
+  --branch-filter <glob>   In cross-branch mode, only include branches matching the glob (e.g. 'feat/*')
+  --help, -h               Show this help message
+`
+
+// showRunners holds the functions that execShow calls to build the explorer.
+// A test replaces them to check that --help calls neither.
+type showRunners struct {
+	run   func(specsDir string, opts show.Options) error
+	watch func(specsDir string, opts show.Options) error
+}
+
 // showSpekk generates and displays the spec explorer web interface.
 // Supports --watch / -w for live reload and --cross-branch (with an optional
 // --branch-filter glob) for merge-preview mode.
 func showSpekk(args []string) {
-	specsDir := findSpecsDir()
+	code := execShow(args, os.Stdout, os.Stderr, showRunners{run: show.Run, watch: show.RunWatch})
+	if code != 0 {
+		os.Exit(code)
+	}
+}
 
+// execShow implements `spekk show` and returns the exit code. --help prints
+// showUsage before it resolves the specs directory, so it never writes the
+// explorer or starts the watch server.
+func execShow(args []string, stdout, stderr io.Writer, runners showRunners) int {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"watch":         {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
 		"cross-branch":  {Names: []string{"--cross-branch"}, Type: cli.BoolFlag},
 		"branch-filter": {Names: []string{"--branch-filter"}, Type: cli.StringFlag},
+		"help":          {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
+	if flags.Bool("help") {
+		fmt.Fprint(stdout, showUsage)
+		return 0
+	}
+	if flags.Err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", flags.Err)
+		return 1
+	}
+
+	specsDir := findSpecsDir()
 	opts := show.Options{
 		CrossBranch:  flags.Bool("cross-branch"),
 		BranchFilter: flags.String("branch-filter"),
 	}
 
+	run := runners.run
 	if flags.Bool("watch") {
-		if err := show.RunWatch(specsDir, opts); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
-		}
-		return
+		run = runners.watch
 	}
-
-	if err := show.Run(specsDir, opts); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
+	if err := run(specsDir, opts); err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", err)
+		return 1
 	}
+	return 0
 }
 
 // launchServe starts the WebSocket server for the browser extension.

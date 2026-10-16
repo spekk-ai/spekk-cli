@@ -4,7 +4,7 @@ icon: lucide/square-terminal
 
 # CLI Reference
 
-Every spekk command, its flags, and what it does. `spekk help` prints the command list. `spekk <command> --help` prints the help for one command. `spekk next`, `spekk status`, and `spekk show` have no `--help` text of their own, so this page is their reference.
+Every spekk command, its flags, and what it does. `spekk help` prints the command list. `spekk <command> --help` prints the help for one command. `spekk next` and `spekk status` have no `--help` text of their own, so this page is their reference.
 
 `spekk` with no command runs `spekk next`.
 
@@ -305,8 +305,11 @@ spekk show -w --cross-branch                        # Merge preview with live re
 | `--watch` | `-w` | Serve the page on `127.0.0.1` and reload it when a spec file changes |
 | `--cross-branch` | | Read-only preview of what a merge of each other branch would do to the specs |
 | `--branch-filter <glob>` | | In cross-branch mode, only branches that match the glob (for example `'feat/*'`) |
+| `--help` | `-h` | Print the help for `spekk show` and exit |
 
 Without `--watch`, `spekk show` writes `.spekk/index.html` and opens it in your browser. With `--watch`, it serves the page from a local port and reloads it when a spec file changes. Set the `CI` environment variable to stop watch mode from opening a browser.
+
+The explorer lists specs and assertions in the same order as `spekk list`: priority first, then ID. An item with no priority (0) comes last. In cross-branch mode, the items from other branches take their place in that order.
 
 The page shows:
 
