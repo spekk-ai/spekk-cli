@@ -3,7 +3,7 @@ id: purpose-refuses-control-characters
 parent: sandbox-kind
 created: 2026-10-16T01:10:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: one-off-create-labels-and-marker
 branch: sandbox-kind
 ---

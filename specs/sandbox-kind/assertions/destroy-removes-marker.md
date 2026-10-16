@@ -3,7 +3,7 @@ id: destroy-removes-marker
 parent: sandbox-kind
 created: 2026-10-16T01:10:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: existing-machine-gets-fields-not-labels
 branch: sandbox-kind
 ---
