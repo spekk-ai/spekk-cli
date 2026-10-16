@@ -3,7 +3,7 @@ id: cli-show-json
 parent: show-command
 created: 2026-10-15T21:30:00Z
 priority: 1
-status: in_progress
+status: done
 ---
 
 # `spekk show --json` Prints the Data of the View
@@ -15,6 +15,8 @@ status: in_progress
 A server that shows the spec tree of a repository needs this data. It reads the specs from a read-only bare repository, and it cannot read the HTML. With `--json`, the server and the explorer use one data model, and the server does not parse specs itself.
 
 The assertion came from spekk-app. The id and all success criteria are the same.
+
+**Tests:** internal/show/show_test.go (`TestWriteJSONMatchesHTML`, `TestWriteJSONCrossBranchSharedGitDir`), cmd/spekk/show_test.go (`TestExecShow_Help_ExitZero`)
 
 ## Success Criteria
 

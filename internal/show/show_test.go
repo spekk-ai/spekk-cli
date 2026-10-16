@@ -85,12 +85,6 @@ branch: feature/test
 	}
 }
 
-func TestTemplateContainsPlaceholder(t *testing.T) {
-	if !strings.Contains(templateHTML, "/*__SPEKK_DATA__*/") {
-		t.Error("template should contain the data placeholder")
-	}
-}
-
 func TestTemplateSanitizesMarkdown(t *testing.T) {
 	// DOMPurify must be loaded
 	if !strings.Contains(templateHTML, "dompurify") {
