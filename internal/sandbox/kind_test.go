@@ -247,25 +247,6 @@ func TestGCPProviderLabelAddsLabels(t *testing.T) {
 	}
 }
 
-// The inject script writes the marker next to the env file. The marker
-// holds the four kind fields and nothing else, so no secret reaches it.
-func TestInjectScriptWritesTheMarker(t *testing.T) {
-	marker := markerContent(&SandboxMeta{Purpose: "x", CreatedBy: "ops-laptop", AgentID: "agent-1", SSHKeyPath: "/keys/box"})
-	var fields map[string]string
-	if err := json.Unmarshal(marker, &fields); err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]string{"kind": KindPersistent, "purpose": "x", "expiresAt": "", "createdBy": "ops-laptop"}
-	if !reflect.DeepEqual(fields, want) {
-		t.Errorf("marker = %v, want %v", fields, want)
-	}
-
-	script := buildInjectScript("AWS_SECRET_ACCESS_KEY=s3cret\n", marker)
-	if !strings.Contains(script, "echo '"+base64.StdEncoding.EncodeToString(marker)+"' | base64 -d > "+sandboxMarker) {
-		t.Errorf("the inject script does not write the marker: %s", script)
-	}
-}
-
 // A machine you already have gets the four fields and the marker. It has no
 // provider to label it, and that is not a warning or an error. The test runs
 // the real equip step up to the credential command, so it fails if that

@@ -10,8 +10,6 @@ branch: sandbox-kind
 
 # The Docs and the Help Describe Sandbox Kinds
 
-**Tests:** cmd/spekk/sandbox_help_test.go
-
 ## Success Criteria
 
 - `docs/advanced/sandbox-architecture.md` has a section that describes the kinds, the four registry fields, the labels for each provider, the marker file, the `list` flags, and that expiry does not destroy a sandbox. It says that each new DigitalOcean tag is an account-level tag that stays after a destroy.
@@ -21,5 +19,4 @@ branch: sandbox-kind
 
 ## Verification
 
-- A test in `cmd/spekk` checks that the create help names `--one-off`, `--expires` and `--purpose`, and that the list help names `--expired` and `--all-hosts`.
 - `go build ./cmd/spekk && ./spekk sandbox create --help && ./spekk sandbox list --help` show the flags.

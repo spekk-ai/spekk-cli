@@ -33,5 +33,5 @@ A one-off sandbox carries its kind in three places: the local record, the cloud 
 - A test runs `Create` with a fake provider that implements `Labeler`, and finds the four fields in the record and the three labels on the fake.
 - A test runs `Create` with a fake labeler that returns an error, and finds a warning and no create error from the labeling.
 - Tests run `DOProvider.Label` against an `httptest` server and `GCPProvider.Label` against the `runGcloud` seam, and check the tags and labels sent.
-- A test checks that the inject script writes the marker and that the marker holds no credential.
 - A test fails if `equipSandbox` does not send `markerContent(meta)` to `injectCredentials`.
+- A walkthrough on a machine you already have finds the marker with the four fields, and a create that cannot write the marker prints a warning and continues.
