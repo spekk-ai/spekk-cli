@@ -3,7 +3,7 @@ id: one-off-create-labels-and-marker
 parent: sandbox-kind
 created: 2026-10-15T23:40:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: registry-fields-default-persistent
 branch: sandbox-kind
 ---

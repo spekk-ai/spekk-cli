@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -67,6 +68,9 @@ func ResolveKind(oneOff bool, expires string, now time.Time) (string, time.Time,
 	return KindOneOff, t, nil
 }
 
+// maxExpiryDays is the largest day count that fits in a time.Duration.
+const maxExpiryDays = int(math.MaxInt64 / int64(24*time.Hour))
+
 // parseExpiry reads an --expires value: a Go duration (36h), a number of
 // days (3d), a date (2026-10-17, which means 00:00 UTC on that day), or an
 // RFC 3339 time. The result is in UTC and must be after now.
@@ -75,6 +79,9 @@ func parseExpiry(s string, now time.Time) (time.Time, error) {
 	if d, err := time.ParseDuration(s); err == nil {
 		t = now.Add(d)
 	} else if n, err := strconv.Atoi(strings.TrimSuffix(s, "d")); err == nil && strings.HasSuffix(s, "d") {
+		if n > maxExpiryDays || n < -maxExpiryDays {
+			return time.Time{}, fmt.Errorf("--expires %q is too far away: use %d days or fewer", s, maxExpiryDays)
+		}
 		t = now.Add(time.Duration(n) * 24 * time.Hour)
 	} else if d, err := time.Parse(time.DateOnly, s); err == nil {
 		t = d

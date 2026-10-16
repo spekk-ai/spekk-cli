@@ -275,7 +275,7 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	// whatever the operator gave for one they already had.
 	user := sshUser(meta)
 
-	if err := fetchAgentBinary(meta, name, artifacts); err != nil {
+	if err := fetchAgent(meta, name, artifacts); err != nil {
 		return &stageError{"fetching agent binary", err}
 	}
 
@@ -295,6 +295,10 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	}
 	return nil
 }
+
+// fetchAgent is the seam equipSandbox fetches the agent build through, so a
+// test can reach the credential step without an SSH connection.
+var fetchAgent = fetchAgentBinary
 
 // fetchAgentBinary picks the agent build for the machine's own CPU, so it runs
 // only after create/provision has reached the machine over SSH.
@@ -1285,8 +1289,12 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 		args = append(args, "-i", keyPath)
 	}
 	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
-	if out, err := sshExec(args); err != nil {
+	out, err := sshExec(args)
+	if err != nil {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
+	}
+	if strings.Contains(string(out), markerNotWritten) {
+		fmt.Fprintf(os.Stderr, "Warning: could not write %s. The sandbox works without it.\n", sandboxMarker)
 	}
 	return nil
 }
@@ -1307,15 +1315,23 @@ func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken,
 	return strings.Join(envLines, "\n") + "\n"
 }
 
+// markerNotWritten is the line the inject script prints when it cannot
+// write the sandbox marker, so injectCredentials can warn about it.
+const markerNotWritten = "spekk: marker not written"
+
 // buildInjectScript produces the SSH command string for injecting credentials
 // and writing the sandbox marker. It base64-encodes both to prevent shell
-// injection. Exported for testing.
+// injection. The marker goes to a temp file and then mv -f, so the write does
+// not follow a symlink at the marker path. A failed marker write prints
+// markerNotWritten and does not fail the command: the marker is information
+// only. Exported for testing.
 func buildInjectScript(envContent string, marker []byte) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(envContent))
 	encodedMarker := base64.StdEncoding.EncodeToString(marker)
 	return fmt.Sprintf(
-		`echo '%s' | base64 -d > /etc/spekk/agent.env && chown agent:agent /etc/spekk/agent.env && chmod 600 /etc/spekk/agent.env && echo '%s' | base64 -d > %s && chmod 644 %s`,
-		encoded, encodedMarker, sandboxMarker, sandboxMarker,
+		`echo '%s' | base64 -d > /etc/spekk/agent.env && chown agent:agent /etc/spekk/agent.env && chmod 600 /etc/spekk/agent.env && `+
+			`{ m=$(mktemp %s.XXXXXX) && echo '%s' | base64 -d > "$m" && chmod 644 "$m" && mv -f "$m" %s || { [ -z "$m" ] || rm -f "$m"; echo '%s'; }; }`,
+		encoded, sandboxMarker, encodedMarker, sandboxMarker, markerNotWritten,
 	)
 }
 

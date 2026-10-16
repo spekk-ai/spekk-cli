@@ -108,6 +108,7 @@ func TestResolveKind(t *testing.T) {
 		{oneOff: true, expires: "soon", err: "invalid --expires"},
 		{oneOff: true, expires: "2026-10-01", err: "not in the future"},
 		{oneOff: true, expires: "-1h", err: "not in the future"},
+		{oneOff: true, expires: "106752d", err: "too far away"},
 	} {
 		kind, expires, err := ResolveKind(tc.oneOff, tc.expires, now)
 		if tc.err != "" {
@@ -202,18 +203,13 @@ func TestCreateOneOffRecordsKindAndLabels(t *testing.T) {
 	}
 }
 
-// DigitalOcean labels are tags key:value on the droplet. A tag that exists
-// already is not an error.
+// DigitalOcean labels are tags key:value on the droplet. The API answers
+// 201 to a tag create, also for a tag that exists already.
 func TestDOProviderLabelTagsTheDroplet(t *testing.T) {
 	var tagged []string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == "POST" && r.URL.Path == "/v2/tags":
-			// The first tag exists already.
-			if len(tagged) == 0 {
-				w.WriteHeader(http.StatusUnprocessableEntity)
-				return
-			}
 			w.WriteHeader(http.StatusCreated)
 		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/resources"):
 			body, _ := io.ReadAll(r.Body)
@@ -271,7 +267,9 @@ func TestInjectScriptWritesTheMarker(t *testing.T) {
 }
 
 // A machine you already have gets the four fields and the marker. It has no
-// provider to label it, and that is not a warning or an error.
+// provider to label it, and that is not a warning or an error. The test runs
+// the real equip step up to the credential command, so it fails if that
+// command does not carry the marker of this record.
 func TestCreateOneOffOnAnExistingMachine(t *testing.T) {
 	isolateConfig(t)
 	useTempStore(t)
@@ -285,13 +283,16 @@ func TestCreateOneOffOnAnExistingMachine(t *testing.T) {
 	origCheck := checkReady
 	checkReady = func(meta *SandboxMeta, name string) error { return nil }
 	t.Cleanup(func() { checkReady = origCheck })
-	var marker []byte
-	origEquip := equip
-	equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, artifacts *releaseArtifacts) *stageError {
-		marker = markerContent(meta)
-		return &stageError{"injecting credentials", errors.New("stop here")}
+	origFetch := fetchAgent
+	fetchAgent = func(meta *SandboxMeta, name string, artifacts *releaseArtifacts) error { return nil }
+	t.Cleanup(func() { fetchAgent = origFetch })
+	var injected string
+	origExec := sshExec
+	sshExec = func(args []string) ([]byte, error) {
+		injected = args[len(args)-1]
+		return nil, errors.New("stop here")
 	}
-	t.Cleanup(func() { equip = origEquip })
+	t.Cleanup(func() { sshExec = origExec })
 
 	stderr := captureStderr(t)
 	err := Create(nil, CreateOptions{Name: "borrowed", IP: "203.0.113.10", SSHKey: key, Kind: KindOneOff, ExpiresAt: time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC), Purpose: "x"})
@@ -304,8 +305,9 @@ func TestCreateOneOffOnAnExistingMachine(t *testing.T) {
 	if got == nil || got.Kind != KindOneOff || got.Purpose != "x" || got.ExpiresAt != "2026-10-17T00:00:00Z" || got.CreatedBy != "ops-laptop" {
 		t.Fatalf("record = %+v, want the four kind fields", got)
 	}
-	if !strings.Contains(string(marker), `"kind": "one-off"`) || !strings.Contains(string(marker), `"purpose": "x"`) {
-		t.Errorf("marker for the existing machine = %s", marker)
+	marker := markerContent(&SandboxMeta{Kind: KindOneOff, Purpose: "x", ExpiresAt: "2026-10-17T00:00:00Z", CreatedBy: "ops-laptop"})
+	if !strings.Contains(injected, base64.StdEncoding.EncodeToString(marker)) {
+		t.Errorf("the credential command does not write the marker %s:\n%s", marker, injected)
 	}
 	if strings.Contains(strings.ToLower(out), "label") {
 		t.Errorf("an existing machine has no labels, but create said:\n%s", out)

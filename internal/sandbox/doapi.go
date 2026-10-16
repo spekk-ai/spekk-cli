@@ -274,11 +274,10 @@ func (c *Client) AssignToProject(projectID string, resourceURNs []string) error 
 // --- Tag operations ---
 
 // TagDroplet puts a tag on a droplet. It creates the tag first, because the
-// API tags a resource only with a tag that exists. A tag that exists already
-// is not an error.
+// API tags a resource only with a tag that exists. The API answers 201 for a
+// tag that exists already, so an error here is a real error.
 func (c *Client) TagDroplet(tag string, dropletID int) error {
-	err := c.doRequest("POST", "/v2/tags", map[string]string{"name": tag}, nil)
-	if apiErr, ok := err.(*APIError); err != nil && !(ok && apiErr.StatusCode == http.StatusUnprocessableEntity) {
+	if err := c.doRequest("POST", "/v2/tags", map[string]string{"name": tag}, nil); err != nil {
 		return err
 	}
 	payload := map[string]any{
