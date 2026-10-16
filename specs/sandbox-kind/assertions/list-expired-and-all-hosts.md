@@ -3,7 +3,7 @@ id: list-expired-and-all-hosts
 parent: sandbox-kind
 created: 2026-10-15T23:40:00Z
 priority: 1
-status: done
+status: not_started
 depends-on: one-off-create-labels-and-marker
 branch: sandbox-kind
 ---
@@ -18,7 +18,7 @@ branch: sandbox-kind
 - `list --expired` shows only the expired sandboxes. With no expired sandbox, it says so.
 - `Labeler` has a method that lists the labeled machines of that provider. `DOProvider` lists the droplets with the `spekk-sandbox` tag. `GCPProvider` lists the VMs in the default gcloud project that have a `spekk-kind` label.
 - `list --all-hosts` asks each provider in `ValidProviders` that implements `Labeler`. It adds the machines that no local record names, with the status `remote`. It reads the kind and the expiry from the labels.
-- For each provider that `--all-hosts` cannot ask (the provider cannot be built, it does not label, or its list call fails), `list` prints one line that names the provider and the reason. It does not leave the provider out silently, and it does not fail.
+- For each cloud provider that `--all-hosts` cannot ask (the provider cannot be built, or its list call fails), `list` prints one line that names the provider and the reason, and it does not fail. A provider that does not label its machines (`none`) is not a cloud, so it gets no line.
 - `--expired` and `--all-hosts` work together: the remote rows are filtered too.
 
 ## Verification

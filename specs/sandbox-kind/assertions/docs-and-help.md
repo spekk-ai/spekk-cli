@@ -3,7 +3,7 @@ id: docs-and-help
 parent: sandbox-kind
 created: 2026-10-15T23:40:00Z
 priority: 2
-status: done
+status: not_started
 depends-on: list-expired-and-all-hosts
 branch: sandbox-kind
 ---
@@ -14,8 +14,8 @@ branch: sandbox-kind
 
 ## Success Criteria
 
-- `docs/advanced/sandbox-architecture.md` has a section that describes the kinds, the four registry fields, the labels for each provider, the marker file, the `list` flags, and that expiry does not destroy a sandbox.
-- `spekk sandbox create --help` lists `--one-off`, `--expires` and `--purpose` with their defaults.
+- `docs/advanced/sandbox-architecture.md` has a section that describes the kinds, the four registry fields, the labels for each provider, the marker file, the `list` flags, and that expiry does not destroy a sandbox. It says that each new DigitalOcean tag is an account-level tag that stays after a destroy.
+- `spekk sandbox create --help` shows its title one time, and lists `--one-off`, `--expires` and `--purpose` with their defaults.
 - `spekk sandbox list --help` exists and lists `--expired` and `--all-hosts`.
 - `docs/cli-reference.md` describes the new `create` and `list` flags.
 
