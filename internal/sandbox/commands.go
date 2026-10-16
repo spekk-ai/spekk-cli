@@ -1298,7 +1298,8 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
 	}
 	if strings.Contains(string(out), markerNotWritten) {
-		fmt.Fprintf(os.Stderr, "Warning: could not write %s. The sandbox works without it.\n", sandboxMarker)
+		cause := strings.TrimSpace(strings.Replace(string(out), markerNotWritten, "", 1))
+		fmt.Fprintf(os.Stderr, "Warning: could not write %s. The sandbox works without it.\n%s\n", sandboxMarker, cause)
 	}
 	return nil
 }
