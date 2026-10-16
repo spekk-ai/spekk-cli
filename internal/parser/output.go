@@ -350,6 +350,26 @@ type FlatAssertion struct {
 // FormatAssertionsFlat produces a flat JSON list of all assertions in result,
 // sorted by priority (ascending) then ID (alphabetical).
 func FormatAssertionsFlat(result *ParseResult) ([]byte, error) {
+	flat := buildFlatAssertions(result)
+	sort.Slice(flat, func(i, j int) bool {
+		if flat[i].Priority != flat[j].Priority {
+			return flat[i].Priority < flat[j].Priority
+		}
+		return flat[i].ID < flat[j].ID
+	})
+	return marshalJSON(AssertionsFlatOutput{Type: "assertions", Assertions: flat})
+}
+
+// FormatAssertionsFlatInOrder is FormatAssertionsFlat without the default
+// priority-then-id sort: it emits assertions in result order. The list command
+// uses it once --sort-by has already ordered the assertions, so the JSON output
+// honours the chosen column instead of re-imposing the default ordering.
+func FormatAssertionsFlatInOrder(result *ParseResult) ([]byte, error) {
+	flat := buildFlatAssertions(result)
+	return marshalJSON(AssertionsFlatOutput{Type: "assertions", Assertions: flat})
+}
+
+func buildFlatAssertions(result *ParseResult) []FlatAssertion {
 	flat := make([]FlatAssertion, 0, len(result.Assertions))
 	for _, a := range result.Assertions {
 		dependsOn := []string{}
@@ -367,17 +387,33 @@ func FormatAssertionsFlat(result *ParseResult) ([]byte, error) {
 			DependsOn: dependsOn,
 		})
 	}
+	return flat
+}
 
-	sort.Slice(flat, func(i, j int) bool {
-		if flat[i].Priority != flat[j].Priority {
-			return flat[i].Priority < flat[j].Priority
-		}
-		return flat[i].ID < flat[j].ID
-	})
+// sortColumns lists the columns SortAssertions accepts, in the order the error
+// message names them.
+var sortColumns = []string{"id", "priority", "status", "title"}
 
-	out := AssertionsFlatOutput{
-		Type:       "assertions",
-		Assertions: flat,
+// assertionLess maps a --sort-by column to its ascending comparison. Priority
+// compares numerically (priority 1 first); the rest compare their string value.
+var assertionLess = map[string]func(a, b Assertion) bool{
+	"id":       func(a, b Assertion) bool { return a.ID < b.ID },
+	"priority": func(a, b Assertion) bool { return a.Priority < b.Priority },
+	"status":   func(a, b Assertion) bool { return a.Status < b.Status },
+	"title":    func(a, b Assertion) bool { return a.Title < b.Title },
+}
+
+// SortAssertions returns a copy of result whose assertions are sorted in
+// ascending order by column. The sort is stable: assertions with equal keys
+// keep their original (parser) relative order. Specs and warnings are carried
+// through unchanged. An unknown column is an error naming the valid columns.
+func SortAssertions(result *ParseResult, column string) (*ParseResult, error) {
+	less, ok := assertionLess[column]
+	if !ok {
+		return nil, fmt.Errorf("invalid sort column %q — valid values: %s", column, strings.Join(sortColumns, ", "))
 	}
-	return marshalJSON(out)
+	sorted := make([]Assertion, len(result.Assertions))
+	copy(sorted, result.Assertions)
+	sort.SliceStable(sorted, func(i, j int) bool { return less(sorted[i], sorted[j]) })
+	return &ParseResult{Specs: result.Specs, Assertions: sorted, Warnings: result.Warnings}, nil
 }
