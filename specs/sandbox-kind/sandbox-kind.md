@@ -13,9 +13,9 @@ The local registry (`sandboxes.json`) stays the source of truth. Registration wi
 ## Design
 
 - **Registry fields.** `SandboxMeta` gets four optional fields: `kind` (`one-off` or `persistent`), `purpose`, `expiresAt` (RFC 3339) and `createdBy` (the hostname). An empty `kind` means `persistent`, so a record from an older binary does not change.
-- **Create flags.** `--one-off` sets the kind to `one-off` with an expiry of 48 hours. `--expires <duration|date>` changes the expiry. `--purpose <text>` records why the sandbox exists. The default stays `persistent`.
+- **Create flags.** `--one-off` sets the kind to `one-off` with an expiry of 48 hours. `--expires <duration|date>` changes the expiry. `--purpose <text>` records why the sandbox exists, as one line of text without control characters. The default stays `persistent`.
 - **Provider labels are optional.** A provider that can label its machines implements a separate `Labeler` interface. `Create` finds it with a type assertion. `Provider` does not change, so a provider that cannot label (a machine you already have, and the AWS CloudFormation path) needs no code. Label values obey the strictest rules, which are GCP's: lowercase `[a-z0-9_-]`, 63 characters or fewer.
-- **Marker on the machine.** Credential injection also writes `/opt/spekk/sandbox.json` with the four fields. This works on every provider. The file holds no secret.
+- **Marker on the machine.** Credential injection also writes `/opt/spekk/sandbox.json` with the four fields. This works on every provider. The file holds no secret. `destroy` on a machine you already have removes it.
 - **List.** `list` shows a kind column and flags an expired sandbox. `--expired` shows only the expired ones. `--all-hosts` also asks each labeling provider for the sandboxes that this machine did not create.
 - **No auto-destroy.** Expiry is only a reminder.
 
