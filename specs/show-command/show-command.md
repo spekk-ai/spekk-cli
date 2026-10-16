@@ -8,7 +8,7 @@ priority: 1
 
 ## Overview
 
-`spekk show` writes the Spec Explorer to `.spekk/index.html` and opens it. With `--watch` it starts a local server. This spec covers two basic behaviors that the other show specs (`show-cross-branch`, `show-mobile-cards`) do not cover: the help flag, a stable order for the specs and assertions in the output, and a `--watch` reload that does not depend on the file mtime.
+`spekk show` writes the Spec Explorer to `.spekk/index.html` and opens it. With `--watch` it starts a local server. This spec covers three basic behaviors that the other show specs (`show-cross-branch`, `show-mobile-cards`) do not cover: the help flag, a stable order for the specs and assertions in the output, and a `--watch` reload that does not depend on the file mtime.
 
 ## Assertions
 
