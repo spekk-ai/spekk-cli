@@ -564,6 +564,10 @@ func Status(p Provider, name string) error {
 	fmt.Printf("Region: %s\n", orUnknown(sandbox.Region))
 	fmt.Printf("Size: %s\n", orUnknown(sandbox.Size))
 	fmt.Printf("Created: %s\n", orUnknown(sandbox.CreatedAt))
+	fmt.Printf("Kind: %s\n", sandbox.KindOf())
+	fmt.Printf("Purpose: %s\n", orDash(sandbox.Purpose))
+	fmt.Printf("Expires: %s\n", expiresCell(sandbox, time.Now()))
+	fmt.Printf("Created by: %s\n", orDash(sandbox.CreatedBy))
 
 	// Fetch live status from the provider. A nil provider has two causes:
 	// no cloud owns this machine, which is normal and silent, or one could

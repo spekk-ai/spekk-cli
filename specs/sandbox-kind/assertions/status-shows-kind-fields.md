@@ -3,7 +3,7 @@ id: status-shows-kind-fields
 parent: sandbox-kind
 created: 2026-10-16T00:20:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: one-off-create-labels-and-marker
 branch: sandbox-kind
 ---

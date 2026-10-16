@@ -798,7 +798,7 @@ spekk sandbox list --all-hosts           # Also the labeled sandboxes that other
 
 ### `spekk sandbox status <name>`
 
-Print the stored fields of a sandbox, the live machine state, and two SSH checks: the provisioned marker, and the `spekk-agent` service.
+Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and two SSH checks: the provisioned marker, and the `spekk-agent` service.
 
 ```bash
 spekk sandbox status my-sandbox
