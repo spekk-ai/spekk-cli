@@ -976,6 +976,7 @@ OPTIONS:
   --watch, -w              Watch specs and live-reload the explorer
   --cross-branch           Merge-preview mode: show spec/assertion state across all branches
   --branch-filter <glob>   In cross-branch mode, only include branches matching the glob (e.g. 'feat/*')
+  --json                   Print the explorer data as JSON to stdout; write no file and open no browser
   --help, -h               Show this help message
 `
 
@@ -984,13 +985,14 @@ OPTIONS:
 type showRunners struct {
 	run   func(specsDir string, opts show.Options) error
 	watch func(specsDir string, opts show.Options) error
+	json  func(w io.Writer, specsDir string, opts show.Options) error
 }
 
 // showSpekk generates and displays the spec explorer web interface.
 // Supports --watch / -w for live reload and --cross-branch (with an optional
 // --branch-filter glob) for merge-preview mode.
 func showSpekk(args []string) {
-	code := execShow(args, os.Stdout, os.Stderr, showRunners{run: show.Run, watch: show.RunWatch})
+	code := execShow(args, os.Stdout, os.Stderr, showRunners{run: show.Run, watch: show.RunWatch, json: show.WriteJSON})
 	if code != 0 {
 		os.Exit(code)
 	}
@@ -1004,6 +1006,7 @@ func execShow(args []string, stdout, stderr io.Writer, runners showRunners) int 
 		"watch":         {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
 		"cross-branch":  {Names: []string{"--cross-branch"}, Type: cli.BoolFlag},
 		"branch-filter": {Names: []string{"--branch-filter"}, Type: cli.StringFlag},
+		"json":          {Names: []string{"--json"}, Type: cli.BoolFlag},
 		"help":          {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -1015,11 +1018,23 @@ func execShow(args []string, stdout, stderr io.Writer, runners showRunners) int 
 		fmt.Fprintf(stderr, "Error: %s\n", flags.Err)
 		return 1
 	}
+	if flags.Bool("json") && flags.Bool("watch") {
+		fmt.Fprintln(stderr, "Error: --json cannot be used with --watch")
+		return 1
+	}
 
 	specsDir := findSpecsDir()
 	opts := show.Options{
 		CrossBranch:  flags.Bool("cross-branch"),
 		BranchFilter: flags.String("branch-filter"),
+	}
+
+	if flags.Bool("json") {
+		if err := runners.json(stdout, specsDir, opts); err != nil {
+			fmt.Fprintf(stderr, "Error: %s\n", err)
+			return 1
+		}
+		return 0
 	}
 
 	run := runners.run
@@ -2095,7 +2110,7 @@ COMMANDS:
   list      List specs and assertions with optional --status filter and --assertions-only flat output
   index     Build .spekk/index.db SQLite index from specs/ (use --force to rebuild from scratch)
   query     Execute a SELECT query against .spekk/index.db (supports --json, --tsv, --csv)
-  show      Generate and display spec explorer web interface (-w to watch)
+  show      Generate and display spec explorer web interface (-w to watch, --json for data)
   status    Show comprehensive overview of all specs and assertions
   validate  Check specs/ against a fixed set of invariants; exit non-zero on any violation
   serve     Start WebSocket server for browser extension (--port, --host)
@@ -2122,6 +2137,7 @@ FLAGS for "show":
   --watch, -w              Watch specs and live-reload the explorer
   --cross-branch           Merge-preview mode: show spec/assertion state across all branches
   --branch-filter <glob>   In cross-branch mode, only include branches matching the glob (e.g. 'feat/*')
+  --json                   Print the explorer data as JSON to stdout; write no file and open no browser
 
 FLAGS for "next":
   --all             Show all assertions

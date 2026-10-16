@@ -296,6 +296,7 @@ spekk show --watch                                  # Serve it and reload on cha
 spekk show --cross-branch                           # Merge preview
 spekk show --cross-branch --branch-filter 'feat/*'  # Only branches that match the glob
 spekk show -w --cross-branch                        # Merge preview with live reload
+spekk show --json | jq                              # Print the data of the page as JSON
 ```
 
 **Flags:**
@@ -305,6 +306,7 @@ spekk show -w --cross-branch                        # Merge preview with live re
 | `--watch` | `-w` | Serve the page on `127.0.0.1` and reload it when the content of a spec file changes |
 | `--cross-branch` | | Read-only preview of what a merge of each other branch would do to the specs |
 | `--branch-filter <glob>` | | In cross-branch mode, only branches that match the glob (for example `'feat/*'`) |
+| `--json` | | Print the data of the page to stdout as one JSON object. Write no file and open no browser. Not with `--watch` |
 | `--help` | `-h` | Print the help for `spekk show` and exit |
 
 Without `--watch`, `spekk show` writes `.spekk/index.html` and opens it in your browser. With `--watch`, it serves the page from a local port and reloads it when the content of a spec file changes. A save or `touch` that does not change the content does not reload the page. Set the `CI` environment variable to stop watch mode from opening a browser.
@@ -318,6 +320,23 @@ The page shows:
 - Drag to pan, click to open a spec or an assertion
 - Done specs hidden by default, with a toggle to show them
 - A search box that filters by name, status, or priority
+
+### JSON output
+
+`spekk show --json` prints the data that the page uses, as one JSON object, and stops. It writes nothing to `.spekk/` and opens no browser. Use it when a script or a server needs the spec tree.
+
+```json
+{"projectName":"my-project","specs":[{"id":"auth","title":"Auth","status":"in_progress","priority":1,"file":"specs/auth/auth.md","content":"...","branch":"main"}],"assertions":[{"id":"login-form","parent":"auth","title":"Login form","status":"done","priority":1,"file":"specs/auth/assertions/login-form.md","content":"...","branch":"main","created":"2026-01-01T00:00:00Z"}]}
+```
+
+- `projectName` is the name of the project directory.
+- `specs` and `assertions` are in the order of the page: priority, then ID, then file path.
+- A `specs/` directory with no specs gives empty arrays and exit code 0.
+- A parse error, for example a duplicate spec ID, gives exit code 1 and the error on stderr. Parser warnings also go to stderr, so stdout has only the JSON.
+- With `--cross-branch`, the object also has `crossBranch`, and it can have `degraded` and `branches`. Each item can have `foreign` and `crossBranch` (a list of `branch`, `state`, `degraded`, `oldStatus`, `newStatus`), and each spec can have `crossBranchSummary`. `--branch-filter` applies.
+- A cross-branch key with no value is absent from the output. An absent `degraded` or `foreign` means false, and an absent `branches` or `crossBranch` list means an empty list.
+
+`--json --cross-branch` also works on a read-only bare repository. Set `GIT_DIR` to a directory that holds `HEAD` and a `commondir` file with the path of the bare repository, `GIT_WORK_TREE` to a directory that holds `specs/`, and `GIT_OBJECT_DIRECTORY` to an empty directory of your own, with `GIT_ALTERNATE_OBJECT_DIRECTORIES` set to the `objects` directory of the bare repository. The conflict check writes its objects to your directory, not to the bare repository.
 
 ### Cross-branch mode
 

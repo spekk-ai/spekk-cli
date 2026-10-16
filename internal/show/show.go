@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/url"
 	"os"
@@ -129,40 +130,25 @@ type Options struct {
 // folds the contributions into the rendered data.
 func Run(specsDir string, opts Options) error {
 	// 1. Parse specs
-	result, err := parser.ParseAllSpecs(specsDir)
+	result, err := parseSpecs(specsDir)
 	if err != nil {
-		return fmt.Errorf("parsing specs: %w", err)
-	}
-	if summary := result.WarningSummary(); summary != "" {
-		fmt.Fprintln(os.Stderr, summary)
+		return err
 	}
 
 	if len(result.Specs) == 0 {
 		return fmt.Errorf("no specifications found in %s", specsDir)
 	}
 
-	// 2. Build showData from parse result
-	data := buildShowData(specsDir, result)
-
-	// 2a. In cross-branch mode, classify changed spec/assertion files across all
-	// branches and fold the contributions into the data. When off, this is
-	// skipped entirely so the output is byte-identical to the default path.
-	if opts.CrossBranch {
-		if err := applyCrossBranch(&data, opts.BranchFilter); err != nil {
-			return fmt.Errorf("classifying cross-branch state: %w", err)
-		}
-	}
-
-	// 3. Marshal to JSON
-	jsonBytes, err := json.Marshal(data)
+	// 2. Build the data and marshal it to JSON
+	jsonBytes, err := marshalData(specsDir, result, opts)
 	if err != nil {
-		return fmt.Errorf("marshaling data to JSON: %w", err)
+		return err
 	}
 
-	// 4. Replace placeholder in template
+	// 3. Replace placeholder in template
 	html := strings.Replace(templateHTML, "/*__SPEKK_DATA__*/", string(jsonBytes), 1)
 
-	// 5. Determine output path (.spekk/index.html relative to project root)
+	// 4. Determine output path (.spekk/index.html relative to project root)
 	projectRoot := filepath.Dir(specsDir) // specsDir is <root>/specs
 	spekkDir := filepath.Join(projectRoot, ".spekk")
 
@@ -177,13 +163,60 @@ func Run(specsDir string, opts Options) error {
 
 	fmt.Fprintf(os.Stderr, "Spec Explorer written to %s\n", outputPath)
 
-	// 6. Open in browser
+	// 5. Open in browser
 	if err := openBrowser(outputPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Could not open browser: %s\n", err)
 		fmt.Fprintf(os.Stderr, "Open the file manually: %s\n", outputPath)
 	}
 
 	return nil
+}
+
+// WriteJSON writes the data that Run puts into the explorer HTML to w, as one
+// JSON object and a newline. It writes no file and opens no browser. A tree
+// with no specs is not an error here: the object has empty arrays, so a caller
+// can tell an empty repository from a failed parse.
+func WriteJSON(w io.Writer, specsDir string, opts Options) error {
+	result, err := parseSpecs(specsDir)
+	if err != nil {
+		return err
+	}
+	jsonBytes, err := marshalData(specsDir, result, opts)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "%s\n", jsonBytes)
+	return err
+}
+
+// parseSpecs parses specsDir and writes the parser warning summary to stderr.
+func parseSpecs(specsDir string) (*parser.ParseResult, error) {
+	result, err := parser.ParseAllSpecs(specsDir)
+	if err != nil {
+		return nil, fmt.Errorf("parsing specs: %w", err)
+	}
+	if summary := result.WarningSummary(); summary != "" {
+		fmt.Fprintln(os.Stderr, summary)
+	}
+	return result, nil
+}
+
+// marshalData builds the explorer data from result and marshals it to JSON.
+// In cross-branch mode it first folds in the state of the other branches. When
+// the mode is off, this is skipped entirely so the output is byte-identical to
+// the default path.
+func marshalData(specsDir string, result *parser.ParseResult, opts Options) ([]byte, error) {
+	data := buildShowData(specsDir, result)
+	if opts.CrossBranch {
+		if err := applyCrossBranch(&data, opts.BranchFilter); err != nil {
+			return nil, fmt.Errorf("classifying cross-branch state: %w", err)
+		}
+	}
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling data to JSON: %w", err)
+	}
+	return jsonBytes, nil
 }
 
 // buildShowData converts the parser result into the JSON structure expected by
