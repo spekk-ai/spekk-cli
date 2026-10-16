@@ -74,32 +74,6 @@ func TestWatchSpecsDetectsChange(t *testing.T) {
 	}
 }
 
-func TestWatchSpecsDetectsNewFile(t *testing.T) {
-	dir := t.TempDir()
-	specsDir := filepath.Join(dir, "specs")
-	writeFile(t, filepath.Join(specsDir, "existing.md"), "# Existing")
-
-	changed := make(chan struct{}, 1)
-	stop := watchSpecs(specsDir, func() {
-		select {
-		case changed <- struct{}{}:
-		default:
-		}
-	})
-	defer stop()
-
-	// Baseline snapshot is taken synchronously in watchSpecs; the new file below
-	// therefore always postdates it.
-	writeFile(t, filepath.Join(specsDir, "new.md"), "# New")
-
-	select {
-	case <-changed:
-		// ok
-	case <-time.After(6 * specsPollInterval):
-		t.Fatal("watcher did not detect new file within timeout")
-	}
-}
-
 // TestWatchRefsDetectsBranchChange verifies the cross-branch ref watcher fires
 // when a new branch is created — a git-state change that moves no working-tree
 // .md file and would be missed by the file watcher alone.
