@@ -1,9 +1,11 @@
 package show
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -711,4 +713,110 @@ priority: 1
 	if strings.Contains(html, "/*__SPEKK_DATA__*/") {
 		t.Error("placeholder should be replaced with actual data")
 	}
+}
+
+// TestShowOrderMatchesList checks that show lists specs and assertions in the
+// `spekk list` order (priority, then ID, then file), that foreign items from
+// cross-branch mode take their place in that order instead of map order, and
+// that an unparseable foreign item (priority 0) comes last.
+func TestShowOrderMatchesList(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+	spec := func(id string, priority int) {
+		writeFile(t, filepath.Join(specsDir, id, id+".md"), fmt.Sprintf(
+			"---\nid: %s\ncreated: 2026-01-01T00:00:00Z\npriority: %d\n---\n\n# %s\n", id, priority, id))
+	}
+	assertion := func(parent, id string, priority int) {
+		writeFile(t, filepath.Join(specsDir, parent, "assertions", id+".md"), fmt.Sprintf(
+			"---\nid: %s\nparent: %s\ncreated: 2026-01-01T00:00:00Z\npriority: %d\nstatus: not_started\n---\n\n# %s\n",
+			id, parent, priority, id))
+	}
+	spec("zeta", 1)
+	spec("alpha", 1)
+	assertion("alpha", "a-b", 3)
+	assertion("alpha", "a-c", 1)
+	assertion("zeta", "z-b", 2)
+	assertion("zeta", "z-a", 1)
+	assertion("zeta", "a-c", 1) // same ID as alpha/a-c: the file path decides
+
+	// Foreign items that exist only on another branch.
+	foreign := map[string]int{
+		"specs/gamma/gamma.md":              2,
+		"specs/delta/delta.md":              1,
+		"specs/epsilon/epsilon.md":          1,
+		"specs/delta/assertions/d-1.md":     2,
+		"specs/gamma/assertions/g-1.md":     1,
+		"specs/epsilon/assertions/e-1.md":   1,
+		"specs/alpha/assertions/a-new.md":   1,
+		"specs/epsilon/assertions/e-0.md":   3,
+		"specs/gamma/assertions/g-0.md":     2,
+		"specs/delta/assertions/d-0.md":     1,
+		"specs/epsilon/assertions/e-2.md":   1,
+		"specs/gamma/assertions/g-2.md":     3,
+		"specs/delta/assertions/d-2.md":     2,
+		"specs/alpha/assertions/a-other.md": 2,
+	}
+	var states []crossbranch.FileState
+	for path, priority := range foreign {
+		states = append(states, crossbranch.FileState{
+			Path:   path,
+			Branch: "feat/x",
+			State:  crossbranch.StateIncomingAdd,
+			Meta:   &crossbranch.FileMeta{Status: "not_started", Priority: priority, Branch: "feat/x"},
+		})
+	}
+	// A foreign file that could not be parsed has no metadata, so priority 0.
+	// It must sort after every real item.
+	states = append(states, crossbranch.FileState{
+		Path: "specs/alpha/assertions/a-broken.md", Branch: "feat/x", State: crossbranch.StateIncomingAdd,
+	})
+	sort.Slice(states, func(i, j int) bool { return states[i].Path < states[j].Path })
+
+	render := func(crossBranch bool) showData {
+		result, err := parser.ParseAllSpecs(specsDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := buildShowData(specsDir, result)
+		if crossBranch {
+			foldCrossBranch(&data, states, true)
+		}
+		return data
+	}
+	files := func(data showData) (specs, assertions []string) {
+		for _, s := range data.Specs {
+			specs = append(specs, s.File)
+		}
+		for _, a := range data.Assertions {
+			assertions = append(assertions, a.File)
+		}
+		return specs, assertions
+	}
+	check := func(name string, got, want []string) {
+		t.Helper()
+		if strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Errorf("%s order:\n got  %v\n want %v", name, got, want)
+		}
+	}
+
+	_, gotAssertions := files(render(false))
+	check("default assertions", gotAssertions, []string{
+		"specs/alpha/assertions/a-c.md", "specs/zeta/assertions/a-c.md", "specs/zeta/assertions/z-a.md",
+		"specs/zeta/assertions/z-b.md", "specs/alpha/assertions/a-b.md",
+	})
+
+	gotSpecs, gotAssertions := files(render(true))
+	check("cross-branch specs", gotSpecs, []string{
+		"specs/alpha/alpha.md", "specs/delta/delta.md", "specs/epsilon/epsilon.md", "specs/zeta/zeta.md",
+		"specs/gamma/gamma.md",
+	})
+	check("cross-branch assertions", gotAssertions, []string{
+		"specs/alpha/assertions/a-c.md", "specs/zeta/assertions/a-c.md", "specs/alpha/assertions/a-new.md",
+		"specs/delta/assertions/d-0.md", "specs/epsilon/assertions/e-1.md", "specs/epsilon/assertions/e-2.md",
+		"specs/gamma/assertions/g-1.md", "specs/zeta/assertions/z-a.md",
+		"specs/alpha/assertions/a-other.md", "specs/delta/assertions/d-1.md", "specs/delta/assertions/d-2.md",
+		"specs/gamma/assertions/g-0.md", "specs/zeta/assertions/z-b.md",
+		"specs/alpha/assertions/a-b.md", "specs/epsilon/assertions/e-0.md", "specs/gamma/assertions/g-2.md",
+		"specs/alpha/assertions/a-broken.md",
+	})
 }

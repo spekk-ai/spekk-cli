@@ -2,14 +2,17 @@
 package show
 
 import (
+	"cmp"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
@@ -217,11 +220,51 @@ func buildShowData(specsDir string, result *parser.ParseResult) showData {
 		}
 	}
 
-	return showData{
+	data := showData{
 		ProjectName: projectName,
 		Specs:       showSpecs,
 		Assertions:  showAssertions,
 	}
+	sortListOrder(&data)
+	return data
+}
+
+// sortListOrder sorts specs and assertions in the order `spekk list` uses:
+// priority ascending, then ID. The file path breaks ties (assertion IDs are
+// unique only within a spec), so the order is total and every run over the
+// same input gives the same output. Priority 0 sorts last: only a foreign item
+// that could not be parsed has it, and it must not come before real items.
+func sortListOrder(data *showData) {
+	slices.SortFunc(data.Specs, func(a, b showSpec) int {
+		return listKey{a.Priority, a.ID, a.File}.compare(listKey{b.Priority, b.ID, b.File})
+	})
+	slices.SortFunc(data.Assertions, func(a, b showAssertion) int {
+		return listKey{a.Priority, a.ID, a.File}.compare(listKey{b.Priority, b.ID, b.File})
+	})
+}
+
+// listKey holds the fields that decide an item's place in list order.
+type listKey struct {
+	priority int
+	id, file string
+}
+
+// compare orders two keys by priority (0 last), then ID, then file.
+func (k listKey) compare(o listKey) int {
+	return cmp.Or(
+		cmp.Compare(k.rank(), o.rank()),
+		cmp.Compare(k.id, o.id),
+		cmp.Compare(k.file, o.file),
+	)
+}
+
+// rank maps the priority to its sort rank, putting the unset priority 0 after
+// every real priority.
+func (k listKey) rank() int {
+	if k.priority == 0 {
+		return math.MaxInt
+	}
+	return k.priority
 }
 
 // rollupPrecedence ranks cross-branch states for the spec-level rollup badge.
@@ -383,6 +426,10 @@ func foldCrossBranch(data *showData, states []crossbranch.FileState, supported b
 	}
 	sort.Strings(branches)
 	data.Branches = branches
+
+	// Phase 3 appended foreign items in map order. Sort again so they take their
+	// list-order place among the local items.
+	sortListOrder(data)
 }
 
 // normalizePath makes a file path comparable across the parser (which stores
