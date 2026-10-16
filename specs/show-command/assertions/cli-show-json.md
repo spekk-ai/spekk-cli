@@ -3,7 +3,7 @@ id: cli-show-json
 parent: show-command
 created: 2026-10-15T21:30:00Z
 priority: 1
-status: not_started
+status: in_progress
 ---
 
 # `spekk show --json` Prints the Data of the View
