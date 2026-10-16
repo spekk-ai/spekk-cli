@@ -302,12 +302,12 @@ spekk show -w --cross-branch                        # Merge preview with live re
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--watch` | `-w` | Serve the page on `127.0.0.1` and reload it when a spec file changes |
+| `--watch` | `-w` | Serve the page on `127.0.0.1` and reload it when the content of a spec file changes |
 | `--cross-branch` | | Read-only preview of what a merge of each other branch would do to the specs |
 | `--branch-filter <glob>` | | In cross-branch mode, only branches that match the glob (for example `'feat/*'`) |
 | `--help` | `-h` | Print the help for `spekk show` and exit |
 
-Without `--watch`, `spekk show` writes `.spekk/index.html` and opens it in your browser. With `--watch`, it serves the page from a local port and reloads it when a spec file changes. Set the `CI` environment variable to stop watch mode from opening a browser.
+Without `--watch`, `spekk show` writes `.spekk/index.html` and opens it in your browser. With `--watch`, it serves the page from a local port and reloads it when the content of a spec file changes. A save or `touch` that does not change the content does not reload the page. Set the `CI` environment variable to stop watch mode from opening a browser.
 
 The explorer lists specs and assertions in the same order as `spekk list`: priority first, then ID. An item with no priority (0) comes last. In cross-branch mode, the items from other branches take their place in that order.
 

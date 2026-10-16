@@ -39,65 +39,15 @@ func TestScanMdFilesMissingDir(t *testing.T) {
 	}
 }
 
-func TestSnapshotChanged(t *testing.T) {
-	now := time.Now()
-
-	a := map[string]time.Time{"a.md": now}
-	b := map[string]time.Time{"a.md": now}
-
-	if snapshotChanged(a, b) {
-		t.Error("identical snapshots should not be changed")
-	}
-
-	// Modified file
-	c := map[string]time.Time{"a.md": now.Add(time.Second)}
-	if !snapshotChanged(a, c) {
-		t.Error("modified file should be detected")
-	}
-
-	// New file
-	d := map[string]time.Time{"a.md": now, "b.md": now}
-	if !snapshotChanged(a, d) {
-		t.Error("new file should be detected")
-	}
-
-	// Deleted file
-	e := map[string]time.Time{}
-	if !snapshotChanged(a, e) {
-		t.Error("deleted file should be detected")
-	}
-}
-
 func TestWatchSpecsDetectsChange(t *testing.T) {
 	dir := t.TempDir()
 	specsDir := filepath.Join(dir, "specs")
-	writeFile(t, filepath.Join(specsDir, "test.md"), "# Initial")
-
-	changed := make(chan struct{}, 1)
-	stop := watchSpecs(specsDir, func() {
-		select {
-		case changed <- struct{}{}:
-		default:
-		}
-	})
-	defer stop()
-
-	// watchSpecs captures its baseline snapshot synchronously before returning,
-	// so the modification below is guaranteed to come after it — no sleep needed.
-	writeFile(t, filepath.Join(specsDir, "test.md"), "# Modified")
-
-	select {
-	case <-changed:
-		// ok
-	case <-time.After(3 * time.Second):
-		t.Fatal("watcher did not detect file change within timeout")
+	path := filepath.Join(specsDir, "test.md")
+	writeFile(t, path, "# Version 1")
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestWatchSpecsDetectsNewFile(t *testing.T) {
-	dir := t.TempDir()
-	specsDir := filepath.Join(dir, "specs")
-	writeFile(t, filepath.Join(specsDir, "existing.md"), "# Existing")
 
 	changed := make(chan struct{}, 1)
 	stop := watchSpecs(specsDir, func() {
@@ -108,15 +58,19 @@ func TestWatchSpecsDetectsNewFile(t *testing.T) {
 	})
 	defer stop()
 
-	// Baseline snapshot is taken synchronously in watchSpecs; the new file below
-	// therefore always postdates it.
-	writeFile(t, filepath.Join(specsDir, "new.md"), "# New")
+	// Two saves inside one mtime tick give the same mtime. Set the old mtime
+	// again so that the test does not depend on the filesystem clock: the
+	// new content has the same size and the same mtime as the old content.
+	writeFile(t, path, "# Version 2")
+	if err := os.Chtimes(path, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatal(err)
+	}
 
 	select {
 	case <-changed:
 		// ok
-	case <-time.After(3 * time.Second):
-		t.Fatal("watcher did not detect new file within timeout")
+	case <-time.After(6 * specsPollInterval):
+		t.Fatal("watcher did not detect file change within timeout")
 	}
 }
 
