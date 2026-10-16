@@ -1,10 +1,14 @@
 package sandbox
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 )
+
+// DOProvider can label its machines.
+var _ Labeler = (*DOProvider)(nil)
 
 // DOProvider implements Provider using the DigitalOcean API.
 type DOProvider struct {
@@ -173,4 +177,41 @@ func (p *DOProvider) Status(meta *SandboxMeta) (string, error) {
 		return "unknown", nil
 	}
 	return droplet.Status, nil
+}
+
+// Label puts each label on the droplet as a DigitalOcean tag key:value.
+func (p *DOProvider) Label(meta *SandboxMeta, labels map[string]string) error {
+	if meta.DropletID == 0 {
+		return fmt.Errorf("no droplet recorded")
+	}
+	var errs []error
+	for _, tag := range sortedLabels(labels, ":") {
+		if err := p.client.TagDroplet(tag, meta.DropletID); err != nil {
+			errs = append(errs, fmt.Errorf("tag %s: %w", tag, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ListLabeled lists the droplets with the spekk-sandbox tag, which every
+// droplet spekk creates carries. A droplet without a spekk-kind tag was
+// created before labels existed, and reads as persistent.
+func (p *DOProvider) ListLabeled() ([]RemoteSandbox, error) {
+	droplets, err := p.client.ListDroplets("spekk-sandbox")
+	if err != nil {
+		return nil, err
+	}
+	var found []RemoteSandbox
+	for _, d := range droplets {
+		labels := map[string]string{}
+		for _, tag := range d.Tags {
+			if k, v, ok := strings.Cut(tag, ":"); ok {
+				labels[k] = v
+			}
+		}
+		meta := SandboxMeta{Provider: p.Name(), DropletID: d.ID, IP: d.PublicIP(), Region: d.Region.Slug, CreatedAt: d.CreatedAt}
+		metaFromLabels(&meta, labels)
+		found = append(found, RemoteSandbox{Name: strings.TrimPrefix(d.Name, "spekk-"), Meta: meta})
+	}
+	return found, nil
 }

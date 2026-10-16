@@ -69,7 +69,12 @@ func TestGCPCreateRecordsTheVMAndWaitsAsTheLoginUser(t *testing.T) {
 		t.Errorf("wait logged in as %q, want %q", waitUser, gcpLoginUser)
 	}
 
-	create := (*calls)[len(*calls)-1]
+	var create string
+	for _, call := range *calls {
+		if strings.HasPrefix(call, "compute instances create ") {
+			create = call
+		}
+	}
 	for _, part := range []string{
 		"create spekk-box --project proj-a --zone " + gcpDefaultZone,
 		"--image-family " + gcpImageFamily,

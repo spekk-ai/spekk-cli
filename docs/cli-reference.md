@@ -657,6 +657,8 @@ spekk sandbox create --name my-sandbox --provision-timeout 45m
 spekk sandbox create --name my-sandbox --auth subscription
 spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box
 spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --ssh-user ubuntu
+spekk sandbox create --name tmp-fix-login --one-off --purpose "fix the login test"
+spekk sandbox create --name tmp-migration --one-off --expires 3d
 ```
 
 **Flags:**
@@ -676,6 +678,9 @@ spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --s
 | `--ssh-user <user>` | SSH login user for that machine (default: `root`). A non-root user must have passwordless sudo |
 | `--release <tag>` | Pull the agent binary from a specific spekk release instead of the latest, e.g. an `exp-*` prerelease. The cloud-init template always comes from the installed CLI |
 | `--organization <id>` | The control host organization to register the agent in. Needed only when you belong to more than one |
+| `--one-off` | Mark the sandbox one-off: one task, then destroy it. It expires 48 hours after `create` unless `--expires` says when. Without it, the sandbox is persistent and has no expiry |
+| `--expires <when>` | Expiry of a one-off sandbox: a Go duration (`36h`), days (`3d`), a date (`2026-10-17`, which means 00:00 UTC), or an RFC 3339 time. It must be in the future, and it needs `--one-off` |
+| `--purpose <text>` | Why the sandbox exists. It is kept in the record and in the marker on the machine. It is one line: `create` refuses a newline, a tab or any other control character |
 
 The cloud flags and the existing-machine flags exclude each other. For the `gcp` defaults and what spekk creates in the project, see [A Sandbox on Google Cloud](advanced/sandbox-gcp.md). `create` refuses a name that is already recorded: destroy the old sandbox first.
 
@@ -777,15 +782,26 @@ Use it for a sandbox that was created without `SPEKK_API_TOKEN`, or to replace t
 
 ### `spekk sandbox list`
 
-Print every recorded sandbox: name, IP, region, status, and creation time.
+Print every recorded sandbox, sorted by name: name, kind, IP, region, status, creation time, and expiry. A sandbox whose expiry is in the past shows `EXPIRED`. A record that an older CLI wrote has no kind, and lists as `persistent`.
 
 ```bash
 spekk sandbox list
+spekk sandbox list --expired             # Only the expired sandboxes
+spekk sandbox list --all-hosts           # Also the labeled sandboxes that other machines created
 ```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--expired` | Show only the sandboxes whose expiry is in the past |
+| `--all-hosts` | Also ask DigitalOcean and GCP for the labeled machines that no local record names, and show them with the status `remote` |
+
+`--all-hosts` lists the DigitalOcean droplets with the `spekk-sandbox` tag, and the GCP VMs with a `spekk-kind` label in the default gcloud project. For each cloud that it cannot ask (no token, no `gcloud`, or an API error), it prints one line on stderr with the reason. Expiry is a reminder only: spekk never destroys a sandbox because it expired. See [Sandbox kinds](advanced/sandbox-architecture.md#sandbox-kinds).
 
 ### `spekk sandbox status <name>`
 
-Print the stored fields of a sandbox, the live machine state, and two SSH checks: the provisioned marker, and the `spekk-agent` service.
+Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and two SSH checks: the provisioned marker, and the `spekk-agent` service.
 
 ```bash
 spekk sandbox status my-sandbox
@@ -824,7 +840,7 @@ When the record has an agent id, `destroy` first revokes the agent on the contro
 
 For a DigitalOcean sandbox, `destroy` deletes the droplet and its SSH key on DigitalOcean, then removes the local record. When the record names no droplet, `destroy` refuses, because the droplet may still be running and billing. `--force` removes the record anyway.
 
-For a machine spekk did not create, `destroy` stops the `spekk-agent` service, removes the credential files spekk put on the machine, and removes the local record. It makes no cloud API call and needs no API token. When the teardown fails, `destroy` keeps the record, because removing it would leave an agent running with live credentials and nothing that points at it. `--force` removes the record anyway.
+For a machine spekk did not create, `destroy` stops the `spekk-agent` service, removes the credential files spekk put on the machine and the marker `/opt/spekk/sandbox.json`, and removes the local record. It makes no cloud API call and needs no API token. When the teardown fails, `destroy` keeps the record, because removing it would leave an agent running with live credentials and nothing that points at it. `--force` removes the record anyway.
 
 The local SSH key pair is deleted only when spekk generated it. The test is where the private key is: the recorded path, cleaned and made absolute, must be inside the `keys` directory under spekk's config directory, and so must the file it resolves to after symlinks are followed on both sides. A key anywhere else is kept, and `destroy` prints one line to stderr that names the path it kept.
 

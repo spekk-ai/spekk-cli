@@ -6,11 +6,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -58,6 +60,14 @@ type CreateOptions struct {
 	// ProvisionTimeout is how long Create waits for cloud-init to write the
 	// provisioned marker. Zero means DefaultProvisionTimeout.
 	ProvisionTimeout time.Duration
+
+	// Kind is KindOneOff or KindPersistent; empty means persistent.
+	// ExpiresAt is when a one-off sandbox expires; zero means never.
+	// Purpose says why the sandbox exists. ResolveKind fills Kind and
+	// ExpiresAt from the flags.
+	Kind      string
+	ExpiresAt time.Time
+	Purpose   string
 
 	// CloudInit is the provisioning payload from the release artifacts.
 	// Create fills it in; no flag sets it. A provider that does not use
@@ -151,6 +161,15 @@ func Create(p Provider, opts CreateOptions) (err error) {
 		Auth:      string(opts.Auth),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 		AgentID:   agentID,
+		Kind:      opts.Kind,
+		Purpose:   opts.Purpose,
+		CreatedBy: hostname(),
+	}
+	if meta.Kind == "" {
+		meta.Kind = KindPersistent
+	}
+	if !opts.ExpiresAt.IsZero() {
+		meta.ExpiresAt = opts.ExpiresAt.UTC().Format(time.RFC3339)
 	}
 	defer func() {
 		if err != nil && meta.AgentID != "" && revokeAbandoned(meta.AgentID, opts.Name) {
@@ -195,6 +214,7 @@ func Create(p Provider, opts CreateOptions) (err error) {
 		}
 		return createErr
 	}
+	labelMachine(p, meta)
 
 	// --- Generic provisioning (provider-agnostic) ---
 
@@ -255,12 +275,12 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	// whatever the operator gave for one they already had.
 	user := sshUser(meta)
 
-	if err := fetchAgentBinary(meta, name, artifacts); err != nil {
+	if err := fetchAgent(meta, name, artifacts); err != nil {
 		return &stageError{"fetching agent binary", err}
 	}
 
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, mode); err != nil {
+	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, mode, markerContent(meta)); err != nil {
 		return &stageError{"injecting credentials", err}
 	}
 
@@ -275,6 +295,10 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	}
 	return nil
 }
+
+// fetchAgent is the seam equipSandbox fetches the agent build through, so a
+// test can reach the credential step without an SSH connection.
+var fetchAgent = fetchAgentBinary
 
 // fetchAgentBinary picks the agent build for the machine's own CPU, so it runs
 // only after create/provision has reached the machine over SSH.
@@ -442,31 +466,77 @@ func Provision(name string, opts ProvisionOptions) error {
 
 // --- List ---
 
-// List displays all sandboxes in a table.
-func List() error {
+// ListOptions holds flags for the list subcommand.
+type ListOptions struct {
+	// Expired shows only the sandboxes whose expiry is in the past.
+	Expired bool
+	// AllHosts also lists the labeled machines that the providers report
+	// and no local record names, for example those another machine made.
+	AllHosts bool
+}
+
+// listRow is one sandbox in the list table.
+type listRow struct {
+	name string
+	meta *SandboxMeta
+}
+
+// List displays the sandboxes in a table, sorted by name.
+func List(opts ListOptions) error {
+	return list(os.Stdout, os.Stderr, opts, time.Now())
+}
+
+func list(out, errOut io.Writer, opts ListOptions, now time.Time) error {
 	sandboxes, err := LoadSandboxes()
 	if err != nil {
 		return err
 	}
-	if len(sandboxes) == 0 {
-		fmt.Println("No sandboxes found.")
+	var all []listRow
+	for name, meta := range sandboxes {
+		all = append(all, listRow{name, meta})
+	}
+	if opts.AllHosts {
+		all = append(all, remoteRows(sandboxes, errOut)...)
+	}
+	var rows []listRow
+	for _, r := range all {
+		if !opts.Expired || r.meta.Expired(now) {
+			rows = append(rows, r)
+		}
+	}
+	if len(rows) == 0 {
+		if opts.Expired {
+			fmt.Fprintln(out, "No expired sandboxes found.")
+		} else {
+			fmt.Fprintln(out, "No sandboxes found.")
+		}
 		return nil
 	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
 
-	header := padRow("Name", "IP", "Region", "Status", "Created")
-	fmt.Println(header)
-	fmt.Println(strings.Repeat("-", len(header)))
-
-	for name, data := range sandboxes {
-		fmt.Println(padRow(
-			name,
-			orDash(data.IP),
-			orDash(data.Region),
-			orDash(data.Status),
-			orDash(data.CreatedAt),
+	header := padRow("Name", "Kind", "IP", "Region", "Status", "Created", "Expires")
+	fmt.Fprintln(out, header)
+	fmt.Fprintln(out, strings.Repeat("-", len(header)))
+	for _, r := range rows {
+		fmt.Fprintln(out, padRow(
+			r.name,
+			r.meta.KindOf(),
+			orDash(r.meta.IP),
+			orDash(r.meta.Region),
+			orDash(r.meta.Status),
+			orDash(r.meta.CreatedAt),
+			expiresCell(r.meta, now),
 		))
 	}
 	return nil
+}
+
+// expiresCell is the Expires column: the expiry, marked when it is past.
+func expiresCell(meta *SandboxMeta, now time.Time) string {
+	if meta.Expired(now) {
+		return "EXPIRED " + meta.ExpiresAt
+	}
+	return orDash(meta.ExpiresAt)
 }
 
 // --- Status ---
@@ -494,6 +564,10 @@ func Status(p Provider, name string) error {
 	fmt.Printf("Region: %s\n", orUnknown(sandbox.Region))
 	fmt.Printf("Size: %s\n", orUnknown(sandbox.Size))
 	fmt.Printf("Created: %s\n", orUnknown(sandbox.CreatedAt))
+	fmt.Printf("Kind: %s\n", sandbox.KindOf())
+	fmt.Printf("Purpose: %s\n", orDash(sandbox.Purpose))
+	fmt.Printf("Expires: %s\n", expiresCell(sandbox, time.Now()))
+	fmt.Printf("Created by: %s\n", orDash(sandbox.CreatedBy))
 
 	// Fetch live status from the provider. A nil provider has two causes:
 	// no cloud owns this machine, which is normal and silent, or one could
@@ -1198,7 +1272,9 @@ func sshCheck(sandbox *SandboxMeta, name, command string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode) error {
+// injectCredentials writes the env file, and in the same command the
+// sandbox marker, which holds no secret.
+func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode, marker []byte) error {
 	envVars := map[string]string{
 		"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
 		"AWS_SECRET_ACCESS_KEY": os.Getenv("AWS_SECRET_ACCESS_KEY"),
@@ -1209,7 +1285,7 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 	spekkHost := os.Getenv("SPEKK_HOST")
 
 	envContent := buildEnvContent(mode, envVars, name, agentToken, spekkHost)
-	script := privilegedScript(user, buildInjectScript(envContent))
+	script := privilegedScript(user, buildInjectScript(envContent, marker))
 
 	args := sshHostKeyOpts(name)
 	args = append(args, "-o", "ConnectTimeout=10")
@@ -1217,8 +1293,13 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 		args = append(args, "-i", keyPath)
 	}
 	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
-	if out, err := sshExec(args); err != nil {
+	out, err := sshExec(args)
+	if err != nil {
 		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
+	}
+	if strings.Contains(string(out), markerNotWritten) {
+		cause := strings.TrimSpace(strings.Replace(string(out), markerNotWritten, "", 1))
+		fmt.Fprintf(os.Stderr, "Warning: could not write %s. The sandbox works without it.\n%s\n", sandboxMarker, cause)
 	}
 	return nil
 }
@@ -1239,13 +1320,23 @@ func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken,
 	return strings.Join(envLines, "\n") + "\n"
 }
 
-// buildInjectScript produces the SSH command string for injecting credentials.
-// It base64-encodes the content to prevent shell injection. Exported for testing.
-func buildInjectScript(envContent string) string {
+// markerNotWritten is the line the inject script prints when it cannot
+// write the sandbox marker, so injectCredentials can warn about it.
+const markerNotWritten = "spekk: marker not written"
+
+// buildInjectScript produces the SSH command string for injecting credentials
+// and writing the sandbox marker. It base64-encodes both to prevent shell
+// injection. The marker goes to a temp file and then mv -f, so the write does
+// not follow a symlink at the marker path. A failed marker write prints
+// markerNotWritten and does not fail the command: the marker is information
+// only. Exported for testing.
+func buildInjectScript(envContent string, marker []byte) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(envContent))
+	encodedMarker := base64.StdEncoding.EncodeToString(marker)
 	return fmt.Sprintf(
-		`echo '%s' | base64 -d > /etc/spekk/agent.env && chown agent:agent /etc/spekk/agent.env && chmod 600 /etc/spekk/agent.env`,
-		encoded,
+		`echo '%s' | base64 -d > /etc/spekk/agent.env && chown agent:agent /etc/spekk/agent.env && chmod 600 /etc/spekk/agent.env && `+
+			`{ m=$(mktemp %s.XXXXXX) && echo '%s' | base64 -d > "$m" && chmod 644 "$m" && mv -f "$m" %s || { [ -z "$m" ] || rm -f "$m"; echo '%s'; }; }`,
+		encoded, sandboxMarker, encodedMarker, sandboxMarker, markerNotWritten,
 	)
 }
 
@@ -1309,8 +1400,8 @@ func generateAgentToken() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func padRow(name, ip, region, status, created string) string {
-	return fmt.Sprintf("%-20s  %-18s  %-10s  %-12s  %s", name, ip, region, status, created)
+func padRow(name, kind, ip, region, status, created, expires string) string {
+	return fmt.Sprintf("%-20s  %-10s  %-18s  %-14s  %-12s  %-20s  %s", name, kind, ip, region, status, created, expires)
 }
 
 func orDash(s string) string {

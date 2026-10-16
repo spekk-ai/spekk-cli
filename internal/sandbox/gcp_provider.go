@@ -1,12 +1,14 @@
 package sandbox
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // ProviderGCP is the SandboxMeta.Provider value for a Compute Engine VM.
@@ -59,6 +61,9 @@ func gcloudNotFound(err error) bool {
 func gcloudCannotExist(err error) bool {
 	return gcloudNotFound(err) || strings.Contains(err.Error(), "Invalid value for field")
 }
+
+// GCPProvider can label its machines.
+var _ Labeler = (*GCPProvider)(nil)
 
 // GCPProvider implements Provider for Google Compute Engine through the
 // gcloud CLI, which brings the operator's credentials and configuration.
@@ -232,4 +237,59 @@ func (p *GCPProvider) Status(meta *SandboxMeta) (string, error) {
 		return "", nil
 	}
 	return runGcloud(append(instanceArgs("describe", meta), "--format", "value(status)")...)
+}
+
+// Label puts the labels on the VM as GCP labels key=value.
+func (p *GCPProvider) Label(meta *SandboxMeta, labels map[string]string) error {
+	if meta.GCPInstance == "" {
+		return fmt.Errorf("no VM recorded")
+	}
+	_, err := runGcloud(append(instanceArgs("add-labels", meta), "--labels", strings.Join(sortedLabels(labels, "="), ","))...)
+	return err
+}
+
+// ListLabeled lists the VMs in the default gcloud project that carry a
+// spekk-kind label. A VM created before labels existed has none, so it is
+// not listed.
+func (p *GCPProvider) ListLabeled() ([]RemoteSandbox, error) {
+	project, err := gcloudConfig("", "project")
+	if err != nil {
+		return nil, fmt.Errorf("reading the gcloud project: %w", err)
+	}
+	if project == "" {
+		return nil, fmt.Errorf("no default gcloud project: run gcloud config set project <project-id>")
+	}
+	out, err := runGcloud("compute", "instances", "list", "--project", project, "--filter", "labels."+labelKind+":*", "--format", "json")
+	if err != nil {
+		return nil, err
+	}
+	var vms []struct {
+		Name              string            `json:"name"`
+		Zone              string            `json:"zone"`
+		Labels            map[string]string `json:"labels"`
+		CreationTimestamp string            `json:"creationTimestamp"`
+		NetworkInterfaces []struct {
+			AccessConfigs []struct {
+				NatIP string `json:"natIP"`
+			} `json:"accessConfigs"`
+		} `json:"networkInterfaces"`
+	}
+	if err := json.Unmarshal([]byte(out), &vms); err != nil {
+		return nil, fmt.Errorf("reading the gcloud instance list: %w", err)
+	}
+	var found []RemoteSandbox
+	for _, vm := range vms {
+		// The zone is a URL that ends in the zone name.
+		zone := vm.Zone[strings.LastIndex(vm.Zone, "/")+1:]
+		meta := SandboxMeta{Provider: ProviderGCP, GCPInstance: vm.Name, Project: project, Region: zone}
+		if t, err := time.Parse(time.RFC3339, vm.CreationTimestamp); err == nil {
+			meta.CreatedAt = t.UTC().Format(time.RFC3339)
+		}
+		if len(vm.NetworkInterfaces) > 0 && len(vm.NetworkInterfaces[0].AccessConfigs) > 0 {
+			meta.IP = vm.NetworkInterfaces[0].AccessConfigs[0].NatIP
+		}
+		metaFromLabels(&meta, vm.Labels)
+		found = append(found, RemoteSandbox{Name: strings.TrimPrefix(vm.Name, "spekk-"), Meta: meta})
+	}
+	return found, nil
 }

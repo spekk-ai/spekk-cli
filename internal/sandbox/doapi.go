@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -174,19 +175,27 @@ func (c *Client) GetDroplet(id int) (*Droplet, error) {
 	return resp.Droplet, nil
 }
 
-// ListDroplets lists droplets, optionally filtered by tag.
+// ListDroplets lists droplets, optionally filtered by tag. It reads every
+// page, so a large account does not lose droplets past the first page.
 func (c *Client) ListDroplets(tag string) ([]Droplet, error) {
-	path := "/v2/droplets"
-	if tag != "" {
-		path += "?tag_name=" + url.QueryEscape(tag)
+	const perPage = 200
+	var all []Droplet
+	for page := 1; ; page++ {
+		query := url.Values{"per_page": {strconv.Itoa(perPage)}, "page": {strconv.Itoa(page)}}
+		if tag != "" {
+			query.Set("tag_name", tag)
+		}
+		var resp struct {
+			Droplets []Droplet `json:"droplets"`
+		}
+		if err := c.doRequest("GET", "/v2/droplets?"+query.Encode(), nil, &resp); err != nil {
+			return nil, err
+		}
+		all = append(all, resp.Droplets...)
+		if len(resp.Droplets) < perPage {
+			return all, nil
+		}
 	}
-	var resp struct {
-		Droplets []Droplet `json:"droplets"`
-	}
-	if err := c.doRequest("GET", path, nil, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Droplets, nil
 }
 
 // DeleteDroplet destroys a droplet by ID.
@@ -260,6 +269,21 @@ func (c *Client) AssignToProject(projectID string, resourceURNs []string) error 
 		"resources": resourceURNs,
 	}
 	return c.doRequest("POST", fmt.Sprintf("/v2/projects/%s/resources", projectID), payload, nil)
+}
+
+// --- Tag operations ---
+
+// TagDroplet puts a tag on a droplet. It creates the tag first, because the
+// API tags a resource only with a tag that exists. The API answers 201 for a
+// tag that exists already, so an error here is a real error.
+func (c *Client) TagDroplet(tag string, dropletID int) error {
+	if err := c.doRequest("POST", "/v2/tags", map[string]string{"name": tag}, nil); err != nil {
+		return err
+	}
+	payload := map[string]any{
+		"resources": []map[string]string{{"resource_id": strconv.Itoa(dropletID), "resource_type": "droplet"}},
+	}
+	return c.doRequest("POST", "/v2/tags/"+url.PathEscape(tag)+"/resources", payload, nil)
 }
 
 // --- HTTP helper ---

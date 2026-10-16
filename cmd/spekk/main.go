@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	spekk "github.com/spekk-ai/spekk-cli"
 	"github.com/spekk-ai/spekk-cli/internal/agent"
@@ -1088,7 +1089,7 @@ SUBCOMMANDS:
   create      Create a sandbox, or register a machine you already have
   provision   Finish a sandbox that create left at "provisioning"
   register    Register a sandbox on the control host with your API token
-  list        List all sandboxes
+  list        List sandboxes, their kind and their expiry
   status      Show status of a sandbox
   ssh         SSH into a sandbox
   destroy     Destroy a sandbox, or deregister a machine you own
@@ -1148,6 +1149,51 @@ If the sandbox had an agent before, register revokes it. Use this for a
 sandbox that was created without SPEKK_API_TOKEN.
 `
 
+// sandboxListHelpText is the help for `spekk sandbox list`.
+const sandboxListHelpText = `
+spekk sandbox list - List sandboxes
+
+USAGE:
+  spekk sandbox list [options]
+
+OPTIONS:
+  --expired     Show only the sandboxes whose expiry is in the past
+  --all-hosts   Also ask DigitalOcean and GCP for the labeled sandboxes
+                that this machine did not create, shown as "remote"
+  --help, -h    Show this help message
+
+The table shows each sandbox's kind (one-off or persistent) and its
+expiry. An expired sandbox shows EXPIRED. Expiry is a reminder only:
+spekk never destroys a sandbox because it expired.
+
+With --all-hosts, a cloud that cannot be asked (no token, no gcloud, or
+an API error) gets one line on stderr that says why. DigitalOcean lists
+the droplets tagged spekk-sandbox. GCP lists the VMs with a spekk-kind
+label in the default gcloud project.
+`
+
+// listSandboxes runs `spekk sandbox list`.
+func listSandboxes(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"expired":   {Names: []string{"--expired"}, Type: cli.BoolFlag},
+		"all-hosts": {Names: []string{"--all-hosts"}, Type: cli.BoolFlag},
+		"help":      {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Print(sandboxListHelpText)
+		return
+	}
+	if flags.Err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", flags.Err)
+		os.Exit(1)
+	}
+	opts := sandbox.ListOptions{Expired: flags.Bool("expired"), AllHosts: flags.Bool("all-hosts")}
+	if err := sandbox.List(opts); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
 // launchSandbox manages cloud sandbox environments.
 // Subcommands: create, provision, register, list, status, ssh, destroy, deploy.
 func launchSandbox(args []string) {
@@ -1167,10 +1213,7 @@ func launchSandbox(args []string) {
 	case "register":
 		registerSandbox(subArgs)
 	case "list":
-		if err := sandbox.List(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
-		}
+		listSandboxes(subArgs)
 	case "status":
 		if len(subArgs) == 0 {
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox status <name>")
@@ -1351,26 +1394,8 @@ func sandboxPositional(args []string, valueFlags ...string) string {
 	return ""
 }
 
-func createSandbox(args []string) {
-	flags := cli.ParseFlags(args, cli.FlagSet{
-		"name":              {Names: []string{"--name"}, Type: cli.StringFlag},
-		"provider":          {Names: []string{"--provider"}, Type: cli.StringFlag},
-		"region":            {Names: []string{"--region"}, Type: cli.StringFlag},
-		"size":              {Names: []string{"--size"}, Type: cli.StringFlag},
-		"project":           {Names: []string{"--project"}, Type: cli.StringFlag},
-		"vpc":               {Names: []string{"--vpc"}, Type: cli.StringFlag},
-		"ip":                {Names: []string{"--ip"}, Type: cli.StringFlag},
-		"ssh-key":           {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
-		"ssh-user":          {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
-		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
-		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
-		"release":           {Names: []string{"--release"}, Type: cli.StringFlag},
-		"organization":      {Names: []string{"--organization"}, Type: cli.StringFlag},
-		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
-	})
-
-	if flags.Bool("help") {
-		fmt.Print(`
+// sandboxCreateHelpText is the help for `spekk sandbox create`.
+const sandboxCreateHelpText = `
 spekk sandbox create - Create a new sandbox
 
 USAGE:
@@ -1415,6 +1440,23 @@ OPTIONS:
                          specific spekk release instead of the latest, e.g. an
                          exp-* prerelease. Default: the latest published release
 
+  Sandbox kind:
+  --one-off              One task, then destroy. Expires 48h after create
+                         unless --expires says when. Default: persistent,
+                         with no expiry
+  --expires <when>       Expiry of a one-off sandbox: a duration (36h),
+                         days (3d), a date (2026-10-17, 00:00 UTC), or an
+                         RFC 3339 time. Needs --one-off
+  --purpose <text>       Why the sandbox exists, kept in its record. One
+                         line: no newline, tab or other control character
+
+  create records the kind, purpose, expiry and host in sandboxes.json and
+  in /opt/spekk/sandbox.json on the machine. On DigitalOcean and GCP it
+  also labels the machine (spekk-kind, spekk-expires, spekk-host), so
+  "spekk sandbox list --all-hosts" on a different machine finds it. A
+  failed label is a warning. Expiry is a reminder in "spekk sandbox list";
+  spekk never destroys a sandbox because it expired.
+
   Control host registration:
   --organization <id>    Control host organization for the agent. Needed only
                          when you belong to more than one
@@ -1427,7 +1469,31 @@ OPTIONS:
   spekk does not provision a machine it did not create. The machine must
   already carry /opt/spekk/.provisioned; spekk then injects credentials
   and deploys the agent onto it.
-`)
+`
+
+func createSandbox(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"name":              {Names: []string{"--name"}, Type: cli.StringFlag},
+		"provider":          {Names: []string{"--provider"}, Type: cli.StringFlag},
+		"region":            {Names: []string{"--region"}, Type: cli.StringFlag},
+		"size":              {Names: []string{"--size"}, Type: cli.StringFlag},
+		"project":           {Names: []string{"--project"}, Type: cli.StringFlag},
+		"vpc":               {Names: []string{"--vpc"}, Type: cli.StringFlag},
+		"ip":                {Names: []string{"--ip"}, Type: cli.StringFlag},
+		"ssh-key":           {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
+		"ssh-user":          {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
+		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
+		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
+		"release":           {Names: []string{"--release"}, Type: cli.StringFlag},
+		"organization":      {Names: []string{"--organization"}, Type: cli.StringFlag},
+		"one-off":           {Names: []string{"--one-off"}, Type: cli.BoolFlag},
+		"expires":           {Names: []string{"--expires"}, Type: cli.StringFlag},
+		"purpose":           {Names: []string{"--purpose"}, Type: cli.StringFlag},
+		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(sandboxCreateHelpText)
 		return
 	}
 
@@ -1449,6 +1515,17 @@ OPTIONS:
 
 	provisionTimeout, err := sandbox.ParseProvisionTimeout(flags.String("provision-timeout"))
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	kind, expiresAt, err := sandbox.ResolveKind(flags.Bool("one-off"), flags.String("expires"), time.Now())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := sandbox.ValidatePurpose(flags.String("purpose")); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -1495,6 +1572,10 @@ OPTIONS:
 
 		Organization:     flags.String("organization"),
 		ProvisionTimeout: provisionTimeout,
+
+		Kind:      kind,
+		ExpiresAt: expiresAt,
+		Purpose:   flags.String("purpose"),
 	}
 	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
