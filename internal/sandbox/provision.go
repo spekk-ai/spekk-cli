@@ -158,6 +158,9 @@ func teardownCommand() string {
 	for _, path := range agentSecrets {
 		steps = append(steps, fmt.Sprintf("test -e %s && rc=1", path))
 	}
+	// The marker holds no secret, so a marker that stays does not fail
+	// the teardown. It only says the machine is still a sandbox.
+	steps = append(steps, fmt.Sprintf("rm -f %s || true", sandboxMarker))
 	steps = append(steps,
 		// is-active exits 0 while the agent runs, which is a failure.
 		"systemctl is-active --quiet spekk-agent && rc=1",

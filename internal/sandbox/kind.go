@@ -25,8 +25,11 @@ const (
 const defaultOneOffExpiry = 48 * time.Hour
 
 // sandboxMarker is the file on the machine that says what kind of sandbox
-// it is, for whoever logs in. Credential injection writes it.
-const sandboxMarker = "/opt/spekk/sandbox.json"
+// it is, for whoever logs in. Credential injection writes it, and the
+// teardown of a machine you already have removes it. It is a variable so
+// that a test of the teardown does not remove the marker of the machine
+// that runs it.
+var sandboxMarker = "/opt/spekk/sandbox.json"
 
 // KindOf returns the kind of a sandbox. A record with no kind was written
 // before the field existed, when every sandbox was persistent.

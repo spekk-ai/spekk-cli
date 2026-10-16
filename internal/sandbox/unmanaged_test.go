@@ -185,9 +185,12 @@ func TestTeardownCommand(t *testing.T) {
 			}
 			secrets = append(secrets, path)
 		}
-		orig := agentSecrets
+		orig, origMarker := agentSecrets, sandboxMarker
 		agentSecrets = secrets
-		t.Cleanup(func() { agentSecrets = orig })
+		// The teardown also removes the marker. Point it away from the
+		// machine that runs the test.
+		sandboxMarker = filepath.Join(dir, "sandbox.json")
+		t.Cleanup(func() { agentSecrets, sandboxMarker = orig, origMarker })
 
 		bin := t.TempDir()
 		for name, body := range map[string]string{"systemctl": systemctl, "rm": rmBody} {

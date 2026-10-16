@@ -677,7 +677,7 @@ spekk sandbox create --name tmp-migration --one-off --expires 3d
 | `--organization <id>` | The control host organization to register the agent in. Needed only when you belong to more than one |
 | `--one-off` | Mark the sandbox one-off: one task, then destroy it. It expires 48 hours after `create` unless `--expires` says when. Without it, the sandbox is persistent and has no expiry |
 | `--expires <when>` | Expiry of a one-off sandbox: a Go duration (`36h`), days (`3d`), a date (`2026-10-17`, which means 00:00 UTC), or an RFC 3339 time. It must be in the future, and it needs `--one-off` |
-| `--purpose <text>` | Why the sandbox exists. It is kept in the record and in the marker on the machine |
+| `--purpose <text>` | Why the sandbox exists. It is kept in the record and in the marker on the machine. It is one line: `create` refuses a newline, a tab or any other control character |
 
 The cloud flags and the existing-machine flags exclude each other. For the `gcp` defaults and what spekk creates in the project, see [A Sandbox on Google Cloud](advanced/sandbox-gcp.md). `create` refuses a name that is already recorded: destroy the old sandbox first.
 
