@@ -387,10 +387,8 @@ func TestListExpiredAndAllHosts(t *testing.T) {
 	if strings.Count(out, "old-task") != 1 {
 		t.Errorf("a remote machine that a local record names is listed twice:\n%s", out)
 	}
-	for _, want := range []string{"gcp: cannot query: gcloud is not on PATH", "none: cannot query:"} {
-		if !strings.Contains(errOut, want) {
-			t.Errorf("no line for a provider that cannot be asked: want %q in:\n%s", want, errOut)
-		}
+	if errOut != "gcp: cannot query: gcloud is not on PATH\n" {
+		t.Errorf("want one line for gcp, which cannot be asked, and none for none, which is not a cloud:\n%s", errOut)
 	}
 
 	out, _ = run(ListOptions{AllHosts: true, Expired: true})

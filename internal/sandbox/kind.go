@@ -150,8 +150,9 @@ func sameMachine(local, remote *SandboxMeta) bool {
 var providerByName = ProviderByName
 
 // remoteRows asks each provider that labels for its machines, and returns
-// those that no local record names. For each provider it cannot ask, it
-// writes one line to errOut, so no provider is left out silently.
+// those that no local record names. For each cloud provider it cannot ask,
+// it writes one line to errOut, so no cloud is left out silently. A provider
+// that does not label (none) is not a cloud, so it gets no line.
 func remoteRows(local map[string]*SandboxMeta, errOut io.Writer) []listRow {
 	var rows []listRow
 	for _, name := range ValidProviders {
@@ -162,7 +163,6 @@ func remoteRows(local map[string]*SandboxMeta, errOut io.Writer) []listRow {
 		}
 		l, ok := p.(Labeler)
 		if !ok {
-			fmt.Fprintf(errOut, "%s: cannot query: this provider does not label its machines\n", name)
 			continue
 		}
 		found, err := l.ListLabeled()

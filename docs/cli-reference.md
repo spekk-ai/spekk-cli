@@ -794,7 +794,7 @@ spekk sandbox list --all-hosts           # Also the labeled sandboxes that other
 | `--expired` | Show only the sandboxes whose expiry is in the past |
 | `--all-hosts` | Also ask DigitalOcean and GCP for the labeled machines that no local record names, and show them with the status `remote` |
 
-`--all-hosts` lists the DigitalOcean droplets with the `spekk-sandbox` tag, and the GCP VMs with a `spekk-kind` label in the default gcloud project. For each provider that it cannot ask (no token, no `gcloud`, an API error, or a provider that does not label, such as `none`), it prints one line on stderr with the reason. Expiry is a reminder only: spekk never destroys a sandbox because it expired. See [Sandbox kinds](advanced/sandbox-architecture.md#sandbox-kinds).
+`--all-hosts` lists the DigitalOcean droplets with the `spekk-sandbox` tag, and the GCP VMs with a `spekk-kind` label in the default gcloud project. For each cloud that it cannot ask (no token, no `gcloud`, or an API error), it prints one line on stderr with the reason. Expiry is a reminder only: spekk never destroys a sandbox because it expired. See [Sandbox kinds](advanced/sandbox-architecture.md#sandbox-kinds).
 
 ### `spekk sandbox status <name>`
 

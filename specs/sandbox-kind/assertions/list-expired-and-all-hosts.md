@@ -3,7 +3,7 @@ id: list-expired-and-all-hosts
 parent: sandbox-kind
 created: 2026-10-15T23:40:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: one-off-create-labels-and-marker
 branch: sandbox-kind
 ---

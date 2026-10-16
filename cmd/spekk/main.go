@@ -1129,9 +1129,8 @@ The table shows each sandbox's kind (one-off or persistent) and its
 expiry. An expired sandbox shows EXPIRED. Expiry is a reminder only:
 spekk never destroys a sandbox because it expired.
 
-With --all-hosts, a provider that cannot be asked (no token, no gcloud,
-an API error, or a provider that does not label) gets one line on stderr
-that says why. DigitalOcean lists the droplets tagged spekk-sandbox. GCP
+With --all-hosts, a cloud that cannot be asked (no token, no gcloud, or
+an API error) gets one line on stderr that says why. DigitalOcean lists the droplets tagged spekk-sandbox. GCP
 lists the VMs with a spekk-kind label in the default gcloud project.
 `
 
