@@ -1359,7 +1359,6 @@ func sandboxPositional(args []string, valueFlags ...string) string {
 // sandboxCreateHelpText is the help for `spekk sandbox create`.
 const sandboxCreateHelpText = `
 spekk sandbox create - Create a new sandbox
-spekk sandbox create - Create a new sandbox
 
 USAGE:
   spekk sandbox create --name <name> [options]

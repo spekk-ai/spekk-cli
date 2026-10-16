@@ -253,6 +253,8 @@ The local registry (`sandboxes.json`) is the source of truth. Registration with 
 
 Every label value obeys GCP's rules, the strictest: lowercase `[a-z0-9_-]`, 63 characters or fewer. Other characters become `-`. The expiry label is a date, rounded up to the next day, so a list that reads it never flags a sandbox early.
 
+On DigitalOcean, a tag belongs to the account, not to the droplet. Each new expiry date and each new host makes a new tag, and `spekk sandbox destroy` does not delete it. A tag with no droplet costs nothing. To delete one, run `doctl compute tag delete <tag>`.
+
 **List.** `spekk sandbox list` shows the kind and the expiry, and marks an expired sandbox `EXPIRED`. `--expired` shows only the expired ones. `--all-hosts` also asks each labeling provider for its labeled machines, and shows those that no local record names with the status `remote`. For each cloud that it cannot ask, it prints one line with the reason. `none` is not a cloud, so it gets no line.
 
 **No auto-destroy.** Expiry is a reminder only. spekk never destroys a sandbox because it expired.

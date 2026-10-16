@@ -3,7 +3,7 @@ id: docs-and-help
 parent: sandbox-kind
 created: 2026-10-15T23:40:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: list-expired-and-all-hosts
 branch: sandbox-kind
 ---
