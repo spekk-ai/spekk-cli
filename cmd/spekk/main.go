@@ -1010,6 +1010,10 @@ func execShow(args []string, stdout, stderr io.Writer, runners showRunners) int 
 		fmt.Fprint(stdout, showUsage)
 		return 0
 	}
+	if flags.Err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", flags.Err)
+		return 1
+	}
 
 	specsDir := findSpecsDir()
 	opts := show.Options{

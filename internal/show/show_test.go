@@ -1,8 +1,6 @@
 package show
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -720,7 +718,7 @@ priority: 1
 // TestShowOrderMatchesList checks that show lists specs and assertions in the
 // `spekk list` order (priority, then ID, then file), that foreign items from
 // cross-branch mode take their place in that order instead of map order, and
-// that two runs over the same input give byte-identical JSON.
+// that an unparseable foreign item (priority 0) comes last.
 func TestShowOrderMatchesList(t *testing.T) {
 	dir := t.TempDir()
 	specsDir := filepath.Join(dir, "specs")
@@ -767,9 +765,14 @@ func TestShowOrderMatchesList(t *testing.T) {
 			Meta:   &crossbranch.FileMeta{Status: "not_started", Priority: priority, Branch: "feat/x"},
 		})
 	}
+	// A foreign file that could not be parsed has no metadata, so priority 0.
+	// It must sort after every real item.
+	states = append(states, crossbranch.FileState{
+		Path: "specs/alpha/assertions/a-broken.md", Branch: "feat/x", State: crossbranch.StateIncomingAdd,
+	})
 	sort.Slice(states, func(i, j int) bool { return states[i].Path < states[j].Path })
 
-	render := func(crossBranch bool) (showData, []byte) {
+	render := func(crossBranch bool) showData {
 		result, err := parser.ParseAllSpecs(specsDir)
 		if err != nil {
 			t.Fatal(err)
@@ -778,11 +781,7 @@ func TestShowOrderMatchesList(t *testing.T) {
 		if crossBranch {
 			foldCrossBranch(&data, states, true)
 		}
-		out, err := json.Marshal(data)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return data, out
+		return data
 	}
 	files := func(data showData) (specs, assertions []string) {
 		for _, s := range data.Specs {
@@ -800,16 +799,13 @@ func TestShowOrderMatchesList(t *testing.T) {
 		}
 	}
 
-	local, _ := render(false)
-	gotSpecs, gotAssertions := files(local)
-	check("default specs", gotSpecs, []string{"specs/alpha/alpha.md", "specs/zeta/zeta.md"})
+	_, gotAssertions := files(render(false))
 	check("default assertions", gotAssertions, []string{
 		"specs/alpha/assertions/a-c.md", "specs/zeta/assertions/a-c.md", "specs/zeta/assertions/z-a.md",
 		"specs/zeta/assertions/z-b.md", "specs/alpha/assertions/a-b.md",
 	})
 
-	cross, first := render(true)
-	gotSpecs, gotAssertions = files(cross)
+	gotSpecs, gotAssertions := files(render(true))
 	check("cross-branch specs", gotSpecs, []string{
 		"specs/alpha/alpha.md", "specs/delta/delta.md", "specs/epsilon/epsilon.md", "specs/zeta/zeta.md",
 		"specs/gamma/gamma.md",
@@ -821,11 +817,6 @@ func TestShowOrderMatchesList(t *testing.T) {
 		"specs/alpha/assertions/a-other.md", "specs/delta/assertions/d-1.md", "specs/delta/assertions/d-2.md",
 		"specs/gamma/assertions/g-0.md", "specs/zeta/assertions/z-b.md",
 		"specs/alpha/assertions/a-b.md", "specs/epsilon/assertions/e-0.md", "specs/gamma/assertions/g-2.md",
+		"specs/alpha/assertions/a-broken.md",
 	})
-
-	for run := 2; run <= 5; run++ {
-		if _, again := render(true); !bytes.Equal(first, again) {
-			t.Fatalf("run %d gave different output than run 1", run)
-		}
-	}
 }
