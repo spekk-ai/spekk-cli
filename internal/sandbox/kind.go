@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // The kinds of sandbox. A one-off sandbox is for one task and then a
@@ -66,6 +67,19 @@ func ResolveKind(oneOff bool, expires string, now time.Time) (string, time.Time,
 		return "", time.Time{}, err
 	}
 	return KindOneOff, t, nil
+}
+
+// ValidatePurpose refuses a --purpose with a control character (C0, DEL or
+// C1). status prints the purpose as one "Key: value" line, so a newline
+// breaks the layout and an escape sequence goes to the terminal. Every other
+// character is kept as it is.
+func ValidatePurpose(purpose string) error {
+	for _, r := range purpose {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("--purpose has a control character (%U): use one line of plain text", r)
+		}
+	}
+	return nil
 }
 
 // maxExpiryDays is the largest day count that fits in a time.Duration.

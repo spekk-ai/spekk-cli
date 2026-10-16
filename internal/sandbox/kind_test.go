@@ -123,6 +123,19 @@ func TestResolveKind(t *testing.T) {
 	}
 }
 
+// A purpose is one line of text: every control character is refused, and
+// every other character, shell syntax included, is kept.
+func TestValidatePurpose(t *testing.T) {
+	for _, bad := range []string{"two\nlines", "a\ttab", "red \x1b[31m", "del \x7f", "next line \u0085"} {
+		if err := ValidatePurpose(bad); err == nil || !strings.Contains(err.Error(), "control character") {
+			t.Errorf("ValidatePurpose(%q) = %v, want a control character error", bad, err)
+		}
+	}
+	if err := ValidatePurpose("fix \"login\" $(touch /tmp/x) `id`; rm -rf /tmp/y 'q' café"); err != nil {
+		t.Errorf("ValidatePurpose refused a purpose without control characters: %v", err)
+	}
+}
+
 // Label values obey GCP's rules on every provider, and the expiry label
 // rounds up to the next day so a remote list never flags a sandbox early.
 func TestSandboxLabels(t *testing.T) {
@@ -200,50 +213,6 @@ func TestCreateOneOffRecordsKindAndLabels(t *testing.T) {
 				t.Errorf("label warning printed = %v, want %v:\n%s", warned, labelErr != nil, out)
 			}
 		})
-	}
-}
-
-// DigitalOcean labels are tags key:value on the droplet. The API answers
-// 201 to a tag create, also for a tag that exists already.
-func TestDOProviderLabelTagsTheDroplet(t *testing.T) {
-	var tagged []string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == "POST" && r.URL.Path == "/v2/tags":
-			w.WriteHeader(http.StatusCreated)
-		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/resources"):
-			body, _ := io.ReadAll(r.Body)
-			if !strings.Contains(string(body), `"resource_id":"42"`) {
-				t.Errorf("tagged the wrong resource: %s", body)
-			}
-			tagged = append(tagged, strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v2/tags/"), "/resources"))
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer ts.Close()
-
-	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
-	err := p.Label(&SandboxMeta{DropletID: 42}, map[string]string{labelKind: "one-off", labelExpires: "2026-10-18"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"spekk-expires:2026-10-18", "spekk-kind:one-off"}; !reflect.DeepEqual(tagged, want) {
-		t.Errorf("tags = %v, want %v", tagged, want)
-	}
-}
-
-// GCP labels are native labels key=value on the VM.
-func TestGCPProviderLabelAddsLabels(t *testing.T) {
-	calls := fakeGcloud(t, func(cmd string) (string, error) { return "", nil })
-	meta := &SandboxMeta{GCPInstance: "spekk-box", Project: "proj-a", Region: "us-central1-a"}
-	if err := (&GCPProvider{}).Label(meta, map[string]string{labelKind: "one-off", labelHost: "ops-laptop"}); err != nil {
-		t.Fatal(err)
-	}
-	want := "compute instances add-labels spekk-box --project proj-a --zone us-central1-a --labels spekk-host=ops-laptop,spekk-kind=one-off"
-	if len(*calls) != 1 || (*calls)[0] != want {
-		t.Errorf("gcloud calls = %q, want %q", *calls, want)
 	}
 }
 

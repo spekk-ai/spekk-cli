@@ -237,11 +237,11 @@ The local registry (`sandboxes.json`) is the source of truth. Registration with 
 | Field | Meaning |
 |-------|---------|
 | `kind` | `one-off` or `persistent`. Empty means `persistent`, so a record from an older CLI does not change |
-| `purpose` | The `--purpose` text |
+| `purpose` | The `--purpose` text. It is one line: `create` refuses a control character, such as a newline, a tab or ESC |
 | `expiresAt` | The expiry, as an RFC 3339 time in UTC |
 | `createdBy` | The hostname of the machine that ran `create` |
 
-**Marker on the machine.** Credential injection also writes `/opt/spekk/sandbox.json` with the same four fields. It works on every provider, and it holds no secret.
+**Marker on the machine.** Credential injection also writes `/opt/spekk/sandbox.json` with the same four fields. It works on every provider, and it holds no secret. On a machine you already have, `destroy` removes it. On a cloud machine, it goes with the machine.
 
 **Provider labels.** A provider that can label its machines implements the optional `Labeler` interface next to `Provider`. `create` finds it with a type assertion, and labels the machine after the provider creates it. A labeling failure is a warning, never a failed create.
 

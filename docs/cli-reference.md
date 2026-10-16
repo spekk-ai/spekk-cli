@@ -837,7 +837,7 @@ When the record has an agent id, `destroy` first revokes the agent on the contro
 
 For a DigitalOcean sandbox, `destroy` deletes the droplet and its SSH key on DigitalOcean, then removes the local record. When the record names no droplet, `destroy` refuses, because the droplet may still be running and billing. `--force` removes the record anyway.
 
-For a machine spekk did not create, `destroy` stops the `spekk-agent` service, removes the credential files spekk put on the machine, and removes the local record. It makes no cloud API call and needs no API token. When the teardown fails, `destroy` keeps the record, because removing it would leave an agent running with live credentials and nothing that points at it. `--force` removes the record anyway.
+For a machine spekk did not create, `destroy` stops the `spekk-agent` service, removes the credential files spekk put on the machine and the marker `/opt/spekk/sandbox.json`, and removes the local record. It makes no cloud API call and needs no API token. When the teardown fails, `destroy` keeps the record, because removing it would leave an agent running with live credentials and nothing that points at it. `--force` removes the record anyway.
 
 The local SSH key pair is deleted only when spekk generated it. The test is where the private key is: the recorded path, cleaned and made absolute, must be inside the `keys` directory under spekk's config directory, and so must the file it resolves to after symlinks are followed on both sides. A key anywhere else is kept, and `destroy` prints one line to stderr that names the path it kept.
 

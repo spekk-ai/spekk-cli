@@ -1130,8 +1130,9 @@ expiry. An expired sandbox shows EXPIRED. Expiry is a reminder only:
 spekk never destroys a sandbox because it expired.
 
 With --all-hosts, a cloud that cannot be asked (no token, no gcloud, or
-an API error) gets one line on stderr that says why. DigitalOcean lists the droplets tagged spekk-sandbox. GCP
-lists the VMs with a spekk-kind label in the default gcloud project.
+an API error) gets one line on stderr that says why. DigitalOcean lists
+the droplets tagged spekk-sandbox. GCP lists the VMs with a spekk-kind
+label in the default gcloud project.
 `
 
 // listSandboxes runs `spekk sandbox list`.
@@ -1409,7 +1410,8 @@ OPTIONS:
   --expires <when>       Expiry of a one-off sandbox: a duration (36h),
                          days (3d), a date (2026-10-17, 00:00 UTC), or an
                          RFC 3339 time. Needs --one-off
-  --purpose <text>       Why the sandbox exists, kept in its record
+  --purpose <text>       Why the sandbox exists, kept in its record. One
+                         line: no newline, tab or other control character
 
   create records the kind, purpose, expiry and host in sandboxes.json and
   in /opt/spekk/sandbox.json on the machine. On DigitalOcean and GCP it
@@ -1482,6 +1484,11 @@ func createSandbox(args []string) {
 
 	kind, expiresAt, err := sandbox.ResolveKind(flags.Bool("one-off"), flags.String("expires"), time.Now())
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := sandbox.ValidatePurpose(flags.String("purpose")); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
