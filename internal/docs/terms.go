@@ -174,7 +174,7 @@ func MatchingLines(body string, start int, query string, budget, maxRunes int) [
 	type scored struct{ i, score int }
 	var cands []scored
 	for i, line := range lines {
-		text[i] = Truncate(CleanLine(line), maxRunes)
+		text[i] = lineWindow(CleanLine(line), terms, maxRunes)
 		words := wordsOf(line)
 		score := 0
 		for _, t := range terms {
@@ -252,4 +252,73 @@ func WordsNotIn(query, title string) string {
 		}
 	}
 	return strings.Join(out, " ")
+}
+
+// lineWindow cuts a line to maxRunes characters. A longer line that holds
+// a query term keeps the part with the most distinct terms (then the most
+// matches, then the earliest), so the answer deep in a long line, such as a
+// speaker turn of a transcript, is printed and not only the start of the
+// line. A cut end is marked with "…". terms are lowercase word prefixes.
+func lineWindow(line string, terms []string, maxRunes int) string {
+	rs := []rune(line)
+	if len(rs) <= maxRunes {
+		return line
+	}
+	isWord := func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
+	// The first rune of each word that matches a term, and the term.
+	type hit struct{ pos, term int }
+	var hits []hit
+	for i := 0; i < len(rs); {
+		if !isWord(rs[i]) {
+			i++
+			continue
+		}
+		j := i
+		for j < len(rs) && isWord(rs[j]) {
+			j++
+		}
+		w := strings.ToLower(string(rs[i:j]))
+		for t, term := range terms {
+			if strings.HasPrefix(w, term) {
+				hits = append(hits, hit{i, t})
+				break
+			}
+		}
+		i = j
+	}
+	// A part has room for maxRunes-2 runes between its two marks. It starts
+	// a quarter of the width before a match, so the words that lead to the
+	// match are printed too.
+	// The start of the line is the first candidate, so a tie keeps it.
+	width, lead := maxRunes-2, maxRunes/4
+	starts := []int{0}
+	for _, h := range hits {
+		starts = append(starts, max(0, h.pos-lead))
+	}
+	best, bestTerms, bestHits := 0, -1, 0
+	for _, from := range starts {
+		seen := map[int]bool{}
+		n := 0
+		for _, o := range hits {
+			if o.pos >= from && o.pos < from+width {
+				seen[o.term] = true
+				n++
+			}
+		}
+		if len(seen) > bestTerms || len(seen) == bestTerms && n > bestHits {
+			best, bestTerms, bestHits = from, len(seen), n
+		}
+	}
+	if best == 0 {
+		return Truncate(line, maxRunes)
+	}
+	for best < len(rs) && isWord(rs[best-1]) {
+		best++
+	}
+	end := min(len(rs), best+width)
+	out := "…" + strings.TrimSpace(string(rs[best:end]))
+	if end < len(rs) {
+		out += "…"
+	}
+	return out
 }

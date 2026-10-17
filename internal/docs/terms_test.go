@@ -2,6 +2,7 @@ package docs
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -38,5 +39,32 @@ func TestIdentifierTerms(t *testing.T) {
 	want := "parse all specs http server ensure fresh"
 	if got != want {
 		t.Errorf("IdentifierTerms = %q, want %q", got, want)
+	}
+}
+
+func TestLineWindow(t *testing.T) {
+	filler := strings.Repeat("we talked about the weather and lunch plans for a while. ", 6)
+	turn := "**Rowan Pike:** " + filler + "The harbor survey quote came to 7,400 for the north pier. " + filler
+	terms := []string{"harbo", "surve", "quote"}
+
+	got := lineWindow(turn, terms, 160)
+	if !strings.HasPrefix(got, "…") || !strings.HasSuffix(got, "…") || !strings.Contains(got, "7,400 for the north pier") {
+		t.Errorf("deep match: got %q, want the part with the quote, marked at both ends", got)
+	}
+	if n := len([]rune(got)); n > 160 {
+		t.Errorf("deep match: %d runes, want at most 160", n)
+	}
+
+	// Both parts hold the two terms; the second holds them more often.
+	tie := "harbor quote early. " + filler + "harbor quote, harbor quote again: the late part. " + filler
+	if got := lineWindow(tie, []string{"harbo", "quote"}, 160); !strings.Contains(got, "the late part") {
+		t.Errorf("tie: got %q, want the part with more matches", got)
+	}
+
+	for _, line := range []string{"a short harbor line", filler + filler} {
+		want := Truncate(line, 160)
+		if got := lineWindow(line, terms, 160); got != want {
+			t.Errorf("lineWindow(%.30q...) = %q, want %q", line, got, want)
+		}
 	}
 }
