@@ -540,6 +540,11 @@ func walkRoot(root string, wr globBase, fn func(rel string, isDir bool)) error {
 		if rel == "." {
 			rel = ""
 		}
+		// A symlink to a file outside the repository is not a document of
+		// the repository.
+		if de.Type()&fs.ModeSymlink != 0 && !resolvesInside(root, p) {
+			return nil
+		}
 		if de.IsDir() && rel != "" {
 			top := strings.SplitN(rel, "/", 2)[0]
 			for _, n := range neverInPlace {

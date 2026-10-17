@@ -105,6 +105,12 @@ func TestCorpusStaysInsideTheRoot(t *testing.T) {
 	write(t, outside, "secret.txt", "outside the repository")
 	root := t.TempDir()
 	write(t, root, "docs/ok.md", "# Ok\n")
+	if err := os.Symlink(filepath.Join(outside, "secret.txt"), filepath.Join(root, "docs", "link.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "docs", "ok.md"), filepath.Join(root, "docs", "inner.md")); err != nil {
+		t.Fatal(err)
+	}
 	write(t, root, "raw/r.txt", "a raw file")
 	for name, fields := range map[string]string{
 		"up":       "path: raw/r.txt\ntext: ../" + filepath.Base(outside) + "/secret.txt",
@@ -126,8 +132,8 @@ func TestCorpusStaysInsideTheRoot(t *testing.T) {
 	for _, d := range c.Docs {
 		ids = append(ids, d.ID)
 	}
-	if strings.Join(ids, ",") != "docs-ok" {
-		t.Errorf("indexed %v, want only docs-ok", ids)
+	if strings.Join(ids, ",") != "docs-inner,docs-ok" {
+		t.Errorf("indexed %v, want only docs-inner and docs-ok", ids)
 	}
 	if len(c.Warnings) != 4 {
 		t.Errorf("warnings = %q, want one for each of the 4 stubs that leave the corpus", c.Warnings)
