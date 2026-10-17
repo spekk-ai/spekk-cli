@@ -1088,13 +1088,17 @@ var (
 const cloudInitLog = "/var/log/cloud-init-output.log"
 
 // provisionProbeScript is one SSH round trip that reports everything the
-// wait wants to know: the marker, what cloud-init says about itself, and the
-// last line of its log. The log line goes through printf, quoted, so a line
-// with a glob character or a run of spaces arrives as it was written.
-const provisionProbeScript = `marker=no; test -f ` + provisionedMarker + ` && marker=yes
-status=$(cloud-init status 2>/dev/null | sed -n 's/^status: //p' | head -n 1)
+// wait wants to know: what cloud-init says about itself, the marker, and the
+// last line of its log. The status is read before the marker is tested: the
+// marker is the last runcmd step, so a status of "done" read first cannot
+// miss a marker that the same moment wrote (#282). The log line goes through
+// printf, quoted, so a line with a glob character or a run of spaces arrives
+// as it was written. Each line of the status gets a "cloud-init: " prefix.
+const provisionProbeScript = `long=$(cloud-init status --long 2>/dev/null)
+marker=no; test -f ` + provisionedMarker + ` && marker=yes
 log=$(tail -n 1 ` + cloudInitLog + ` 2>/dev/null)
-printf 'marker=%s\nstatus=%s\nlog=%s\n' "$marker" "$status" "$log"`
+printf 'marker=%s\nlog=%s\n' "$marker" "$log"
+printf '%s\n' "$long" | sed 's/^/cloud-init: /'`
 
 // provisionProbe is what one poll of a provisioning machine reports.
 type provisionProbe struct {
@@ -1103,6 +1107,12 @@ type provisionProbe struct {
 	// cloudInit is what `cloud-init status` reports: running, done, error,
 	// or "" when the machine could not be asked.
 	cloudInit string
+	// hasErrors is true when the errors of `cloud-init status --long` are not
+	// empty.
+	hasErrors bool
+	// status is the full output of `cloud-init status --long`, for the
+	// error message.
+	status string
 	// lastLog is the last line of cloud-init's output log.
 	lastLog string
 }
@@ -1112,7 +1122,12 @@ type provisionProbe struct {
 // returns, reads as "nothing known yet".
 func parseProvisionProbe(out string) provisionProbe {
 	var p provisionProbe
+	var status []string
 	for _, line := range strings.Split(out, "\n") {
+		if rest, ok := strings.CutPrefix(line, "cloud-init: "); ok {
+			status = append(status, rest)
+			continue
+		}
 		key, value, ok := strings.Cut(line, "=")
 		if !ok {
 			continue
@@ -1120,13 +1135,46 @@ func parseProvisionProbe(out string) provisionProbe {
 		switch key {
 		case "marker":
 			p.marker = value == "yes"
-		case "status":
-			p.cloudInit = strings.TrimSpace(value)
 		case "log":
 			p.lastLog = strings.TrimSpace(value)
 		}
 	}
+	p.status = strings.TrimSpace(strings.Join(status, "\n"))
+	p.cloudInit, p.hasErrors = readCloudInitStatus(status)
 	return p
+}
+
+// readCloudInitStatus reads the state and whether there are errors from the
+// lines of `cloud-init status --long`. The errors are a YAML list: "[]" when
+// there are none, else inline ("errors: [...]") or one "- " item on each
+// line after "errors:".
+func readCloudInitStatus(lines []string) (state string, hasErrors bool) {
+	inErrors := false
+	for _, line := range lines {
+		if inErrors {
+			if item := strings.TrimSpace(line); strings.HasPrefix(item, "- ") {
+				hasErrors = true
+				continue
+			}
+			inErrors = false
+		}
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		switch key {
+		case "status":
+			state = value
+		case "errors":
+			if value == "" {
+				inErrors = true
+			} else if value != "[]" {
+				hasErrors = true
+			}
+		}
+	}
+	return state, hasErrors
 }
 
 // probeProvisioning is the seam the wait polls through, so a test can drive
@@ -1135,22 +1183,27 @@ var probeProvisioning = func(ip, keyPath, name, user string) provisionProbe {
 	return parseProvisionProbe(runSSH(ip, keyPath, name, user, provisionProbeScript))
 }
 
-// provisionStopped reports why the marker will not appear, or nil while it
-// still may. The marker is the last runcmd step, so cloud-init saying "done"
-// without it means a step before it failed silently; "error" says so
-// outright. Either way, waiting out the clock would tell the operator
-// nothing more.
-func provisionStopped(p provisionProbe) error {
-	if p.marker {
+// markerGrace is how long the wait polls for the marker after cloud-init
+// reports "done" without it. The marker is the last runcmd step, and on a
+// real machine it has arrived in the same second as the "finished" line
+// (#282). A variable so a test can make it short.
+var markerGrace = 30 * time.Second
+
+// cloudInitFailed reports a real cloud-init failure, or nil. Only this stops
+// the wait early: "done" without the marker gets the grace period.
+func cloudInitFailed(p provisionProbe) error {
+	if p.cloudInit != "error" && !p.hasErrors {
 		return nil
 	}
-	switch p.cloudInit {
-	case "error":
-		return fmt.Errorf("cloud-init reported an error before writing %s", provisionedMarker)
-	case "done":
-		return fmt.Errorf("cloud-init finished without writing %s", provisionedMarker)
+	return fmt.Errorf("cloud-init reported an error before writing %s\n%s", provisionedMarker, statusOrPlaceholder(p))
+}
+
+// statusOrPlaceholder is the cloud-init status output for an error message.
+func statusOrPlaceholder(p provisionProbe) string {
+	if p.status == "" {
+		return "(no cloud-init status)"
 	}
-	return nil
+	return p.status
 }
 
 // lastLogOrPlaceholder is the last cloud-init log line as a progress note.
@@ -1173,7 +1226,7 @@ func waitForProvisioning(ip, keyPath, name, user string, timeout time.Duration) 
 	// Wait for SSH connectivity
 	fmt.Fprintln(os.Stderr, "Waiting for SSH connectivity...")
 	for time.Now().Before(deadline) {
-		if checkTCPPort(ip, 22) {
+		if sshPortOpen(ip) {
 			break
 		}
 		time.Sleep(provisionPollInterval)
@@ -1183,20 +1236,38 @@ func waitForProvisioning(ip, keyPath, name, user string, timeout time.Duration) 
 	return waitForMarker(deadline, func() provisionProbe { return probeProvisioning(ip, keyPath, name, user) })
 }
 
-// waitForMarker polls probe until the marker appears, cloud-init says it
-// will not, or the deadline passes. At most once a report interval it prints
-// how long it has waited and what cloud-init last logged.
+// sshPortOpen is the seam the wait checks port 22 through, so a test can run
+// the real wait against a fake probe.
+var sshPortOpen = func(ip string) bool { return checkTCPPort(ip, 22) }
+
+// waitForMarker polls probe until the marker appears, cloud-init reports a
+// failure, or the time is up. The time is the deadline until cloud-init
+// reports "done", and from then on the grace period, also past the deadline.
+// At most once a report interval it prints how long it has waited and what
+// cloud-init last logged.
 func waitForMarker(deadline time.Time, probe func() provisionProbe) error {
 	start := time.Now()
 	lastReport := start
 	var last provisionProbe
-	for time.Now().Before(deadline) {
+	var doneAt time.Time
+	for {
+		if doneAt.IsZero() && !time.Now().Before(deadline) {
+			break
+		}
+		if !doneAt.IsZero() && !time.Now().Before(doneAt.Add(markerGrace)) {
+			return fmt.Errorf("cloud-init finished without writing %s within %s\n%s\nLast log line: %s",
+				provisionedMarker, markerGrace, statusOrPlaceholder(last), lastLogOrPlaceholder(last))
+		}
 		last = probe()
 		if last.marker {
 			return nil
 		}
-		if err := provisionStopped(last); err != nil {
+		if err := cloudInitFailed(last); err != nil {
 			return fmt.Errorf("%w\nLast log line: %s", err, lastLogOrPlaceholder(last))
+		}
+		if last.cloudInit == "done" && doneAt.IsZero() {
+			doneAt = time.Now()
+			fmt.Fprintf(os.Stderr, "cloud-init is done; waiting up to %s for %s...\n", markerGrace, provisionedMarker)
 		}
 		if time.Since(lastReport) >= provisionReportInterval {
 			lastReport = time.Now()

@@ -308,6 +308,46 @@ func TestCreateMachine(t *testing.T) {
 		}
 	})
 
+	// #282: the last runcmd step writes the marker just after cloud-init
+	// reports done. The real wait polls a fake machine whose marker comes
+	// 2 seconds after "done", and the create still ends online.
+	t.Run("a marker that comes just after cloud-init is done", func(t *testing.T) {
+		_, _, _, _, input := setUp(t, 201, "")
+		origWait, origPort, origProbe, origPoll := waitReady, sshPortOpen, probeProvisioning, provisionPollInterval
+		t.Cleanup(func() {
+			waitReady, sshPortOpen, probeProvisioning, provisionPollInterval = origWait, origPort, origProbe, origPoll
+		})
+		waitReady = waitForProvisioning
+		sshPortOpen = func(string) bool { return true }
+		provisionPollInterval = 100 * time.Millisecond
+		var doneAt time.Time
+		probeProvisioning = func(ip, keyPath, name, user string) provisionProbe {
+			if doneAt.IsZero() {
+				doneAt = time.Now()
+			}
+			marker := "no"
+			if time.Since(doneAt) >= 2*time.Second {
+				marker = "yes"
+			}
+			return parseProvisionProbe("marker=" + marker + "\nlog=Cloud-init v. 24.4 finished\ncloud-init: status: done\ncloud-init: errors: []\n")
+		}
+
+		var stdout strings.Builder
+		captureStderr(t)
+		if err := CreateMachine(strings.NewReader(input), &stdout, machineOptions()); err != nil {
+			t.Fatal(err)
+		}
+		var stages []string
+		for _, l := range stageLines(t, stdout.String()) {
+			if len(stages) == 0 || stages[len(stages)-1] != l.Stage {
+				stages = append(stages, l.Stage)
+			}
+		}
+		if got := strings.Join(stages, " "); got != "creating provisioning registering online" {
+			t.Errorf("stages = %s", got)
+		}
+	})
+
 	t.Run("a failed deploy keeps the droplet on record", func(t *testing.T) {
 		_, _, _, _, input := setUp(t, 201, "systemctl restart spekk-agent")
 		var stdout strings.Builder

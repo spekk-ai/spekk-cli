@@ -3,7 +3,7 @@ id: marker-wait-outlasts-cloud-init-done
 parent: sandbox-provider-abstraction
 created: 2026-10-17T00:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: create-resumes-after-provisioning-timeout
 branch: fix/provisioned-marker-race
 ---
@@ -13,6 +13,8 @@ branch: fix/provisioned-marker-race
 `spekk sandbox create` stopped with "cloud-init finished without writing /opt/spekk/.provisioned" and revoked its agent, although provisioning had succeeded (issue #282). On the machine after the failure, the marker was there, with the same second as the "finished" line of cloud-init, and `cloud-init status --long` reported `status: done` and `errors: []`.
 
 The cause: one probe tested the marker first and then asked `cloud-init status`. When the last `runcmd` step wrote the marker between the two, the probe read "no marker" and "done" together. The wait read that as "the marker will not come" and stopped on the first such probe.
+
+**Tests:** internal/sandbox/machine_test.go, internal/sandbox/provision_wait_test.go
 
 ## Success Criteria
 

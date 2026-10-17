@@ -3,7 +3,7 @@ id: create-resumes-after-provisioning-timeout
 parent: sandbox-provider-abstraction
 created: 2026-09-05T00:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: cli-provider-dispatch
 branch: fix/provisioned-marker-race
 ---
