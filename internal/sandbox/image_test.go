@@ -59,15 +59,16 @@ func builderOnDisk(t *testing.T) string {
 		}
 	}
 	for path, content := range map[string]string{
-		"etc/os-release":                  `PRETTY_NAME="Ubuntu 24.04.3 LTS"` + "\n",
-		"etc/machine-id":                  "0123456789abcdef0123456789abcdef\n",
-		"etc/ssh/ssh_host_ed25519_key":    "builder host key\n",
-		"home/agent/.ssh/authorized_keys": "ssh-ed25519 AAAA builder\n",
-		"home/agent/.bash_history":        "ls\n",
-		"opt/spekk/.provisioned":          "",
-		"home/agent/.bashrc":              "export PATH=$PATH:/opt/bin\nGITHUB_TOKEN=\n",
-		"root/.ssh/authorized_keys":       "ssh-ed25519 AAAA builder\n",
-		"home/agent/.docker/config.json":  `{"credsStore": "desktop"}`,
+		"etc/os-release":                   `PRETTY_NAME="Ubuntu 24.04.3 LTS"` + "\n",
+		"etc/machine-id":                   "0123456789abcdef0123456789abcdef\n",
+		"etc/ssh/ssh_host_ed25519_key":     "builder host key\n",
+		"home/agent/.ssh/authorized_keys":  "ssh-ed25519 AAAA builder\n",
+		"home/agent/.bash_history":         "ls\n",
+		"opt/spekk/.provisioned":           "",
+		"home/agent/.bashrc":               "export PATH=$PATH:/opt/bin\nGITHUB_TOKEN=\n",
+		"root/.ssh/authorized_keys":        "ssh-ed25519 AAAA builder\n",
+		"home/agent/.docker/config.json":   `{"credsStore": "desktop"}`,
+		"home/agent/.claude/settings.json": `{"autoUpdatesChannel": "stable"}`,
 	} {
 		full := filepath.Join(root, path)
 		os.MkdirAll(filepath.Dir(full), 0o755)
@@ -104,6 +105,7 @@ func TestBuildImage(t *testing.T) {
 		{name: "a clean builder becomes an image"},
 		{name: "a credential file fails the build", plant: "etc/spekk/agent.env", wantErr: "/etc/spekk/agent.env is on the builder"},
 		{name: "a token in a shell file fails the build", plant: "etc/profile.d/ci.sh", wantErr: "/etc/profile.d/ci.sh sets a secret variable"},
+		{name: "a Claude Code sign-in fails the build", plant: "home/agent/.claude/.credentials.json", wantErr: "/home/agent/.claude is on the builder"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateConfig(t)
@@ -146,7 +148,7 @@ func TestBuildImage(t *testing.T) {
 				img.OSVersion != "Ubuntu 24.04.3 LTS" || len(img.SetupSHA256) != 64 || img.CreatedAt == "" || img.SpekkVersion == "" {
 				t.Fatalf("image record = %+v", img)
 			}
-			for _, gone := range []string{"etc/ssh/ssh_host_ed25519_key", "home/agent/.ssh/authorized_keys", "home/agent/.bash_history", "opt/spekk/.provisioned"} {
+			for _, gone := range []string{"etc/ssh/ssh_host_ed25519_key", "home/agent/.ssh/authorized_keys", "home/agent/.bash_history", "opt/spekk/.provisioned", "home/agent/.claude"} {
 				if _, err := os.Stat(filepath.Join(root, gone)); err == nil {
 					t.Errorf("%s is still on the builder", gone)
 				}

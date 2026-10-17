@@ -335,7 +335,8 @@ var imageRoot = ""
 // the clean step removes the authorized keys, so a new session could not log
 // in after it. Credentials are not removed: a check that finds one fails the
 // build, because a setup script that left one can have left a copy that
-// this script does not know about. It prints "os=<PRETTY_NAME>" first and
+// this script does not know about. Claude Code settings without a sign-in
+// are removed, because the base cloud-init writes them. It prints "os=<PRETTY_NAME>" first and
 // one "hygiene: <finding>" line for each finding, and exits 1 when there is
 // one.
 func hygieneScript(root string) string {
@@ -350,6 +351,9 @@ if [ ! -L "$R/var/lib/dbus/machine-id" ]; then rm -f "$R/var/lib/dbus/machine-id
 rm -f "$R/root/.ssh/authorized_keys" "$R"/home/*/.ssh/authorized_keys
 rm -f "$R/root/.bash_history" "$R"/home/*/.bash_history
 rm -f "$R` + provisionedMarker + `"
+# The Claude Code installer writes its settings as agent. A sign-in in them
+# is a credential, so it stays, and the check below fails on it.
+if [ ! -e "$R/home/agent/.claude/.credentials.json" ]; then rm -rf "$R/home/agent/.claude" "$R/home/agent/.claude.json"; fi
 if [ -z "$R" ]; then
   cloud-init clean --logs
   journalctl --rotate >/dev/null 2>&1 || true
