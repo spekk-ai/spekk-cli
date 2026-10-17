@@ -139,7 +139,9 @@ func Show(specsDir string) error {
 	fmt.Println()
 
 	// Next priority item.
-	next := parser.FindNextAssertion(result.Assertions, result.Specs, parser.FindOptions{AllBranches: true})
+	opts := parser.FindOptions{AllBranches: true}
+	next := parser.FindNextAssertion(result.Assertions, result.Specs, opts)
+	reasons := parser.CountIneligible(result.Assertions, result.Specs, opts)
 	if next != nil {
 		var parentTitle string
 		for _, s := range result.Specs {
@@ -159,6 +161,8 @@ func Show(specsDir string) error {
 		fmt.Printf("  Priority: %d\n", next.Priority)
 		fmt.Printf("  Status: %s\n", icon(next.Status))
 		fmt.Printf("  File: %s\n", next.File)
+	} else if len(reasons) > 0 {
+		fmt.Println("⏸️ " + parser.NoneEligibleMessage(reasons))
 	} else {
 		fmt.Println("🎉 All specifications complete!")
 		fmt.Println("No remaining assertions to work on.")

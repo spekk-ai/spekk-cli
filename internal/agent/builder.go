@@ -402,6 +402,16 @@ func RunBuilder(args []string, installDir string) {
 			continue
 		}
 
+		if result.Type == "none_eligible" {
+			if cfg.Once {
+				colorLog(colorYellow, result.Message)
+				os.Exit(0)
+			}
+			colorLog(colorYellow, result.Message+" Waiting...")
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
 		if result.Type == "error" {
 			if cfg.Once {
 				colorLog(colorRed, result.Message)

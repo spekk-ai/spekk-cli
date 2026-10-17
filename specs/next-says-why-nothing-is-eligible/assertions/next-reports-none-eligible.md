@@ -3,7 +3,7 @@ id: next-reports-none-eligible
 parent: next-says-why-nothing-is-eligible
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # `spekk next` reports `none_eligible` with the count and the reasons

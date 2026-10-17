@@ -99,6 +99,12 @@ func RunBuilderLoop(installDir string) {
 			continue
 		}
 
+		if result.Type == "none_eligible" {
+			colorLog(colorYellow, result.Message+" Waiting...")
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
 		if result.Type != "assertion" {
 			colorLog(colorYellow, "Unexpected result type from parser. Retrying in 5s...")
 			time.Sleep(5 * time.Second)
