@@ -133,6 +133,26 @@ func TestXLSXToText(t *testing.T) {
 	}
 }
 
+func TestXLSXColumnBound(t *testing.T) {
+	sheet := func(body string) map[string]string {
+		return map[string]string{
+			"xl/workbook.xml":          `<workbook><sheets><sheet name="S" sheetId="1"/></sheets></workbook>`,
+			"xl/worksheets/sheet1.xml": `<worksheet><sheetData>` + body + `</sheetData></worksheet>`,
+		}
+	}
+	dir := t.TempDir()
+	col := filepath.Join(dir, "col.xlsx")
+	writeZip(t, col, sheet(`<row r="1"><c r="ZZZZZZZZZZZZ1"><v>1</v></c></row>`))
+	if _, err := Extract(col); err == nil || !strings.Contains(err.Error(), "past the last column") {
+		t.Errorf("a column past XFD: err = %v", err)
+	}
+	last := filepath.Join(dir, "last.xlsx")
+	writeZip(t, last, sheet(`<row r="1"><c r="XFD1"><v>1</v></c></row>`))
+	if _, err := Extract(last); err != nil {
+		t.Errorf("column XFD must be read: %v", err)
+	}
+}
+
 func TestEmailToText(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "msg.eml")
 	write(t, filepath.Dir(p), "msg.eml", strings.ReplaceAll(`From: Ana <ana@example.com>

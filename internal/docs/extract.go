@@ -222,6 +222,12 @@ func HTMLToText(src string) string {
 	}
 }
 
+// XLSX limits. A spreadsheet is someone else's file: a cell reference can
+// name any column.
+const (
+	maxColumns = 16384 // column XFD, the last one Excel has
+)
+
 // xlsxToText writes one `# <sheet>` heading for each sheet, then one line for
 // each row with the cell values joined by a tab.
 func xlsxToText(file string) (string, error) {
@@ -330,7 +336,11 @@ func xlsxToText(file string) (string, error) {
 				}
 				// A sparse row skips empty cells; the cell reference keeps
 				// each value in its own column.
-				if col := columnIndex(c.Ref); col > len(cells) {
+				col := columnIndex(c.Ref)
+				if col >= maxColumns {
+					return "", fmt.Errorf("sheet %q: cell reference %q is past the last column (XFD)", s.Name, c.Ref)
+				}
+				if col > len(cells) {
 					cells = append(cells, make([]string, col-len(cells))...)
 				}
 				cells = append(cells, strings.Join(strings.Fields(v), " "))
@@ -343,6 +353,8 @@ func xlsxToText(file string) (string, error) {
 }
 
 // columnIndex returns the 0-based column of a cell reference such as "C7".
+// A reference with more letters than any real column returns maxColumns, so
+// the sum cannot overflow.
 func columnIndex(ref string) int {
 	n := 0
 	for _, r := range ref {
@@ -350,6 +362,9 @@ func columnIndex(ref string) int {
 			break
 		}
 		n = n*26 + int(r-'A'+1)
+		if n > maxColumns {
+			return maxColumns
+		}
 	}
 	return n - 1
 }
