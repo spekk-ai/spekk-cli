@@ -196,18 +196,24 @@ func TestSecretScan(t *testing.T) {
 		"slack xoxb-1234567890-abc",
 		"anthropic sk-ant-" + strings.Repeat("b", 24),
 		"google AIza" + strings.Repeat("c", 35),
-		"near miss AKIA1234 and ghp_short and sk-ant-x",
+		"-----BEGIN PGP PRIVATE KEY BLOCK-----",
+		"openai sk-proj-" + strings.Repeat("d", 24),
+		"stripe sk_live_" + strings.Repeat("e", 24),
+		"gitlab glpat-" + strings.Repeat("f", 20),
+		"DB_PASSWORD=" + strings.Repeat("g", 12),
+		"near miss AKIA1234 and ghp_short and sk-ant-x and sk-proj-x",
+		"DB_PASSWORD=$DB_PASSWORD and API_KEY=<your key> and password = not an env line",
 	}, "\n")
 	hits := ScanSecrets(text)
 	var got []string
 	for _, h := range hits {
 		got = append(got, h.Kind)
-		if h.Line < 2 || h.Line > 7 {
+		if h.Line < 2 || h.Line > 12 {
 			t.Errorf("hit on line %d: %+v", h.Line, h)
 		}
 	}
-	if len(hits) != 6 {
-		t.Errorf("hits = %v, want 6 (one for each pattern, no near miss)", got)
+	if len(hits) != 11 {
+		t.Errorf("hits = %v, want 11 (one for each pattern, no near miss, no placeholder)", got)
 	}
 
 	root := t.TempDir()

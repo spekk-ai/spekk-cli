@@ -22,6 +22,13 @@ var secretPatterns = []struct {
 	{"Slack token", regexp.MustCompile(`\bxox[abprs]-[A-Za-z0-9-]{10,}`)},
 	{"Anthropic API key", regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_-]{20,}`)},
 	{"Google API key", regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`)},
+	{"PGP private key", regexp.MustCompile(`-----BEGIN PGP PRIVATE KEY BLOCK-----`)},
+	{"OpenAI API key", regexp.MustCompile(`\bsk-(?:(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{32,})`)},
+	{"Stripe live key", regexp.MustCompile(`\b[rs]k_live_[0-9A-Za-z]{16,}`)},
+	{"GitLab token", regexp.MustCompile(`\bglpat-[0-9A-Za-z_-]{20,}`)},
+	// A .env line: an upper-case name that says what it holds, and a value
+	// that is not a placeholder ($VAR, <value>, {{value}}).
+	{"password or secret assignment", regexp.MustCompile(`^\s*(?:export\s+)?[A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY)[A-Z0-9_]*\s*=\s*["']?[^\s"'$<{]{8,}`)},
 }
 
 // ScanSecrets returns each line of text that holds a secret, one hit for each

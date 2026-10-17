@@ -89,7 +89,7 @@ Each stub keeps the `sha256` of its raw file. When the raw file changes, the doc
 
 ## Secrets, large files, and untrusted text
 
-Git history is permanent. `docs add` scans the text of each file for private keys and common cloud and API tokens, and refuses the file. It prints the kind of secret and the line, never the secret. After a person checks the file, `--allow-secrets` adds it. A document that must not enter git does not belong in `raw/`: keep it outside the repository. The exclude globs in `.spekk/docs-paths` keep a file out of the index, not out of git.
+Git history is permanent. `docs add` scans the text of each file for private keys, common cloud and API tokens, and `.env`-style password and secret lines, and refuses the file. It prints the kind of secret and the line, never the secret. After a person checks the file, `--allow-secrets` adds it. A document that must not enter git does not belong in `raw/`: keep it outside the repository. The exclude globs in `.spekk/docs-paths` keep a file out of the index, not out of git.
 
 A converted file larger than 5 MB stays local: `docs add` lists it in `raw/.gitignore`, and the stub (with its `sha256` and `source`) and the text are committed. On another clone the document shows as `pointer`, and search and show work from the text.
 
