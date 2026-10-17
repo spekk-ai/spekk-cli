@@ -77,14 +77,22 @@ func Show(specsDir string) error {
 			return specAssertions[i].ID < specAssertions[j].ID
 		})
 
-		done := 0
+		// A draft is not counted: it is not work that a builder can do yet.
+		done, drafts := 0, 0
 		for _, a := range specAssertions {
-			if a.Status == "done" {
+			switch a.Status {
+			case "done":
 				done++
+			case "draft":
+				drafts++
 			}
 		}
 
-		fmt.Printf("%d %s %s (%d/%d assertions complete)\n", spec.Priority, icon(spec.Status), spec.Title, done, len(specAssertions))
+		draftNote := ""
+		if drafts > 0 {
+			draftNote = fmt.Sprintf(" · %d draft", drafts)
+		}
+		fmt.Printf("%d %s %s (%d/%d assertions complete%s)\n", spec.Priority, icon(spec.Status), spec.Title, done, len(specAssertions)-drafts, draftNote)
 
 		for _, a := range specAssertions {
 			fmt.Printf("  %d %s %s\n", a.Priority, icon(a.Status), a.Title)
@@ -93,8 +101,7 @@ func Show(specsDir string) error {
 	}
 
 	// Overall statistics.
-	total := len(result.Assertions)
-	var doneCount, inProgressCount, notStartedCount, blockedCount int
+	var doneCount, inProgressCount, notStartedCount, blockedCount, draftCount int
 	for _, a := range result.Assertions {
 		switch a.Status {
 		case "done":
@@ -105,8 +112,11 @@ func Show(specsDir string) error {
 			notStartedCount++
 		case "blocked":
 			blockedCount++
+		case "draft":
+			draftCount++
 		}
 	}
+	total := len(result.Assertions) - draftCount
 
 	fmt.Println("📈 Overall Progress")
 	fmt.Println("-------------------")
@@ -116,6 +126,9 @@ func Show(specsDir string) error {
 	fmt.Printf("📋 Not Started: %d\n", notStartedCount)
 	if blockedCount > 0 {
 		fmt.Printf("⏸️ Blocked: %d\n", blockedCount)
+	}
+	if draftCount > 0 {
+		fmt.Printf("📝 Draft: %d\n", draftCount)
 	}
 
 	pct := 0

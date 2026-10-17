@@ -3,7 +3,7 @@ id: status-shows-drafts-separately
 parent: status-counts-match-the-work
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # `spekk status` shows draft assertions separately from the count
