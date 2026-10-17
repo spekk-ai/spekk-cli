@@ -364,6 +364,7 @@ func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bo
 	// is not the hash of its new text, so the next check rebuilds again.
 	var result *parser.ParseResult
 	texts := map[string][]byte{}
+	failed := map[string]bool{}
 	var sums map[string]string
 	if specsPart {
 		var changed bool
@@ -379,11 +380,11 @@ func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bo
 		if testHookAfterSpecHash != nil {
 			testHookAfterSpecHash()
 		}
-		result, err = parser.ParseAllSpecsRead(specsDir, specReader(specsDir, texts))
+		result, err = parser.ParseAllSpecsRead(specsDir, specReader(specsDir, texts, failed))
 		if err != nil {
 			return stats, false, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
 		}
-		if sums, err = recordSpecReads(tx, texts, sums); err != nil {
+		if sums, err = recordSpecReads(tx, texts, failed, sums); err != nil {
 			return stats, false, err
 		}
 	}

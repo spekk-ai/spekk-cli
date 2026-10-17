@@ -594,6 +594,9 @@ func syncSpecFiles(tx *sql.Tx, specsDir string, cutoff time.Time) (map[string]st
 		sum, err := docs.FileSHA256(filepath.Join(specsDir, filepath.FromSlash(strings.TrimPrefix(p, "specs/"))))
 		if err != nil {
 			changed = true
+			if _, err := tx.Exec(`DELETE FROM spec_files WHERE path = ?`, p); err != nil {
+				return nil, false, fmt.Errorf("cannot update the spec file manifest: %w", err)
+			}
 			continue
 		}
 		if !ok || sum != m.sha {
@@ -621,8 +624,8 @@ func syncSpecFiles(tx *sql.Tx, specsDir string, cutoff time.Time) (map[string]st
 // specReader returns the read function of the parse. It keeps the bytes of
 // each file in texts, keyed as specFiles keys it, and gives the kept bytes
 // on a second read of a file, so the parse and the passages use one text of
-// each file.
-func specReader(specsDir string, texts map[string][]byte) func(string) ([]byte, error) {
+// each file. It adds the key of each file that it cannot read to failed.
+func specReader(specsDir string, texts map[string][]byte, failed map[string]bool) func(string) ([]byte, error) {
 	return func(p string) ([]byte, error) {
 		rel, err := filepath.Rel(specsDir, p)
 		if err != nil {
@@ -635,6 +638,8 @@ func specReader(specsDir string, texts map[string][]byte) func(string) ([]byte, 
 		raw, err := os.ReadFile(p)
 		if err == nil {
 			texts[key] = raw
+		} else {
+			failed[key] = true
 		}
 		return raw, err
 	}
@@ -644,8 +649,14 @@ func specReader(specsDir string, texts map[string][]byte) func(string) ([]byte, 
 // writes it as the sha256 of a spec_files row whose file changed after
 // syncSpecFiles hashed it (sums). That row also gets mtime_ns 0, so the
 // next check hashes the file again and compares the text on disk with the
-// text in the index.
-func recordSpecReads(tx *sql.Tx, texts map[string][]byte, sums map[string]string) (map[string]string, error) {
+// text in the index. It deletes the row of each file that the parse could
+// not read (failed), so the next check sees that file as added.
+func recordSpecReads(tx *sql.Tx, texts map[string][]byte, failed map[string]bool, sums map[string]string) (map[string]string, error) {
+	for p := range failed {
+		if _, err := tx.Exec(`DELETE FROM spec_files WHERE path = ?`, p); err != nil {
+			return nil, fmt.Errorf("cannot update the spec file manifest: %w", err)
+		}
+	}
 	read := make(map[string]string, len(texts))
 	for p, raw := range texts {
 		sum := bytesSHA256(raw)
