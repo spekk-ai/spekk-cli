@@ -483,6 +483,7 @@ func checkDocuments(root string, specs []parser.Spec, assertions []parser.Assert
 		result.Warnings = append(result.Warnings, "cannot read the document corpus: "+err.Error())
 		return
 	}
+	result.Warnings = append(result.Warnings, corpus.Warnings...)
 	state := map[string]string{}
 	for _, d := range corpus.Docs {
 		state[d.ID] = d.State

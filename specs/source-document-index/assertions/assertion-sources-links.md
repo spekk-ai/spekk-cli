@@ -17,4 +17,4 @@ depends-on: docs-status-and-freshness
 - `spekk validate` reads the corpus from the files (the same scan the index uses), not from `index.db`.
 - The observer prompt says: when an assertion has `sources`, read the cited documents with `spekk docs show` before you report that the spec is underspecified, and report a value that the source holds but the spec does not.
 
-**Tests:** one validate test: an unknown id gives the warning and exit 0, a known id gives no warning.
+**Tests:** `internal/validate/validate_test.go`: one validate test: an unknown id gives the warning and exit 0, a known id gives no warning.

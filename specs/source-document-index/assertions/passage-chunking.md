@@ -22,4 +22,4 @@ One function cuts the plaintext of any document into passages. The index, search
 - A file with no non-blank text gives no passages, and not an error.
 - CRLF line endings give the same line numbers as LF.
 
-**Tests:** table tests for heading kinds, code fences, frontmatter offset, heading-only merge, the 80/40 window rule, and CRLF. These are the chunk-boundary edge cases.
+**Tests:** `internal/docs/chunk_test.go`: table tests for heading kinds, code fences, frontmatter offset, heading-only merge, the 80/40 window rule, and CRLF. These are the chunk-boundary edge cases.

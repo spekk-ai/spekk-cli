@@ -234,10 +234,11 @@ func xlsxToText(file string) (string, error) {
 	for _, f := range zr.File {
 		files[f.Name] = f
 	}
+	errMissing := errors.New("missing")
 	readXML := func(name string, v any) error {
 		f, ok := files[name]
 		if !ok {
-			return fmt.Errorf("%s is missing", name)
+			return fmt.Errorf("%s is %w", name, errMissing)
 		}
 		rc, err := f.Open()
 		if err != nil {
@@ -262,7 +263,11 @@ func xlsxToText(file string) (string, error) {
 			Target string `xml:"Target,attr"`
 		} `xml:"Relationship"`
 	}
-	_ = readXML("xl/_rels/workbook.xml.rels", &rels)
+	// A workbook may have no relationships part or no shared strings; a part
+	// that is there and does not parse is an error.
+	if err := readXML("xl/_rels/workbook.xml.rels", &rels); err != nil && !errors.Is(err, errMissing) {
+		return "", fmt.Errorf("not a readable XLSX file: %w", err)
+	}
 	targets := map[string]string{}
 	for _, r := range rels.Rel {
 		t := strings.TrimPrefix(r.Target, "/")
@@ -287,7 +292,9 @@ func xlsxToText(file string) (string, error) {
 	var sst struct {
 		SI []richText `xml:"si"`
 	}
-	_ = readXML("xl/sharedStrings.xml", &sst)
+	if err := readXML("xl/sharedStrings.xml", &sst); err != nil && !errors.Is(err, errMissing) {
+		return "", fmt.Errorf("not a readable XLSX file: %w", err)
+	}
 
 	var b strings.Builder
 	for i, s := range wb.Sheets {

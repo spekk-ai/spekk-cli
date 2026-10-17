@@ -24,4 +24,4 @@ depends-on: passage-chunking
 - `spekk index` prints `Indexed N specs, N assertions, N observations, N documents (N passages).`, where documents counts kinds `doc` and `raw`.
 - `spekk query "SELECT kind, id FROM documents"` and a `passages MATCH` query work through the read-only connection.
 
-**Tests:** extend the existing build test: a spec tree in a temp dir gives `documents` rows for each spec and assertion, and a `MATCH` on a word that only one assertion body holds returns that assertion with correct line numbers.
+**Tests:** `internal/index/documents_test.go`: extend the existing build test: a spec tree in a temp dir gives `documents` rows for each spec and assertion, and a `MATCH` on a word that only one assertion body holds returns that assertion with correct line numbers.

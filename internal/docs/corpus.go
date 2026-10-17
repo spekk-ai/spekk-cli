@@ -113,10 +113,11 @@ func Scan(root string) (*Corpus, error) {
 		add(d)
 	}
 
-	raws, noStub, err := scanRaw(root)
+	raws, noStub, warnings, err := scanRaw(root)
 	if err != nil {
 		return nil, err
 	}
+	c.Warnings = append(c.Warnings, warnings...)
 	for _, d := range raws {
 		add(d)
 	}
@@ -236,14 +237,15 @@ func scalar(items []string) string {
 }
 
 // scanRaw reads every stub in formatted/ and checks it against raw/.
-func scanRaw(root string) ([]Document, []string, error) {
+func scanRaw(root string) ([]Document, []string, []string, error) {
 	entries, err := os.ReadDir(filepath.Join(root, FormattedDir))
 	if err != nil && !os.IsNotExist(err) {
-		return nil, nil, fmt.Errorf("cannot read %s/: %w", FormattedDir, err)
+		return nil, nil, nil, fmt.Errorf("cannot read %s/: %w", FormattedDir, err)
 	}
 	ignored := rawIgnored(root)
 	referenced := map[string]bool{}
 	var docs []Document
+	var warnings []string
 	for _, e := range entries {
 		if e.IsDir() || path.Ext(e.Name()) != ".md" {
 			continue
@@ -251,7 +253,10 @@ func scanRaw(root string) ([]Document, []string, error) {
 		stubRel := FormattedDir + "/" + e.Name()
 		stub, err := ReadStub(filepath.Join(root, FormattedDir, e.Name()))
 		if err != nil {
-			return nil, nil, fmt.Errorf("cannot read stub %s: %w", stubRel, err)
+			// One broken stub must not stop every spekk command, as a
+			// broken spec does: a stub is evidence, not the work queue.
+			warnings = append(warnings, fmt.Sprintf("%s is not a readable stub, so its document is not indexed: %v", stubRel, err))
+			continue
 		}
 		d := Document{
 			Kind:     KindRaw,
@@ -293,10 +298,10 @@ func scanRaw(root string) ([]Document, []string, error) {
 		return nil
 	})
 	if walkErr != nil && !os.IsNotExist(walkErr) {
-		return nil, nil, fmt.Errorf("cannot walk %s/: %w", RawDir, walkErr)
+		return nil, nil, nil, fmt.Errorf("cannot walk %s/: %w", RawDir, walkErr)
 	}
 	sort.Strings(noStub)
-	return docs, noStub, nil
+	return docs, noStub, warnings, nil
 }
 
 // rawState computes the state of a raw document. stale wins over no_summary:

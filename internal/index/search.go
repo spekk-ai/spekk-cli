@@ -142,6 +142,8 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 		if r.TextPath == r.Path {
 			r.TextPath = ""
 		}
+		// A file name is text someone else chose, too.
+		r.Path, r.TextPath = docs.CleanLine(r.Path), docs.CleanLine(r.TextPath)
 		r.Title = docs.Truncate(docs.CleanLine(r.Title), 200)
 		r.Summary = docs.Truncate(docs.CleanLine(r.Summary), 300)
 		r.Excerpt = docs.Truncate(docs.CleanLine(snippet), 400)

@@ -19,5 +19,6 @@ depends-on: index-holds-full-text
 - Each in-place document has kind `doc`, id = kebab-case of its path without the extension (`docs/advanced/index.md` -> `docs-advanced-index`, `README.md` -> `readme`).
 - Frontmatter on the file is optional. When present, `title`, `summary`, `type`, `tags`, and `created` are read. Without a `title`, the first heading is the title, else the file name. Without a `summary`, the first paragraph of the body (cut to 300 characters) is the summary.
 - Two documents with the same id: the first in path order is indexed, and the build reports a warning that names both paths.
+- A stub in `formatted/` that does not parse is skipped with a warning (from `spekk index` and `spekk validate`), so one broken stub does not stop every command.
 
-**Tests:** the glob matcher (`**` at the start, middle, and end, `!` excludes, root-only `*.md`), and the id rule.
+**Tests:** `internal/docs/corpus_test.go`: the glob matcher (`**` at the start, middle, and end, `!` excludes, root-only `*.md`), and the id rule.

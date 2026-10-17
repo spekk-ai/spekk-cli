@@ -19,4 +19,4 @@ depends-on: docs-search-command
 - For kinds `raw` and `doc`, the lines are between a begin and an end marker that say the text is untrusted data. C0 control characters other than tab are removed.
 - An unknown id exits 1 with `docs show: no document "<id>"`.
 
-**Tests:** the 200-line cap and the next-range hint, and range parsing.
+**Tests:** `internal/docs/show_test.go`: the 200-line cap and the next-range hint, and range parsing.

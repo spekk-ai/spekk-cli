@@ -101,4 +101,4 @@ Vector search, a spekk-app UI for documents, Google Drive sync, OCR of scanned P
 
 ## Acceptance
 
-The claim rests on an eval, not on unit tests: about 20 fixed questions over a public corpus of a few hundred documents, answered by a headless agent once with only grep and read, and once with `spekk docs`. Tokens, wall time, tool calls, and correctness against a key written first. The suite lives in spekk-evals (`source-document-index/`). The pull request quotes the numbers only.
+The claim rests on an eval, not on unit tests: about 20 fixed questions over a public corpus of a few hundred documents, answered by a headless agent once with only grep and read, and once with `spekk docs`. Tokens, wall time, tool calls, and correctness against a key written first. The eval suite lives outside this repository. The pull request quotes its numbers.

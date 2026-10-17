@@ -17,4 +17,4 @@ depends-on: docs-add-text-formats
 - A converted file (anything that is not `.md`, `.markdown`, `.txt`) larger than 5 MB (5,242,880 bytes) is a pointer: its path under `raw/` is added once to `raw/.gitignore`, the stub keeps `sha256`, `size`, and `source`, and the derived text is committed as usual. The command says that the raw file stays local.
 - On a clone without the raw file, `spekk docs status` shows the document as `pointer` (not missing), and search and show work from the derived text.
 
-**Tests:** the secret scan (each pattern found with its line number, the secret not in the message, a near miss not flagged) and the size rule (a file one byte above the limit is a pointer, one at the limit is not).
+**Tests:** `internal/docs/add_test.go`: the secret scan (each pattern found with its line number, the secret not in the message, a near miss not flagged) and the size rule (a file one byte above the limit is a pointer, one at the limit is not).

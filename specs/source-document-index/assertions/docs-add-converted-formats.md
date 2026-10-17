@@ -19,4 +19,4 @@ depends-on: docs-add-text-formats
 - The derived text is written to `formatted/<id>.txt` and the stub has `text: formatted/<id>.txt`. The index reads this file and never the binary, so `spekk index --force` on a clone with no converter gives the same documents and passages.
 - A converter that exits non-zero, or output with no non-blank text (for example a scanned PDF), fails that file with the converter's message and a note that OCR is out of scope.
 
-**Tests:** XLSX and email conversion from small fixtures built in the test (no binary fixture files in the repository), and the missing-converter message (a `PATH` with no `pdftotext`). PDF and DOCX are verified in the walkthrough with the real tools.
+**Tests:** `internal/docs/add_test.go`: XLSX and email conversion from small fixtures built in the test (no binary fixture files in the repository), and the missing-converter message (a `PATH` with no `pdftotext`). PDF and DOCX are verified in the walkthrough with the real tools.
