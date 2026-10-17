@@ -76,11 +76,19 @@ Text goes in git. A converted file of more than 5 MB becomes a pointer: the stub
 
 ### Freshness
 
-`EnsureFresh` stays the one freshness gate, with two parts. The spec part keeps today's rule (a file under `specs/` newer than `index.db`, now with directories, so a deleted file counts). The document part rebuilds when a fingerprint of its files (path, size, mtime) changes. A spec edit then does not index a large corpus again (measured on 518 documents, 10 MB: 0.16 s, not 4.5 s), and an unrelated file at the repository root does not cause a rebuild. A schema-version change rebuilds all. Each stub keeps the `sha256` of its raw file; when the raw file changes, the stub is stale. `spekk docs status` lists it, `spekk validate` warns, and search marks the result `stale`. To add the document again clears the summary when the content changed, so the agent must write a new one.
+The index is checked at query time, and a query is never slow because of it. `EnsureFresh` stays the one freshness gate.
+
+- **Spec part:** today's rule. A file or directory under `specs/` newer than `index.db`, or changed observation refs, rebuilds the spec part (about 0.2 s).
+- **Document part, cheap dirty check:** the index holds a manifest (`doc_files`: path, size, mtime, sha256 of each file the corpus reads). A stat walk is compared with it. No file is read when nothing changed.
+- **No false positives:** a file whose size or mtime changed is hashed. Only a file whose sha256 changed is re-indexed; a `touch` or a `git checkout` with the same content costs one hash and a manifest update.
+- **Incremental:** only the documents of changed, added, and deleted files are deleted and inserted again (a changed stub, raw file, or derived text maps to its raw document). A change to `.spekk/docs-paths` or `raw/.gitignore`, a duplicate id, a schema change, and `spekk index --force` rebuild the whole document part.
+- **Inline or background:** a small change set is applied inline, and the query answers from a fresh index. A large one (a fresh clone with an old index, a branch switch) does not block: the query answers from the current index at once, says so (`"stale": {"changed": N, "reindexing": true}` in JSON, one line in text), and starts one background `spekk index` that holds `.spekk/index.lock`. The index uses SQLite WAL and a busy timeout, so a reader is never blocked and a parallel query never fails.
+
+Each stub keeps the `sha256` of its raw file; when the raw file changes, the stub is stale. `spekk docs status` lists it, `spekk validate` warns, and search marks the result `stale`. To add the document again clears the summary when the content changed, so the agent must write a new one.
 
 ### Untrusted content and sensitive documents
 
-Source documents are someone else's text. Search and show output for kinds `raw` and `doc` is labeled as untrusted data, and terminal control characters are removed from all document text (the same rule as #147, applied to tool output). `spekk docs add` scans the extracted text for secrets (private keys, cloud and API tokens) and refuses the file unless `--allow-secrets` is given, because git history is permanent. The exclude globs in `.spekk/docs-paths` keep a file out of the index; they do not keep it out of git. A document that must not enter git does not belong in `raw/`.
+Source documents are someone else's text. Search and show output for kinds `raw` and `doc` is labeled as untrusted data, and terminal control characters are removed from all document text (the same rule as #147, applied to tool output). The markers around the text of `show` hold a random value for each call, so a document cannot forge the end marker. A document is hostile input in other ways too: a stub path that leaves `raw/` or `formatted/`, a symlink that leaves the repository, an XLSX cell reference or part that is too large, and a converter that does not stop are each refused. `spekk docs add` scans the extracted text for secrets (private keys, cloud and API tokens) and refuses the file unless `--allow-secrets` is given, because git history is permanent. The exclude globs in `.spekk/docs-paths` keep a file out of the index; they do not keep it out of git. A document that must not enter git does not belong in `raw/`.
 
 ### Links from specs to sources
 
