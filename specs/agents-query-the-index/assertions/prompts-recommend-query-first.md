@@ -20,7 +20,7 @@ Both prompts name `spekk query` as the way to find an assertion by keyword or by
   spekk query "SELECT id, status, file FROM assertions WHERE title LIKE '%keyword%'"
   ```
 - One short sentence says why: `query` reads `.spekk/index.db`, which the command refreshes first, and it returns whole rows.
-- The `grep -rl "keyword" specs/` guidance for a search of spec prose **stays**, with a sentence that names it as the one search `query` cannot serve, because no table holds an assertion body.
+- A search of spec prose uses `spekk docs search "<words>" --kind spec,assertion`, which ranks the bodies of specs and assertions in the index (see `source-document-index`). Before that index existed, this criterion kept a `grep -rl "keyword" specs/` example, because no table held an assertion body.
 - The `spekk list --status <value>` examples stay. Enumerating one status is a job `list` does well, and this assertion does not remove it.
 
 ### `specs/builder-agent/builder.prompt.md`

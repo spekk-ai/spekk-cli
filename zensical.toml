@@ -49,6 +49,7 @@ nav = [
   { "Getting Started" = "getting-started.md" },
   { "Concepts" = "concepts.md" },
   { "CLI Reference" = "cli-reference.md" },
+  { "Search Specs and Documents" = "source-documents.md" },
   { "Skills" = "coach-skills.md" },
   { "Validation in CI" = "ci.md" },
   { "Configuration" = "configuration.md" },
@@ -62,6 +63,7 @@ nav = [
   { "Cutting a Release" = "releasing.md" },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.37.0 - Search Specs, Docs, and Source Documents From One Index" = "release-notes/RELEASE-NOTES-1.37.0.md" },
     { "1.33.0 - A Sandbox Registers Itself, and Sees Its Background Tasks End" = "release-notes/RELEASE-NOTES-1.33.0.md" },
     { "1.32.0 - Each Stream Frame Names Its Session" = "release-notes/RELEASE-NOTES-1.32.0.md" },
     { "1.31.1 - A Failed Turn Says Why" = "release-notes/RELEASE-NOTES-1.31.1.md" },

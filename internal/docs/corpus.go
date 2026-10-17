@@ -1,0 +1,708 @@
+package docs
+
+import (
+	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"unicode"
+
+	"github.com/spekk-ai/spekk-cli/internal/parser"
+)
+
+// Kinds of document. spec and assertion come from specs/ and are written by
+// internal/index; this package finds doc and raw.
+const (
+	KindSpec      = "spec"
+	KindAssertion = "assertion"
+	KindDoc       = "doc"
+	KindRaw       = "raw"
+)
+
+// Kinds lists every kind in a stable order.
+var Kinds = []string{KindSpec, KindAssertion, KindDoc, KindRaw}
+
+// States of a raw document. Every other kind is always StateOK.
+const (
+	StateOK         = "ok"
+	StateStale      = "stale"
+	StateNoSummary  = "no_summary"
+	StateMissingRaw = "missing_raw"
+	StatePointer    = "pointer"
+	StateNoStub     = "no_stub"
+)
+
+// The fixed directories of the source corpus, relative to the repository root.
+const (
+	RawDir       = "raw"
+	FormattedDir = "formatted"
+	pathsFile    = ".spekk/docs-paths"
+)
+
+// Document is one indexed document of kind doc or raw. Path is the file the
+// document is (for raw, the file in raw/); TextPath is the plaintext file the
+// passages and line numbers come from. Both are relative to the repository
+// root, with forward slashes.
+type Document struct {
+	Kind     string
+	ID       string
+	Path     string
+	TextPath string
+	StubPath string
+	Title    string
+	Type     string
+	Created  string
+	Summary  string
+	Tags     []string
+	SHA256   string
+	State    string
+}
+
+// Corpus is what Scan found.
+type Corpus struct {
+	Docs []Document
+	// NoStub lists files in raw/ of a supported format that no stub points
+	// at. They are not indexed: a document enters the corpus through
+	// `spekk docs add`, never by being dropped into a folder.
+	NoStub []string
+	// Warnings name documents that were skipped, such as a duplicate id.
+	Warnings []string
+}
+
+// defaultIncludes are the in-place globs when .spekk/docs-paths is absent.
+var defaultIncludes = []string{"docs/**/*.md", "docs/**/*.txt", "*.md"}
+
+// neverInPlace are the top-level directories that never hold an in-place
+// document: specs are indexed as specs, raw/ and formatted/ through stubs.
+var neverInPlace = []string{"specs", RawDir, FormattedDir, ".spekk", ".git"}
+
+// inPlaceExts are the formats an in-place document may have.
+var inPlaceExts = map[string]bool{".md": true, ".markdown": true, ".txt": true}
+
+// Scan finds every doc and raw document under root.
+func Scan(root string) (*Corpus, error) {
+	c := &Corpus{}
+	seen := map[string]string{}
+	add := func(d Document) {
+		key := d.Kind + "\x00" + d.ID
+		if prev, ok := seen[key]; ok {
+			c.Warnings = append(c.Warnings, fmt.Sprintf("%s and %s have the same document id %q; only %s is indexed", prev, d.Path, d.ID, prev))
+			return
+		}
+		seen[key] = d.Path
+		c.Docs = append(c.Docs, d)
+	}
+
+	inPlace, err := InPlaceFiles(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, rel := range inPlace {
+		d, err := ReadInPlace(root, rel)
+		if err != nil {
+			return nil, err
+		}
+		add(d)
+	}
+
+	raws, noStub, warnings, err := scanRaw(root)
+	if err != nil {
+		return nil, err
+	}
+	c.Warnings = append(c.Warnings, warnings...)
+	for _, d := range raws {
+		add(d)
+	}
+	c.NoStub = noStub
+	return c, nil
+}
+
+// ID returns the document id for a path: kebab-case of the path without its
+// extension. Letters are lowercased, and each run of other characters becomes
+// one hyphen.
+func ID(rel string) string {
+	rel = strings.TrimSuffix(rel, path.Ext(rel))
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(rel) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if dash && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			dash = false
+			b.WriteRune(r)
+			continue
+		}
+		dash = true
+	}
+	return b.String()
+}
+
+// ReadInPlace reads one in-place document. Frontmatter is optional.
+func ReadInPlace(root, rel string) (Document, error) {
+	raw, err := ReadRegular(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		return Document{}, fmt.Errorf("cannot read %s: %w", rel, err)
+	}
+	text := string(raw)
+	d := Document{Kind: KindDoc, ID: ID(rel), Path: rel, TextPath: rel, State: StateOK}
+	if fields, err := parser.CustomFields(text, nil); err == nil {
+		d.Title = scalar(fields["title"])
+		d.Summary = scalar(fields["summary"])
+		d.Type = scalar(fields["type"])
+		d.Created = scalar(fields["created"])
+		d.Tags = fields["tags"]
+	}
+	ps := Chunk(text)
+	if d.Title == "" {
+		for _, p := range ps {
+			if p.Heading != "" {
+				d.Title = strings.SplitN(p.Heading, " / ", 2)[0]
+				break
+			}
+		}
+	}
+	if d.Title == "" {
+		d.Title = path.Base(rel)
+	}
+	if d.Summary == "" {
+		d.Summary = firstParagraph(text)
+	}
+	return d, nil
+}
+
+// metadataField matches a field label such as "Author: " or "Post-History: ".
+var metadataField = regexp.MustCompile(`(?:^|\s)[A-Z][A-Za-z-]+: `)
+
+// firstParagraph returns the first paragraph of body text (not a heading, not
+// frontmatter, not a code block, not a block of two or more metadata fields),
+// cut to 300 characters.
+func firstParagraph(text string) string {
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	var para []string
+	fence := false
+	for i := frontmatterEnd(lines); i < len(lines); i++ {
+		t := strings.TrimSpace(lines[i])
+		if fenceMarker(t) != "" {
+			fence = !fence
+			continue
+		}
+		_, atx := atxHeading(t)
+		setext := i+1 < len(lines) && t != "" && isSetextUnderline(lines[i+1])
+		skip := fence || atx || setext || isSetextUnderline(t) || strings.HasPrefix(t, "|") || strings.HasPrefix(t, "<")
+		if t == "" || skip {
+			if len(metadataField.FindAllStringIndex(strings.Join(para, " "), 2)) == 2 {
+				// A header block ("PEP: 8 Title: ... Author: ...") tells
+				// nothing about the content; the next paragraph does.
+				para = nil
+			}
+			if len(para) > 0 {
+				break
+			}
+			if setext {
+				i++
+			}
+			continue
+		}
+		para = append(para, t)
+	}
+	return Truncate(strings.Join(para, " "), 300)
+}
+
+// Truncate cuts s to at most n runes, with an ellipsis when it cut.
+func Truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return strings.TrimSpace(string(r[:n-1])) + "…"
+}
+
+// scalar joins the items of a custom field back into one string. The parser
+// splits a bare scalar on commas, which is right for a tag list and wrong for
+// a sentence, so a summary written without quotes comes back whole. A
+// double-quoted value written by WriteStub has its two escapes undone.
+func scalar(items []string) string {
+	s := strings.Join(items, ", ")
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) && (s[i+1] == '"' || s[i+1] == '\\') {
+			i++
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// scanRaw reads every stub in formatted/ and checks it against raw/.
+func scanRaw(root string) ([]Document, []string, []string, error) {
+	entries, err := os.ReadDir(filepath.Join(root, FormattedDir))
+	if err != nil && !os.IsNotExist(err) {
+		return nil, nil, nil, fmt.Errorf("cannot read %s/: %w", FormattedDir, err)
+	}
+	ignored := RawIgnored(root)
+	referenced := map[string]bool{}
+	var docs []Document
+	var warnings []string
+	for _, e := range entries {
+		if e.IsDir() || path.Ext(e.Name()) != ".md" {
+			continue
+		}
+		d, warning := ReadRawStub(root, e.Name(), ignored)
+		if warning != "" {
+			warnings = append(warnings, warning)
+			continue
+		}
+		referenced[d.Path] = true
+		docs = append(docs, d)
+	}
+
+	var noStub []string
+	walkErr := filepath.WalkDir(filepath.Join(root, RawDir), func(p string, de fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return filepath.SkipDir
+			}
+			return err
+		}
+		// The manifest skips the same entries (CorpusStat): status must not
+		// tell an agent to add a FIFO, or a file outside the repository.
+		if de.IsDir() || !regularEntry(p, de) || (de.Type()&fs.ModeSymlink != 0 && !resolvesInside(root, p)) {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, p)
+		rel = filepath.ToSlash(rel)
+		if !referenced[rel] && Supported(rel) {
+			noStub = append(noStub, rel)
+		}
+		return nil
+	})
+	if walkErr != nil && !os.IsNotExist(walkErr) {
+		return nil, nil, nil, fmt.Errorf("cannot walk %s/: %w", RawDir, walkErr)
+	}
+	sort.Strings(noStub)
+	return docs, noStub, warnings, nil
+}
+
+// Within reports whether rel, a repository-relative path with forward
+// slashes, is a path under dir in root: not absolute, no ".." out of dir,
+// and, when the file exists, no symlink that resolves outside root.
+func Within(root, rel, dir string) bool {
+	if rel == "" || path.IsAbs(rel) || filepath.IsAbs(rel) || filepath.VolumeName(rel) != "" {
+		return false
+	}
+	clean := path.Clean(rel)
+	if dir != "" && !strings.HasPrefix(clean, dir+"/") {
+		return false
+	}
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return false
+	}
+	return resolvesInside(root, filepath.Join(root, filepath.FromSlash(clean)))
+}
+
+// resolvesInside reports whether the file at p, after symlinks, is under
+// root. A file that does not exist is inside: nothing will be read from it.
+func resolvesInside(root, p string) bool {
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return os.IsNotExist(err)
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(realRoot, real)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// ReadRawStub reads the stub formatted/<name> and returns its raw document.
+// A stub that does not parse, or that names a file outside the corpus, gives
+// a warning and no document. ignored is RawIgnored(root).
+func ReadRawStub(root, name string, ignored map[string]bool) (Document, string) {
+	stubRel := FormattedDir + "/" + name
+	stub, err := ReadStub(filepath.Join(root, FormattedDir, name))
+	if err != nil {
+		// One broken stub must not stop every spekk command, as a broken
+		// spec does: a stub is evidence, not the work queue.
+		return Document{}, fmt.Sprintf("%s is not a readable stub, so its document is not indexed: %v", stubRel, err)
+	}
+	d := Document{
+		Kind:     KindRaw,
+		ID:       strings.TrimSuffix(name, ".md"),
+		Path:     stub.Path,
+		TextPath: stub.Text,
+		StubPath: stubRel,
+		Title:    stub.Title,
+		Type:     stub.Type,
+		Created:  stub.Created,
+		Summary:  stub.Summary,
+		Tags:     stub.Tags,
+		SHA256:   stub.SHA256,
+	}
+	if d.TextPath == "" {
+		d.TextPath = d.Path
+	}
+	// A stub is a committed file that anyone can write, so its paths must
+	// not lead the index or `show` to a file outside the corpus.
+	if !Within(root, d.Path, RawDir) || (stub.Text != "" && !Within(root, d.TextPath, FormattedDir)) {
+		return Document{}, fmt.Sprintf("%s names a file outside %s/ or %s/, so its document is not indexed", stubRel, RawDir, FormattedDir)
+	}
+	d.State = rawState(root, d, ignored[d.Path])
+	return d, ""
+}
+
+// rawState computes the state of a raw document. stale wins over no_summary:
+// a summary of the old content is worse than none.
+func rawState(root string, d Document, ignored bool) string {
+	sum, err := FileSHA256(filepath.Join(root, filepath.FromSlash(d.Path)))
+	switch {
+	case err != nil && ignored:
+		return StatePointer
+	case err != nil:
+		return StateMissingRaw
+	case sum != d.SHA256:
+		return StateStale
+	case strings.TrimSpace(d.Summary) == "":
+		return StateNoSummary
+	}
+	return StateOK
+}
+
+// FileSHA256 returns the hex sha256 of a regular file.
+func FileSHA256(p string) (string, error) {
+	if err := regular(p); err != nil {
+		return "", err
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// regular returns an error when p, after symlinks, is not a regular file. A
+// committed symlink to /dev/zero reads without end, and the open of a FIFO
+// blocks, so the corpus never opens either one.
+func regular(p string) error {
+	info, err := os.Stat(p)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a regular file", filepath.Base(p))
+	}
+	return nil
+}
+
+// ReadRegular is os.ReadFile for a regular file only.
+func ReadRegular(p string) ([]byte, error) {
+	if err := regular(p); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(p)
+}
+
+// regularEntry reports whether the walk entry de at p is a regular file,
+// after a symlink.
+func regularEntry(p string, de fs.DirEntry) bool {
+	if de.Type()&fs.ModeSymlink == 0 {
+		return de.Type().IsRegular()
+	}
+	info, err := os.Stat(p)
+	return err == nil && info.Mode().IsRegular()
+}
+
+// RawIgnored reads raw/.gitignore: the pointer entries that `docs add`
+// wrote, one repository-relative path per line ("/" + path under raw/).
+func RawIgnored(root string) map[string]bool {
+	out := map[string]bool{}
+	f, err := os.Open(filepath.Join(root, RawDir, ".gitignore"))
+	if err != nil {
+		return out
+	}
+	defer f.Close()
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		line := strings.TrimSpace(s.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		out[RawDir+"/"+strings.TrimPrefix(line, "/")] = true
+	}
+	return out
+}
+
+// Globs returns the in-place include and exclude globs: the lines of
+// .spekk/docs-paths, or the defaults when the file is absent.
+func Globs(root string) (include, exclude []string, err error) {
+	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(pathsFile)))
+	if os.IsNotExist(err) {
+		return defaultIncludes, nil, nil
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot read %s: %w", pathsFile, err)
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "!") {
+			exclude = append(exclude, strings.TrimPrefix(line, "!"))
+			continue
+		}
+		include = append(include, line)
+	}
+	return include, exclude, nil
+}
+
+// globRegexp compiles a glob: `**` matches zero or more directories, `*` and
+// `?` match inside one path segment.
+func globRegexp(glob string) (*regexp.Regexp, error) {
+	glob = strings.TrimPrefix(glob, "/")
+	var b strings.Builder
+	b.WriteString("^")
+	for i := 0; i < len(glob); i++ {
+		switch {
+		case strings.HasPrefix(glob[i:], "**/"):
+			b.WriteString("(?:.*/)?")
+			i += 2
+		case strings.HasPrefix(glob[i:], "**"):
+			b.WriteString(".*")
+			i++
+		case glob[i] == '*':
+			b.WriteString("[^/]*")
+		case glob[i] == '?':
+			b.WriteString("[^/]")
+		default:
+			b.WriteString(regexp.QuoteMeta(string(glob[i])))
+		}
+	}
+	b.WriteString("$")
+	return regexp.Compile(b.String())
+}
+
+// globBase is the directory an in-place glob starts in, and how deep: Depth
+// is the number of path segments below Dir a match can have, or -1 for any.
+type globBase struct {
+	Dir   string
+	Depth int
+}
+
+// globRoot returns the fixed directory a glob starts in and its depth.
+func globRoot(glob string) globBase {
+	segs := strings.Split(strings.TrimPrefix(glob, "/"), "/")
+	i := 0
+	for i < len(segs)-1 && !strings.ContainsAny(segs[i], "*?[") {
+		i++
+	}
+	r := globBase{Dir: strings.Join(segs[:i], "/"), Depth: len(segs) - i}
+	for _, s := range segs[i:] {
+		if strings.Contains(s, "**") {
+			r.Depth = -1
+		}
+	}
+	return r
+}
+
+// InPlaceFiles returns every file the globs select, in path order.
+func InPlaceFiles(root string) ([]string, error) {
+	var out []string
+	err := inPlaceWalk(root, func(rel string, _ fs.DirEntry) { out = append(out, rel) })
+	sort.Strings(out)
+	return out, err
+}
+
+// inPlaceWalk calls fn once for each file the globs select. Globs that start
+// in the same directory share one walk, so the default globs read docs/ once.
+func inPlaceWalk(root string, fn func(rel string, de fs.DirEntry)) error {
+	include, exclude, err := Globs(root)
+	if err != nil {
+		return err
+	}
+	match := func(globs []string) ([]*regexp.Regexp, error) {
+		var out []*regexp.Regexp
+		for _, g := range globs {
+			re, err := globRegexp(g)
+			if err != nil {
+				return nil, fmt.Errorf("%s: bad glob %q: %w", pathsFile, g, err)
+			}
+			out = append(out, re)
+		}
+		return out, nil
+	}
+	inc, err := match(include)
+	if err != nil {
+		return err
+	}
+	exc, err := match(exclude)
+	if err != nil {
+		return err
+	}
+
+	// One walk for each base directory, to the deepest depth of its globs.
+	depth := map[string]int{}
+	var bases []string
+	for _, g := range include {
+		wr := globRoot(g)
+		d, ok := depth[wr.Dir]
+		switch {
+		case !ok:
+			bases = append(bases, wr.Dir)
+			depth[wr.Dir] = wr.Depth
+		case d >= 0 && (wr.Depth < 0 || wr.Depth > d):
+			depth[wr.Dir] = wr.Depth
+		}
+	}
+	found := map[string]bool{}
+	for _, dir := range bases {
+		err := walkRoot(root, globBase{Dir: dir, Depth: depth[dir]}, func(rel string, de fs.DirEntry) {
+			if de.IsDir() || found[rel] || !inPlaceExts[strings.ToLower(path.Ext(rel))] {
+				return
+			}
+			if !regularEntry(filepath.Join(root, filepath.FromSlash(rel)), de) {
+				return
+			}
+			if anyMatch(inc, rel) && !anyMatch(exc, rel) {
+				found[rel] = true
+				fn(rel, de)
+			}
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func anyMatch(res []*regexp.Regexp, s string) bool {
+	for _, re := range res {
+		if re.MatchString(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// walkRoot calls fn for each file and directory under the base of one glob,
+// to its depth, and skips the directories that never hold in-place documents.
+func walkRoot(root string, wr globBase, fn func(rel string, de fs.DirEntry)) error {
+	base := filepath.Join(root, filepath.FromSlash(wr.Dir))
+	err := filepath.WalkDir(base, func(p string, de fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) && p == base {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, _ := filepath.Rel(root, p)
+		rel = filepath.ToSlash(rel)
+		if rel == "." {
+			rel = ""
+		}
+		// A symlink to a file outside the repository is not a document of
+		// the repository.
+		if de.Type()&fs.ModeSymlink != 0 && !resolvesInside(root, p) {
+			return nil
+		}
+		if de.IsDir() && rel != "" {
+			top := strings.SplitN(rel, "/", 2)[0]
+			for _, n := range neverInPlace {
+				if top == n {
+					return filepath.SkipDir
+				}
+			}
+			if de.Name() == "node_modules" || de.Name() == "vendor" {
+				return filepath.SkipDir
+			}
+			if wr.Depth >= 0 {
+				relToBase, _ := filepath.Rel(base, p)
+				if strings.Count(filepath.ToSlash(relToBase), "/")+1 >= wr.Depth {
+					return filepath.SkipDir
+				}
+			}
+		}
+		fn(rel, de)
+		return nil
+	})
+	if err == filepath.SkipDir {
+		return nil
+	}
+	return err
+}
+
+// PathsFile and RawIgnoreFile are the two corpus files that change which
+// files are documents and what state they have, so a change to either one
+// rebuilds the whole document part of the index.
+const (
+	PathsFile     = pathsFile
+	RawIgnoreFile = RawDir + "/.gitignore"
+)
+
+// FileStat is the size and mtime (Unix nanoseconds) of one corpus file.
+type FileStat struct {
+	Size, MTime int64
+}
+
+// CorpusStat returns the size and mtime of every file the document corpus
+// reads: each in-place document, each regular file under raw/ and
+// formatted/, and .spekk/docs-paths when it exists. It reads no file
+// content, and takes each stat from the directory walk. A FIFO, a device,
+// and a symlink out of the repository are not in it, so no hash reads them.
+// The index keeps a manifest of these files, so a new, edited, or deleted
+// document is seen, and an unrelated file is not.
+func CorpusStat(root string) (map[string]FileStat, error) {
+	out := map[string]FileStat{}
+	add := func(rel, p string, de fs.DirEntry) {
+		info, err := de.Info()
+		if err == nil && info.Mode()&fs.ModeSymlink != 0 {
+			info, err = os.Stat(p)
+		}
+		if err == nil {
+			out[rel] = FileStat{info.Size(), info.ModTime().UnixNano()}
+		}
+	}
+	err := inPlaceWalk(root, func(rel string, de fs.DirEntry) {
+		add(rel, filepath.Join(root, filepath.FromSlash(rel)), de)
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, dir := range []string{RawDir, FormattedDir} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(p string, de fs.DirEntry, err error) error {
+			if err != nil || de.IsDir() || !regularEntry(p, de) {
+				return nil
+			}
+			if de.Type()&fs.ModeSymlink != 0 && !resolvesInside(root, p) {
+				return nil
+			}
+			rel, _ := filepath.Rel(root, p)
+			add(filepath.ToSlash(rel), p, de)
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(pathsFile))); err == nil {
+		out[pathsFile] = FileStat{info.Size(), info.ModTime().UnixNano()}
+	}
+	return out, nil
+}

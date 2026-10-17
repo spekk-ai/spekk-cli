@@ -713,6 +713,12 @@ func hasFrontmatter(content string) bool {
 // ParseAllSpecs walks specsDir and parses all specs and assertions.
 // Malformed or incomplete structures produce warnings on stderr and are skipped.
 func ParseAllSpecs(specsDir string) (*ParseResult, error) {
+	return ParseAllSpecsRead(specsDir, os.ReadFile)
+}
+
+// ParseAllSpecsRead is ParseAllSpecs with readFile for each file read, so a
+// caller can index the same bytes that the parse saw.
+func ParseAllSpecsRead(specsDir string, readFile func(string) ([]byte, error)) (*ParseResult, error) {
 	info, err := os.Stat(specsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -745,7 +751,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 			// Flat .md files at specs/ level with frontmatter are an error.
 			if strings.HasSuffix(entry.Name(), ".md") {
 				flatPath := filepath.Join(specsDir, entry.Name())
-				raw, readErr := os.ReadFile(flatPath)
+				raw, readErr := readFile(flatPath)
 				if readErr == nil && hasFrontmatter(string(raw)) {
 					return nil, fmt.Errorf("Invalid folder structure: Found flat .md files with frontmatter in specs/: %s. All specs must be in folders following the pattern specs/{spec-id}/{spec-id}.md", entry.Name())
 				}
@@ -761,7 +767,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 		// Determine whether this directory contains any actual spec files.
 		hasSpecFiles := false
 
-		specFileRaw, readErr := os.ReadFile(specFilePath)
+		specFileRaw, readErr := readFile(specFilePath)
 		if readErr == nil && hasFrontmatter(string(specFileRaw)) {
 			hasSpecFiles = true
 		}
@@ -772,7 +778,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 				if werr != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
 					return nil
 				}
-				raw, rerr := os.ReadFile(p)
+				raw, rerr := readFile(p)
 				if rerr == nil && hasFrontmatter(string(raw)) {
 					hasSpecFiles = true
 				}
@@ -840,7 +846,7 @@ func ParseAllSpecs(specsDir string) (*ParseResult, error) {
 			aFilePath := filepath.Join(assertionsDirPath, aFileName)
 			relAFilePath := filepath.ToSlash(filepath.Join("specs", specDirName, "assertions", aFileName))
 
-			aRaw, aReadErr := os.ReadFile(aFilePath)
+			aRaw, aReadErr := readFile(aFilePath)
 			if aReadErr != nil {
 				warnings = append(warnings, fmt.Sprintf("Skipping unreadable assertion file %s: %s", relAFilePath, aReadErr.Error()))
 				continue

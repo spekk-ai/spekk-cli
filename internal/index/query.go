@@ -37,7 +37,7 @@ func RunQuery(dbPath, sqlStr string) (*QueryResult, error) {
 	// the isSelectStatement prefix check is only a fast, friendly early error and
 	// is bypassable (e.g. "WITH x AS (...) DELETE ..."), but a read-only
 	// connection rejects any write regardless of how the SQL is phrased.
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	db, err := sql.Open("sqlite", ReadDSN(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("cannot open index.db: %w", err)
 	}

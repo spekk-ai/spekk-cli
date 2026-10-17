@@ -234,6 +234,9 @@ The default output is a padded table. The index is refreshed first, so the resul
 | `frontmatter_fields` | `owner_type` (`spec`, `assertion`, or `observation`), `owner_id`, `key`, `value` |
 | `observations` | `slug`, `ref`, `type`, `severity`, `status`, `created`, `announced`, `pr`, `title`, `file`. One row per (slug, ref) |
 | `observation_files` | `slug`, `ref`, `path`. One row per `affected` path |
+| `documents` | `kind` (`spec`, `assertion`, `doc`, or `raw`), `id`, `path`, `text_path`, `title`, `type`, `created`, `summary`, `sha256`, `state`. See [`spekk docs`](#spekk-docs) |
+| `document_tags` | `kind`, `doc_id`, `tag` |
+| `passages` | FTS5 table: `heading`, `body`, `terms`, and unindexed `kind`, `doc_id`, `start_line`, `end_line`, `is_header` |
 
 `depends_on` holds assertion-level edges only. A spec-level relationship is prose in the spec body, not data.
 
@@ -283,6 +286,62 @@ spekk query "SELECT f.value AS workflow, COUNT(*) AS total, SUM(a.status = 'done
     ON f.owner_type = 'assertion' AND f.owner_id = a.id AND f.key = 'workflows'
   GROUP BY f.value"
 ```
+
+## `spekk docs`
+
+Search the specs, the docs in the repository, and the source documents in `raw/`, from one full-text index. See [Search Specs, Docs, and Source Documents](source-documents.md).
+
+```bash
+spekk docs search "torque limit" --kind raw,doc
+spekk docs show pump-manual --lines 120:160
+spekk docs add ~/Downloads/pump-manual.pdf
+spekk docs add raw/pump-manual.pdf --summary "Acme P-200 pump manual: torque limits, valve sizes, and wiring."
+spekk docs status
+```
+
+### `spekk docs search "<words>"`
+
+Rank passages with BM25 and print the best passage of each document: kind, id, title, path, line range, summary, and the numbered lines of the passage that hold the most query words, so the answer is often in the search output. Up to three other matching passages of the same document are listed by line range. The output is at most 4,000 bytes, and results that do not fit are counted, not printed.
+
+| Flag | Description |
+|------|-------------|
+| `--kind <k1,k2>` | Only these kinds: `spec`, `assertion`, `doc`, `raw` |
+| `--type <type>` | Only documents with this frontmatter `type` |
+| `--tag <tag>` | Only documents with this tag |
+| `--since <YYYY-MM-DD>` | Only documents with a `created` date on or after this date |
+| `--limit <n>` | At most n documents (default 5, maximum 20) |
+| `--json` | One JSON object: `query`, `notice`, `results`, `omitted` |
+
+Each word matches as written, joined with OR. `snake_case`, `dotted.name`, and `kebab-case` match as exact phrases, and `"quoted words"` match as one phrase. No query text is read as FTS5 syntax. An unknown kind, a malformed date, or a bad limit exits 2.
+
+### `spekk docs show <id|path>`
+
+Print numbered lines of one document, at most 200 for each call. The output names the next range.
+
+| Flag | Description |
+|------|-------------|
+| `--lines <a:b>` | Lines a to b; `a:` prints from a |
+| `--kind <kind>` | Choose the kind when two documents share the id |
+
+Line numbers are those of the plaintext file: the document itself, or the derived text `formatted/<id>.txt` of a converted format. Text of kinds `doc` and `raw` is printed between markers that say it is untrusted data.
+
+### `spekk docs add <file|folder>...`
+
+Copy each file to `raw/` (a file already under `raw/` stays), convert it to text when it must, and write its stub in `formatted/`. Then rebuild the index.
+
+| Flag | Description |
+|------|-------------|
+| `--summary "<text>"` | The summary, 40 to 600 characters. One file only |
+| `--type <type>` | Document type, such as `manual`, `transcript`, `email` |
+| `--tags <a,b>` | Tags |
+| `--source <s>` | Where the document came from, such as a URL. The default is the path in the repository, or the file name for a file from outside |
+| `--allow-secrets` | Add a file that the secret scan refused, after a person checked it |
+
+Formats: `.md`, `.markdown`, `.txt`, `.html`, `.htm`, `.eml`, and `.xlsx` in the binary; `.pdf` with `pdftotext` and `.docx` with `pandoc` on `PATH`. A missing converter fails that file with the install command. Adding a document again with changed content updates the stub and clears the summary. A converted file larger than 5 MB is listed in `raw/.gitignore`. Exit 1 when any file failed.
+
+### `spekk docs status`
+
+List each source document that is not `ok` (`stale`, `no_summary`, `missing_raw`, `pointer`, `no_stub`) with the command to run. Exit 0.
 
 ## `spekk show`
 
