@@ -676,7 +676,10 @@ OPTIONS:
 Only SELECT (and WITH ... SELECT) statements are permitted; the database is
 opened read-only. Tables: specs(id, title, status, priority, branch, file),
 assertions(id, parent_id, title, status, priority, branch, file),
-depends_on(assertion_id, depends_on_id).
+depends_on(assertion_id, depends_on_id), documents(kind, id, path, text_path,
+title, type, created, summary, sha256, state), document_tags(kind, doc_id,
+tag), and the FTS5 table passages(meta, heading, body, terms, kind, doc_id,
+start_line, end_line). For a ranked text search, use "spekk docs search".
 `
 
 // runIndex implements the `spekk index` subcommand.
@@ -716,7 +719,7 @@ func runIndex(args []string) {
 		fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %s\n", err)
 	}
 
-	fmt.Printf("Indexed %d specs, %d assertions, %d observations.\n", stats.Specs, stats.Assertions, stats.Observations)
+	fmt.Printf("Indexed %d specs, %d assertions, %d observations, %d documents (%d passages).\n", stats.Specs, stats.Assertions, stats.Observations, stats.Documents, stats.Passages)
 }
 
 // runQuery implements the `spekk query "<sql>"` subcommand.

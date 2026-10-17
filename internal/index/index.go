@@ -26,6 +26,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/spekk-ai/spekk-cli/internal/docs"
 	"github.com/spekk-ai/spekk-cli/internal/observation"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
@@ -96,6 +97,38 @@ CREATE TABLE IF NOT EXISTS index_meta (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+-- Full-text corpus (specs/source-document-index/): one row per spec,
+-- assertion, in-place doc, and raw source document. path is the document
+-- file; text_path is the plaintext file that the passage line numbers refer
+-- to (for a converted raw document, its derived text in formatted/). state
+-- is 'ok' for every kind but raw (see internal/docs).
+CREATE TABLE IF NOT EXISTS documents (
+  kind      TEXT,   -- 'spec' | 'assertion' | 'doc' | 'raw'
+  id        TEXT,
+  path      TEXT,
+  text_path TEXT,
+  title     TEXT,
+  type      TEXT,
+  created   TEXT,
+  summary   TEXT,
+  sha256    TEXT,
+  state     TEXT,
+  PRIMARY KEY (kind, id)
+);
+CREATE TABLE IF NOT EXISTS document_tags (
+  kind   TEXT,
+  doc_id TEXT,
+  tag    TEXT
+);
+-- One row per passage (a heading section, or a 40-line window of a long
+-- one). meta repeats the document's title, summary, and tags so that a
+-- passage of a matching document ranks; terms holds the camelCase parts of
+-- identifiers in the body (internal/docs.IdentifierTerms).
+CREATE VIRTUAL TABLE IF NOT EXISTS passages USING fts5(
+  meta, heading, body, terms,
+  kind UNINDEXED, doc_id UNINDEXED, start_line UNINDEXED, end_line UNINDEXED,
+  tokenize = 'porter unicode61 remove_diacritics 2'
+);
 `
 
 // dropAllTables drops every table in the database, enumerated from
@@ -106,7 +139,10 @@ CREATE TABLE IF NOT EXISTS index_meta (
 // and silently kept the rest). Dropping whatever exists makes every future
 // schema bump safe against this binary going stale.
 func dropAllTables(db *sql.DB) error {
-	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	// Virtual tables come first: dropping one drops its shadow tables, which
+	// SQLite does not let a caller drop on their own first.
+	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+		ORDER BY (sql LIKE 'CREATE VIRTUAL TABLE%') DESC, rowid`)
 	if err != nil {
 		return fmt.Errorf("cannot list tables: %w", err)
 	}
@@ -141,12 +177,13 @@ func dropAllTables(db *sql.DB) error {
 //
 // Version history: 1 = specs/assertions/depends_on; 2 adds the observation
 // tables (observations, observation_files, index_meta); 3 adds
-// frontmatter_fields; 4 adds observation rows to frontmatter_fields. Version
+// frontmatter_fields; 4 adds observation rows to frontmatter_fields; 5 adds
+// the full-text corpus (documents, document_tags, passages). Version
 // 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 4
+const schemaVersion = 5
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
@@ -164,7 +201,11 @@ type Stats struct {
 	Specs        int
 	Assertions   int
 	Observations int
-	Warnings     []string
+	// Documents counts kinds doc and raw; Passages counts every passage,
+	// specs and assertions included.
+	Documents int
+	Passages  int
+	Warnings  []string
 }
 
 // ErrSpecsUnparseable marks an index build that failed at the parse step and
@@ -240,7 +281,7 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	defer tx.Rollback() //nolint:errcheck
 
 	// Clear existing rows for idempotency (delete-all + re-insert).
-	for _, table := range []string{"depends_on", "frontmatter_fields", "assertions", "specs", "observation_files", "observations", "index_meta"} {
+	for _, table := range []string{"depends_on", "frontmatter_fields", "assertions", "specs", "observation_files", "observations", "index_meta", "documents", "document_tags", "passages"} {
 		if _, err = tx.Exec("DELETE FROM " + table); err != nil {
 			return stats, fmt.Errorf("cannot clear %s: %w", table, err)
 		}
@@ -282,11 +323,18 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 		}
 	}
 
+	// Full-text pass: spec and assertion bodies, then the document corpus.
+	docCount, passageCount, docWarnings, err := indexDocuments(tx, specsDir, result)
+	if err != nil {
+		return stats, err
+	}
+
 	// Observation pass: read the cross-branch union from git refs.
 	obsCount, warnings, err := indexObservations(tx)
 	if err != nil {
 		return stats, err
 	}
+	warnings = append(docWarnings, warnings...)
 
 	if err = tx.Commit(); err != nil {
 		return stats, fmt.Errorf("cannot commit transaction: %w", err)
@@ -302,6 +350,8 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	stats.Specs = len(result.Specs)
 	stats.Assertions = len(result.Assertions)
 	stats.Observations = obsCount
+	stats.Documents = docCount
+	stats.Passages = passageCount
 	stats.Warnings = warnings
 	return stats, nil
 }
@@ -518,9 +568,11 @@ func observationRefsChanged(dbPath string) (bool, error) {
 }
 
 // IsStale reports whether the index at dbPath is absent or older than the
-// most recently modified file under specsDir. Returns (true, nil) when the
-// index should be rebuilt, (false, nil) when it is fresh, and (false, err)
-// on unexpected I/O errors.
+// most recently modified file or directory under an indexed root: specsDir,
+// raw/ and formatted/ beside it, the directories the in-place document globs
+// reach, and .spekk/docs-paths. A directory counts, so a deleted file makes
+// the index stale too. Returns (true, nil) when the index should be rebuilt,
+// (false, nil) when it is fresh, and (false, err) on unexpected I/O errors.
 func IsStale(specsDir, dbPath string) (bool, error) {
 	dbInfo, err := os.Stat(dbPath)
 	if err != nil {
@@ -531,26 +583,30 @@ func IsStale(specsDir, dbPath string) (bool, error) {
 	}
 	dbMtime := dbInfo.ModTime()
 
-	// Walk specs dir to find the most recent mtime.
-	var newestSpec time.Time
-	walkErr := filepath.WalkDir(specsDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	var newest time.Time
+	note := func(p string) {
+		if info, err := os.Stat(p); err == nil && info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+	}
+	root := filepath.Dir(specsDir)
+	for _, dir := range []string{specsDir, filepath.Join(root, docs.RawDir), filepath.Join(root, docs.FormattedDir)} {
+		walkErr := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			note(path)
 			return nil
+		})
+		if walkErr != nil {
+			return false, fmt.Errorf("cannot walk %s: %w", dir, walkErr)
 		}
-		info, err := d.Info()
-		if err != nil {
-			return nil
-		}
-		if info.ModTime().After(newestSpec) {
-			newestSpec = info.ModTime()
-		}
-		return nil
-	})
-	if walkErr != nil {
-		return false, fmt.Errorf("cannot walk specs directory: %w", walkErr)
+	}
+	if err := docs.WalkWatched(root, note); err != nil {
+		return false, err
 	}
 
-	return newestSpec.After(dbMtime), nil
+	return newest.After(dbMtime), nil
 }
 
 // EnsureGitignored adds .spekk/index.db (or .spekk/) to .gitignore at repoRoot
