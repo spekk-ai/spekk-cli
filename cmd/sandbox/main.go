@@ -17,6 +17,11 @@ var (
 )
 
 func main() {
+	// git runs the credential helper as "agent-client git-credential get".
+	if len(os.Args) > 1 && os.Args[1] == "git-credential" {
+		os.Exit(runGitCredential(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
+
 	showVersion := flag.Bool("version", false, "Print version information and exit")
 	flag.Parse()
 
