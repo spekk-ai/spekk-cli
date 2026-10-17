@@ -5,6 +5,7 @@ package index_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -66,5 +67,15 @@ func TestRefreshSkipsFilesThatAreNotRegular(t *testing.T) {
 	must(t, err)
 	if len(c.NoStub) != 0 {
 		t.Errorf("docs status lists %v as raw files to add", c.NoStub)
+	}
+	// Nor must docs add copy the outside file into the corpus.
+	var out strings.Builder
+	if failed := docs.Add(root, []string{filepath.Join(root, "raw", "outside.txt")}, docs.AddOptions{}, &out); failed != 1 {
+		t.Errorf("docs add of the outside symlink: %d failed, want 1:\n%s", failed, out.String())
+	}
+	for _, rel := range []string{"formatted/outside.md", "formatted/outside.txt"} {
+		if _, err := os.Lstat(filepath.Join(root, rel)); !os.IsNotExist(err) {
+			t.Errorf("docs add of the outside symlink wrote %s", rel)
+		}
 	}
 }

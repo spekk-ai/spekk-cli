@@ -147,6 +147,21 @@ func addJobs(root, arg string) ([]addJob, []string, error) {
 	return jobs, skipped, err
 }
 
+// inRepo reports whether the path p, as written, is under root or under the
+// real path of root.
+func inRepo(root, p string) bool {
+	bases := []string{root}
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		bases = append(bases, real)
+	}
+	for _, b := range bases {
+		if rel, err := filepath.Rel(b, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
 func mustRel(base, p string) string {
 	rel, _ := filepath.Rel(base, p)
 	return rel
@@ -154,6 +169,11 @@ func mustRel(base, p string) string {
 
 // addOne adds one file. Nothing is written until every check passed.
 func addOne(root string, j addJob, opts AddOptions, out io.Writer) error {
+	// A committed symlink can point at a secret in the home directory. A
+	// file from outside is added only when it is named by its own path.
+	if inRepo(root, j.src) && !resolvesInside(root, j.src) {
+		return fmt.Errorf("%s resolves to a file outside the repository, so it was not added", filepath.Base(j.src))
+	}
 	if err := regular(j.src); err != nil {
 		return err
 	}
