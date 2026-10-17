@@ -47,7 +47,7 @@ BM25 over a whole long document ranks badly, and the second read is then the ful
 
 - `spekk docs add <path>...` ingests source documents (files or folders). It writes the stub deterministically. The summary is an agent step that the command asks for and validates (`--summary`, 40 to 600 characters). It is never a convention.
 - `spekk docs search "<query>" [--kind] [--type] [--tag] [--since] [--limit] [--json]` returns ranked documents with title, summary, the best passage and its line range. The output has a hard cap of 4,000 bytes, on by default, with no flag to remove it.
-- `spekk docs show <id|path> [--lines a:b]` prints numbered lines of the plaintext, at most 200 lines for each call.
+- `spekk docs show <id|path> [--lines a:b]` prints numbered lines of the plaintext, at most 200 lines or 20,000 bytes for each call.
 - `spekk docs status` lists documents that need work (stale, no summary, no stub, raw file missing).
 - `spekk query` reads the new tables (`documents`, `document_tags`, `passages`) read-only, as today.
 

@@ -29,7 +29,7 @@ spekk docs show vendor-manual --lines 120:160
 
 Each word matches as written. `snake_case`, `dotted.name`, and `kebab-case` match as exact phrases, `"quoted words"` match as one phrase, and a `camelCase` identifier also matches its parts (`parse specs` finds `parseAllSpecs`). Results are ranked with BM25, so a passage that matches more words ranks first.
 
-The output has a strict budget. A search prints at most 4,000 bytes (text or `--json`), and results that do not fit are counted, not printed. `show` prints at most 200 lines for each call and names the next range. No flag removes these limits: to get more, make a narrower call.
+The output has a strict budget. A search prints at most 4,000 bytes (text or `--json`), and results that do not fit are counted, not printed. `show` prints at most 200 lines or 20,000 bytes for each call and names the next range. A line longer than 20,000 bytes is cut, and the output says so. No flag removes these limits: to get more, make a narrower call.
 
 Search is on demand. Nothing is added to a prompt automatically.
 
