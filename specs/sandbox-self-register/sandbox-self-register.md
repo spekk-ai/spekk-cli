@@ -21,7 +21,10 @@ The CLI calls the control host API with the user's own API token:
 
 ## Security rule
 
-The control host never receives a cloud credential or a model credential of the user. The DigitalOcean token, the AWS keys, the Google Cloud credentials, the Claude subscription token, and the GitHub token go from the user's machine to the user's own sandbox, and nowhere else. The control host sees only two credentials: the user's spekk API token, which authenticates each call, and the agent token, which the control host makes.
+The rule has two paths.
+
+- **From a terminal** (`spekk sandbox create` without `--machine`). The control host never receives a cloud credential or a model credential of the user. The DigitalOcean token, the AWS keys, the Google Cloud credentials, the Claude subscription token, and the GitHub token go from the user's machine to the user's own sandbox, and nowhere else. The control host sees only two credentials: the user's spekk API token, which authenticates each call, and the agent token, which the control host makes.
+- **Machine mode** (`--machine`, `specs/sandbox-machine-mode/`). The control host launches the sandbox. It keeps the DigitalOcean token and the model key of an organization (sealed), and its worker gives them to the CLI on stdin. The CLI sends them to the machine only. No request from the CLI to the control host API carries a cloud credential or a model credential.
 
 ## Contract with the control host
 

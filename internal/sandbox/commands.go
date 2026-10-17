@@ -69,6 +69,9 @@ type CreateOptions struct {
 	ExpiresAt time.Time
 	Purpose   string
 
+	// Labels are extra labels for the machine, from --label in machine mode.
+	Labels map[string]string
+
 	// CloudInit is the provisioning payload from the release artifacts.
 	// Create fills it in; no flag sets it. A provider that does not use
 	// cloud-init ignores it.
@@ -361,7 +364,7 @@ func printResult(headline, name string, meta *SandboxMeta, agentToken string) {
 // control host. The agent cannot connect until they do, so the message is
 // the same whichever command finished the sandbox.
 func printRegistration(headline, name, ip, agentToken string) {
-	bareHost := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(os.Getenv("SPEKK_HOST"), "https://"), "http://"), "/")
+	host := bareHost(os.Getenv("SPEKK_HOST"))
 
 	fmt.Fprintf(os.Stderr, `
 %s:
@@ -377,7 +380,7 @@ Next: Register this agent on the control host admin at https://%s/
 Or register it with your spekk API token, with no admin step:
   export %s=<your API token>
   spekk sandbox register %s
-`, headline, name, ip, agentToken, bareHost, name, name, agentToken, apiTokenVar, name)
+`, headline, name, ip, agentToken, host, name, name, agentToken, apiTokenVar, name)
 }
 
 // --- Provision ---
@@ -634,6 +637,10 @@ type DestroyOptions struct {
 	// control host. Force does not, because a live agent with no machine
 	// is a credential that nothing points at.
 	IgnoreRevokeFailure bool
+	// CallerRevokes skips the revoke, because the caller revokes the agent
+	// itself. Machine mode sets it: it has no API token, and the server
+	// that runs it owns the agent.
+	CallerRevokes bool
 }
 
 // Destroy tears down a sandbox using the Provider for remote resource cleanup
@@ -649,7 +656,8 @@ func Destroy(p Provider, name string, opts DestroyOptions) error {
 
 	// Without SPEKK_API_TOKEN or SPEKK_HOST the revoke cannot even start.
 	// Say so before the prompt, not after the user has said yes.
-	if sandbox.AgentID != "" && !opts.IgnoreRevokeFailure {
+	revoke := sandbox.AgentID != "" && !opts.CallerRevokes
+	if revoke && !opts.IgnoreRevokeFailure {
 		if _, err := newControlHost(); err != nil {
 			return fmt.Errorf("cannot revoke agent %s of sandbox %q: %w\nNothing was destroyed. Use --ignore-revoke-failure to destroy the sandbox and leave the agent live", sandbox.AgentID, name, err)
 		}
@@ -667,7 +675,7 @@ func Destroy(p Provider, name string, opts DestroyOptions) error {
 
 	// Revoke first. A machine that is gone with its agent still live on the
 	// control host leaves a credential that nothing points at any more.
-	if sandbox.AgentID != "" {
+	if revoke {
 		if err := revokeRecordedAgent(sandbox.AgentID); err != nil {
 			if !opts.IgnoreRevokeFailure {
 				return fmt.Errorf("revoking agent %s on the control host: %w\nNothing was destroyed. Use --ignore-revoke-failure to destroy the sandbox anyway", sandbox.AgentID, err)
@@ -869,10 +877,15 @@ systemctl restart spekk-agent`, spekkAgentUnit)
 // stagedBinary is the upload path relative to the SSH login user's home.
 const stagedBinary = "agent-client.staged"
 
-// sshExec runs an ssh command. It is a variable so a test can read what the
-// privileged steps actually send, with no machine to send it to.
-var sshExec = func(args []string) ([]byte, error) {
-	return exec.Command("ssh", args...).CombinedOutput()
+// sshExec runs an ssh command, with stdin as its standard input when it is
+// not empty. It is a variable so a test can read what the privileged steps
+// actually send, with no machine to send it to.
+var sshExec = func(args []string, stdin string) ([]byte, error) {
+	cmd := exec.Command("ssh", args...)
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
+	return cmd.CombinedOutput()
 }
 
 // scpExec copies a file with scp. It is a seam for the same reason sshExec
@@ -1247,7 +1260,30 @@ func runSSHCombined(ip, keyPath, name, user, command string) (string, error) {
 		args = append(args, "-i", keyPath)
 	}
 	args = append(args, fmt.Sprintf("%s@%s", user, ip), command)
-	out, err := sshExec(args)
+	out, err := sshExec(args, "")
+	return string(out), err
+}
+
+// runSecretScript runs a script that holds a secret as root on the host. The
+// script goes on the stdin of ssh, never in its argument list: each process
+// on this host can read the argument list of ssh in /proc/<pid>/cmdline, and
+// a secret in base64 there is still the secret. The remote command is only
+// "bash -s", or "sudo bash -s" for a login user that is not root.
+func runSecretScript(ip, keyPath, name, user, script string) (string, error) {
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
+	if keyPath != "" {
+		args = append(args, "-i", keyPath)
+	}
+	shell := "bash -s"
+	if user != "root" {
+		shell = "sudo bash -s"
+	}
+	args = append(args, fmt.Sprintf("%s@%s", user, ip), shell)
+	// bash reads a script on stdin one command at a time, so a command in
+	// it that reads stdin would eat the rest of the script. The braces make
+	// bash read the whole script first, and give each command /dev/null.
+	out, err := sshExec(args, "{\n"+script+"\n} </dev/null\n")
 	return string(out), err
 }
 
@@ -1272,8 +1308,9 @@ func sshCheck(sandbox *SandboxMeta, name, command string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// injectCredentials writes the env file, and in the same command the
-// sandbox marker, which holds no secret.
+// injectCredentials writes the env file from the credentials in the
+// environment of the CLI, and in the same command the sandbox marker, which
+// holds no secret.
 func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode, marker []byte) error {
 	envVars := map[string]string{
 		"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
@@ -1284,21 +1321,17 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 	}
 	spekkHost := os.Getenv("SPEKK_HOST")
 
-	envContent := buildEnvContent(mode, envVars, name, agentToken, spekkHost)
-	script := privilegedScript(user, buildInjectScript(envContent, marker))
+	return writeEnvFile(ip, keyPath, name, user, buildEnvContent(mode, envVars, name, agentToken, spekkHost), marker)
+}
 
-	args := sshHostKeyOpts(name)
-	args = append(args, "-o", "ConnectTimeout=10")
-	if keyPath != "" {
-		args = append(args, "-i", keyPath)
-	}
-	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
-	out, err := sshExec(args)
+// writeEnvFile writes envContent to /etc/spekk/agent.env, and the marker.
+func writeEnvFile(ip, keyPath, name, user, envContent string, marker []byte) error {
+	out, err := runSecretScript(ip, keyPath, name, user, buildInjectScript(envContent, marker))
 	if err != nil {
-		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
+		return fmt.Errorf("SSH command failed: %s\n%s", err, out)
 	}
-	if strings.Contains(string(out), markerNotWritten) {
-		cause := strings.TrimSpace(strings.Replace(string(out), markerNotWritten, "", 1))
+	if strings.Contains(out, markerNotWritten) {
+		cause := strings.TrimSpace(strings.Replace(out, markerNotWritten, "", 1))
 		fmt.Fprintf(os.Stderr, "Warning: could not write %s. The sandbox works without it.\n%s\n", sandboxMarker, cause)
 	}
 	return nil
@@ -1308,11 +1341,9 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 // The model credential comes from the auth mode; everything after it is the
 // same whatever the sandbox pays with. Exported for testing.
 func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken, spekkHost string) string {
-	bareHost := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(spekkHost, "https://"), "http://"), "/")
-
 	envLines := append(authLines(mode, envVars),
 		"GITHUB_TOKEN="+envVars["GITHUB_TOKEN"],
-		"SPEKK_HOST="+bareHost,
+		"SPEKK_HOST="+bareHost(spekkHost),
 		"SPEKK_AGENT_TOKEN="+agentToken,
 		"WORKSPACE=/opt/spekk/workspace",
 		"SPEKK_AGENT_NAME=spekk-"+name,
@@ -1320,11 +1351,17 @@ func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken,
 	return strings.Join(envLines, "\n") + "\n"
 }
 
+// bareHost is SPEKK_HOST with no scheme and no trailing slash, the form the
+// agent client reads.
+func bareHost(spekkHost string) string {
+	return strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(spekkHost, "https://"), "http://"), "/")
+}
+
 // markerNotWritten is the line the inject script prints when it cannot
 // write the sandbox marker, so injectCredentials can warn about it.
 const markerNotWritten = "spekk: marker not written"
 
-// buildInjectScript produces the SSH command string for injecting credentials
+// buildInjectScript produces the script for injecting credentials
 // and writing the sandbox marker. It base64-encodes both to prevent shell
 // injection. The marker goes to a temp file and then mv -f, so the write does
 // not follow a symlink at the marker path. A failed marker write prints
@@ -1343,21 +1380,13 @@ func buildInjectScript(envContent string, marker []byte) string {
 func configureGitCredentials(ip, keyPath, name, user string) error {
 	ghToken := os.Getenv("GITHUB_TOKEN")
 
-	script := privilegedScript(user, buildGitCredentialScript(ghToken))
-
-	args := sshHostKeyOpts(name)
-	args = append(args, "-o", "ConnectTimeout=10")
-	if keyPath != "" {
-		args = append(args, "-i", keyPath)
-	}
-	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
-	if out, err := sshExec(args); err != nil {
-		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
+	if out, err := runSecretScript(ip, keyPath, name, user, buildGitCredentialScript(ghToken)); err != nil {
+		return fmt.Errorf("SSH command failed: %s\n%s", err, out)
 	}
 	return nil
 }
 
-// buildGitCredentialScript produces the SSH command string for configuring git credentials.
+// buildGitCredentialScript produces the script for configuring git credentials.
 // It base64-encodes the token to prevent shell injection. Exported for testing.
 func buildGitCredentialScript(ghToken string) string {
 	encodedToken := base64.StdEncoding.EncodeToString([]byte(ghToken))

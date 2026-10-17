@@ -21,11 +21,12 @@ import (
 // credentials go to the sandbox only; see specs/sandbox-self-register/.
 const apiTokenVar = "SPEKK_API_TOKEN"
 
-// controlHost calls the control host API as the user who owns the API token.
+// controlHost calls the control host API as the user who owns the API token,
+// or, in machine mode, with a one-time registration token.
 type controlHost struct {
-	base  string // scheme and host, no trailing slash
-	token string
-	http  *http.Client
+	base string // scheme and host, no trailing slash
+	auth string // the whole Authorization header value
+	http *http.Client
 }
 
 // newControlHost reads SPEKK_HOST and SPEKK_API_TOKEN, and refuses an address
@@ -39,13 +40,23 @@ func newControlHost() (*controlHost, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A redirect is not followed, so the Authorization header goes to
-	// SPEKK_HOST only. The 3xx answer becomes an error like any other.
-	client := &http.Client{
+	return &controlHost{base: base, auth: "Token " + token, http: noRedirectClient()}, nil
+}
+
+// newRegistrationHost calls the control host at base with a one-time
+// registration token, which is a Bearer token and not a user's API token.
+func newRegistrationHost(base, registrationToken string) *controlHost {
+	return &controlHost{base: base, auth: "Bearer " + registrationToken, http: noRedirectClient()}
+}
+
+// noRedirectClient does not follow a redirect, so the Authorization header
+// goes to the control host only. The 3xx answer becomes an error like any
+// other.
+func noRedirectClient() *http.Client {
+	return &http.Client{
 		Timeout:       30 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	return &controlHost{base: base, token: token, http: client}, nil
 }
 
 // controlHostBase turns SPEKK_HOST into a base URL. A bare host gets https,
@@ -97,7 +108,7 @@ func isLoopback(hostport string) bool {
 // authorize is the one place that puts a credential on a control host
 // request, so a change to the token scheme changes this line only.
 func (c *controlHost) authorize(req *http.Request) {
-	req.Header.Set("Authorization", "Token "+c.token)
+	req.Header.Set("Authorization", c.auth)
 }
 
 // do sends one request and decodes a 2xx body into out, when out is not nil.
@@ -225,4 +236,28 @@ func (c *controlHost) registerAgent(name, organization string) (*registeredAgent
 // revokeAgent stops the agent from authenticating, and closes its connection.
 func (c *controlHost) revokeAgent(id string) error {
 	return c.do(http.MethodPost, "/api/agents/"+url.PathEscape(id)+"/revoke/", nil, nil)
+}
+
+// registerWithToken registers the agent of a machine-mode sandbox. The
+// caller made the agent token, and the control host stores its hash, so the
+// raw token exists only in this process and on the machine. sandbox_id is
+// new for each registration, as in registerAgent.
+func (c *controlHost) registerWithToken(name, agentToken string) (string, error) {
+	suffix := make([]byte, 4)
+	rand.Read(suffix)
+	body := map[string]string{
+		"name":       name,
+		"sandbox_id": "spekk-" + name + "-" + hex.EncodeToString(suffix),
+		"token":      agentToken,
+	}
+	var agent struct {
+		ID string `json:"id"`
+	}
+	if err := c.do(http.MethodPost, "/api/agents/register/", body, &agent); err != nil {
+		return "", err
+	}
+	if agent.ID == "" {
+		return "", errors.New("POST /api/agents/register/: the response has no agent id")
+	}
+	return agent.ID, nil
 }

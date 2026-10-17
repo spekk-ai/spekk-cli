@@ -875,6 +875,62 @@ It copies the binary, writes the `spekk-agent` systemd unit, and restarts the se
 
 Before the restart, it reads the version of the `claude` that the service runs, with the service's user and `agent.env`. When the version is older than the minimum (`MinVersion` in `internal/claudecode`), or cannot be read, it installs the `stable` release as `agent` with the native installer, and reads the version again. When the version is still older, the deploy fails and does not restart the agent, because the new agent refuses every turn on an older Claude Code. When the version still cannot be read, the deploy prints a warning and continues. A `claude` process that runs keeps its own binary, so this step stops no turn. `create` and `provision` run the same step when they deploy the agent.
 
+### Machine mode (`--machine`)
+
+Machine mode is the interface for a server worker that launches sandboxes for its users. A person at a terminal does not use it. The worker gives each secret to the CLI on stdin, and reads the progress from stdout. No secret is in a flag, in the environment of the CLI, or on stdout, and machine mode reads no credential from its environment. Machine mode is for DigitalOcean only.
+
+```bash
+spekk sandbox create <name> --machine --size <size> --region <region> [--one-off [--expires <when>]] [--label <key>=<value> ...] [--release <tag>] [--provision-timeout <duration>] < create.json
+spekk sandbox destroy <name> --machine --force < destroy.json
+```
+
+**Create input.** One JSON object on stdin. Each field is required and must not be empty. A field that is not in this list, data after the object, or more than 64 KiB is an error:
+
+```json
+{
+  "digitalocean_token": "<DigitalOcean token>",
+  "registration_token": "<one-time registration token>",
+  "spekk_host": "<control host>",
+  "github_token": "<GitHub App installation token>",
+  "github_repository": "<owner>/<repository>",
+  "harness": "claude-code",
+  "model_credential": {"kind": "none"}
+}
+```
+
+`harness` must be `claude-code`. `model_credential` is one of these kinds. Each kind takes only its own fields. A Claude subscription token is not a choice in machine mode, because it belongs to one person:
+
+| `kind` | Fields | Env file on the machine |
+|------|--------|-------------------------|
+| `none` | none | No model credential. A person signs in to Claude Code on the machine later. Until then the heartbeat of the agent says `claude_signed_in: false` (see [Claude sign-in state](advanced/sandbox-architecture.md#claude-sign-in-state)) |
+| `anthropic_api_key` | `api_key` | `ANTHROPIC_API_KEY` |
+| `bedrock` | `aws_access_key_id`, `aws_secret_access_key`, `aws_region` | The AWS keys, `AWS_DEFAULT_REGION`, and `CLAUDE_CODE_USE_BEDROCK=1` |
+
+**Flags.** `--size` and `--region` are required. `--label <key>=<value>` can repeat. The key and the value are lowercase `[a-z0-9_-]`, 1 to 63 characters, and the label goes on the droplet as the tag `<key>:<value>`, next to the kind tags of a terminal create. The label tags are in the droplet create request, so a droplet that a killed or failed create leaves has them too. A key that spekk sets itself (`spekk-kind`, `spekk-expires`, `spekk-host`, `spekk-sandbox`) is refused. Any other flag is an error. Without `--release`, a CLI with the version `vX.Y.Z` deploys the agent of the release `vX.Y.Z`, so the CLI and the agent match. Any other build needs `--release <tag>`.
+
+**Stage lines.** Stdout has one JSON line for each stage, and nothing else. Human logs go to stderr:
+
+```json
+{"stage":"creating"}
+{"stage":"provisioning","droplet_id":123,"ip":"203.0.113.10"}
+{"stage":"registering"}
+{"stage":"online","agent_id":"<id>"}
+```
+
+While the CLI waits (for the release download, the droplet, cloud-init, or an SSH step), it writes the last stage line again, unchanged, every 30 seconds. A line comes at least every 30 seconds, and the final `online` or `failed` line is always the last line.
+
+On an error, the last line is `{"stage":"failed","at":"<stage>","message":"<text>"}`, where `at` is the last stage that started, and the exit status is 1. The message holds no secret. A bad flag or a bad input fails at `creating`, before any call to DigitalOcean, the control host, or GitHub.
+
+**Steps.** `creating` checks the input and creates the droplet with the token from stdin. `provisioning` waits for cloud-init. `registering` makes the agent token, registers the agent with `POST /api/agents/register/` and `Authorization: Bearer <registration token>` (the body has `name`, `sandbox_id`, and `token`), writes the env file, clones the repository into `/opt/spekk/workspace`, configures git, and deploys the agent. Each script that holds a secret goes to the machine on the stdin of `ssh`.
+
+**Git.** The installation token reaches `git clone` in the environment of the git process, and is not stored. Then `credential.https://github.com.helper` is `/opt/spekk/agent-client git-credential`. For each git request to `github.com`, the helper reads `/etc/spekk/agent.env` and asks the control host for a new installation token with `POST /api/agents/<agent id>/git-token/` and `Authorization: Bearer <agent token>`. The env file has no `GITHUB_TOKEN`, and `gh` is not signed in.
+
+**Failure.** The CLI does not destroy the droplet and does not revoke the agent when a create fails. It keeps the record of a droplet that exists, so the caller can run `destroy --machine` with the same `HOME`, and revoke the agent itself.
+
+**State.** The record and the SSH key are under `$HOME/.config/spekk/` (or `$XDG_CONFIG_HOME/spekk/`), as for a terminal create. Give each launch its own `HOME`, and keep it until the destroy.
+
+**Destroy.** `destroy --machine --force` reads `{"digitalocean_token": "<token>"}` on stdin, with the same strict rules. It needs `--force`, because stdin cannot also answer the prompt. It does not revoke the agent. It deletes the droplet, its DigitalOcean SSH key, the local key pair, the `known_hosts` file, and the record. It writes nothing to stdout, and exits 0 when the record is gone.
+
 ## `spekk schedule`
 
 Manage the scheduled tasks of a sandbox agent on the control host. Every subcommand needs `SPEKK_API_TOKEN` and `SPEKK_HOST`.

@@ -1222,6 +1222,10 @@ func launchSandbox(args []string) {
 
 	switch subcommand {
 	case "create":
+		if isMachineMode(subArgs) {
+			createMachineSandbox(subArgs)
+			return
+		}
 		createSandbox(subArgs)
 	case "provision":
 		provisionSandbox(subArgs)
@@ -1266,6 +1270,10 @@ func launchSandbox(args []string) {
 			os.Exit(1)
 		}
 	case "destroy":
+		if isMachineMode(subArgs) {
+			destroyMachineSandbox(subArgs)
+			return
+		}
 		name := ""
 		var opts sandbox.DestroyOptions
 		for _, a := range subArgs {
@@ -1279,6 +1287,7 @@ func launchSandbox(args []string) {
 		}
 		if name == "" {
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force] [--ignore-revoke-failure]")
+			fmt.Fprintln(os.Stderr, "       spekk sandbox destroy <name> --machine --force   (DigitalOcean token as JSON on stdin)")
 			os.Exit(1)
 		}
 		if err := sandbox.ValidateSandboxName(name); err != nil {
@@ -1484,6 +1493,14 @@ OPTIONS:
   spekk does not provision a machine it did not create. The machine must
   already carry /opt/spekk/.provisioned; spekk then injects credentials
   and deploys the agent onto it.
+
+  Machine mode (for a server worker, DigitalOcean only):
+  spekk sandbox create <name> --machine --size <size> --region <region>
+      [--one-off [--expires <when>]] [--label <key>=<value> ...]
+      [--release <tag>] [--provision-timeout <duration>]
+                         Reads one JSON object with every secret on stdin,
+                         and writes one JSON line for each stage on stdout.
+                         See "Machine mode" in docs/cli-reference.md
 `
 
 func createSandbox(args []string) {

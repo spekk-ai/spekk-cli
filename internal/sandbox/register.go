@@ -126,7 +126,7 @@ func Register(name, organization string) error {
 	fmt.Fprintf(os.Stderr, "Registered agent %s. Writing its token to %s...\n", agent.ID, machineRef(sandbox))
 
 	user := sshUser(sandbox)
-	if out, err := runSSHCombined(sandbox.IP, sandbox.SSHKeyPath, name, user, privilegedScript(user, buildTokenScript(agent.AuthToken))); err != nil {
+	if out, err := runSecretScript(sandbox.IP, sandbox.SSHKeyPath, name, user, buildTokenScript(agent.AuthToken)); err != nil {
 		revokeAbandoned(agent.ID, name)
 		return fmt.Errorf("writing the agent token to %s: %w\n%s", machineRef(sandbox), err, strings.TrimSpace(out))
 	}

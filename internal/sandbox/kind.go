@@ -255,8 +255,9 @@ func sortedLabels(labels map[string]string, sep string) []string {
 	return out
 }
 
-// labelMachine labels the machine when the provider can. A failure is a
-// warning: the record and the marker still carry the kind.
+// labelMachine labels the machine with the kind labels when the provider
+// can. A failure is a warning: the record and the marker still carry the
+// kind.
 func labelMachine(p Provider, meta *SandboxMeta) {
 	l, ok := p.(Labeler)
 	if !ok {

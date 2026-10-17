@@ -125,6 +125,27 @@ func TestBuildEnvContentSubscriptionCarriesNoBedrockCredential(t *testing.T) {
 	}
 }
 
+// A machine-mode file is pinned whole for the two types that the terminal
+// path does not have, so a line of another type, or a GITHUB_TOKEN line with
+// a token that expires in 1 hour, fails here. The bedrock block is the one
+// the pinned bedrock file above already proves.
+func TestBuildMachineEnvContentPinsEachNewType(t *testing.T) {
+	shared := "SPEKK_HOST=host.example\nSPEKK_AGENT_TOKEN=agenttok\nSPEKK_AGENT_ID=agent-1\nWORKSPACE=/opt/spekk/workspace\nSPEKK_AGENT_NAME=spekk-probe\n"
+	for _, tc := range []struct {
+		auth AuthMode
+		env  map[string]string
+		want string
+	}{
+		{AuthNone, map[string]string{}, shared},
+		{AuthAPIKey, map[string]string{apiKeyVar: "sk-key"}, "ANTHROPIC_API_KEY=sk-key\n" + shared},
+	} {
+		in := &machineInput{auth: tc.auth, modelEnv: tc.env, controlHost: "https://host.example", githubToken: "ghtok"}
+		if got := buildMachineEnvContent(in, "probe", "agenttok", "agent-1"); got != tc.want {
+			t.Errorf("%s env file:\ngot:\n%s\nwant:\n%s", tc.auth, got, tc.want)
+		}
+	}
+}
+
 func contains(haystack []string, needle string) bool {
 	for _, s := range haystack {
 		if s == needle {

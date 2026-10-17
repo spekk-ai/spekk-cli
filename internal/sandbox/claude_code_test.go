@@ -100,7 +100,7 @@ func TestDeployKeepsClaudeCodeAtTheMinimum(t *testing.T) {
 			versions := tc.versions
 			origSCP, origSSH := scpExec, sshExec
 			scpExec = func([]string) ([]byte, error) { return nil, nil }
-			sshExec = func(args []string) ([]byte, error) {
+			sshExec = func(args []string, stdin string) ([]byte, error) {
 				cmd := args[len(args)-1]
 				switch {
 				case strings.Contains(cmd, claudeVersionLine):

@@ -98,6 +98,10 @@ func (p *DOProvider) Create(name string, opts CreateOptions, meta *SandboxMeta) 
 		SSHKeys:  []int{doKey.ID},
 		VpcUUID:  opts.VPC,
 		UserData: cloudInit,
+		// The caller's labels go on at create, not after the active wait:
+		// a caller that finds its droplets by a label also finds one that
+		// a killed or failed create leaves.
+		Tags: append([]string{"spekk-sandbox"}, sortedLabels(opts.Labels, ":")...),
 	})
 	if err != nil {
 		if delErr := p.client.DeleteSSHKey(doKey.ID); delErr != nil {
