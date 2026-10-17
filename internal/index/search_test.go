@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -131,6 +132,10 @@ func TestSearchCleansDocumentText(t *testing.T) {
 	}
 	if strings.Contains(out, "\n1. fake") {
 		t.Errorf("document text forged an output line: %q", out)
+	}
+	marked := regexp.MustCompile(`(?s)\n----- begin untrusted document text ([0-9a-f]{8}):.*fake result line.*\n----- end untrusted document text ([0-9a-f]{8}) -----\n\nThe numbered lines`).FindStringSubmatch(out)
+	if marked == nil || marked[1] != marked[2] {
+		t.Errorf("document lines are not between markers with one nonce, before the footer: %q", out)
 	}
 }
 

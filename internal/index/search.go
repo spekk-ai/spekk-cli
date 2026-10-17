@@ -260,18 +260,26 @@ func RenderSearchText(query string, results []SearchResult, pending int) string 
 	if len(results) == 0 {
 		return staleLine(pending) + fmt.Sprintf("No results for %q.\n", query)
 	}
+	// One pair of markers for each call, as in docs show, so a document
+	// line cannot pass for the footer or for a result of its own.
+	begin, end := docs.UntrustedMarkers()
 	render := func(shown []SearchResult) string {
 		var b strings.Builder
 		n := len(shown)
 		b.WriteString(staleLine(pending))
 		fmt.Fprintf(&b, "%d results for %q.", n, query)
+		marked := false
 		for _, r := range shown {
 			if untrusted(r.Kind) {
 				b.WriteString(" " + UntrustedNotice)
+				marked = true
 				break
 			}
 		}
 		b.WriteString("\n")
+		if marked {
+			b.WriteString(begin)
+		}
 		for i, r := range shown {
 			fmt.Fprintf(&b, "\n%d. %s %s - %s", i+1, r.Kind, r.ID, r.Title)
 			if r.State != docs.StateOK {
@@ -292,6 +300,9 @@ func RenderSearchText(query string, results []SearchResult, pending int) string 
 			for _, l := range r.Lines {
 				fmt.Fprintf(&b, "   %d: %s\n", l.N, l.Text)
 			}
+		}
+		if marked {
+			b.WriteString(end)
 		}
 		if left := len(results) - n; left > 0 {
 			fmt.Fprintf(&b, "\n%d more results left out by the %d-byte output cap. Narrow the query, or filter with --kind, --type, or --tag.\n", left, SearchCap)
