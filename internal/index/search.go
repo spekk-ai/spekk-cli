@@ -66,7 +66,7 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		return nil, ErrDBNotFound
 	}
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	db, err := sql.Open("sqlite", ReadDSN(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("cannot open index.db: %w", err)
 	}
@@ -170,15 +170,26 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 	return out, nil
 }
 
+// staleLine is the text line of a search that answered from an index that a
+// background refresh is still updating.
+func staleLine(pending int) string {
+	if pending == 0 {
+		return ""
+	}
+	return fmt.Sprintf("The index is being updated in the background (%d changed files); these results can be out of date.\n", pending)
+}
+
 // RenderSearchText renders results as text under SearchCap. Results that do
-// not fit are left out, and the output says how many.
-func RenderSearchText(query string, results []SearchResult) string {
+// not fit are left out, and the output says how many. pending is the number
+// of changed document files that are not indexed yet.
+func RenderSearchText(query string, results []SearchResult, pending int) string {
 	if len(results) == 0 {
-		return fmt.Sprintf("No results for %q.\n", query)
+		return staleLine(pending) + fmt.Sprintf("No results for %q.\n", query)
 	}
 	render := func(n int) string {
 		var b strings.Builder
 		shown := results[:n]
+		b.WriteString(staleLine(pending))
 		fmt.Fprintf(&b, "%d results for %q.", n, query)
 		for _, r := range shown {
 			if untrusted(r.Kind) {
@@ -219,16 +230,26 @@ func RenderSearchText(query string, results []SearchResult) string {
 type searchJSON struct {
 	Query   string         `json:"query"`
 	Notice  string         `json:"notice,omitempty"`
+	Stale   *staleJSON     `json:"stale,omitempty"`
 	Results []SearchResult `json:"results"`
 	Omitted int            `json:"omitted"`
+}
+
+// staleJSON says that a background refresh is still indexing changed files.
+type staleJSON struct {
+	Changed    int  `json:"changed"`
+	Reindexing bool `json:"reindexing"`
 }
 
 // RenderSearchJSON renders results as one JSON object under SearchCap. It is
 // valid JSON at every size: results that do not fit are left out whole and
 // counted in omitted.
-func RenderSearchJSON(query string, results []SearchResult) string {
+func RenderSearchJSON(query string, results []SearchResult, pending int) string {
 	render := func(n int) string {
 		obj := searchJSON{Query: query, Results: results[:n], Omitted: len(results) - n}
+		if pending > 0 {
+			obj.Stale = &staleJSON{Changed: pending, Reindexing: true}
+		}
 		for _, r := range obj.Results {
 			if untrusted(r.Kind) {
 				obj.Notice = UntrustedNotice
@@ -258,7 +279,7 @@ func FindDocuments(dbPath, key, kind string) ([]docs.Document, error) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		return nil, ErrDBNotFound
 	}
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	db, err := sql.Open("sqlite", ReadDSN(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("cannot open index.db: %w", err)
 	}

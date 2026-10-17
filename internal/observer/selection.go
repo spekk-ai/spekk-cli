@@ -16,6 +16,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/spekk-ai/spekk-cli/internal/index"
 	"github.com/spekk-ai/spekk-cli/internal/observation"
 )
 
@@ -85,7 +86,7 @@ func SelectCandidates(rows []Candidate) []Candidate {
 // side is deliberately simple; eligibility and ordering live in
 // SelectCandidates, one tested pure function.
 func loadCandidates(dbPath string) ([]Candidate, error) {
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	db, err := sql.Open("sqlite", index.ReadDSN(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("cannot open index.db: %w", err)
 	}

@@ -193,17 +193,21 @@ func splitDocsArgs(args []string, allowed []string) ([]string, *cli.ParseResult,
 	return positional, flags, nil
 }
 
-// refreshIndex runs the one freshness gate before a read.
-func refreshIndex(specsDir string, stderr io.Writer) (string, bool) {
+// refreshIndex runs the one freshness gate before a read. It returns the
+// number of changed document files that a background refresh is still
+// indexing.
+func refreshIndex(specsDir string, stderr io.Writer) (string, int, bool) {
 	root := filepath.Dir(specsDir)
 	dbPath := index.DBPath(root)
-	if rebuilt, err := index.EnsureFresh(specsDir, dbPath); err != nil {
+	f, err := index.Refresh(specsDir, dbPath, true)
+	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", index.FormatError(err))
-		return "", false
-	} else if rebuilt {
+		return "", 0, false
+	}
+	if f.Rebuilt {
 		_ = index.EnsureGitignored(root)
 	}
-	return dbPath, true
+	return dbPath, f.Pending, true
 }
 
 var datePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
@@ -237,7 +241,7 @@ func docsSearch(positional []string, flags *cli.ParseResult, stdout, stderr io.W
 		fmt.Fprintln(stderr, `docs search: missing query. Usage: spekk docs search "<words>"`)
 		return 2
 	}
-	dbPath, ok := refreshIndex(specsDir, stderr)
+	dbPath, pending, ok := refreshIndex(specsDir, stderr)
 	if !ok {
 		return 1
 	}
@@ -247,9 +251,9 @@ func docsSearch(positional []string, flags *cli.ParseResult, stdout, stderr io.W
 		return 1
 	}
 	if flags.Bool("json") {
-		fmt.Fprint(stdout, index.RenderSearchJSON(query, results))
+		fmt.Fprint(stdout, index.RenderSearchJSON(query, results, pending))
 	} else {
-		fmt.Fprint(stdout, index.RenderSearchText(query, results))
+		fmt.Fprint(stdout, index.RenderSearchText(query, results, pending))
 	}
 	return 0
 }
@@ -272,7 +276,7 @@ func docsShow(positional []string, flags *cli.ParseResult, stdout, stderr io.Wri
 		fmt.Fprintf(stderr, "docs show: unknown kind %q (kinds: %s)\n", kind, strings.Join(docs.Kinds, ", "))
 		return 2
 	}
-	dbPath, ok := refreshIndex(specsDir, stderr)
+	dbPath, _, ok := refreshIndex(specsDir, stderr)
 	if !ok {
 		return 1
 	}
@@ -340,7 +344,7 @@ func docsAdd(positional []string, flags *cli.ParseResult, stdout, stderr io.Writ
 
 	// Refresh now, so the next search finds the new documents and a build
 	// problem shows here, beside the add that caused it.
-	if _, ok := refreshIndex(specsDir, stderr); !ok {
+	if _, _, ok := refreshIndex(specsDir, stderr); !ok {
 		return 1
 	}
 	if failed > 0 {

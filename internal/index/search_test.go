@@ -93,7 +93,7 @@ func TestSearchOutputCap(t *testing.T) {
 			Summary: strings.Repeat("s", 300), Excerpt: strings.Repeat("e", 400), State: "ok", Also: []string{"1-2"},
 		})
 	}
-	text := index.RenderSearchText("q", rs)
+	text := index.RenderSearchText("q", rs, 0)
 	if len(text) > index.SearchCap {
 		t.Errorf("text output is %d bytes, over the %d cap", len(text), index.SearchCap)
 	}
@@ -101,7 +101,7 @@ func TestSearchOutputCap(t *testing.T) {
 		t.Errorf("text output does not name the omitted results and the notice:\n%s", text)
 	}
 
-	out := index.RenderSearchJSON("q", rs)
+	out := index.RenderSearchJSON("q", rs, 0)
 	if len(out) > index.SearchCap {
 		t.Errorf("JSON output is %d bytes, over the %d cap", len(out), index.SearchCap)
 	}
@@ -124,7 +124,7 @@ func TestSearchCleansDocumentText(t *testing.T) {
 	})
 	rs, err := index.Search(dbPath, index.SearchOptions{Query: "quokka"})
 	must(t, err)
-	out := index.RenderSearchText("quokka", rs)
+	out := index.RenderSearchText("quokka", rs, 0)
 	if strings.ContainsRune(out, 0x1b) {
 		t.Errorf("escape character in output: %q", out)
 	}

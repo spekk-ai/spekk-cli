@@ -26,7 +26,6 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/spekk-ai/spekk-cli/internal/docs"
 	"github.com/spekk-ai/spekk-cli/internal/observation"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
@@ -113,12 +112,25 @@ CREATE TABLE IF NOT EXISTS documents (
   summary   TEXT,
   sha256    TEXT,
   state     TEXT,
+  -- The rowids of the document's passages, so that a re-index deletes them
+  -- by rowid: the kind and doc_id columns of an FTS5 table have no index.
+  passage_first INTEGER,
+  passage_last  INTEGER,
   PRIMARY KEY (kind, id)
 );
 CREATE TABLE IF NOT EXISTS document_tags (
   kind   TEXT,
   doc_id TEXT,
   tag    TEXT
+);
+-- The manifest of the document corpus (internal/index/fresh.go): one row per
+-- file that the document part reads, so the dirty check at query time is a
+-- stat walk, and only the documents of changed files are indexed again.
+CREATE TABLE IF NOT EXISTS doc_files (
+  path     TEXT PRIMARY KEY,
+  size     INTEGER,
+  mtime_ns INTEGER,
+  sha256   TEXT
 );
 -- One row per passage (a heading section, or a 40-line window of a long
 -- one). A doc or raw document also has one header row (is_header = 1) that
@@ -181,16 +193,49 @@ func dropAllTables(db *sql.DB) error {
 // Version history: 1 = specs/assertions/depends_on; 2 adds the observation
 // tables (observations, observation_files, index_meta); 3 adds
 // frontmatter_fields; 4 adds observation rows to frontmatter_fields; 5 adds
-// the full-text corpus (documents, document_tags, passages). Version
+// the full-text corpus (documents, document_tags, passages); 6 adds the
+// document manifest (doc_files) in place of one corpus fingerprint. Version
 // 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 5
+const schemaVersion = 6
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
 const observationRefsKey = "observation_refs"
+
+// busyTimeoutMS is how long a connection waits for another process's write.
+// The index is in WAL mode, so a reader never waits for a writer; a writer
+// waits for the other writer.
+const busyTimeoutMS = 10000
+
+// ReadDSN is the data source name of a read-only connection to the index.
+func ReadDSN(dbPath string) string {
+	return fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(%d)", dbPath, busyTimeoutMS)
+}
+
+// openRead opens a read-only connection to the index.
+func openRead(dbPath string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", ReadDSN(dbPath))
+	if err != nil {
+		return nil, fmt.Errorf("cannot open index.db: %w", err)
+	}
+	return db, nil
+}
+
+// openWrite opens a connection that writes the index: WAL, so that readers
+// are not blocked; synchronous NORMAL, so that a commit does not wait for a
+// disk sync (the index is derived, and a lost last commit is rebuilt on the
+// next check); and BEGIN IMMEDIATE, so that a transaction takes the write
+// lock before it reads what it will change.
+func openWrite(dbPath string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_txlock=immediate", dbPath, busyTimeoutMS))
+	if err != nil {
+		return nil, fmt.Errorf("cannot open index.db: %w", err)
+	}
+	return db, nil
+}
 
 // DBPath returns the canonical path for the index database given the repo root.
 func DBPath(repoRoot string) string {
@@ -264,9 +309,9 @@ func build(specsDir, dbPath string, force, specsPart, docsPart bool) (Stats, err
 		return stats, fmt.Errorf("cannot create .spekk directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := openWrite(dbPath)
 	if err != nil {
-		return stats, fmt.Errorf("cannot open index.db: %w", err)
+		return stats, err
 	}
 	defer db.Close()
 
@@ -305,16 +350,14 @@ func build(specsDir, dbPath string, force, specsPart, docsPart bool) (Stats, err
 			"DELETE FROM document_tags WHERE kind IN ('spec', 'assertion')",
 			"DELETE FROM passages WHERE kind IN ('spec', 'assertion')")
 	}
-	if docsPart {
-		clear = append(clear,
-			"DELETE FROM index_meta WHERE key = '"+docsFingerprintKey+"'",
-			"DELETE FROM documents WHERE kind IN ('doc', 'raw')",
-			"DELETE FROM document_tags WHERE kind IN ('doc', 'raw')",
-			"DELETE FROM passages WHERE kind IN ('doc', 'raw')")
-	}
 	for _, stmt := range clear {
 		if _, err = tx.Exec(stmt); err != nil {
 			return stats, fmt.Errorf("cannot clear the index (%s): %w", stmt, err)
+		}
+	}
+	if docsPart {
+		if err = clearDocs(tx); err != nil {
+			return stats, err
 		}
 	}
 
@@ -518,9 +561,9 @@ func indexObservations(tx *sql.Tx) (int, []string, error) {
 // A database built by a version-unaware spekk (or any fresh SQLite file) reports
 // 0, which never equals a real schemaVersion, so it is always treated as stale.
 func readSchemaVersion(dbPath string) (int, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := openRead(dbPath)
 	if err != nil {
-		return 0, fmt.Errorf("cannot open index.db: %w", err)
+		return 0, err
 	}
 	defer db.Close()
 
@@ -531,64 +574,111 @@ func readSchemaVersion(dbPath string) (int, error) {
 	return v, nil
 }
 
-// EnsureFresh rebuilds the index at dbPath from specsDir when it is absent,
-// older than the specs (mtime), stamped with a schema version other than the
-// current one, or built against a different set of observation refs (an
-// observer branch was fetched, created, or deleted since the last build). It
-// reports whether a rebuild happened. A schema-version mismatch forces a
-// drop-and-recreate so a changed schema never leaves old-shaped tables in
-// place; a plain content-staleness rebuild does not need to force.
+// Freshness is what a refresh did before a read.
+type Freshness struct {
+	// Rebuilt is true when the refresh wrote the index.
+	Rebuilt bool
+	// Pending counts the document files that changed on disk and are not
+	// in the index yet: a background refresh is indexing them, and the read
+	// answers from the current index.
+	Pending int
+}
+
+// EnsureFresh brings the index at dbPath up to date before a read, and
+// reports whether it wrote the index. It rebuilds everything when the index
+// is absent or stamped with another schema version, rebuilds the spec part
+// when a file under specsDir is newer than the index or the observation refs
+// changed (an observer branch was fetched, created, or deleted), and
+// re-indexes the documents of changed corpus files. A large document change
+// goes to a background refresh, so a read never waits for it (Refresh).
 //
 // This is the single freshness gate every index reader should call, so the
 // "when do we rebuild" rule lives in exactly one place.
 func EnsureFresh(specsDir, dbPath string) (bool, error) {
+	f, err := Refresh(specsDir, dbPath, true)
+	return f.Rebuilt, err
+}
+
+// EnsureFreshInline is EnsureFresh with no background refresh: every change
+// is indexed before it returns.
+func EnsureFreshInline(specsDir, dbPath string) (bool, error) {
+	f, err := Refresh(specsDir, dbPath, false)
+	return f.Rebuilt, err
+}
+
+// Refresh is EnsureFresh with the full result. With background true, a
+// document change of more than InlineLimit files, or any change while a
+// background refresh holds the lock, is left to the background refresh and
+// counted in Pending. With no index at all, the build is inline: there is
+// nothing to answer from.
+func Refresh(specsDir, dbPath string, background bool) (Freshness, error) {
+	var f Freshness
 	if _, err := os.Stat(dbPath); err != nil {
-		if os.IsNotExist(err) {
-			if _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
-				return false, buildErr
-			}
-			return true, nil
+		if !os.IsNotExist(err) {
+			return f, fmt.Errorf("cannot stat index.db: %w", err)
 		}
-		return false, fmt.Errorf("cannot stat index.db: %w", err)
+		if _, err := BuildIndex(specsDir, dbPath, false); err != nil {
+			return f, err
+		}
+		f.Rebuilt = true
+		return f, nil
 	}
 
 	// The database exists: a schema-version mismatch requires a force rebuild.
 	v, err := readSchemaVersion(dbPath)
 	if err != nil {
-		return false, err
+		return f, err
 	}
 	if v != schemaVersion {
-		if _, buildErr := BuildIndex(specsDir, dbPath, true); buildErr != nil {
-			return false, buildErr
+		if _, err := BuildIndex(specsDir, dbPath, true); err != nil {
+			return f, err
 		}
-		return true, nil
+		f.Rebuilt = true
+		return f, nil
 	}
 
-	// Schema is current: rebuild the spec part if the specs are newer than
-	// the index or the observation refs changed, and the document part if
-	// its fingerprint changed.
 	specsStale, err := specsNewer(specsDir, dbPath)
 	if err != nil {
-		return false, err
+		return f, err
 	}
 	if !specsStale {
 		specsStale, err = observationRefsChanged(dbPath)
 		if err != nil {
-			return false, err
+			return f, err
 		}
 	}
-	docsStale, err := docsChanged(filepath.Dir(specsDir), dbPath)
-	if err != nil {
-		return false, err
-	}
-	if specsStale || docsStale {
-		if _, buildErr := build(specsDir, dbPath, false, specsStale, docsStale); buildErr != nil {
-			return false, buildErr
+	if specsStale {
+		if _, err := build(specsDir, dbPath, false, true, false); err != nil {
+			return f, err
 		}
-		return true, nil
+		f.Rebuilt = true
 	}
 
-	return false, nil
+	root := filepath.Dir(specsDir)
+	c, err := checkDocs(root, dbPath)
+	if err != nil {
+		return f, err
+	}
+	if c.count() == 0 {
+		return f, nil
+	}
+	if background {
+		lock := LockPath(root)
+		if lockHeld(lock) {
+			f.Pending = c.count()
+			return f, nil
+		}
+		// A background start that fails falls back to the inline refresh.
+		if c.count() > InlineLimit && startBackground(root) == nil {
+			f.Pending = c.count()
+			return f, nil
+		}
+	}
+	if _, _, err := RefreshDocs(specsDir, dbPath); err != nil {
+		return f, err
+	}
+	f.Rebuilt = true
+	return f, nil
 }
 
 // observationRefsChanged reports whether the observation-relevant refs
@@ -599,9 +689,9 @@ func observationRefsChanged(dbPath string) (bool, error) {
 		return false, fmt.Errorf("cannot fingerprint observation refs: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	db, err := openRead(dbPath)
 	if err != nil {
-		return false, fmt.Errorf("cannot open index.db: %w", err)
+		return false, err
 	}
 	defer db.Close()
 
@@ -618,7 +708,7 @@ func observationRefsChanged(dbPath string) (bool, error) {
 
 // IsStale reports whether the index at dbPath is absent, older than a file
 // or directory under specsDir (a directory counts, so a deleted spec file
-// makes the index stale), or built from a document corpus other than the one
+// makes the index stale), or built from document files other than the ones
 // on disk. Returns (true, nil) when the index should be rebuilt, (false, nil)
 // when it is fresh, and (false, err) on unexpected I/O errors.
 func IsStale(specsDir, dbPath string) (bool, error) {
@@ -632,7 +722,8 @@ func IsStale(specsDir, dbPath string) (bool, error) {
 	if err != nil || stale {
 		return stale, err
 	}
-	return docsChanged(filepath.Dir(specsDir), dbPath)
+	c, err := checkDocs(filepath.Dir(specsDir), dbPath)
+	return c.count() > 0, err
 }
 
 // specsNewer reports whether a file or directory under specsDir is newer than
@@ -656,35 +747,6 @@ func specsNewer(specsDir, dbPath string) (bool, error) {
 		return false, fmt.Errorf("cannot walk specs directory: %w", walkErr)
 	}
 	return newest.After(dbInfo.ModTime()), nil
-}
-
-// docsFingerprintKey is the index_meta key holding the docs.Fingerprint the
-// last build of the document part saw.
-const docsFingerprintKey = "docs_fingerprint"
-
-// docsChanged reports whether the document corpus on disk differs from the
-// one the index was built from. The fingerprint lists exactly the files the
-// corpus reads, so a new, edited, or deleted document changes it, and an
-// unrelated file at the repository root does not.
-func docsChanged(root, dbPath string) (bool, error) {
-	current, err := docs.Fingerprint(root)
-	if err != nil {
-		return false, err
-	}
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
-	if err != nil {
-		return false, fmt.Errorf("cannot open index.db: %w", err)
-	}
-	defer db.Close()
-	var stored string
-	err = db.QueryRow("SELECT value FROM index_meta WHERE key = ?", docsFingerprintKey).Scan(&stored)
-	if err == sql.ErrNoRows {
-		return true, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("cannot read the document fingerprint: %w", err)
-	}
-	return stored != current, nil
 }
 
 // EnsureGitignored adds .spekk/index.db (or .spekk/) to .gitignore at repoRoot

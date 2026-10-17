@@ -101,12 +101,12 @@ func Scan(root string) (*Corpus, error) {
 		c.Docs = append(c.Docs, d)
 	}
 
-	inPlace, err := inPlaceFiles(root)
+	inPlace, err := InPlaceFiles(root)
 	if err != nil {
 		return nil, err
 	}
 	for _, rel := range inPlace {
-		d, err := readInPlace(root, rel)
+		d, err := ReadInPlace(root, rel)
 		if err != nil {
 			return nil, err
 		}
@@ -146,8 +146,8 @@ func ID(rel string) string {
 	return b.String()
 }
 
-// readInPlace reads one in-place document. Frontmatter is optional.
-func readInPlace(root, rel string) (Document, error) {
+// ReadInPlace reads one in-place document. Frontmatter is optional.
+func ReadInPlace(root, rel string) (Document, error) {
 	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
 	if err != nil {
 		return Document{}, fmt.Errorf("cannot read %s: %w", rel, err)
@@ -242,7 +242,7 @@ func scanRaw(root string) ([]Document, []string, []string, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, nil, nil, fmt.Errorf("cannot read %s/: %w", FormattedDir, err)
 	}
-	ignored := rawIgnored(root)
+	ignored := RawIgnored(root)
 	referenced := map[string]bool{}
 	var docs []Document
 	var warnings []string
@@ -250,38 +250,12 @@ func scanRaw(root string) ([]Document, []string, []string, error) {
 		if e.IsDir() || path.Ext(e.Name()) != ".md" {
 			continue
 		}
-		stubRel := FormattedDir + "/" + e.Name()
-		stub, err := ReadStub(filepath.Join(root, FormattedDir, e.Name()))
-		if err != nil {
-			// One broken stub must not stop every spekk command, as a
-			// broken spec does: a stub is evidence, not the work queue.
-			warnings = append(warnings, fmt.Sprintf("%s is not a readable stub, so its document is not indexed: %v", stubRel, err))
-			continue
-		}
-		d := Document{
-			Kind:     KindRaw,
-			ID:       strings.TrimSuffix(e.Name(), ".md"),
-			Path:     stub.Path,
-			TextPath: stub.Text,
-			StubPath: stubRel,
-			Title:    stub.Title,
-			Type:     stub.Type,
-			Created:  stub.Created,
-			Summary:  stub.Summary,
-			Tags:     stub.Tags,
-			SHA256:   stub.SHA256,
-		}
-		if d.TextPath == "" {
-			d.TextPath = d.Path
-		}
-		// A stub is a committed file that anyone can write, so its paths
-		// must not lead the index or `show` to a file outside the corpus.
-		if !Within(root, d.Path, RawDir) || (stub.Text != "" && !Within(root, d.TextPath, FormattedDir)) {
-			warnings = append(warnings, fmt.Sprintf("%s names a file outside %s/ or %s/, so its document is not indexed", stubRel, RawDir, FormattedDir))
+		d, warning := ReadRawStub(root, e.Name(), ignored)
+		if warning != "" {
+			warnings = append(warnings, warning)
 			continue
 		}
 		referenced[d.Path] = true
-		d.State = rawState(root, d, ignored[d.Path])
 		docs = append(docs, d)
 	}
 
@@ -342,6 +316,42 @@ func resolvesInside(root, p string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// ReadRawStub reads the stub formatted/<name> and returns its raw document.
+// A stub that does not parse, or that names a file outside the corpus, gives
+// a warning and no document. ignored is RawIgnored(root).
+func ReadRawStub(root, name string, ignored map[string]bool) (Document, string) {
+	stubRel := FormattedDir + "/" + name
+	stub, err := ReadStub(filepath.Join(root, FormattedDir, name))
+	if err != nil {
+		// One broken stub must not stop every spekk command, as a broken
+		// spec does: a stub is evidence, not the work queue.
+		return Document{}, fmt.Sprintf("%s is not a readable stub, so its document is not indexed: %v", stubRel, err)
+	}
+	d := Document{
+		Kind:     KindRaw,
+		ID:       strings.TrimSuffix(name, ".md"),
+		Path:     stub.Path,
+		TextPath: stub.Text,
+		StubPath: stubRel,
+		Title:    stub.Title,
+		Type:     stub.Type,
+		Created:  stub.Created,
+		Summary:  stub.Summary,
+		Tags:     stub.Tags,
+		SHA256:   stub.SHA256,
+	}
+	if d.TextPath == "" {
+		d.TextPath = d.Path
+	}
+	// A stub is a committed file that anyone can write, so its paths must
+	// not lead the index or `show` to a file outside the corpus.
+	if !Within(root, d.Path, RawDir) || (stub.Text != "" && !Within(root, d.TextPath, FormattedDir)) {
+		return Document{}, fmt.Sprintf("%s names a file outside %s/ or %s/, so its document is not indexed", stubRel, RawDir, FormattedDir)
+	}
+	d.State = rawState(root, d, ignored[d.Path])
+	return d, ""
+}
+
 // rawState computes the state of a raw document. stale wins over no_summary:
 // a summary of the old content is worse than none.
 func rawState(root string, d Document, ignored bool) string {
@@ -373,9 +383,9 @@ func FileSHA256(p string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// rawIgnored reads raw/.gitignore: the pointer entries that `docs add`
+// RawIgnored reads raw/.gitignore: the pointer entries that `docs add`
 // wrote, one repository-relative path per line ("/" + path under raw/).
-func rawIgnored(root string) map[string]bool {
+func RawIgnored(root string) map[string]bool {
 	out := map[string]bool{}
 	f, err := os.Open(filepath.Join(root, RawDir, ".gitignore"))
 	if err != nil {
@@ -466,11 +476,20 @@ func globRoot(glob string) globBase {
 	return r
 }
 
-// inPlaceFiles returns every file the globs select, in path order.
-func inPlaceFiles(root string) ([]string, error) {
+// InPlaceFiles returns every file the globs select, in path order.
+func InPlaceFiles(root string) ([]string, error) {
+	var out []string
+	err := inPlaceWalk(root, func(rel string, _ fs.DirEntry) { out = append(out, rel) })
+	sort.Strings(out)
+	return out, err
+}
+
+// inPlaceWalk calls fn once for each file the globs select. Globs that start
+// in the same directory share one walk, so the default globs read docs/ once.
+func inPlaceWalk(root string, fn func(rel string, de fs.DirEntry)) error {
 	include, exclude, err := Globs(root)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	match := func(globs []string) ([]*regexp.Regexp, error) {
 		var out []*regexp.Regexp
@@ -485,34 +504,43 @@ func inPlaceFiles(root string) ([]string, error) {
 	}
 	inc, err := match(include)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	exc, err := match(exclude)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	found := map[string]bool{}
+	// One walk for each base directory, to the deepest depth of its globs.
+	depth := map[string]int{}
+	var bases []string
 	for _, g := range include {
 		wr := globRoot(g)
-		err := walkRoot(root, wr, func(rel string, isDir bool) {
-			if isDir || found[rel] || !inPlaceExts[strings.ToLower(path.Ext(rel))] {
+		d, ok := depth[wr.Dir]
+		switch {
+		case !ok:
+			bases = append(bases, wr.Dir)
+			depth[wr.Dir] = wr.Depth
+		case d >= 0 && (wr.Depth < 0 || wr.Depth > d):
+			depth[wr.Dir] = wr.Depth
+		}
+	}
+	found := map[string]bool{}
+	for _, dir := range bases {
+		err := walkRoot(root, globBase{Dir: dir, Depth: depth[dir]}, func(rel string, de fs.DirEntry) {
+			if de.IsDir() || found[rel] || !inPlaceExts[strings.ToLower(path.Ext(rel))] {
 				return
 			}
 			if anyMatch(inc, rel) && !anyMatch(exc, rel) {
 				found[rel] = true
+				fn(rel, de)
 			}
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	out := make([]string, 0, len(found))
-	for rel := range found {
-		out = append(out, rel)
-	}
-	sort.Strings(out)
-	return out, nil
+	return nil
 }
 
 func anyMatch(res []*regexp.Regexp, s string) bool {
@@ -526,7 +554,7 @@ func anyMatch(res []*regexp.Regexp, s string) bool {
 
 // walkRoot calls fn for each file and directory under the base of one glob,
 // to its depth, and skips the directories that never hold in-place documents.
-func walkRoot(root string, wr globBase, fn func(rel string, isDir bool)) error {
+func walkRoot(root string, wr globBase, fn func(rel string, de fs.DirEntry)) error {
 	base := filepath.Join(root, filepath.FromSlash(wr.Dir))
 	err := filepath.WalkDir(base, func(p string, de fs.DirEntry, err error) error {
 		if err != nil {
@@ -558,12 +586,11 @@ func walkRoot(root string, wr globBase, fn func(rel string, isDir bool)) error {
 			if wr.Depth >= 0 {
 				relToBase, _ := filepath.Rel(base, p)
 				if strings.Count(filepath.ToSlash(relToBase), "/")+1 >= wr.Depth {
-					fn(rel, true)
 					return filepath.SkipDir
 				}
 			}
 		}
-		fn(rel, de.IsDir())
+		fn(rel, de)
 		return nil
 	})
 	if err == filepath.SkipDir {
@@ -572,15 +599,40 @@ func walkRoot(root string, wr globBase, fn func(rel string, isDir bool)) error {
 	return err
 }
 
-// Fingerprint identifies the document corpus on disk: the path, size, and
-// mtime of each in-place document, of each file under raw/ and formatted/,
-// and of .spekk/docs-paths. It reads no file content. The index stores it and
-// rebuilds the document part when it changes, so a new, edited, or deleted
-// document is seen, and an unrelated file is not.
-func Fingerprint(root string) (string, error) {
-	files, err := inPlaceFiles(root)
+// PathsFile and RawIgnoreFile are the two corpus files that change which
+// files are documents and what state they have, so a change to either one
+// rebuilds the whole document part of the index.
+const (
+	PathsFile     = pathsFile
+	RawIgnoreFile = RawDir + "/.gitignore"
+)
+
+// FileStat is the size and mtime (Unix nanoseconds) of one corpus file.
+type FileStat struct {
+	Size, MTime int64
+}
+
+// CorpusStat returns the size and mtime of every file the document corpus
+// reads: each in-place document, each file under raw/ and formatted/, and
+// .spekk/docs-paths when it exists. It reads no file content, and takes each
+// stat from the directory walk. The index keeps a manifest of these files, so
+// a new, edited, or deleted document is seen, and an unrelated file is not.
+func CorpusStat(root string) (map[string]FileStat, error) {
+	out := map[string]FileStat{}
+	add := func(rel, p string, de fs.DirEntry) {
+		info, err := de.Info()
+		if err == nil && info.Mode()&fs.ModeSymlink != 0 {
+			info, err = os.Stat(p)
+		}
+		if err == nil {
+			out[rel] = FileStat{info.Size(), info.ModTime().UnixNano()}
+		}
+	}
+	err := inPlaceWalk(root, func(rel string, de fs.DirEntry) {
+		add(rel, filepath.Join(root, filepath.FromSlash(rel)), de)
+	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	for _, dir := range []string{RawDir, FormattedDir} {
 		err := filepath.WalkDir(filepath.Join(root, dir), func(p string, de fs.DirEntry, err error) error {
@@ -588,22 +640,15 @@ func Fingerprint(root string) (string, error) {
 				return nil
 			}
 			rel, _ := filepath.Rel(root, p)
-			files = append(files, filepath.ToSlash(rel))
+			add(filepath.ToSlash(rel), p, de)
 			return nil
 		})
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 	}
-	files = append(files, pathsFile)
-	sort.Strings(files)
-	h := sha256.New()
-	for _, rel := range files {
-		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel)))
-		if err != nil {
-			continue
-		}
-		fmt.Fprintf(h, "%s\x00%d\x00%d\n", rel, info.Size(), info.ModTime().UnixNano())
+	if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(pathsFile))); err == nil {
+		out[pathsFile] = FileStat{info.Size(), info.ModTime().UnixNano()}
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return out, nil
 }

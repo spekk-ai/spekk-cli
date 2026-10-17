@@ -3,7 +3,7 @@ id: docs-refresh-never-blocks
 parent: source-document-index
 created: 2026-10-17T18:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/source-document-index
 depends-on: docs-incremental-reindex
 ---

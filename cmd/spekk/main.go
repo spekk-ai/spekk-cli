@@ -693,7 +693,10 @@ func runIndex(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
 		"force":    {Names: []string{"--force"}, Type: cli.BoolFlag},
-		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		// --background is the refresh that a query starts when many
+		// documents changed; it is not for people, so the usage omits it.
+		"background": {Names: []string{"--background"}, Type: cli.BoolFlag},
+		"help":       {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
 	if flags.Bool("help") {
@@ -709,6 +712,13 @@ func runIndex(args []string) {
 	// Derive repo root from the specs directory.
 	repoRoot := filepath.Dir(specsDir)
 	dbPath := index.DBPath(repoRoot)
+
+	if flags.Bool("background") {
+		if err := index.RefreshInBackground(specsDir, dbPath); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 
 	stats, err := index.BuildIndex(specsDir, dbPath, flags.Bool("force"))
 	if err != nil {

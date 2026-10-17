@@ -34,13 +34,21 @@ func insertDocument(tx *sql.Tx, d docs.Document, file string) (int, error) {
 		return 0, nil
 	}
 	ps := docs.Chunk(string(raw))
+	var first, last int64
 	add := func(heading, body string, start, end, header int) error {
-		if _, err := tx.Exec(
+		res, err := tx.Exec(
 			`INSERT INTO passages (heading, body, terms, kind, doc_id, start_line, end_line, is_header)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			heading, body, docs.IdentifierTerms(heading+" "+body), d.Kind, d.ID, start, end, header,
-		); err != nil {
+		)
+		if err != nil {
 			return fmt.Errorf("cannot insert passage of %q: %w", d.ID, err)
+		}
+		if last, err = res.LastInsertId(); err != nil {
+			return fmt.Errorf("cannot insert passage of %q: %w", d.ID, err)
+		}
+		if passages == 0 {
+			first = last
 		}
 		passages++
 		return nil
@@ -60,6 +68,12 @@ func insertDocument(tx *sql.Tx, d docs.Document, file string) (int, error) {
 	for _, p := range ps {
 		if err := add(p.Heading, p.Text, p.Start, p.End, 0); err != nil {
 			return 0, err
+		}
+	}
+	if passages > 0 {
+		if _, err := tx.Exec(`UPDATE documents SET passage_first = ?, passage_last = ? WHERE kind = ? AND id = ?`,
+			first, last, d.Kind, d.ID); err != nil {
+			return 0, fmt.Errorf("cannot record the passages of %q: %w", d.ID, err)
 		}
 	}
 	return passages, nil
@@ -93,15 +107,28 @@ func indexSpecDocuments(tx *sql.Tx, specsDir string, result *parser.ParseResult)
 	return total, nil
 }
 
-// indexCorpus writes the doc and raw documents and the fingerprint of the
-// corpus they came from. It reads plaintext only, so the rebuild needs no
+// indexCorpus writes every doc and raw document and the manifest of the
+// files they came from. It reads plaintext only, so the rebuild needs no
 // converter. It returns the count of documents, the count of their passages,
 // and the warnings of the corpus scan.
 func indexCorpus(tx *sql.Tx, root string) (int, int, []string, error) {
-	// The fingerprint is taken before the scan, so a file that changes
-	// during the build makes the next check rebuild again.
-	fingerprint, err := docs.Fingerprint(root)
+	// The manifest is taken before the scan, so a file that changes during
+	// the build makes the next check index it again.
+	stats, err := docs.CorpusStat(root)
 	if err != nil {
+		return 0, 0, nil, err
+	}
+	for rel, st := range stats {
+		sum, err := docs.FileSHA256(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			continue
+		}
+		if _, err := tx.Exec(`INSERT OR REPLACE INTO doc_files (path, size, mtime_ns, sha256) VALUES (?, ?, ?, ?)`,
+			rel, st.Size, st.MTime, sum); err != nil {
+			return 0, 0, nil, fmt.Errorf("cannot write the document manifest: %w", err)
+		}
+	}
+	if err := storeManifestHash(tx); err != nil {
 		return 0, 0, nil, err
 	}
 	corpus, err := docs.Scan(root)
@@ -115,9 +142,6 @@ func indexCorpus(tx *sql.Tx, root string) (int, int, []string, error) {
 			return 0, 0, nil, err
 		}
 		total += n
-	}
-	if _, err := tx.Exec(`INSERT INTO index_meta (key, value) VALUES (?, ?)`, docsFingerprintKey, fingerprint); err != nil {
-		return 0, 0, nil, fmt.Errorf("cannot record the document fingerprint: %w", err)
 	}
 	return len(corpus.Docs), total, corpus.Warnings, nil
 }

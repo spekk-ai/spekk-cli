@@ -42,7 +42,7 @@ func TestInPlaceGlobs(t *testing.T) {
 		write(t, root, rel, "# T\n\nBody.\n")
 	}
 	list := func() string {
-		files, err := inPlaceFiles(root)
+		files, err := InPlaceFiles(root)
 		if err != nil {
 			t.Fatal(err)
 		}
