@@ -132,3 +132,25 @@ func TestSearchCleansDocumentText(t *testing.T) {
 		t.Errorf("document text forged an output line: %q", out)
 	}
 }
+
+// A regression found in the walkthrough: FTS5 bm25() normalizes by the length
+// of the whole row, so a summary on each passage made a three-line footer the
+// best passage of a document whose summary matched.
+func TestSearchShowsATextPassageNotAShortFooter(t *testing.T) {
+	var long strings.Builder
+	long.WriteString("---\nsummary: \"JSON Patch: add, remove, and test operations.\"\n---\n\n# Operations\n\n")
+	for i := 0; i < 30; i++ {
+		long.WriteString("Filler text about documents and members.\n")
+	}
+	long.WriteString("The test operation compares the value at the target location.\n\n# Authors\n\nPage 18\n")
+	dbPath := buildCorpus(t, map[string]string{"docs/patch.md": long.String()})
+
+	rs, err := index.Search(dbPath, index.SearchOptions{Query: "test operation"})
+	must(t, err)
+	if len(rs) == 0 || rs[0].ID != "docs-patch" {
+		t.Fatalf("results = %+v, want docs-patch first", rs)
+	}
+	if rs[0].StartLine != 5 || !strings.Contains(rs[0].Excerpt, "compares the value") {
+		t.Errorf("best passage = lines %d-%d %q, want the Operations section (line 5) with the match", rs[0].StartLine, rs[0].EndLine, rs[0].Excerpt)
+	}
+}

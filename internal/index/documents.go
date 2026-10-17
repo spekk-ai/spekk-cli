@@ -39,16 +39,34 @@ func indexDocuments(tx *sql.Tx, specsDir string, result *parser.ParseResult) (in
 			// and search can name it, and has no passages.
 			return nil
 		}
-		meta := strings.Join(append([]string{d.Title, d.Summary}, d.Tags...), " ")
-		for _, p := range docs.Chunk(string(raw)) {
+		ps := docs.Chunk(string(raw))
+		add := func(heading, body string, start, end, header int) error {
 			if _, err := tx.Exec(
-				`INSERT INTO passages (meta, heading, body, terms, kind, doc_id, start_line, end_line)
+				`INSERT INTO passages (heading, body, terms, kind, doc_id, start_line, end_line, is_header)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-				meta, p.Heading, p.Text, docs.IdentifierTerms(p.Heading+" "+p.Text), d.Kind, d.ID, p.Start, p.End,
+				heading, body, docs.IdentifierTerms(heading+" "+body), d.Kind, d.ID, start, end, header,
 			); err != nil {
 				return fmt.Errorf("cannot insert passage of %q: %w", d.ID, err)
 			}
 			passages++
+			return nil
+		}
+		// A spec or an assertion has its title as the heading of its first
+		// passage; another document gets a header row for its title,
+		// summary, and tags, at the line range of its first passage.
+		if d.Kind == docs.KindDoc || d.Kind == docs.KindRaw {
+			start, end := 1, 1
+			if len(ps) > 0 {
+				start, end = ps[0].Start, ps[0].End
+			}
+			if err := add(d.Title, strings.Join(append([]string{d.Summary}, d.Tags...), " "), start, end, 1); err != nil {
+				return err
+			}
+		}
+		for _, p := range ps {
+			if err := add(p.Heading, p.Text, p.Start, p.End, 0); err != nil {
+				return err
+			}
 		}
 		return nil
 	}

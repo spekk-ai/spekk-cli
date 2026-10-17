@@ -682,8 +682,8 @@ opened read-only. Tables: specs(id, title, status, priority, branch, file),
 assertions(id, parent_id, title, status, priority, branch, file),
 depends_on(assertion_id, depends_on_id), documents(kind, id, path, text_path,
 title, type, created, summary, sha256, state), document_tags(kind, doc_id,
-tag), and the FTS5 table passages(meta, heading, body, terms, kind, doc_id,
-start_line, end_line). For a ranked text search, use "spekk docs search".
+tag), and the FTS5 table passages(heading, body, terms, kind, doc_id,
+start_line, end_line, is_header). For a ranked text search, use "spekk docs search".
 `
 
 // runIndex implements the `spekk index` subcommand.

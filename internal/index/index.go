@@ -121,12 +121,15 @@ CREATE TABLE IF NOT EXISTS document_tags (
   tag    TEXT
 );
 -- One row per passage (a heading section, or a 40-line window of a long
--- one). meta repeats the document's title, summary, and tags so that a
--- passage of a matching document ranks; terms holds the camelCase parts of
--- identifiers in the body (internal/docs.IdentifierTerms).
+-- one). A doc or raw document also has one header row (is_header = 1) that
+-- holds its title, summary, and tags, so a match on them ranks the document.
+-- The summary is not repeated on each passage: FTS5 bm25() normalizes by the
+-- length of the whole row, so a repeated summary made the shortest passage of
+-- a matching document rank first. terms holds the camelCase parts of
+-- identifiers (internal/docs.IdentifierTerms).
 CREATE VIRTUAL TABLE IF NOT EXISTS passages USING fts5(
-  meta, heading, body, terms,
-  kind UNINDEXED, doc_id UNINDEXED, start_line UNINDEXED, end_line UNINDEXED,
+  heading, body, terms,
+  kind UNINDEXED, doc_id UNINDEXED, start_line UNINDEXED, end_line UNINDEXED, is_header UNINDEXED,
   tokenize = 'porter unicode61 remove_diacritics 2'
 );
 `

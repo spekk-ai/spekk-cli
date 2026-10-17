@@ -23,7 +23,7 @@ documents (raw/), from one full-text index.
 USAGE:
   spekk docs search "<words>" [--kind k1,k2] [--type t] [--tag t] [--since YYYY-MM-DD] [--limit n] [--json]
   spekk docs show <id|path> [--lines a:b] [--kind k]
-  spekk docs add <file|folder>... [--summary "<text>"] [--type t] [--tags a,b] [--source s] [--allow-secrets]
+  spekk docs add <file|folder>... [--summary "<text>"] [--title t] [--type t] [--tags a,b] [--source s] [--allow-secrets]
   spekk docs status
 
 SUBCOMMANDS:
@@ -78,6 +78,8 @@ spekk docs add <file|folder>... - File source documents into raw/
 OPTIONS:
   --summary "<text>"  The summary (40-600 characters): what an agent needs to
                       decide whether to read the document. One file only.
+  --title <title>     The title (default: the first heading, else the file
+                      name). One file only.
   --type <type>       Document type, such as manual, transcript, email, paper
   --tags <a,b>        Tags
   --source <s>        Where the document came from, such as a URL
@@ -102,6 +104,7 @@ var docsFlags = cli.FlagSet{
 	"json":         {Names: []string{"--json"}, Type: cli.BoolFlag},
 	"lines":        {Names: []string{"--lines"}, Type: cli.StringFlag},
 	"summary":      {Names: []string{"--summary"}, Type: cli.StringFlag},
+	"title":        {Names: []string{"--title"}, Type: cli.StringFlag},
 	"source":       {Names: []string{"--source"}, Type: cli.StringFlag},
 	"allowSecrets": {Names: []string{"--allow-secrets"}, Type: cli.BoolFlag},
 	"help":         {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
@@ -110,7 +113,7 @@ var docsFlags = cli.FlagSet{
 var docsSubcommandFlags = map[string][]string{
 	"search": {"kind", "type", "tag", "since", "limit", "json", "help"},
 	"show":   {"lines", "kind", "help"},
-	"add":    {"summary", "type", "tags", "source", "allowSecrets", "help"},
+	"add":    {"summary", "title", "type", "tags", "source", "allowSecrets", "help"},
 	"status": {"help"},
 }
 
@@ -308,17 +311,21 @@ func docsAdd(positional []string, flags *cli.ParseResult, stdout, stderr io.Writ
 	}
 	opts := docs.AddOptions{
 		Summary:      flags.String("summary"),
+		Title:        flags.String("title"),
 		Type:         flags.String("type"),
 		Source:       flags.String("source"),
 		AllowSecrets: flags.Bool("allowSecrets"),
 	}
-	if opts.Summary != "" {
+	for _, one := range []string{"summary", "title"} {
+		if flags.String(one) == "" {
+			continue
+		}
 		if len(positional) != 1 {
-			fmt.Fprintln(stderr, "docs add: --summary describes one document, so give exactly one file")
+			fmt.Fprintf(stderr, "docs add: --%s describes one document, so give exactly one file\n", one)
 			return 2
 		}
 		if info, err := os.Stat(positional[0]); err == nil && info.IsDir() {
-			fmt.Fprintln(stderr, "docs add: --summary describes one document, so give a file, not a folder")
+			fmt.Fprintf(stderr, "docs add: --%s describes one document, so give a file, not a folder\n", one)
 			return 2
 		}
 	}

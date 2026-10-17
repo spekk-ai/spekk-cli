@@ -236,7 +236,7 @@ The default output is a padded table. The index is refreshed first, so the resul
 | `observation_files` | `slug`, `ref`, `path`. One row per `affected` path |
 | `documents` | `kind` (`spec`, `assertion`, `doc`, or `raw`), `id`, `path`, `text_path`, `title`, `type`, `created`, `summary`, `sha256`, `state`. See [`spekk docs`](#spekk-docs) |
 | `document_tags` | `kind`, `doc_id`, `tag` |
-| `passages` | FTS5 table: `meta`, `heading`, `body`, `terms`, and unindexed `kind`, `doc_id`, `start_line`, `end_line` |
+| `passages` | FTS5 table: `heading`, `body`, `terms`, and unindexed `kind`, `doc_id`, `start_line`, `end_line`, `is_header` |
 
 `depends_on` holds assertion-level edges only. A spec-level relationship is prose in the spec body, not data.
 

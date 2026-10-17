@@ -17,7 +17,8 @@ depends-on: passage-chunking
 - New tables in `.spekk/index.db`:
   - `documents(kind, id, path, text_path, title, type, created, summary, sha256, state)`, primary key `(kind, id)`. `kind` is one of `spec`, `assertion`, `doc`, `raw`. `path` is relative to the repository root. `text_path` is the file the line numbers refer to.
   - `document_tags(kind, doc_id, tag)`.
-  - `passages`, an FTS5 table with columns `meta` (title, summary, and tags of the document), `heading`, `body`, `terms` (identifier parts, see `identifier-aware-search`), and unindexed `kind`, `doc_id`, `start_line`, `end_line`. Tokenizer: `porter unicode61 remove_diacritics 2`.
+  - `passages`, an FTS5 table with columns `heading`, `body`, `terms` (identifier parts, see `identifier-aware-search`), and unindexed `kind`, `doc_id`, `start_line`, `end_line`, `is_header`. Tokenizer: `porter unicode61 remove_diacritics 2`.
+  - A document of kind `doc` or `raw` has one header row (`is_header = 1`: heading = title, body = summary and tags, at the line range of its first passage). The summary is not repeated on each passage. FTS5 `bm25()` normalizes by the length of the whole row, so a summary on each passage made the shortest passage of a matching document rank first (found in the walkthrough).
 - Each spec and each assertion has one `documents` row (summary = its title, `created` from frontmatter) and its passages from `passage-chunking`, with line numbers in its own file.
 - The existing tables and their rows do not change. `schemaVersion` goes to 5, so an index that version 4 built rebuilds on first use.
 - `spekk index` prints `Indexed N specs, N assertions, N observations, N documents (N passages).`, where documents counts kinds `doc` and `raw`.

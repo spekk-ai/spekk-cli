@@ -27,6 +27,7 @@ const (
 // value the stub already has.
 type AddOptions struct {
 	Summary      string
+	Title        string
 	Type         string
 	Tags         []string
 	Source       string
@@ -202,6 +203,9 @@ func addOne(root string, j addJob, opts AddOptions, out io.Writer) error {
 	if stub.Source == "" || opts.Source != "" {
 		stub.Source = firstNonEmpty(opts.Source, j.source)
 	}
+	if opts.Title != "" {
+		stub.Title = strings.Join(strings.Fields(opts.Title), " ")
+	}
 	if opts.Type != "" {
 		stub.Type = opts.Type
 	}
@@ -245,6 +249,8 @@ func addOne(root string, j addJob, opts AddOptions, out io.Writer) error {
 	switch {
 	case changed:
 		what = "updated (content changed)"
+	case exists && (opts.Summary != "" || opts.Title != "" || opts.Type != "" || opts.Tags != nil || opts.Source != ""):
+		what = "updated (stub fields)"
 	case exists:
 		what = "unchanged"
 	}

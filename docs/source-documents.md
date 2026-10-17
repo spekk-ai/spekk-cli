@@ -118,4 +118,4 @@ spekk query "SELECT doc_id, start_line, end_line FROM passages WHERE passages MA
 |---|---|
 | `documents` | `kind`, `id`, `path`, `text_path`, `title`, `type`, `created`, `summary`, `sha256`, `state` |
 | `document_tags` | `kind`, `doc_id`, `tag` |
-| `passages` (FTS5) | `meta`, `heading`, `body`, `terms`, `kind`, `doc_id`, `start_line`, `end_line` |
+| `passages` (FTS5) | `heading`, `body`, `terms`, `kind`, `doc_id`, `start_line`, `end_line`, `is_header` (1 for the title-and-summary row of a doc or raw document) |

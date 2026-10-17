@@ -13,7 +13,7 @@ depends-on: identifier-aware-search
 ## Success criteria
 
 - `spekk docs search "<query>"` refreshes the index with `EnsureFresh`, then prints at most `--limit` documents (default 5, maximum 20), best first.
-- Results are grouped by document: one entry for each document, with the best passage. Up to three other matching passages of the same document are listed by line range only (`also: 120-160, 300-340`).
+- Results are grouped by document: one entry for each document, with the best passage. When the best match is the header row, the entry shows the best text passage of the same document, if one matches, and the document keeps the rank of its header. Up to three other matching passages of the same document are listed by line range only (`also: 120-160, 300-340`).
 - Each entry shows: rank, `kind`, `id`, title, `path`, and `text_path` when the line numbers refer to another file (the derived text), the line range of the best passage, the summary (cut to 300 characters), an excerpt of the best passage (FTS5 `snippet`, about 24 tokens), and `stale` when the document state is not `ok`.
 - Filters: `--kind` (comma list of `spec`, `assertion`, `doc`, `raw`), `--type` (frontmatter `type`), `--tag` (exact tag), `--since YYYY-MM-DD` (frontmatter `created` on or after the date; a document with no `created` does not match). An unknown kind or a malformed date is an error with exit code 2.
 - `--json` prints one object: `query`, `notice`, `results` (array of `kind`, `id`, `title`, `path`, `text_path` (when it differs), `start_line`, `end_line`, `summary`, `excerpt`, `state`, `also`), `omitted`. It is valid JSON at every size.
