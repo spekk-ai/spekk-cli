@@ -978,18 +978,23 @@ func computeParentStatus(parentID string, assertions []Assertion) string {
 		}
 	}
 
-	allDone := true
+	allDone, started := true, false
 	for _, c := range active {
 		if c.Status != "done" {
 			allDone = false
-			break
+		}
+		if c.Status == "done" || c.Status == "in_progress" {
+			started = true
 		}
 	}
 	if allDone {
 		return "done"
 	}
+	if started {
+		return "in_progress"
+	}
 
-	return "in_progress"
+	return "not_started"
 }
 
 // detectCircularDependencies checks all assertions for dependency cycles.

@@ -3,7 +3,7 @@ id: spec-not-started-until-work-starts
 parent: status-counts-match-the-work
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # A spec is `not_started` until one of its assertions starts
