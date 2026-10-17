@@ -3,8 +3,10 @@ package sandbox
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/config"
@@ -57,6 +59,60 @@ type SandboxMeta struct {
 	Purpose   string `json:"purpose,omitempty"`
 	ExpiresAt string `json:"expiresAt,omitempty"`
 	CreatedBy string `json:"createdBy,omitempty"`
+
+	// unknown holds the fields of the record that this CLI does not know,
+	// for example ones that a newer CLI wrote, as a JSON object. A save
+	// writes them back, so an older CLI does not delete them. It is a
+	// string, not a map, so that SandboxMeta stays comparable.
+	unknown string
+}
+
+// knownKeys are the JSON names of the SandboxMeta fields, in lower case,
+// because encoding/json matches a key to a field without case.
+var knownKeys = func() map[string]bool {
+	keys := map[string]bool{}
+	t := reflect.TypeOf(SandboxMeta{})
+	for i := 0; i < t.NumField(); i++ {
+		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if name != "" && name != "-" {
+			keys[strings.ToLower(name)] = true
+		}
+	}
+	return keys
+}()
+
+// UnmarshalJSON decodes the known fields and keeps the others in unknown.
+func (m *SandboxMeta) UnmarshalJSON(data []byte) error {
+	type plain SandboxMeta
+	if err := json.Unmarshal(data, (*plain)(m)); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	maps.DeleteFunc(fields, func(k string, _ json.RawMessage) bool { return knownKeys[strings.ToLower(k)] })
+	m.unknown = ""
+	if len(fields) > 0 {
+		obj, err := json.Marshal(fields)
+		if err != nil {
+			return err
+		}
+		m.unknown = string(obj)
+	}
+	return nil
+}
+
+// MarshalJSON writes the known fields in their usual order, then the unknown
+// fields. A record with no unknown fields is written as before.
+func (m SandboxMeta) MarshalJSON() ([]byte, error) {
+	type plain SandboxMeta
+	data, err := json.Marshal(plain(m))
+	if err != nil || m.unknown == "" {
+		return data, err
+	}
+	// Both are JSON objects, and plain always has fields: join the members.
+	return append(append(data[:len(data)-1], ','), m.unknown[1:]...), nil
 }
 
 // sandboxesFile returns the path to the sandboxes metadata file.

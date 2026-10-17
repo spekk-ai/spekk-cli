@@ -3,7 +3,7 @@ id: unknown-fields-survive-a-save
 parent: sandbox-store-keeps-unknown-fields
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # An unknown field survives a read-modify-write of `sandboxes.json`
