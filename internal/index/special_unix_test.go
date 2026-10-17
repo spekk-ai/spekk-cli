@@ -56,9 +56,9 @@ func TestRefreshSkipsFilesThatAreNotRegular(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Refresh and a forced rebuild did not return in 10 s")
 	}
-	want := docRows(t, forced)
+	want := docRows(t, forced, "'doc', 'raw'")
 	for _, db := range []string{dbPath, withEntries} {
-		if got := docRows(t, db); got != want {
+		if got := docRows(t, db, "'doc', 'raw'"); got != want {
 			t.Errorf("rows of %s differ from a forced rebuild without the special files:\n%s\nwant:\n%s", filepath.Base(db), got, want)
 		}
 	}

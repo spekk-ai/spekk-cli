@@ -132,6 +132,15 @@ CREATE TABLE IF NOT EXISTS doc_files (
   mtime_ns INTEGER,
   sha256   TEXT
 );
+-- The manifest of the .md files under specs/ (internal/index/fresh.go): a
+-- touch that changes no content needs no rebuild of the spec part, and a
+-- rebuild indexes again only the passages of changed files.
+CREATE TABLE IF NOT EXISTS spec_files (
+  path     TEXT PRIMARY KEY,
+  size     INTEGER,
+  mtime_ns INTEGER,
+  sha256   TEXT
+);
 -- One row per passage (a heading section, or a 40-line window of a long
 -- one). A doc or raw document also has one header row (is_header = 1) that
 -- holds its title, summary, and tags, so a match on them ranks the document.
@@ -195,12 +204,14 @@ func dropAllTables(db *sql.DB) error {
 // frontmatter_fields; 4 adds observation rows to frontmatter_fields; 5 adds
 // the full-text corpus (documents, document_tags, passages); 6 adds the
 // document manifest (doc_files) in place of one corpus fingerprint; 7 cuts
-// long sections into 20-line windows, not 40 (no column changes). Version
+// long sections into 20-line windows, not 40 (no column changes); 8 adds
+// the spec file manifest (spec_files) and the sha256 of spec and assertion
+// documents. Version
 // 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 7
+const schemaVersion = 8
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
@@ -295,87 +306,115 @@ func FormatError(err error) string {
 // from the visible git refs (observations), and from the document corpus. If
 // force is true all tables are dropped and recreated from scratch.
 func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
-	return build(specsDir, dbPath, force, true, true)
+	stats, _, err := build(specsDir, dbPath, force, true, true, false)
+	return stats, err
 }
 
 // build rebuilds the spec part (specs, assertions, their passages, and the
 // observations), the document part (doc and raw documents), or both. The
 // parts go stale for different reasons, and a large document corpus must not
 // be indexed again for each spec edit.
-func build(specsDir, dbPath string, force, specsPart, docsPart bool) (Stats, error) {
+//
+// With skipUnchanged, when no .md file under specsDir was added, deleted, or
+// changed its content (a touch, a git checkout of the same content), build
+// records the new file stats, sets the mtime of index.db to the time it
+// started, so that the next query does not check again and a file that
+// changes during the check is still newer, and returns false without a
+// rebuild. Else it returns true.
+func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bool) (Stats, bool, error) {
 	var stats Stats
+	start := time.Now()
 
 	// Ensure the .spekk directory exists.
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return stats, fmt.Errorf("cannot create .spekk directory: %w", err)
+		return stats, false, fmt.Errorf("cannot create .spekk directory: %w", err)
 	}
 
 	db, err := openWrite(dbPath)
 	if err != nil {
-		return stats, err
+		return stats, false, err
 	}
 	defer db.Close()
 
 	if force {
 		if err = dropAllTables(db); err != nil {
-			return stats, fmt.Errorf("cannot drop tables: %w", err)
+			return stats, false, fmt.Errorf("cannot drop tables: %w", err)
 		}
 	}
 
 	if _, err = db.Exec(createSchema); err != nil {
-		return stats, fmt.Errorf("cannot create schema: %w", err)
-	}
-
-	var result *parser.ParseResult
-	if specsPart {
-		result, err = parser.ParseAllSpecs(specsDir)
-		if err != nil {
-			return stats, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
-		}
+		return stats, false, fmt.Errorf("cannot create schema: %w", err)
 	}
 
 	tx, err := db.Begin()
 	if err != nil {
-		return stats, fmt.Errorf("cannot begin transaction: %w", err)
+		return stats, false, fmt.Errorf("cannot begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	// Clear the rows of each part that is rebuilt (delete + re-insert).
+	// The spec files are hashed before the parse, so a file that changes
+	// between the two has a manifest row with its old hash, and the next
+	// check rebuilds again.
+	var result *parser.ParseResult
+	var sums map[string]string
+	if specsPart {
+		var changed bool
+		if sums, changed, err = syncSpecFiles(tx, specsDir); err != nil {
+			return stats, false, err
+		}
+		if skipUnchanged && !changed {
+			if err = tx.Commit(); err != nil {
+				return stats, false, fmt.Errorf("cannot commit transaction: %w", err)
+			}
+			if err = db.Close(); err != nil {
+				return stats, false, fmt.Errorf("cannot close index.db: %w", err)
+			}
+			if err = os.Chtimes(dbPath, start, start); err != nil {
+				return stats, false, fmt.Errorf("cannot set the mtime of index.db: %w", err)
+			}
+			return stats, false, nil
+		}
+		result, err = parser.ParseAllSpecs(specsDir)
+		if err != nil {
+			return stats, false, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
+		}
+	}
+
+	// Clear the rows of each part that is rebuilt (delete + re-insert). The
+	// spec and assertion documents are not cleared: indexSpecDocuments
+	// writes again only those whose file changed.
 	var clear []string
 	if specsPart {
 		clear = append(clear,
 			"DELETE FROM depends_on", "DELETE FROM frontmatter_fields", "DELETE FROM assertions", "DELETE FROM specs",
 			"DELETE FROM observation_files", "DELETE FROM observations",
-			"DELETE FROM index_meta WHERE key = '"+observationRefsKey+"'",
-			"DELETE FROM documents WHERE kind IN ('spec', 'assertion')",
-			"DELETE FROM document_tags WHERE kind IN ('spec', 'assertion')",
-			"DELETE FROM passages WHERE kind IN ('spec', 'assertion')")
+			"DELETE FROM index_meta WHERE key = '"+observationRefsKey+"'")
 	}
 	for _, stmt := range clear {
 		if _, err = tx.Exec(stmt); err != nil {
-			return stats, fmt.Errorf("cannot clear the index (%s): %w", stmt, err)
+			return stats, false, fmt.Errorf("cannot clear the index (%s): %w", stmt, err)
 		}
 	}
 	if docsPart {
 		if err = clearDocs(tx); err != nil {
-			return stats, err
+			return stats, false, err
 		}
 	}
 
 	if specsPart {
 		if err = insertSpecs(tx, result); err != nil {
-			return stats, err
+			return stats, false, err
 		}
-		n, err := indexSpecDocuments(tx, specsDir, result)
+		n, err := indexSpecDocuments(tx, specsDir, result, sums)
 		if err != nil {
-			return stats, err
+			return stats, false, err
 		}
 		stats.Passages += n
 
 		// Observation pass: read the cross-branch union from git refs.
 		obsCount, warnings, err := indexObservations(tx)
 		if err != nil {
-			return stats, err
+			return stats, false, err
 		}
 		stats.Specs = len(result.Specs)
 		stats.Assertions = len(result.Assertions)
@@ -386,7 +425,7 @@ func build(specsDir, dbPath string, force, specsPart, docsPart bool) (Stats, err
 	if docsPart {
 		docCount, passageCount, docWarnings, err := indexCorpus(tx, filepath.Dir(specsDir))
 		if err != nil {
-			return stats, err
+			return stats, false, err
 		}
 		stats.Documents = docCount
 		stats.Passages += passageCount
@@ -394,16 +433,16 @@ func build(specsDir, dbPath string, force, specsPart, docsPart bool) (Stats, err
 	}
 
 	if err = tx.Commit(); err != nil {
-		return stats, fmt.Errorf("cannot commit transaction: %w", err)
+		return stats, false, fmt.Errorf("cannot commit transaction: %w", err)
 	}
 
 	// Stamp the schema version so a future binary can detect and rebuild an
 	// index built against an older schema. PRAGMA takes no bound parameters;
 	// schemaVersion is a trusted integer constant.
 	if _, err = db.Exec(fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
-		return stats, fmt.Errorf("cannot set schema version: %w", err)
+		return stats, false, fmt.Errorf("cannot set schema version: %w", err)
 	}
-	return stats, nil
+	return stats, true, nil
 }
 
 // insertSpecs writes the spec, assertion, depends_on, and custom-field rows.
@@ -588,8 +627,9 @@ type Freshness struct {
 // EnsureFresh brings the index at dbPath up to date before a read, and
 // reports whether it wrote the index. It rebuilds everything when the index
 // is absent or stamped with another schema version, rebuilds the spec part
-// when a file under specsDir is newer than the index or the observation refs
-// changed (an observer branch was fetched, created, or deleted), and
+// when a file under specsDir is newer than the index and a .md file changed
+// its content, or the observation refs changed (an observer
+// branch was fetched, created, or deleted), and
 // re-indexes the documents of changed corpus files. A large document change
 // goes to a background refresh, so a read never waits for it (Refresh).
 //
@@ -635,17 +675,14 @@ func Refresh(specsDir, dbPath string, background bool) (Freshness, error) {
 	if err != nil {
 		return f, err
 	}
-	if !specsStale {
-		specsStale, err = observationRefsChanged(dbPath)
-		if err != nil {
-			return f, err
-		}
+	refsStale, err := observationRefsChanged(dbPath)
+	if err != nil {
+		return f, err
 	}
-	if specsStale {
-		if _, err := build(specsDir, dbPath, false, true, false); err != nil {
+	if specsStale || refsStale {
+		if _, f.Rebuilt, err = build(specsDir, dbPath, false, true, false, !refsStale); err != nil {
 			return f, err
 		}
-		f.Rebuilt = true
 	}
 
 	root := filepath.Dir(specsDir)

@@ -22,6 +22,6 @@ A spec or an assertion can cite documents: `sources: [doc-id]`. `spekk validate`
 
 ## Upgrade notes
 
-- The index schema is now version 7. The first command after the upgrade rebuilds the index with no manual step.
-- The index now follows the documents at query time. It keeps the size, mtime, and sha256 of each document file, indexes again only the documents of added, edited, and deleted files, and does not index a file again when only its mtime changed. When more than 10 files changed, a search answers at once from the current index, says so, and a background `spekk index` updates it. The index uses SQLite WAL, so parallel searches do not block or fail. A spec edit does not index the documents again.
+- The index schema is now version 8. The first command after the upgrade rebuilds the index with no manual step.
+- The index now follows the documents at query time. It keeps the size, mtime, and sha256 of each document file, indexes again only the documents of added, edited, and deleted files, and does not index a file again when only its mtime changed. When more than 10 files changed, a search answers at once from the current index, says so, and a background `spekk index` updates it. The index uses SQLite WAL, so parallel searches do not block or fail. A spec edit does not index the documents again, and indexes again only the passages of the edited spec or assertion file. A spec file with a new mtime and the same content (after `touch` or `git checkout`) does not rebuild the specs.
 - The coach, builder, and observer prompts now use `spekk docs search` for spec prose and documents.

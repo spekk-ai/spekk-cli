@@ -78,7 +78,7 @@ Text goes in git. A converted file of more than 5 MB becomes a pointer: the stub
 
 The index is checked at query time, and a query is never slow because of it. `EnsureFresh` stays the one freshness gate.
 
-- **Spec part:** today's rule. A file or directory under `specs/` newer than `index.db`, or changed observation refs, rebuilds the spec part (about 0.2 s).
+- **Spec part:** a file or directory under `specs/` newer than `index.db`, or changed observation refs, start the check. A manifest (`spec_files`: path, size, mtime, sha256 of each `.md` file under `specs/`) is compared with a stat walk, and only a file whose size or mtime changed is hashed. When no `.md` file was added, deleted, or changed its content (a `touch`, a `git checkout` of the same content), the manifest is updated and nothing is rebuilt. Else the spec part is rebuilt (about 0.2 s): the spec and assertion rows are written again, but only the passages of a spec or assertion file whose sha256 changed are indexed again.
 - **Document part, cheap dirty check:** the index holds a manifest (`doc_files`: path, size, mtime, sha256 of each file the corpus reads). A stat walk is compared with it. No file is read when nothing changed.
 - **No false positives:** a file whose size or mtime changed is hashed. Only a file whose sha256 changed is re-indexed; a `touch` or a `git checkout` with the same content costs one hash and a manifest update.
 - **Incremental:** only the documents of changed, added, and deleted files are deleted and inserted again (a changed stub, raw file, or derived text maps to its raw document). A change to `.spekk/docs-paths` or `raw/.gitignore`, a duplicate id, a schema change, and `spekk index --force` rebuild the whole document part.

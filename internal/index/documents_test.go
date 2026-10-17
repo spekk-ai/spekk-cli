@@ -88,15 +88,15 @@ func TestEnsureFreshSeesDeletedDocument(t *testing.T) {
 	}
 }
 
-// docRows returns the doc and raw rows of the index, documents and
+// docRows returns the rows of the given kinds (an SQL list), documents and
 // passages, in a stable order.
-func docRows(t *testing.T, dbPath string) string {
+func docRows(t *testing.T, dbPath, kinds string) string {
 	t.Helper()
 	db := openDB(t, dbPath)
 	var b strings.Builder
 	for _, q := range []string{
-		`SELECT kind, id, path, text_path, title, summary, sha256, state FROM documents WHERE kind IN ('doc', 'raw') ORDER BY kind, id`,
-		`SELECT kind, doc_id, start_line, end_line, is_header, heading, body FROM passages WHERE kind IN ('doc', 'raw') ORDER BY kind, doc_id, start_line, is_header DESC`,
+		`SELECT kind, id, path, text_path, title, summary, sha256, state FROM documents WHERE kind IN (` + kinds + `) ORDER BY kind, id`,
+		`SELECT kind, doc_id, start_line, end_line, is_header, heading, body FROM passages WHERE kind IN (` + kinds + `) ORDER BY kind, doc_id, start_line, is_header DESC`,
 	} {
 		rows, err := db.Query(q)
 		must(t, err)
@@ -152,11 +152,78 @@ func TestRefreshIndexesOnlyWhatChanged(t *testing.T) {
 	writeFile(t, root, "raw/r.txt", "The raw file, changed.\n")
 	refresh(1, "an edit of a raw file (its state goes stale)")
 
-	got := docRows(t, dbPath)
+	got := docRows(t, dbPath, "'doc', 'raw'")
 	forced := filepath.Join(t.TempDir(), "forced.db")
 	_, err = index.BuildIndex(specsDir, forced, true)
 	must(t, err)
-	if want := docRows(t, forced); got != want {
+	if want := docRows(t, forced, "'doc', 'raw'"); got != want {
+		t.Errorf("rows after the edits differ from a forced rebuild:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestSpecEditIndexesOnlyThatSpec(t *testing.T) {
+	specsDir := makeSpecs(t)
+	root := filepath.Dir(specsDir)
+	// A document after the spec passages, so a passage written again gets
+	// another rowid.
+	writeFile(t, root, "docs/guide.md", "# Guide\n\nText.\n")
+	dbPath := filepath.Join(root, ".spekk", "index.db")
+	_, err := index.BuildIndex(specsDir, dbPath, false)
+	must(t, err)
+	passageFirst := func(id string) int64 {
+		t.Helper()
+		var first int64
+		must(t, openDB(t, dbPath).QueryRow(`SELECT passage_first FROM documents WHERE kind = 'assertion' AND id = ?`, id).Scan(&first))
+		return first
+	}
+	touchedBefore := passageFirst("assert-one")
+
+	// A touch alone does not rebuild the spec part, and the next check
+	// does not see it again.
+	touched := filepath.Join(specsDir, "spec-a", "assertions", "assert-one.md")
+	earlier := time.Now().Add(-time.Hour)
+	must(t, os.Chtimes(dbPath, earlier, earlier))
+	must(t, os.Chtimes(touched, earlier.Add(time.Minute), earlier.Add(time.Minute)))
+	if rebuilt, err := index.EnsureFresh(specsDir, dbPath); err != nil || rebuilt {
+		t.Errorf("EnsureFresh after a touch = %v, %v; want no rebuild", rebuilt, err)
+	}
+	if stale, err := index.IsStale(specsDir, dbPath); err != nil || stale {
+		t.Errorf("IsStale after the touch was checked = %v, %v; want false", stale, err)
+	}
+
+	later := time.Now().Add(time.Hour)
+	must(t, os.Chtimes(touched, later, later))
+	edited := filepath.Join(specsDir, "spec-a", "assertions", "assert-two.md")
+	raw, err := os.ReadFile(edited)
+	must(t, err)
+	must(t, os.WriteFile(edited, append(raw, "\nThe quokka rule.\n"...), 0o644))
+	must(t, os.Chtimes(edited, later, later))
+	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
+	must(t, err)
+	if !rebuilt {
+		t.Fatal("EnsureFresh did not rebuild after a spec edit")
+	}
+
+	if got := passageFirst("assert-one"); got != touchedBefore {
+		t.Errorf("the touched assertion's passages were written again (first rowid %d, was %d)", got, touchedBefore)
+	}
+	rs, err := index.Search(dbPath, index.SearchOptions{Query: "quokka"})
+	must(t, err)
+	if len(rs) != 1 || rs[0].ID != "assert-two" {
+		t.Errorf("search for the new text = %+v, want assert-two", rs)
+	}
+
+	must(t, os.WriteFile(edited, raw, 0o644))
+	must(t, os.Chtimes(edited, later.Add(time.Hour), later.Add(time.Hour)))
+	_, err = index.EnsureFresh(specsDir, dbPath)
+	must(t, err)
+	if rs, err := index.Search(dbPath, index.SearchOptions{Query: "quokka"}); err != nil || len(rs) != 0 {
+		t.Errorf("search still finds the removed text: %+v, %v", rs, err)
+	}
+	forced := filepath.Join(t.TempDir(), "forced.db")
+	_, err = index.BuildIndex(specsDir, forced, true)
+	must(t, err)
+	if got, want := docRows(t, dbPath, "'spec', 'assertion'"), docRows(t, forced, "'spec', 'assertion'"); got != want {
 		t.Errorf("rows after the edits differ from a forced rebuild:\n%s\nwant:\n%s", got, want)
 	}
 }

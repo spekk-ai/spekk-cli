@@ -80,30 +80,75 @@ func insertDocument(tx *sql.Tx, d docs.Document, file string) (int, error) {
 	return passages, nil
 }
 
-// indexSpecDocuments writes a documents row and the passages of each spec and
-// assertion body. It returns the number of passages.
-func indexSpecDocuments(tx *sql.Tx, specsDir string, result *parser.ParseResult) (int, error) {
+// indexSpecDocuments brings the documents rows and the passages of the specs
+// and assertions in line with result. sums is the sha256 of each spec file
+// (syncSpecFiles). A document whose file has the same path and sha256 as its
+// row keeps its passages, so a spec edit indexes again only the documents of
+// the changed file. It returns the number of spec and assertion passages in
+// the index.
+func indexSpecDocuments(tx *sql.Tx, specsDir string, result *parser.ParseResult, sums map[string]string) (int, error) {
+	type indexed struct {
+		path, sha   string
+		first, last sql.NullInt64
+	}
+	old := map[[2]string]indexed{}
+	rows, err := tx.Query(`SELECT kind, id, path, sha256, passage_first, passage_last FROM documents WHERE kind IN ('spec', 'assertion')`)
+	if err != nil {
+		return 0, fmt.Errorf("cannot read the spec documents: %w", err)
+	}
+	for rows.Next() {
+		var kind, id string
+		var r indexed
+		if err := rows.Scan(&kind, &id, &r.path, &r.sha, &r.first, &r.last); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("cannot read the spec documents: %w", err)
+		}
+		old[[2]string{kind, id}] = r
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("cannot read the spec documents: %w", err)
+	}
+
 	// A spec's File is "specs/<dir>/<file>" whatever the directory is named,
 	// so the file on disk is read relative to specsDir.
 	specFile := func(rel string) string {
 		return filepath.Join(specsDir, filepath.FromSlash(strings.TrimPrefix(rel, "specs/")))
 	}
-	total := 0
+	var current []docs.Document
 	for _, s := range result.Specs {
-		d := docs.Document{Kind: docs.KindSpec, ID: s.ID, Path: s.File, TextPath: s.File, Title: s.Title, Summary: s.Title, Created: s.Created, State: docs.StateOK}
-		n, err := insertDocument(tx, d, specFile(s.File))
+		current = append(current, docs.Document{Kind: docs.KindSpec, ID: s.ID, Path: s.File, TextPath: s.File, Title: s.Title, Summary: s.Title, Created: s.Created, State: docs.StateOK})
+	}
+	for _, a := range result.Assertions {
+		current = append(current, docs.Document{Kind: docs.KindAssertion, ID: a.ID, Path: a.File, TextPath: a.File, Title: a.Title, Summary: a.Title, Created: a.Created, State: docs.StateOK})
+	}
+	total := 0
+	for _, d := range current {
+		d.SHA256 = sums[d.Path]
+		key := [2]string{d.Kind, d.ID}
+		r, ok := old[key]
+		delete(old, key)
+		if ok && r.path == d.Path && r.sha == d.SHA256 && d.SHA256 != "" {
+			if r.first.Valid && r.last.Valid {
+				total += int(r.last.Int64 - r.first.Int64 + 1)
+			}
+			continue
+		}
+		if ok {
+			if err := deleteDocument(tx, d.Kind, d.ID); err != nil {
+				return 0, err
+			}
+		}
+		n, err := insertDocument(tx, d, specFile(d.Path))
 		if err != nil {
 			return 0, err
 		}
 		total += n
 	}
-	for _, a := range result.Assertions {
-		d := docs.Document{Kind: docs.KindAssertion, ID: a.ID, Path: a.File, TextPath: a.File, Title: a.Title, Summary: a.Title, Created: a.Created, State: docs.StateOK}
-		n, err := insertDocument(tx, d, specFile(a.File))
-		if err != nil {
+	for key := range old {
+		if err := deleteDocument(tx, key[0], key[1]); err != nil {
 			return 0, err
 		}
-		total += n
 	}
 	return total, nil
 }

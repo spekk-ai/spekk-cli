@@ -314,9 +314,18 @@ func TestEnsureFreshRebuildsOnStaleSpecs(t *testing.T) {
 	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
 		t.Fatalf("BuildIndex: %v", err)
 	}
-	// Make a spec newer than the db.
+	// Change a spec and make it newer than the db. A newer mtime alone
+	// (a touch) does not rebuild.
 	future := time.Now().Add(2 * time.Hour)
 	specFile := filepath.Join(specsDir, "spec-a", "spec-a.md")
+	f, err := os.OpenFile(specFile, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if _, err := f.WriteString("\nA new line.\n"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	f.Close()
 	if err := os.Chtimes(specFile, future, future); err != nil {
 		t.Fatalf("chtimes: %v", err)
 	}

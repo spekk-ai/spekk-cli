@@ -72,7 +72,7 @@ func statsHash(stats map[string]docs.FileStat) string {
 
 // storeManifestHash records the statsHash of the manifest rows in tx.
 func storeManifestHash(tx *sql.Tx) error {
-	m, err := readManifest(tx)
+	m, err := readFiles(tx, "doc_files")
 	if err != nil {
 		return err
 	}
@@ -86,10 +86,11 @@ func storeManifestHash(tx *sql.Tx) error {
 	return nil
 }
 
-func readManifest(q querier) (map[string]manifestRow, error) {
-	rows, err := q.Query(`SELECT path, size, mtime_ns, sha256 FROM doc_files`)
+// readFiles reads a manifest table: doc_files or spec_files.
+func readFiles(q querier, table string) (map[string]manifestRow, error) {
+	rows, err := q.Query(`SELECT path, size, mtime_ns, sha256 FROM ` + table)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read the document manifest: %w", err)
+		return nil, fmt.Errorf("cannot read %s: %w", table, err)
 	}
 	defer rows.Close()
 	out := map[string]manifestRow{}
@@ -97,7 +98,7 @@ func readManifest(q querier) (map[string]manifestRow, error) {
 		var p string
 		var r manifestRow
 		if err := rows.Scan(&p, &r.Size, &r.MTime, &r.sha); err != nil {
-			return nil, fmt.Errorf("cannot read the document manifest: %w", err)
+			return nil, fmt.Errorf("cannot read %s: %w", table, err)
 		}
 		out[p] = r
 	}
@@ -156,7 +157,7 @@ func checkDocs(root, dbPath string) (docChanges, error) {
 	if stored == statsHash(current) {
 		return docChanges{current: current}, nil
 	}
-	manifest, err := readManifest(db)
+	manifest, err := readFiles(db, "doc_files")
 	if err != nil {
 		return docChanges{}, err
 	}
@@ -197,7 +198,7 @@ func refreshDocs(tx *sql.Tx, root string) (int, []string, error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	manifest, err := readManifest(tx)
+	manifest, err := readFiles(tx, "doc_files")
 	if err != nil {
 		return 0, nil, err
 	}
@@ -496,4 +497,80 @@ func startBackground(repoRoot string) error {
 		return err
 	}
 	return cmd.Process.Release()
+}
+
+// The spec part has a manifest too: spec_files holds the size, mtime, and
+// sha256 of each .md file under specs/. The parse reads only .md files, so
+// when no .md file was added, deleted, or changed its content, the spec part
+// is current, whatever mtimes changed (a touch, a git checkout).
+
+// specFiles returns the size and mtime of each regular .md file under
+// specsDir, keyed "specs/<path>" as the parser keys a spec's File.
+func specFiles(specsDir string) (map[string]docs.FileStat, error) {
+	out := map[string]docs.FileStat{}
+	err := filepath.WalkDir(specsDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
+			return nil
+		}
+		info, err := os.Stat(p)
+		if err != nil || !info.Mode().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(specsDir, p)
+		if err != nil {
+			return err
+		}
+		out["specs/"+filepath.ToSlash(rel)] = docs.FileStat{Size: info.Size(), MTime: info.ModTime().UnixNano()}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("cannot walk specs directory: %w", err)
+	}
+	return out, nil
+}
+
+// syncSpecFiles brings spec_files in line with the .md files under specsDir,
+// inside tx. Only a file whose size or mtime differs from its row is hashed.
+// It returns the sha256 of each file, and whether a file was added or
+// deleted or has new content. A file that cannot be hashed counts as
+// changed and gets no sha256.
+func syncSpecFiles(tx *sql.Tx, specsDir string) (map[string]string, bool, error) {
+	current, err := specFiles(specsDir)
+	if err != nil {
+		return nil, false, err
+	}
+	manifest, err := readFiles(tx, "spec_files")
+	if err != nil {
+		return nil, false, err
+	}
+	sums := map[string]string{}
+	changed := false
+	for p, st := range current {
+		m, ok := manifest[p]
+		delete(manifest, p)
+		if ok && m.FileStat == st {
+			sums[p] = m.sha
+			continue
+		}
+		sum, err := docs.FileSHA256(filepath.Join(specsDir, filepath.FromSlash(strings.TrimPrefix(p, "specs/"))))
+		if err != nil {
+			changed = true
+			continue
+		}
+		if !ok || sum != m.sha {
+			changed = true
+		}
+		sums[p] = sum
+		if _, err := tx.Exec(`INSERT OR REPLACE INTO spec_files (path, size, mtime_ns, sha256) VALUES (?, ?, ?, ?)`,
+			p, st.Size, st.MTime, sum); err != nil {
+			return nil, false, fmt.Errorf("cannot update the spec file manifest: %w", err)
+		}
+	}
+	for p := range manifest {
+		changed = true
+		if _, err := tx.Exec(`DELETE FROM spec_files WHERE path = ?`, p); err != nil {
+			return nil, false, fmt.Errorf("cannot update the spec file manifest: %w", err)
+		}
+	}
+	return sums, changed, nil
 }
