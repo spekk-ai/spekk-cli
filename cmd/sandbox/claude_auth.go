@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 )
@@ -25,7 +26,8 @@ const signInRequiredDetail = "Claude Code is not signed in on this sandbox. Sign
 // variable of the environment, or the file that Claude Code's own login
 // writes. A sandbox launched with no model credential has neither until the
 // person signs in. It reads them again on each call, so a sign-in takes
-// effect with no restart. A sign-in file that is not valid counts as one:
+// effect with no restart. The sign-in file counts only when the agent can
+// read it and it is not empty. A file that is not valid still counts:
 // Claude Code reports that itself, better than a guess here. Each heartbeat
 // reports it as claude_signed_in (specs/sandbox-machine-mode/).
 func claudeSignedIn() bool {
@@ -42,6 +44,6 @@ func claudeSignedIn() bool {
 		}
 		dir = filepath.Join(home, ".claude")
 	}
-	_, err := os.Stat(filepath.Join(dir, ".credentials.json"))
-	return err == nil
+	data, err := os.ReadFile(filepath.Join(dir, ".credentials.json"))
+	return err == nil && len(bytes.TrimSpace(data)) > 0
 }

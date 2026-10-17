@@ -158,7 +158,7 @@ The `terminal` field needs no rollout order, because an absent field means `true
 
 A sandbox that a server launched with no model credential has no way to call Claude until a person signs in to Claude Code on the machine, with Claude Code's own login. Each `heartbeat` frame carries `claude_signed_in`, a JSON boolean, so the control host can show that state before anyone sends a turn:
 
-- `true`: the environment of the agent has `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`, or the sign-in file of Claude Code exists (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `~/.claude/.credentials.json` of `agent`).
+- `true`: the environment of the agent has `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`, or the sign-in file of Claude Code (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `~/.claude/.credentials.json` of `agent`) is readable by `agent` and is not empty.
 - `false`: none of these. The agent refuses each turn with an `error` frame that tells the person to sign in on the sandbox, and does not start `claude`.
 
 The agent reads the state again for each heartbeat and each turn, so a sign-in takes effect with no restart. A control host that does not know the field ignores it.

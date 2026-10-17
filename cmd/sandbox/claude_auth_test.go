@@ -28,12 +28,12 @@ func noClaudeCredential(t *testing.T) (home string) {
 	return home
 }
 
-func writeCredentials(t *testing.T, dir string) {
+func writeCredentials(t *testing.T, dir, content string, mode os.FileMode) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte("{}"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte(content), mode); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -43,26 +43,30 @@ func TestClaudeSignedIn(t *testing.T) {
 		set  func(t *testing.T, home string)
 		want bool
 	}{
-		"nothing": {func(t *testing.T, home string) {}, false},
+		"nothing":           {func(t *testing.T, home string) {}, false},
+		"ANTHROPIC_API_KEY": {func(t *testing.T, home string) { t.Setenv("ANTHROPIC_API_KEY", "sk-test") }, true},
 		"sign-in file in HOME": {func(t *testing.T, home string) {
-			writeCredentials(t, filepath.Join(home, ".claude"))
+			writeCredentials(t, filepath.Join(home, ".claude"), "{}", 0o600)
 		}, true},
 		"sign-in file in CLAUDE_CONFIG_DIR": {func(t *testing.T, home string) {
 			dir := filepath.Join(home, "config")
 			t.Setenv("CLAUDE_CONFIG_DIR", dir)
-			writeCredentials(t, dir)
+			writeCredentials(t, dir, "{}", 0o600)
 		}, true},
 		// Claude Code reads only CLAUDE_CONFIG_DIR when it is set.
 		"sign-in file in HOME, CLAUDE_CONFIG_DIR elsewhere": {func(t *testing.T, home string) {
-			writeCredentials(t, filepath.Join(home, ".claude"))
+			writeCredentials(t, filepath.Join(home, ".claude"), "{}", 0o600)
 			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, "config"))
 		}, false},
-	}
-	for _, v := range claudeAuthEnvVars {
-		cases[v] = struct {
-			set  func(t *testing.T, home string)
-			want bool
-		}{func(t *testing.T, home string) { t.Setenv(v, "1") }, true}
+		"empty sign-in file": {func(t *testing.T, home string) {
+			writeCredentials(t, filepath.Join(home, ".claude"), " \n", 0o600)
+		}, false},
+		"unreadable sign-in file": {func(t *testing.T, home string) {
+			if os.Geteuid() == 0 {
+				t.Skip("root reads a file of mode 000")
+			}
+			writeCredentials(t, filepath.Join(home, ".claude"), "{}", 0o000)
+		}, false},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
