@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/version"
@@ -217,16 +218,68 @@ type stageLine struct {
 	Message   string `json:"message,omitempty"`
 }
 
+// stageKeepalive is how often a machine-mode create writes the last stage
+// line again while it waits. The worker stops a create that writes no line
+// for 20 minutes, and the cloud-init wait alone can take 30. A var, so a
+// test can make it short.
+var stageKeepalive = 30 * time.Second
+
 // stageWriter writes the stage lines of one machine-mode command, and
 // remembers the last stage that started, for the failed line.
 type stageWriter struct {
 	out     io.Writer
 	stage   string
 	secrets []string
+
+	mu   sync.Mutex
+	last stageLine     // the line that the keepalive writes again
+	stop chan struct{} // stops the keepalive; nil until the first line
+	done bool          // set by finish: no line comes after the final line
 }
 
+// emit writes the line of a stage that starts. The first line starts the
+// keepalive.
 func (s *stageWriter) emit(line stageLine) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.stage = line.Stage
+	s.last = line
+	s.write(line)
+	if s.stop == nil {
+		s.stop = make(chan struct{})
+		go s.keepalive(s.stop)
+	}
+}
+
+// keepalive writes the last stage line again, unchanged, on each tick until
+// stop closes. The worker sets the same stage again, so the line needs no
+// field of its own.
+func (s *stageWriter) keepalive(stop <-chan struct{}) {
+	tick := time.NewTicker(stageKeepalive)
+	defer tick.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-tick.C:
+			s.mu.Lock()
+			if !s.done {
+				s.write(s.last)
+			}
+			s.mu.Unlock()
+		}
+	}
+}
+
+// finish writes the online or failed line. It stops the keepalive under the
+// lock first, so the final line is the last line.
+func (s *stageWriter) finish(line stageLine) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stop != nil {
+		close(s.stop)
+	}
+	s.done = true
 	s.write(line)
 }
 
@@ -241,7 +294,7 @@ func (s *stageWriter) write(line stageLine) {
 // taken out, for the error that the command prints on stderr.
 func (s *stageWriter) fail(err error) error {
 	msg := redact(err.Error(), s.secrets)
-	s.write(stageLine{Stage: stageFailed, At: s.stage, Message: msg})
+	s.finish(stageLine{Stage: stageFailed, At: s.stage, Message: msg})
 	return errors.New(msg)
 }
 
@@ -389,7 +442,7 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 	if err := SaveSandbox(opts.Name, meta); err != nil {
 		return st.fail(fmt.Errorf("saving metadata: %w", err))
 	}
-	st.emit(stageLine{Stage: stageOnline, AgentID: agentID})
+	st.finish(stageLine{Stage: stageOnline, AgentID: agentID})
 	return nil
 }
 

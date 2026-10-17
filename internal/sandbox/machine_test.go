@@ -270,6 +270,44 @@ func TestCreateMachine(t *testing.T) {
 		}
 	})
 
+	t.Run("the last stage line comes again while the create waits", func(t *testing.T) {
+		_, _, _, _, input := setUp(t, 201, "")
+		orig := stageKeepalive
+		stageKeepalive = 10 * time.Millisecond
+		t.Cleanup(func() { stageKeepalive = orig })
+		waitReady = func(ip, keyPath, name, user string, timeout time.Duration) error {
+			time.Sleep(100 * time.Millisecond)
+			return nil
+		}
+		var stdout strings.Builder
+		captureStderr(t)
+		if err := CreateMachine(strings.NewReader(input), &stdout, machineOptions()); err != nil {
+			t.Fatal(err)
+		}
+		done := stdout.String()
+
+		provisioning := stageLine{Stage: "provisioning", DropletID: 4242, IP: "203.0.113.10"}
+		var stages []stageLine
+		repeats := 0
+		for _, l := range stageLines(t, done) {
+			if len(stages) > 0 && l == stages[len(stages)-1] {
+				if l == provisioning {
+					repeats++
+				}
+				continue
+			}
+			stages = append(stages, l)
+		}
+		want := []stageLine{{Stage: "creating"}, provisioning, {Stage: "registering"}, {Stage: "online", AgentID: "agent-77"}}
+		if fmt.Sprint(stages) != fmt.Sprint(want) || repeats == 0 {
+			t.Fatalf("stdout = %s, want the provisioning line again during the wait and online last", done)
+		}
+		time.Sleep(5 * stageKeepalive)
+		if stdout.String() != done {
+			t.Errorf("a line came after online: %q", strings.TrimPrefix(stdout.String(), done))
+		}
+	})
+
 	t.Run("a failed deploy keeps the droplet on record", func(t *testing.T) {
 		_, _, _, _, input := setUp(t, 201, "systemctl restart spekk-agent")
 		var stdout strings.Builder

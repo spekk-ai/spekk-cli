@@ -917,6 +917,8 @@ spekk sandbox destroy <name> --machine --force < destroy.json
 {"stage":"online","agent_id":"<id>"}
 ```
 
+While the CLI waits (for the release download, the droplet, cloud-init, or an SSH step), it writes the last stage line again, unchanged, every 30 seconds. A line comes at least every 30 seconds, and the final `online` or `failed` line is always the last line.
+
 On an error, the last line is `{"stage":"failed","at":"<stage>","message":"<text>"}`, where `at` is the last stage that started, and the exit status is 1. The message holds no secret. A bad flag or a bad input fails at `creating`, before any call to DigitalOcean, the control host, or GitHub.
 
 **Steps.** `creating` checks the input and creates the droplet with the token from stdin. `provisioning` waits for cloud-init. `registering` makes the agent token, registers the agent with `POST /api/agents/register/` and `Authorization: Bearer <registration token>` (the body has `name`, `sandbox_id`, and `token`), writes the env file, clones the repository into `/opt/spekk/workspace`, configures git, and deploys the agent. Each script that holds a secret goes to the machine on the stdin of `ssh`.
