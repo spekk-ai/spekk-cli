@@ -2,6 +2,7 @@ package index_test
 
 import (
 	"database/sql"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -51,6 +52,15 @@ depends-on: assert-one
 ---
 # Assert Two
 `), 0o644))
+	// The tree is an hour old, as in a checkout made earlier: a check does
+	// not trust the stat of a file that changed near it (racyMargin).
+	old := time.Now().Add(-time.Hour)
+	must(t, filepath.WalkDir(specsDir, func(p string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chtimes(p, old, old)
+	}))
 	return specsDir
 }
 
@@ -304,38 +314,6 @@ func TestEnsureFreshNoRebuildWhenFresh(t *testing.T) {
 	}
 	if rebuilt {
 		t.Errorf("expected no rebuild for a fresh, current-schema index")
-	}
-}
-
-// TestEnsureFreshRebuildsOnStaleSpecs: a spec modified after the build → rebuild.
-func TestEnsureFreshRebuildsOnStaleSpecs(t *testing.T) {
-	specsDir := makeSpecs(t)
-	dbPath := index.DBPath(filepath.Dir(specsDir))
-	if _, err := index.BuildIndex(specsDir, dbPath, false); err != nil {
-		t.Fatalf("BuildIndex: %v", err)
-	}
-	// Change a spec and make it newer than the db. A newer mtime alone
-	// (a touch) does not rebuild.
-	future := time.Now().Add(2 * time.Hour)
-	specFile := filepath.Join(specsDir, "spec-a", "spec-a.md")
-	f, err := os.OpenFile(specFile, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if _, err := f.WriteString("\nA new line.\n"); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	f.Close()
-	if err := os.Chtimes(specFile, future, future); err != nil {
-		t.Fatalf("chtimes: %v", err)
-	}
-
-	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
-	if err != nil {
-		t.Fatalf("EnsureFresh: %v", err)
-	}
-	if !rebuilt {
-		t.Errorf("expected rebuild when specs are newer than the index")
 	}
 }
 

@@ -268,6 +268,10 @@ type Stats struct {
 	Warnings  []string
 }
 
+// testHookAfterSpecHash, when set, runs after the check hashed the spec
+// files and before the parse, so a test can change a file between the two.
+var testHookAfterSpecHash func()
+
 // ErrSpecsUnparseable marks an index build that failed at the parse step and
 // not at the database.
 //
@@ -306,8 +310,12 @@ func FormatError(err error) string {
 // from the visible git refs (observations), and from the document corpus. If
 // force is true all tables are dropped and recreated from scratch.
 func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
-	stats, _, err := build(specsDir, dbPath, force, true, true, false)
-	return stats, err
+	start := time.Now()
+	stats, _, err := build(specsDir, dbPath, force, true, true, false, start)
+	if err != nil {
+		return stats, err
+	}
+	return stats, stampIndex(dbPath, start)
 }
 
 // build rebuilds the spec part (specs, assertions, their passages, and the
@@ -315,15 +323,13 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 // parts go stale for different reasons, and a large document corpus must not
 // be indexed again for each spec edit.
 //
-// With skipUnchanged, when no .md file under specsDir was added, deleted, or
-// changed its content (a touch, a git checkout of the same content), build
-// records the new file stats, sets the mtime of index.db to the time it
-// started, so that the next query does not check again and a file that
-// changes during the check is still newer, and returns false without a
-// rebuild. Else it returns true.
-func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bool) (Stats, bool, error) {
+// With skipUnchanged, when no file that the parse reads was added, deleted,
+// or changed its content (a touch, a git checkout of the same content), build
+// records the new file stats and returns false without a rebuild. Else it
+// returns true. start is the time the check started (syncSpecFiles). The
+// caller sets the mtime of index.db after the last write (stampIndex).
+func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bool, start time.Time) (Stats, bool, error) {
 	var stats Stats
-	start := time.Now()
 
 	// Ensure the .spekk directory exists.
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
@@ -352,31 +358,33 @@ func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bo
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	// The spec files are hashed before the parse, so a file that changes
-	// between the two has a manifest row with its old hash, and the next
-	// check rebuilds again.
+	// The parse reads each spec file once, and the rows, the passages, and
+	// the manifest hash all come from those bytes. A file that changes after
+	// that read is newer than the index (stampIndex), and its manifest hash
+	// is not the hash of its new text, so the next check rebuilds again.
 	var result *parser.ParseResult
+	texts := map[string][]byte{}
 	var sums map[string]string
 	if specsPart {
 		var changed bool
-		if sums, changed, err = syncSpecFiles(tx, specsDir); err != nil {
+		if sums, changed, err = syncSpecFiles(tx, specsDir, start.Add(-racyMargin)); err != nil {
 			return stats, false, err
 		}
 		if skipUnchanged && !changed {
 			if err = tx.Commit(); err != nil {
 				return stats, false, fmt.Errorf("cannot commit transaction: %w", err)
 			}
-			if err = db.Close(); err != nil {
-				return stats, false, fmt.Errorf("cannot close index.db: %w", err)
-			}
-			if err = os.Chtimes(dbPath, start, start); err != nil {
-				return stats, false, fmt.Errorf("cannot set the mtime of index.db: %w", err)
-			}
 			return stats, false, nil
 		}
-		result, err = parser.ParseAllSpecs(specsDir)
+		if testHookAfterSpecHash != nil {
+			testHookAfterSpecHash()
+		}
+		result, err = parser.ParseAllSpecsRead(specsDir, specReader(specsDir, texts))
 		if err != nil {
 			return stats, false, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
+		}
+		if sums, err = recordSpecReads(tx, texts, sums); err != nil {
+			return stats, false, err
 		}
 	}
 
@@ -405,7 +413,7 @@ func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bo
 		if err = insertSpecs(tx, result); err != nil {
 			return stats, false, err
 		}
-		n, err := indexSpecDocuments(tx, specsDir, result, sums)
+		n, err := indexSpecDocuments(tx, result, texts, sums)
 		if err != nil {
 			return stats, false, err
 		}
@@ -645,8 +653,18 @@ func EnsureFresh(specsDir, dbPath string) (bool, error) {
 // background refresh holds the lock, is left to the background refresh and
 // counted in Pending. With no index at all, the build is inline: there is
 // nothing to answer from.
-func Refresh(specsDir, dbPath string, background bool) (Freshness, error) {
-	var f Freshness
+//
+// After a check of the spec part or a write, Refresh sets the mtime of
+// index.db from the time it started (stampIndex), so a spec file that
+// changed during the refresh is newer than the index.
+func Refresh(specsDir, dbPath string, background bool) (f Freshness, err error) {
+	start := time.Now()
+	checked := false
+	defer func() {
+		if err == nil && (checked || f.Rebuilt) {
+			err = stampIndex(dbPath, start)
+		}
+	}()
 	if _, err := os.Stat(dbPath); err != nil {
 		if !os.IsNotExist(err) {
 			return f, fmt.Errorf("cannot stat index.db: %w", err)
@@ -680,9 +698,10 @@ func Refresh(specsDir, dbPath string, background bool) (Freshness, error) {
 		return f, err
 	}
 	if specsStale || refsStale {
-		if _, f.Rebuilt, err = build(specsDir, dbPath, false, true, false, !refsStale); err != nil {
+		if _, f.Rebuilt, err = build(specsDir, dbPath, false, true, false, !refsStale, start); err != nil {
 			return f, err
 		}
+		checked = true
 	}
 
 	root := filepath.Dir(specsDir)

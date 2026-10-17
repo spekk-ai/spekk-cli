@@ -500,41 +500,80 @@ func startBackground(repoRoot string) error {
 }
 
 // The spec part has a manifest too: spec_files holds the size, mtime, and
-// sha256 of each .md file under specs/. The parse reads only .md files, so
-// when no .md file was added, deleted, or changed its content, the spec part
-// is current, whatever mtimes changed (a touch, a git checkout).
+// sha256 of each file that the parse reads. When no such file was added,
+// deleted, or changed its content, the spec part is current, whatever mtimes
+// changed (a touch, a git checkout).
+//
+// A check trusts the size and mtime of a row only for a file that changed
+// racyMargin or more before the check started. A file system can give two
+// writes in one clock tick (or in one second) the same mtime, so an equal
+// stat of a file that changed near the check does not prove equal content.
+// Such a row gets mtime_ns 0, and stampIndex makes the next check run, so
+// that check hashes the file again.
 
-// specFiles returns the size and mtime of each regular .md file under
-// specsDir, keyed "specs/<path>" as the parser keys a spec's File.
+// racyMargin is how long before a check a file must have changed for the
+// check to trust its size and mtime.
+const racyMargin = time.Second
+
+// stampIndex sets the mtime of index.db to racyMargin before start, the time
+// the check started. A spec file that changed after that time is newer than
+// the index, so the next check runs. Call it after the last write, because a
+// write moves the mtime.
+func stampIndex(dbPath string, start time.Time) error {
+	t := start.Add(-racyMargin)
+	if err := os.Chtimes(dbPath, t, t); err != nil {
+		return fmt.Errorf("cannot set the mtime of index.db: %w", err)
+	}
+	return nil
+}
+
+// specFiles returns the size and mtime of each regular file that the parse
+// reads (parser.ParseAllSpecs): specs/*.md, specs/<dir>/<dir>.md, and
+// specs/<dir>/assertions/*.md, keyed "specs/<path>" as the parser keys a
+// spec's File. It reads each folder with os.ReadDir, as the parser does, so
+// a symlinked assertions/ folder is in the list.
 func specFiles(specsDir string) (map[string]docs.FileStat, error) {
 	out := map[string]docs.FileStat{}
-	err := filepath.WalkDir(specsDir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
-			return nil
+	add := func(rel string) {
+		info, err := os.Stat(filepath.Join(specsDir, filepath.FromSlash(rel)))
+		if err == nil && info.Mode().IsRegular() {
+			out["specs/"+rel] = docs.FileStat{Size: info.Size(), MTime: info.ModTime().UnixNano()}
 		}
-		info, err := os.Stat(p)
-		if err != nil || !info.Mode().IsRegular() {
-			return nil
-		}
-		rel, err := filepath.Rel(specsDir, p)
-		if err != nil {
-			return err
-		}
-		out["specs/"+filepath.ToSlash(rel)] = docs.FileStat{Size: info.Size(), MTime: info.ModTime().UnixNano()}
-		return nil
-	})
+	}
+	entries, err := os.ReadDir(specsDir)
+	if os.IsNotExist(err) {
+		return out, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("cannot walk specs directory: %w", err)
+		return nil, fmt.Errorf("cannot read specs directory: %w", err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			if strings.HasSuffix(e.Name(), ".md") {
+				add(e.Name())
+			}
+			continue
+		}
+		add(path.Join(e.Name(), e.Name()+".md"))
+		as, err := os.ReadDir(filepath.Join(specsDir, e.Name(), "assertions"))
+		if err != nil {
+			continue
+		}
+		for _, a := range as {
+			if !a.IsDir() && strings.HasSuffix(a.Name(), ".md") {
+				add(path.Join(e.Name(), "assertions", a.Name()))
+			}
+		}
 	}
 	return out, nil
 }
 
-// syncSpecFiles brings spec_files in line with the .md files under specsDir,
-// inside tx. Only a file whose size or mtime differs from its row is hashed.
-// It returns the sha256 of each file, and whether a file was added or
-// deleted or has new content. A file that cannot be hashed counts as
-// changed and gets no sha256.
-func syncSpecFiles(tx *sql.Tx, specsDir string) (map[string]string, bool, error) {
+// syncSpecFiles brings spec_files in line with the files that the parse
+// reads, inside tx. Only a file whose size or mtime differs from its row is
+// hashed. A file that changed after cutoff gets mtime_ns 0. It returns the
+// sha256 of each row, and whether a file was added or deleted or has new
+// content. A file that cannot be hashed counts as changed and gets no row.
+func syncSpecFiles(tx *sql.Tx, specsDir string, cutoff time.Time) (map[string]string, bool, error) {
 	current, err := specFiles(specsDir)
 	if err != nil {
 		return nil, false, err
@@ -561,8 +600,12 @@ func syncSpecFiles(tx *sql.Tx, specsDir string) (map[string]string, bool, error)
 			changed = true
 		}
 		sums[p] = sum
+		mtime := st.MTime
+		if mtime > cutoff.UnixNano() {
+			mtime = 0
+		}
 		if _, err := tx.Exec(`INSERT OR REPLACE INTO spec_files (path, size, mtime_ns, sha256) VALUES (?, ?, ?, ?)`,
-			p, st.Size, st.MTime, sum); err != nil {
+			p, st.Size, mtime, sum); err != nil {
 			return nil, false, fmt.Errorf("cannot update the spec file manifest: %w", err)
 		}
 	}
@@ -573,4 +616,52 @@ func syncSpecFiles(tx *sql.Tx, specsDir string) (map[string]string, bool, error)
 		}
 	}
 	return sums, changed, nil
+}
+
+// specReader returns the read function of the parse. It keeps the bytes of
+// each file in texts, keyed as specFiles keys it, and gives the kept bytes
+// on a second read of a file, so the parse and the passages use one text of
+// each file.
+func specReader(specsDir string, texts map[string][]byte) func(string) ([]byte, error) {
+	return func(p string) ([]byte, error) {
+		rel, err := filepath.Rel(specsDir, p)
+		if err != nil {
+			return os.ReadFile(p)
+		}
+		key := "specs/" + filepath.ToSlash(rel)
+		if raw, ok := texts[key]; ok {
+			return raw, nil
+		}
+		raw, err := os.ReadFile(p)
+		if err == nil {
+			texts[key] = raw
+		}
+		return raw, err
+	}
+}
+
+// recordSpecReads returns the sha256 of each text that the parse read, and
+// writes it as the sha256 of a spec_files row whose file changed after
+// syncSpecFiles hashed it (sums). That row also gets mtime_ns 0, so the
+// next check hashes the file again and compares the text on disk with the
+// text in the index.
+func recordSpecReads(tx *sql.Tx, texts map[string][]byte, sums map[string]string) (map[string]string, error) {
+	read := make(map[string]string, len(texts))
+	for p, raw := range texts {
+		sum := bytesSHA256(raw)
+		read[p] = sum
+		if old, ok := sums[p]; !ok || old == sum {
+			continue
+		}
+		if _, err := tx.Exec(`UPDATE spec_files SET sha256 = ?, mtime_ns = 0 WHERE path = ?`, sum, p); err != nil {
+			return nil, fmt.Errorf("cannot update the spec file manifest: %w", err)
+		}
+	}
+	return read, nil
+}
+
+// bytesSHA256 returns the hex sha256 of raw.
+func bytesSHA256(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }

@@ -15,6 +15,18 @@ import (
 // insertDocument writes one documents row, its tags, and its passages from
 // the plaintext file. It returns the number of passages.
 func insertDocument(tx *sql.Tx, d docs.Document, file string) (int, error) {
+	raw, err := docs.ReadRegular(file)
+	if err != nil {
+		// A raw document whose text is absent keeps its row, so status and
+		// search can name it, and has no passages.
+		raw = nil
+	}
+	return insertText(tx, d, raw)
+}
+
+// insertText is insertDocument with the text already read. A nil raw is an
+// absent text.
+func insertText(tx *sql.Tx, d docs.Document, raw []byte) (int, error) {
 	passages := 0
 	if _, err := tx.Exec(
 		`INSERT INTO documents (kind, id, path, text_path, title, type, created, summary, sha256, state)
@@ -28,10 +40,7 @@ func insertDocument(tx *sql.Tx, d docs.Document, file string) (int, error) {
 			return 0, fmt.Errorf("cannot insert tag of %q: %w", d.ID, err)
 		}
 	}
-	raw, err := docs.ReadRegular(file)
-	if err != nil {
-		// A raw document whose text is absent keeps its row, so status and
-		// search can name it, and has no passages.
+	if raw == nil {
 		return 0, nil
 	}
 	ps := docs.Chunk(string(raw))
@@ -81,12 +90,13 @@ func insertDocument(tx *sql.Tx, d docs.Document, file string) (int, error) {
 }
 
 // indexSpecDocuments brings the documents rows and the passages of the specs
-// and assertions in line with result. sums is the sha256 of each spec file
-// (syncSpecFiles). A document whose file has the same path and sha256 as its
-// row keeps its passages, so a spec edit indexes again only the documents of
-// the changed file. It returns the number of spec and assertion passages in
-// the index.
-func indexSpecDocuments(tx *sql.Tx, specsDir string, result *parser.ParseResult, sums map[string]string) (int, error) {
+// and assertions in line with result. texts holds the bytes of each spec file
+// that the parse read and sums their sha256, so the passages and the sha256
+// of a document come from the text of its rows. A document whose file has
+// the same path and sha256 as its row keeps its passages, so a spec edit
+// indexes again only the documents of the changed file. It returns the
+// number of spec and assertion passages in the index.
+func indexSpecDocuments(tx *sql.Tx, result *parser.ParseResult, texts map[string][]byte, sums map[string]string) (int, error) {
 	type indexed struct {
 		path, sha   string
 		first, last sql.NullInt64
@@ -110,11 +120,6 @@ func indexSpecDocuments(tx *sql.Tx, specsDir string, result *parser.ParseResult,
 		return 0, fmt.Errorf("cannot read the spec documents: %w", err)
 	}
 
-	// A spec's File is "specs/<dir>/<file>" whatever the directory is named,
-	// so the file on disk is read relative to specsDir.
-	specFile := func(rel string) string {
-		return filepath.Join(specsDir, filepath.FromSlash(strings.TrimPrefix(rel, "specs/")))
-	}
 	var current []docs.Document
 	for _, s := range result.Specs {
 		current = append(current, docs.Document{Kind: docs.KindSpec, ID: s.ID, Path: s.File, TextPath: s.File, Title: s.Title, Summary: s.Title, Created: s.Created, State: docs.StateOK})
@@ -124,6 +129,7 @@ func indexSpecDocuments(tx *sql.Tx, specsDir string, result *parser.ParseResult,
 	}
 	total := 0
 	for _, d := range current {
+		raw := texts[d.Path]
 		d.SHA256 = sums[d.Path]
 		key := [2]string{d.Kind, d.ID}
 		r, ok := old[key]
@@ -139,7 +145,7 @@ func indexSpecDocuments(tx *sql.Tx, specsDir string, result *parser.ParseResult,
 				return 0, err
 			}
 		}
-		n, err := insertDocument(tx, d, specFile(d.Path))
+		n, err := insertText(tx, d, raw)
 		if err != nil {
 			return 0, err
 		}

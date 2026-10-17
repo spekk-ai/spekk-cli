@@ -228,6 +228,38 @@ func TestSpecEditIndexesOnlyThatSpec(t *testing.T) {
 	}
 }
 
+// An edit after the check hashed a spec file and before the parse, then an
+// undo to the hashed text: the index must hold the text on disk. The
+// manifest hash came from the first read and the rows from the second, so
+// the undo looked unchanged and the index kept the edit.
+func TestSpecEditBetweenHashAndParse(t *testing.T) {
+	specsDir := makeSpecs(t)
+	dbPath := index.DBPath(filepath.Dir(specsDir))
+	_, err := index.BuildIndex(specsDir, dbPath, false)
+	must(t, err)
+	file := filepath.Join(specsDir, "spec-a", "assertions", "assert-one.md")
+	raw, err := os.ReadFile(file)
+	must(t, err)
+	hashed := []byte(string(raw) + "\nThe quokka rule.\n")
+	must(t, os.WriteFile(file, hashed, 0o644))
+	*index.AfterSpecHash = func() {
+		must(t, os.WriteFile(file, []byte(string(raw)+"\nThe numbat rule, a longer line.\n"), 0o644))
+	}
+	_, err = index.EnsureFresh(specsDir, dbPath)
+	*index.AfterSpecHash = nil
+	must(t, err)
+	must(t, os.WriteFile(file, hashed, 0o644))
+	_, err = index.EnsureFresh(specsDir, dbPath)
+	must(t, err)
+
+	forced := filepath.Join(t.TempDir(), "forced.db")
+	_, err = index.BuildIndex(specsDir, forced, true)
+	must(t, err)
+	if got, want := docRows(t, dbPath, "'spec', 'assertion'"), docRows(t, forced, "'spec', 'assertion'"); got != want {
+		t.Errorf("rows after the undo differ from a forced rebuild:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestParallelRefreshesAllSucceed(t *testing.T) {
 	specsDir := makeSpecs(t)
 	root := filepath.Dir(specsDir)
