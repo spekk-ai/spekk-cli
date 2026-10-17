@@ -906,7 +906,7 @@ spekk sandbox destroy <name> --machine --force < destroy.json
 | `anthropic_api_key` | `api_key` | `ANTHROPIC_API_KEY` |
 | `bedrock` | `aws_access_key_id`, `aws_secret_access_key`, `aws_region` | The AWS keys, `AWS_DEFAULT_REGION`, and `CLAUDE_CODE_USE_BEDROCK=1` |
 
-**Flags.** `--size` and `--region` are required. `--label <key>=<value>` can repeat. The key and the value are lowercase `[a-z0-9_-]`, 1 to 63 characters, and the label goes on the droplet as the tag `<key>:<value>`, next to the kind tags of a terminal create. A key that spekk sets itself (`spekk-kind`, `spekk-expires`, `spekk-host`, `spekk-sandbox`) is refused. Any other flag is an error. Without `--release`, a CLI with the version `vX.Y.Z` deploys the agent of the release `vX.Y.Z`, so the CLI and the agent match. Any other build needs `--release <tag>`.
+**Flags.** `--size` and `--region` are required. `--label <key>=<value>` can repeat. The key and the value are lowercase `[a-z0-9_-]`, 1 to 63 characters, and the label goes on the droplet as the tag `<key>:<value>`, next to the kind tags of a terminal create. The label tags are in the droplet create request, so a droplet that a killed or failed create leaves has them too. A key that spekk sets itself (`spekk-kind`, `spekk-expires`, `spekk-host`, `spekk-sandbox`) is refused. Any other flag is an error. Without `--release`, a CLI with the version `vX.Y.Z` deploys the agent of the release `vX.Y.Z`, so the CLI and the agent match. Any other build needs `--release <tag>`.
 
 **Stage lines.** Stdout has one JSON line for each stage, and nothing else. Human logs go to stderr:
 

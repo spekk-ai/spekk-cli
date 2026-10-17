@@ -255,19 +255,15 @@ func sortedLabels(labels map[string]string, sep string) []string {
 	return out
 }
 
-// labelMachine labels the machine when the provider can, with the kind
-// labels and the extra labels of the caller. A failure is a warning: the
-// record and the marker still carry the kind.
-func labelMachine(p Provider, meta *SandboxMeta, extra map[string]string) {
+// labelMachine labels the machine with the kind labels when the provider
+// can. A failure is a warning: the record and the marker still carry the
+// kind.
+func labelMachine(p Provider, meta *SandboxMeta) {
 	l, ok := p.(Labeler)
 	if !ok {
 		return
 	}
-	labels := sandboxLabels(meta)
-	for k, v := range extra {
-		labels[k] = v
-	}
-	if err := l.Label(meta, labels); err != nil {
+	if err := l.Label(meta, sandboxLabels(meta)); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not label %s: %s\n", machineRef(meta), err)
 	}
 }

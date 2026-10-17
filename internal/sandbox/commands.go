@@ -217,7 +217,7 @@ func Create(p Provider, opts CreateOptions) (err error) {
 		}
 		return createErr
 	}
-	labelMachine(p, meta, nil)
+	labelMachine(p, meta)
 
 	// --- Generic provisioning (provider-agnostic) ---
 

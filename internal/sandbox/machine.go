@@ -361,7 +361,7 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 	if createErr != nil {
 		return st.fail(createErr)
 	}
-	labelMachine(p, meta, opts.Labels)
+	labelMachine(p, meta)
 	st.emit(stageLine{Stage: stageProvisioning, DropletID: meta.DropletID, IP: meta.IP})
 
 	if err := waitReady(meta.IP, meta.SSHKeyPath, opts.Name, sshUser(meta), opts.ProvisionTimeout); err != nil {

@@ -66,10 +66,11 @@ func TestReadMachineInput(t *testing.T) {
 // fakeDigitalOcean answers the calls of a droplet create and destroy, and
 // records each request as "METHOD path" with its Authorization header.
 type fakeDigitalOcean struct {
-	mu       sync.Mutex
-	requests []string
-	tags     []string
-	auth     []string
+	mu         sync.Mutex
+	requests   []string
+	createTags []string // the tags of the droplet create request
+	tags       []string // the tags added after the create
+	auth       []string
 }
 
 func useFakeDigitalOcean(t *testing.T) *fakeDigitalOcean {
@@ -86,6 +87,9 @@ func useFakeDigitalOcean(t *testing.T) *fakeDigitalOcean {
 		case r.Method == "POST" && r.URL.Path == "/v2/account/keys":
 			fmt.Fprint(w, `{"ssh_key": {"id": 11}}`)
 		case r.Method == "POST" && r.URL.Path == "/v2/droplets":
+			var req struct{ Tags []string }
+			json.Unmarshal(body, &req)
+			f.createTags = req.Tags
 			fmt.Fprint(w, `{"droplet": {"id": 4242}}`)
 		case r.Method == "GET" && r.URL.Path == "/v2/droplets/4242":
 			fmt.Fprint(w, `{"droplet": {"id": 4242, "status": "active", "networks": {"v4": [{"ip_address": "203.0.113.10", "type": "public"}]}}}`)
@@ -226,8 +230,11 @@ func TestCreateMachine(t *testing.T) {
 				t.Errorf("a DigitalOcean request has Authorization %q, want the token from stdin", a)
 			}
 		}
-		if got := strings.Join(do.tags, " "); got != "spekk-expires:2026-10-20 spekk-host:ops-laptop spekk-kind:one-off spekk-launch:abc123" {
-			t.Errorf("droplet tags = %s", got)
+		if got := strings.Join(do.createTags, " "); got != "spekk-sandbox spekk-launch:abc123" {
+			t.Errorf("droplet create tags = %s", got)
+		}
+		if got := strings.Join(do.tags, " "); got != "spekk-expires:2026-10-20 spekk-host:ops-laptop spekk-kind:one-off" {
+			t.Errorf("droplet tags after the create = %s", got)
 		}
 
 		if len(*regs) != 1 {
