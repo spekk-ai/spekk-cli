@@ -245,10 +245,18 @@ func FormatError(err error) string {
 	return err.Error()
 }
 
-// BuildIndex creates or updates the SQLite index at dbPath from specsDir and
-// from the visible git refs (observations). If force is true all tables are
-// dropped and recreated from scratch.
+// BuildIndex creates or updates the SQLite index at dbPath from specsDir,
+// from the visible git refs (observations), and from the document corpus. If
+// force is true all tables are dropped and recreated from scratch.
 func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
+	return build(specsDir, dbPath, force, true, true)
+}
+
+// build rebuilds the spec part (specs, assertions, their passages, and the
+// observations), the document part (doc and raw documents), or both. The
+// parts go stale for different reasons, and a large document corpus must not
+// be indexed again for each spec edit.
+func build(specsDir, dbPath string, force, specsPart, docsPart bool) (Stats, error) {
 	var stats Stats
 
 	// Ensure the .spekk directory exists.
@@ -272,9 +280,12 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 		return stats, fmt.Errorf("cannot create schema: %w", err)
 	}
 
-	result, err := parser.ParseAllSpecs(specsDir)
-	if err != nil {
-		return stats, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
+	var result *parser.ParseResult
+	if specsPart {
+		result, err = parser.ParseAllSpecs(specsDir)
+		if err != nil {
+			return stats, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
+		}
 	}
 
 	tx, err := db.Begin()
@@ -283,61 +294,60 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	// Clear existing rows for idempotency (delete-all + re-insert).
-	for _, table := range []string{"depends_on", "frontmatter_fields", "assertions", "specs", "observation_files", "observations", "index_meta", "documents", "document_tags", "passages"} {
-		if _, err = tx.Exec("DELETE FROM " + table); err != nil {
-			return stats, fmt.Errorf("cannot clear %s: %w", table, err)
+	// Clear the rows of each part that is rebuilt (delete + re-insert).
+	var clear []string
+	if specsPart {
+		clear = append(clear,
+			"DELETE FROM depends_on", "DELETE FROM frontmatter_fields", "DELETE FROM assertions", "DELETE FROM specs",
+			"DELETE FROM observation_files", "DELETE FROM observations",
+			"DELETE FROM index_meta WHERE key = '"+observationRefsKey+"'",
+			"DELETE FROM documents WHERE kind IN ('spec', 'assertion')",
+			"DELETE FROM document_tags WHERE kind IN ('spec', 'assertion')",
+			"DELETE FROM passages WHERE kind IN ('spec', 'assertion')")
+	}
+	if docsPart {
+		clear = append(clear,
+			"DELETE FROM index_meta WHERE key = '"+docsFingerprintKey+"'",
+			"DELETE FROM documents WHERE kind IN ('doc', 'raw')",
+			"DELETE FROM document_tags WHERE kind IN ('doc', 'raw')",
+			"DELETE FROM passages WHERE kind IN ('doc', 'raw')")
+	}
+	for _, stmt := range clear {
+		if _, err = tx.Exec(stmt); err != nil {
+			return stats, fmt.Errorf("cannot clear the index (%s): %w", stmt, err)
 		}
 	}
 
-	// Insert specs.
-	for _, s := range result.Specs {
-		if _, err = tx.Exec(
-			`INSERT INTO specs (id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?)`,
-			s.ID, s.Title, s.Status, s.Priority, s.Branch, s.File,
-		); err != nil {
-			return stats, fmt.Errorf("cannot insert spec %q: %w", s.ID, err)
-		}
-		if err = insertFrontmatterFields(tx, "spec", s.ID, s.Fields); err != nil {
+	if specsPart {
+		if err = insertSpecs(tx, result); err != nil {
 			return stats, err
 		}
-	}
-
-	// Insert assertions and depends_on edges.
-	for _, a := range result.Assertions {
-		if _, err = tx.Exec(
-			`INSERT INTO assertions (id, parent_id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			a.ID, a.Parent, a.Title, a.Status, a.Priority, a.Branch, a.File,
-		); err != nil {
-			return stats, fmt.Errorf("cannot insert assertion %q: %w", a.ID, err)
-		}
-
-		if a.DependsOn != "" {
-			if _, err = tx.Exec(
-				`INSERT INTO depends_on (assertion_id, depends_on_id) VALUES (?, ?)`,
-				a.ID, a.DependsOn,
-			); err != nil {
-				return stats, fmt.Errorf("cannot insert depends_on edge for %q: %w", a.ID, err)
-			}
-		}
-
-		if err = insertFrontmatterFields(tx, "assertion", a.ID, a.Fields); err != nil {
+		n, err := indexSpecDocuments(tx, specsDir, result)
+		if err != nil {
 			return stats, err
 		}
+		stats.Passages += n
+
+		// Observation pass: read the cross-branch union from git refs.
+		obsCount, warnings, err := indexObservations(tx)
+		if err != nil {
+			return stats, err
+		}
+		stats.Specs = len(result.Specs)
+		stats.Assertions = len(result.Assertions)
+		stats.Observations = obsCount
+		stats.Warnings = append(stats.Warnings, warnings...)
 	}
 
-	// Full-text pass: spec and assertion bodies, then the document corpus.
-	docCount, passageCount, docWarnings, err := indexDocuments(tx, specsDir, result)
-	if err != nil {
-		return stats, err
+	if docsPart {
+		docCount, passageCount, docWarnings, err := indexCorpus(tx, filepath.Dir(specsDir))
+		if err != nil {
+			return stats, err
+		}
+		stats.Documents = docCount
+		stats.Passages += passageCount
+		stats.Warnings = append(docWarnings, stats.Warnings...)
 	}
-
-	// Observation pass: read the cross-branch union from git refs.
-	obsCount, warnings, err := indexObservations(tx)
-	if err != nil {
-		return stats, err
-	}
-	warnings = append(docWarnings, warnings...)
 
 	if err = tx.Commit(); err != nil {
 		return stats, fmt.Errorf("cannot commit transaction: %w", err)
@@ -349,14 +359,45 @@ func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
 	if _, err = db.Exec(fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
 		return stats, fmt.Errorf("cannot set schema version: %w", err)
 	}
-
-	stats.Specs = len(result.Specs)
-	stats.Assertions = len(result.Assertions)
-	stats.Observations = obsCount
-	stats.Documents = docCount
-	stats.Passages = passageCount
-	stats.Warnings = warnings
 	return stats, nil
+}
+
+// insertSpecs writes the spec, assertion, depends_on, and custom-field rows.
+func insertSpecs(tx *sql.Tx, result *parser.ParseResult) error {
+	for _, s := range result.Specs {
+		if _, err := tx.Exec(
+			`INSERT INTO specs (id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?)`,
+			s.ID, s.Title, s.Status, s.Priority, s.Branch, s.File,
+		); err != nil {
+			return fmt.Errorf("cannot insert spec %q: %w", s.ID, err)
+		}
+		if err := insertFrontmatterFields(tx, "spec", s.ID, s.Fields); err != nil {
+			return err
+		}
+	}
+
+	for _, a := range result.Assertions {
+		if _, err := tx.Exec(
+			`INSERT INTO assertions (id, parent_id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			a.ID, a.Parent, a.Title, a.Status, a.Priority, a.Branch, a.File,
+		); err != nil {
+			return fmt.Errorf("cannot insert assertion %q: %w", a.ID, err)
+		}
+
+		if a.DependsOn != "" {
+			if _, err := tx.Exec(
+				`INSERT INTO depends_on (assertion_id, depends_on_id) VALUES (?, ?)`,
+				a.ID, a.DependsOn,
+			); err != nil {
+				return fmt.Errorf("cannot insert depends_on edge for %q: %w", a.ID, err)
+			}
+		}
+
+		if err := insertFrontmatterFields(tx, "assertion", a.ID, a.Fields); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // insertFrontmatterFields writes one row per distinct (key, value) for an
@@ -523,20 +564,25 @@ func EnsureFresh(specsDir, dbPath string) (bool, error) {
 		return true, nil
 	}
 
-	// Schema is current: rebuild if the specs are newer than the index, or
-	// the observation refs changed since the last build.
-	stale, err := IsStale(specsDir, dbPath)
+	// Schema is current: rebuild the spec part if the specs are newer than
+	// the index or the observation refs changed, and the document part if
+	// its fingerprint changed.
+	specsStale, err := specsNewer(specsDir, dbPath)
 	if err != nil {
 		return false, err
 	}
-	if !stale {
-		stale, err = observationRefsChanged(dbPath)
+	if !specsStale {
+		specsStale, err = observationRefsChanged(dbPath)
 		if err != nil {
 			return false, err
 		}
 	}
-	if stale {
-		if _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
+	docsStale, err := docsChanged(filepath.Dir(specsDir), dbPath)
+	if err != nil {
+		return false, err
+	}
+	if specsStale || docsStale {
+		if _, buildErr := build(specsDir, dbPath, false, specsStale, docsStale); buildErr != nil {
 			return false, buildErr
 		}
 		return true, nil
@@ -570,46 +616,75 @@ func observationRefsChanged(dbPath string) (bool, error) {
 	return stored != current, nil
 }
 
-// IsStale reports whether the index at dbPath is absent or older than the
-// most recently modified file or directory under an indexed root: specsDir,
-// raw/ and formatted/ beside it, the directories the in-place document globs
-// reach, and .spekk/docs-paths. A directory counts, so a deleted file makes
-// the index stale too. Returns (true, nil) when the index should be rebuilt,
-// (false, nil) when it is fresh, and (false, err) on unexpected I/O errors.
+// IsStale reports whether the index at dbPath is absent, older than a file
+// or directory under specsDir (a directory counts, so a deleted spec file
+// makes the index stale), or built from a document corpus other than the one
+// on disk. Returns (true, nil) when the index should be rebuilt, (false, nil)
+// when it is fresh, and (false, err) on unexpected I/O errors.
 func IsStale(specsDir, dbPath string) (bool, error) {
-	dbInfo, err := os.Stat(dbPath)
-	if err != nil {
+	if _, err := os.Stat(dbPath); err != nil {
 		if os.IsNotExist(err) {
 			return true, nil // absent → stale
 		}
 		return false, fmt.Errorf("cannot stat index.db: %w", err)
 	}
-	dbMtime := dbInfo.ModTime()
+	stale, err := specsNewer(specsDir, dbPath)
+	if err != nil || stale {
+		return stale, err
+	}
+	return docsChanged(filepath.Dir(specsDir), dbPath)
+}
 
+// specsNewer reports whether a file or directory under specsDir is newer than
+// the index.
+func specsNewer(specsDir, dbPath string) (bool, error) {
+	dbInfo, err := os.Stat(dbPath)
+	if err != nil {
+		return false, fmt.Errorf("cannot stat index.db: %w", err)
+	}
 	var newest time.Time
-	note := func(p string) {
-		if info, err := os.Stat(p); err == nil && info.ModTime().After(newest) {
+	walkErr := filepath.WalkDir(specsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info, err := d.Info(); err == nil && info.ModTime().After(newest) {
 			newest = info.ModTime()
 		}
+		return nil
+	})
+	if walkErr != nil {
+		return false, fmt.Errorf("cannot walk specs directory: %w", walkErr)
 	}
-	root := filepath.Dir(specsDir)
-	for _, dir := range []string{specsDir, filepath.Join(root, docs.RawDir), filepath.Join(root, docs.FormattedDir)} {
-		walkErr := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			note(path)
-			return nil
-		})
-		if walkErr != nil {
-			return false, fmt.Errorf("cannot walk %s: %w", dir, walkErr)
-		}
-	}
-	if err := docs.WalkWatched(root, note); err != nil {
+	return newest.After(dbInfo.ModTime()), nil
+}
+
+// docsFingerprintKey is the index_meta key holding the docs.Fingerprint the
+// last build of the document part saw.
+const docsFingerprintKey = "docs_fingerprint"
+
+// docsChanged reports whether the document corpus on disk differs from the
+// one the index was built from. The fingerprint lists exactly the files the
+// corpus reads, so a new, edited, or deleted document changes it, and an
+// unrelated file at the repository root does not.
+func docsChanged(root, dbPath string) (bool, error) {
+	current, err := docs.Fingerprint(root)
+	if err != nil {
 		return false, err
 	}
-
-	return newest.After(dbMtime), nil
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	if err != nil {
+		return false, fmt.Errorf("cannot open index.db: %w", err)
+	}
+	defer db.Close()
+	var stored string
+	err = db.QueryRow("SELECT value FROM index_meta WHERE key = ?", docsFingerprintKey).Scan(&stored)
+	if err == sql.ErrNoRows {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("cannot read the document fingerprint: %w", err)
+	}
+	return stored != current, nil
 }
 
 // EnsureGitignored adds .spekk/index.db (or .spekk/) to .gitignore at repoRoot

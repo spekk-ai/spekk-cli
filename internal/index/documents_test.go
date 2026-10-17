@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/index"
 )
@@ -65,18 +64,15 @@ func TestEnsureFreshSeesDeletedDocument(t *testing.T) {
 	_, err := index.BuildIndex(specsDir, dbPath, false)
 	must(t, err)
 
-	// Age the database, so that only the deletion can make it stale. A
-	// deletion changes no file mtime, only the mtime of its directory.
-	old := time.Now().Add(-time.Hour)
-	for _, p := range []string{specsDir, filepath.Join(root, "docs"), filepath.Join(root, "docs", "other.md")} {
-		must(t, filepath.WalkDir(p, func(path string, _ os.DirEntry, _ error) error { return os.Chtimes(path, old, old) }))
-	}
-	must(t, os.Chtimes(root, old, old))
+	// A file that no glob selects, beside the root-level *.md documents,
+	// does not make the index stale.
+	writeFile(t, root, "build.log", "x")
 	if stale, err := index.IsStale(specsDir, dbPath); err != nil || stale {
-		t.Fatalf("IsStale before the deletion = %v, %v; want false", stale, err)
+		t.Fatalf("IsStale after an unrelated file = %v, %v; want false", stale, err)
 	}
-	must(t, os.Remove(filepath.Join(root, "docs", "guide.md")))
 
+	// A deletion changes no file that remains; the fingerprint still sees it.
+	must(t, os.Remove(filepath.Join(root, "docs", "guide.md")))
 	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
 	must(t, err)
 	if !rebuilt {

@@ -400,42 +400,27 @@ func globRegexp(glob string) (*regexp.Regexp, error) {
 	return regexp.Compile(b.String())
 }
 
-// WatchRoot is a directory the in-place globs can reach, and how deep: Depth
+// globBase is the directory an in-place glob starts in, and how deep: Depth
 // is the number of path segments below Dir a match can have, or -1 for any.
-type WatchRoot struct {
+type globBase struct {
 	Dir   string
 	Depth int
 }
 
 // globRoot returns the fixed directory a glob starts in and its depth.
-func globRoot(glob string) WatchRoot {
+func globRoot(glob string) globBase {
 	segs := strings.Split(strings.TrimPrefix(glob, "/"), "/")
 	i := 0
 	for i < len(segs)-1 && !strings.ContainsAny(segs[i], "*?[") {
 		i++
 	}
-	r := WatchRoot{Dir: strings.Join(segs[:i], "/"), Depth: len(segs) - i}
+	r := globBase{Dir: strings.Join(segs[:i], "/"), Depth: len(segs) - i}
 	for _, s := range segs[i:] {
 		if strings.Contains(s, "**") {
 			r.Depth = -1
 		}
 	}
 	return r
-}
-
-// WatchRoots returns the directories that the include globs reach. The
-// index freshness check walks them, so it never walks the whole repository
-// for a root-level glob such as `*.md`.
-func WatchRoots(root string) ([]WatchRoot, error) {
-	include, _, err := Globs(root)
-	if err != nil {
-		return nil, err
-	}
-	var out []WatchRoot
-	for _, g := range include {
-		out = append(out, globRoot(g))
-	}
-	return out, nil
 }
 
 // inPlaceFiles returns every file the globs select, in path order.
@@ -496,9 +481,9 @@ func anyMatch(res []*regexp.Regexp, s string) bool {
 	return false
 }
 
-// walkRoot calls fn for each file and directory under one watch root, to its
-// depth, and skips the directories that never hold in-place documents.
-func walkRoot(root string, wr WatchRoot, fn func(rel string, isDir bool)) error {
+// walkRoot calls fn for each file and directory under the base of one glob,
+// to its depth, and skips the directories that never hold in-place documents.
+func walkRoot(root string, wr globBase, fn func(rel string, isDir bool)) error {
 	base := filepath.Join(root, filepath.FromSlash(wr.Dir))
 	err := filepath.WalkDir(base, func(p string, de fs.DirEntry, err error) error {
 		if err != nil {
@@ -539,20 +524,38 @@ func walkRoot(root string, wr WatchRoot, fn func(rel string, isDir bool)) error 
 	return err
 }
 
-// WalkWatched calls fn for each file and directory the include globs reach,
-// and for .spekk/docs-paths. The index freshness check uses it.
-func WalkWatched(root string, fn func(abs string)) error {
-	roots, err := WatchRoots(root)
+// Fingerprint identifies the document corpus on disk: the path, size, and
+// mtime of each in-place document, of each file under raw/ and formatted/,
+// and of .spekk/docs-paths. It reads no file content. The index stores it and
+// rebuilds the document part when it changes, so a new, edited, or deleted
+// document is seen, and an unrelated file is not.
+func Fingerprint(root string) (string, error) {
+	files, err := inPlaceFiles(root)
 	if err != nil {
-		return err
+		return "", err
 	}
-	for _, wr := range roots {
-		if err := walkRoot(root, wr, func(rel string, _ bool) {
-			fn(filepath.Join(root, filepath.FromSlash(rel)))
-		}); err != nil {
-			return err
+	for _, dir := range []string{RawDir, FormattedDir} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(p string, de fs.DirEntry, err error) error {
+			if err != nil || de.IsDir() {
+				return nil
+			}
+			rel, _ := filepath.Rel(root, p)
+			files = append(files, filepath.ToSlash(rel))
+			return nil
+		})
+		if err != nil {
+			return "", err
 		}
 	}
-	fn(filepath.Join(root, filepath.FromSlash(pathsFile)))
-	return nil
+	files = append(files, pathsFile)
+	sort.Strings(files)
+	h := sha256.New()
+	for _, rel := range files {
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00%d\n", rel, info.Size(), info.ModTime().UnixNano())
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

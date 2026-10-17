@@ -23,5 +23,5 @@ A spec or an assertion can cite documents: `sources: [doc-id]`. `spekk validate`
 ## Upgrade notes
 
 - The index schema is now version 5. The first command after the upgrade rebuilds the index with no manual step.
-- The index now also rebuilds when a file or a folder under `raw/`, `formatted/`, or an in-place glob changes, and when a file under `specs/` is deleted.
+- The index now also rebuilds when a document is added, edited, or deleted, and when a file under `specs/` is deleted. The document part and the spec part rebuild apart, so a spec edit does not index the documents again.
 - The coach, builder, and observer prompts now use `spekk docs search` for spec prose and documents.

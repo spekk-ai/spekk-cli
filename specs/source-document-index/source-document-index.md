@@ -76,7 +76,7 @@ Text goes in git. A converted file of more than 5 MB becomes a pointer: the stub
 
 ### Freshness
 
-`EnsureFresh` keeps one rule: rebuild when a file under an indexed root is newer than `index.db`, or the schema version changed. The indexed roots are now `specs/`, `raw/`, `formatted/`, `.spekk/docs-paths`, and the directories of the in-place globs. A directory mtime counts too, so a deleted file triggers a rebuild. Each stub keeps the `sha256` of its raw file; when the raw file changes, the stub is stale. `spekk docs status` lists it, `spekk validate` warns, and search marks the result `stale`. To add the document again clears the summary when the content changed, so the agent must write a new one.
+`EnsureFresh` stays the one freshness gate, with two parts. The spec part keeps today's rule (a file under `specs/` newer than `index.db`, now with directories, so a deleted file counts). The document part rebuilds when a fingerprint of its files (path, size, mtime) changes. A spec edit then does not index a large corpus again (measured on 518 documents, 10 MB: 0.16 s, not 4.5 s), and an unrelated file at the repository root does not cause a rebuild. A schema-version change rebuilds all. Each stub keeps the `sha256` of its raw file; when the raw file changes, the stub is stale. `spekk docs status` lists it, `spekk validate` warns, and search marks the result `stale`. To add the document again clears the summary when the content changed, so the agent must write a new one.
 
 ### Untrusted content and sensitive documents
 

@@ -338,15 +338,11 @@ func docsAdd(positional []string, flags *cli.ParseResult, stdout, stderr io.Writ
 	}
 	failed := docs.Add(root, positional, opts, stdout)
 
-	// Build now, so the next search finds the new documents and a build
+	// Refresh now, so the next search finds the new documents and a build
 	// problem shows here, beside the add that caused it.
-	stats, err := index.BuildIndex(specsDir, index.DBPath(root), false)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", index.FormatError(err))
+	if _, ok := refreshIndex(specsDir, stderr); !ok {
 		return 1
 	}
-	_ = index.EnsureGitignored(root)
-	warn(stderr, stats.Warnings)
 	if failed > 0 {
 		fmt.Fprintf(stderr, "docs add: %d file(s) failed\n", failed)
 		return 1

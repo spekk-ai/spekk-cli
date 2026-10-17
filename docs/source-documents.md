@@ -75,7 +75,7 @@ adr/*.md
 
 ## Freshness
 
-The index rebuilds when a file or a folder under `specs/`, `raw/`, `formatted/`, or an in-place glob changes, so a new, edited, or deleted file shows in the next search. `spekk index --force` rebuilds it from scratch with the same result.
+The index rebuilds when a document is added, edited, or deleted, so the change shows in the next search. The documents and the specs rebuild apart: a spec edit does not index the documents again. `spekk index --force` rebuilds all from scratch with the same result.
 
 Each stub keeps the `sha256` of its raw file. When the raw file changes, the document is `stale`: `spekk docs status` lists it, `spekk validate` warns, and search marks it. Add it again to update the stub and the text. When the content changed, this clears the summary, because it describes the old text, and you write a new one.
 
