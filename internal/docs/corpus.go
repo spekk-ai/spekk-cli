@@ -276,7 +276,9 @@ func scanRaw(root string) ([]Document, []string, []string, error) {
 			}
 			return err
 		}
-		if de.IsDir() {
+		// The manifest skips the same entries (CorpusStat): status must not
+		// tell an agent to add a FIFO, or a file outside the repository.
+		if de.IsDir() || !regularEntry(p, de) || (de.Type()&fs.ModeSymlink != 0 && !resolvesInside(root, p)) {
 			return nil
 		}
 		rel, _ := filepath.Rel(root, p)

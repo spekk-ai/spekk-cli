@@ -154,6 +154,9 @@ func mustRel(base, p string) string {
 
 // addOne adds one file. Nothing is written until every check passed.
 func addOne(root string, j addJob, opts AddOptions, out io.Writer) error {
+	if err := regular(j.src); err != nil {
+		return err
+	}
 	text, err := Extract(j.src)
 	if err != nil {
 		return fmt.Errorf("cannot convert: %w", err)

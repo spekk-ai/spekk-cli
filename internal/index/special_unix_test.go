@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spekk-ai/spekk-cli/internal/docs"
 	"github.com/spekk-ai/spekk-cli/internal/index"
 )
 
@@ -32,6 +33,9 @@ func TestRefreshSkipsFilesThatAreNotRegular(t *testing.T) {
 	must(t, syscall.Mkfifo(filepath.Join(root, "raw", "pipe.txt"), 0o644))
 	must(t, syscall.Mkfifo(filepath.Join(root, "formatted", "pipe.md"), 0o644))
 	must(t, syscall.Mkfifo(filepath.Join(root, "docs", "pipe.md"), 0o644))
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	must(t, os.WriteFile(outside, []byte("Not in the repository.\n"), 0o644))
+	must(t, os.Symlink(outside, filepath.Join(root, "raw", "outside.txt")))
 
 	// The forced rebuild with the entries reads every stub and document,
 	// so it also reaches the readers that the manifest does not.
@@ -56,5 +60,11 @@ func TestRefreshSkipsFilesThatAreNotRegular(t *testing.T) {
 		if got := docRows(t, db); got != want {
 			t.Errorf("rows of %s differ from a forced rebuild without the special files:\n%s\nwant:\n%s", filepath.Base(db), got, want)
 		}
+	}
+	// docs status must not tell an agent to add one of them.
+	c, err := docs.Scan(root)
+	must(t, err)
+	if len(c.NoStub) != 0 {
+		t.Errorf("docs status lists %v as raw files to add", c.NoStub)
 	}
 }
