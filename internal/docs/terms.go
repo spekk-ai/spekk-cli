@@ -153,10 +153,13 @@ type Line struct {
 	Text string `json:"text"`
 }
 
-// MatchingLines returns up to max lines of a passage that hold the most
-// distinct query words, in line order. body is the passage text and start
-// its first line number. A stopword does not count.
-func MatchingLines(body string, start int, query string, max int) []Line {
+// MatchingLines returns lines of a passage that fit in budget bytes, in line
+// order: first the lines that hold the most distinct query words (a stopword
+// does not count), then the lines next to them, nearest first, so a line
+// that completes a match is shown too. body is the passage text and start
+// its first line number. Each line costs its length plus 8 bytes; a blank
+// line is never shown. Each line is cut to maxRunes characters first.
+func MatchingLines(body string, start int, query string, budget, maxRunes int) []Line {
 	var terms []string
 	seen := map[string]bool{}
 	for _, w := range wordsOf(query) {
@@ -166,12 +169,12 @@ func MatchingLines(body string, start int, query string, max int) []Line {
 		seen[w] = true
 		terms = append(terms, stemPrefix(w))
 	}
-	type scored struct {
-		Line
-		score int
-	}
+	lines := strings.Split(body, "\n")
+	text := make([]string, len(lines))
+	type scored struct{ i, score int }
 	var cands []scored
-	for i, line := range strings.Split(body, "\n") {
+	for i, line := range lines {
+		text[i] = Truncate(CleanLine(line), maxRunes)
 		words := wordsOf(line)
 		score := 0
 		for _, t := range terms {
@@ -183,17 +186,47 @@ func MatchingLines(body string, start int, query string, max int) []Line {
 			}
 		}
 		if score > 0 {
-			cands = append(cands, scored{Line{start + i, line}, score})
+			cands = append(cands, scored{i, score})
 		}
 	}
 	sort.SliceStable(cands, func(i, j int) bool { return cands[i].score > cands[j].score })
-	if len(cands) > max {
-		cands = cands[:max]
+
+	picked := map[int]bool{}
+	take := func(i int) bool {
+		if i < 0 || i >= len(lines) || picked[i] || text[i] == "" {
+			return false
+		}
+		if cost := len(text[i]) + 8; cost <= budget {
+			budget -= cost
+			picked[i] = true
+			return true
+		}
+		return false
 	}
-	sort.Slice(cands, func(i, j int) bool { return cands[i].N < cands[j].N })
-	out := make([]Line, len(cands))
-	for i, c := range cands {
-		out[i] = c.Line
+	for _, c := range cands {
+		take(c.i)
+	}
+	// The lines next to the matches, nearest first.
+	for d := 1; d < len(lines) && len(picked) > 0; d++ {
+		var from []int
+		for i := range picked {
+			from = append(from, i)
+		}
+		sort.Ints(from)
+		added := false
+		for _, i := range from {
+			added = take(i-d) || added
+			added = take(i+d) || added
+		}
+		if !added && budget < 16 {
+			break
+		}
+	}
+	var out []Line
+	for i := range lines {
+		if picked[i] {
+			out = append(out, Line{start + i, text[i]})
+		}
 	}
 	return out
 }

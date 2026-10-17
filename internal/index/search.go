@@ -51,9 +51,13 @@ type SearchResult struct {
 	Also  []string    `json:"also"`
 }
 
-// shownLines is the most matching lines printed for the result at each rank;
-// a later rank gets the last value.
-var shownLines = []int{6, 3, 2}
+// linesWeight shares the bytes that the cap leaves for passage lines between
+// the results, by rank; a later rank gets the last value. The first result
+// is the most likely to hold the answer.
+var linesWeight = []int{4, 2, 1}
+
+// linesSlack keeps the lines a little under the cap, for the stale line.
+const linesSlack = 120
 
 // maxLineRunes is the most characters printed of one matching line.
 const maxLineRunes = 160
@@ -168,6 +172,7 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 	}
 	rows.Close()
 
+	bodies, queries := make([]string, len(out)), make([]string, len(out))
 	for i := range out {
 		// The title already tells the agent which document this is, so the
 		// shown passage is the best one for the other query words.
@@ -180,15 +185,25 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 				query = rest
 			}
 		}
-		var body string
-		if err := db.QueryRow(`SELECT body FROM passages WHERE rowid = ?`, shownRow[i]).Scan(&body); err != nil {
+		if err := db.QueryRow(`SELECT body FROM passages WHERE rowid = ?`, shownRow[i]).Scan(&bodies[i]); err != nil {
 			return nil, fmt.Errorf("search: passage of %q: %w", out[i].ID, err)
 		}
-		lines := docs.MatchingLines(body, out[i].StartLine, query, shownLines[min(i, len(shownLines)-1)])
-		for j := range lines {
-			lines[j].Text = docs.Truncate(docs.CleanLine(lines[j].Text), maxLineRunes)
+		queries[i] = query
+	}
+
+	// The passage lines get what the cap leaves after the rest of the text
+	// output, so every result still fits.
+	avail := SearchCap - linesSlack - len(RenderSearchText(opts.Query, out, 0))
+	total := 0
+	for i := range out {
+		total += linesWeight[min(i, len(linesWeight)-1)]
+	}
+	for i := range out {
+		budget := 0
+		if avail > 0 {
+			budget = avail * linesWeight[min(i, len(linesWeight)-1)] / total
 		}
-		out[i].Lines = lines
+		out[i].Lines = docs.MatchingLines(bodies[i], out[i].StartLine, queries[i], budget, maxLineRunes)
 	}
 	return out, nil
 }
@@ -245,9 +260,9 @@ func RenderSearchText(query string, results []SearchResult, pending int) string 
 	if len(results) == 0 {
 		return staleLine(pending) + fmt.Sprintf("No results for %q.\n", query)
 	}
-	render := func(n int) string {
+	render := func(shown []SearchResult) string {
 		var b strings.Builder
-		shown := results[:n]
+		n := len(shown)
 		b.WriteString(staleLine(pending))
 		fmt.Fprintf(&b, "%d results for %q.", n, query)
 		for _, r := range shown {
@@ -284,7 +299,7 @@ func RenderSearchText(query string, results []SearchResult, pending int) string 
 		b.WriteString("\nRead a passage: spekk docs show <id> --lines <a:b>\n")
 		return b.String()
 	}
-	return fit(len(results), render)
+	return fit(results, render)
 }
 
 // searchJSON is the JSON shape of a search.
@@ -306,8 +321,8 @@ type staleJSON struct {
 // valid JSON at every size: results that do not fit are left out whole and
 // counted in omitted.
 func RenderSearchJSON(query string, results []SearchResult, pending int) string {
-	render := func(n int) string {
-		obj := searchJSON{Query: query, Results: results[:n], Omitted: len(results) - n}
+	render := func(shown []SearchResult) string {
+		obj := searchJSON{Query: query, Results: shown, Omitted: len(results) - len(shown)}
 		if pending > 0 {
 			obj.Stale = &staleJSON{Changed: pending, Reindexing: true}
 		}
@@ -320,18 +335,39 @@ func RenderSearchJSON(query string, results []SearchResult, pending int) string 
 		out, _ := json.MarshalIndent(obj, "", "  ")
 		return string(out) + "\n"
 	}
-	return fit(len(results), render)
+	return fit(results, render)
 }
 
-// fit returns the render of the most results whose output is at most
-// SearchCap bytes.
-func fit(total int, render func(n int) string) string {
-	for n := total; n > 0; n-- {
-		if out := render(n); len(out) <= SearchCap {
+// fit returns a render of results that is at most SearchCap bytes. It first
+// leaves out passage lines, from the last line of the lowest-ranked result
+// that has one, and then whole results from the end, so the cap keeps as
+// many documents as it can.
+func fit(results []SearchResult, render func(shown []SearchResult) string) string {
+	rs := make([]SearchResult, len(results))
+	for i, r := range results {
+		r.Lines = append([]docs.Line(nil), r.Lines...)
+		rs[i] = r
+	}
+	for {
+		out := render(rs)
+		if len(out) <= SearchCap {
+			return out
+		}
+		i := len(rs) - 1
+		for i >= 0 && len(rs[i].Lines) == 0 {
+			i--
+		}
+		if i < 0 {
+			break
+		}
+		rs[i].Lines = rs[i].Lines[:len(rs[i].Lines)-1]
+	}
+	for n := len(rs); n > 0; n-- {
+		if out := render(rs[:n]); len(out) <= SearchCap {
 			return out
 		}
 	}
-	return render(0)
+	return render(nil)
 }
 
 // FindDocuments returns the documents whose id, path, or text path is key,
