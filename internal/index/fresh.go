@@ -163,6 +163,31 @@ func checkDocs(root, dbPath string) (docChanges, error) {
 	return diffCorpus(current, manifest), nil
 }
 
+// hashBudget is the most bytes of touched files that a query hashes to
+// count the real changes before it chooses the background refresh.
+const hashBudget = 64 << 20
+
+// contentChanges counts the changes of c that are real: an added or deleted
+// file, or a touched file whose sha256 differs from the manifest. A touch
+// with the same content (git checkout, touch) is not a change. Past
+// hashBudget, a touched file counts as changed without a hash.
+func contentChanges(root string, c docChanges) int {
+	n := len(c.added) + len(c.deleted)
+	budget := int64(hashBudget)
+	for _, p := range c.touched {
+		budget -= c.current[p].Size
+		if budget < 0 {
+			n++
+			continue
+		}
+		sum, err := docs.FileSHA256(filepath.Join(root, filepath.FromSlash(p)))
+		if err != nil || sum != c.manifest[p].sha {
+			n++
+		}
+	}
+	return n
+}
+
 // refreshDocs brings the document part of the index up to date with the
 // files on disk, inside tx. The check runs again inside the write
 // transaction, so two processes that saw the same change index it once. It

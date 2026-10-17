@@ -671,9 +671,11 @@ func Refresh(specsDir, dbPath string, background bool) (Freshness, error) {
 			return f, nil
 		}
 		// A background start that fails falls back to the inline refresh.
-		if c.count() > InlineLimit && startBackground(root) == nil {
-			f.Pending = c.count()
-			return f, nil
+		if n := c.count(); n > InlineLimit {
+			if n = contentChanges(root, c); n > InlineLimit && startBackground(root) == nil {
+				f.Pending = n
+				return f, nil
+			}
 		}
 	}
 	if _, _, err := RefreshDocs(specsDir, dbPath); err != nil {
