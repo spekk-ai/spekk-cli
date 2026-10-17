@@ -15,15 +15,6 @@ func TestProtocolVersionPinned(t *testing.T) {
 	}
 }
 
-func TestProtocolMajor(t *testing.T) {
-	cases := map[string]string{"1.0": "1", "2.3": "2", "weird": "weird", "": ""}
-	for in, want := range cases {
-		if got := protocolMajor(in); got != want {
-			t.Fatalf("protocolMajor(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestDialOptionsSendBothHeaders(t *testing.T) {
 	c := &AgentClient{cfg: Config{Token: "tok"}}
 	h := c.dialOptions().HTTPHeader

@@ -329,6 +329,7 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 		return st.fail(fmt.Errorf("fetching release artifacts: %w", err))
 	}
 	defer func() { os.Remove(artifacts.BinaryPath) }()
+	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
 	opts.CloudInit = artifacts.CloudInit
 
 	p := &DOProvider{client: machineDOClient(in.doToken)}
@@ -349,7 +350,7 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 	createErr := p.Create(opts.Name, opts, meta)
 	if namesMachine(meta) {
 		if err := SaveSandbox(opts.Name, meta); err != nil {
-			return st.fail(fmt.Errorf("saving metadata for %s: %w", machineRef(meta), err))
+			return st.fail(errors.Join(createErr, fmt.Errorf("saving metadata for %s: %w", machineRef(meta), err)))
 		}
 	}
 	if createErr != nil {
