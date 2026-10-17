@@ -24,8 +24,8 @@ type Passage struct {
 // BM25 over a long section ranks badly, and the agent then reads the whole
 // section to find one fact.
 const (
-	maxSectionLines = 80
-	windowLines     = 40
+	maxSectionLines = 40
+	windowLines     = 20
 )
 
 // section is a heading section before the window rule: lines [start, end) as

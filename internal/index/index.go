@@ -194,12 +194,13 @@ func dropAllTables(db *sql.DB) error {
 // tables (observations, observation_files, index_meta); 3 adds
 // frontmatter_fields; 4 adds observation rows to frontmatter_fields; 5 adds
 // the full-text corpus (documents, document_tags, passages); 6 adds the
-// document manifest (doc_files) in place of one corpus fingerprint. Version
+// document manifest (doc_files) in place of one corpus fingerprint; 7 cuts
+// long sections into 20-line windows, not 40 (no column changes). Version
 // 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 6
+const schemaVersion = 7
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.

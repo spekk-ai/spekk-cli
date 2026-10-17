@@ -6,7 +6,7 @@ An agent that needs one fact from a long document reads files with `grep` and `c
 - the prose that is already in the repository (`docs/`, READMEs), where it is,
 - **source documents**: the transcripts, manuals, PDFs, spreadsheets, and email that a spec is written from.
 
-A search returns the best passage of each document and its line range. The agent then reads 40 lines, not 4,000. The index is SQLite FTS5 with BM25 ranking, in the same `.spekk/index.db` as the spec index. There is no vector store, no embedding model, and no service.
+A search returns the best passage of each document and its line range. The agent then reads 20 lines, not 4,000. The index is SQLite FTS5 with BM25 ranking, in the same `.spekk/index.db` as the spec index. There is no vector store, no embedding model, and no service.
 
 ## Kinds
 

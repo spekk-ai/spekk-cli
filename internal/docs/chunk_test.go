@@ -74,22 +74,22 @@ func TestChunkBoundaries(t *testing.T) {
 func TestChunkWindowsLongSections(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("# Long\n")
-	for i := 0; i < 99; i++ {
+	for i := 0; i < 49; i++ {
 		fmt.Fprintf(&b, "line %d\n", i)
 	}
 	got := spans(Chunk(b.String()))
-	want := []span{{"Long", 1, 40}, {"Long", 41, 80}, {"Long", 81, 100}}
+	want := []span{{"Long", 1, 20}, {"Long", 21, 40}, {"Long", 41, 50}}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Errorf("100-line section: got %v, want %v", got, want)
+		t.Errorf("50-line section: got %v, want %v", got, want)
 	}
 
-	// 80 lines is the limit: a section of exactly 80 lines stays whole.
+	// 40 lines is the limit: a section of exactly 40 lines stays whole.
 	b.Reset()
 	b.WriteString("# Edge\n")
-	for i := 0; i < 79; i++ {
+	for i := 0; i < 39; i++ {
 		fmt.Fprintf(&b, "line %d\n", i)
 	}
-	if got := spans(Chunk(b.String())); len(got) != 1 || got[0].end != 80 {
-		t.Errorf("80-line section: got %v, want one passage 1-80", got)
+	if got := spans(Chunk(b.String())); len(got) != 1 || got[0].end != 40 {
+		t.Errorf("40-line section: got %v, want one passage 1-40", got)
 	}
 }

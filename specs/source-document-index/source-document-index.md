@@ -41,7 +41,7 @@ A spec is a claim about what we will build. A source document is evidence. They 
 
 ### Passages, not whole documents
 
-BM25 over a whole long document ranks badly, and the second read is then the full file. The index holds passages: one passage for each heading section (ATX `#` headings and setext `===`/`---` underlines), and a section longer than 80 lines is cut into windows of 40 lines. A result gives the document, the best passage, and its line range in the plaintext file, so the agent reads 40 lines instead of 4,000.
+BM25 over a whole long document ranks badly, and the second read is then the full file. The index holds passages: one passage for each heading section (ATX `#` headings and setext `===`/`---` underlines), and a section longer than 40 lines is cut into windows of 20 lines (smaller passages rank sharper; measured on the eval corpus against 80/40 and 20/10). A result gives the document, the best passage, and its line range in the plaintext file, so the agent reads 20 lines instead of 4,000.
 
 ### Command surface and output budget
 

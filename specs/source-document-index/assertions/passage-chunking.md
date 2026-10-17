@@ -17,9 +17,9 @@ One function cuts the plaintext of any document into passages. The index, search
 - A leading YAML frontmatter block (`---` on line 1 to the next `---`) is in no passage.
 - Text before the first heading is one passage with an empty heading.
 - A section that has no non-blank line after its heading is joined to the next section, so no passage is only a heading.
-- A section of more than 80 lines is cut into windows of 40 lines. Each window keeps the heading of its section.
+- A section of more than 40 lines is cut into windows of 20 lines. Each window keeps the heading of its section.
 - Each passage has `start` and `end`: 1-based line numbers, inclusive, in the file as it is on disk (frontmatter lines counted). Blank lines at the end of a passage are not in its range.
 - A file with no non-blank text gives no passages, and not an error.
 - CRLF line endings give the same line numbers as LF.
 
-**Tests:** `internal/docs/chunk_test.go`: table tests for heading kinds, code fences, frontmatter offset, heading-only merge, the 80/40 window rule, and CRLF. These are the chunk-boundary edge cases.
+**Tests:** `internal/docs/chunk_test.go`: table tests for heading kinds, code fences, frontmatter offset, heading-only merge, the 40/20 window rule, and CRLF. These are the chunk-boundary edge cases.
