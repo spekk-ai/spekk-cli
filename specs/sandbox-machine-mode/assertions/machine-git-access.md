@@ -4,6 +4,7 @@ parent: sandbox-machine-mode
 created: 2026-10-17T00:00:00Z
 priority: 1
 status: not_started
+branch: feature/sandbox-machine-mode
 depends-on: machine-model-credential
 ---
 
