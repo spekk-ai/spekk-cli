@@ -68,6 +68,9 @@ func main() {
 	case "query":
 		runQuery(args[1:])
 
+	case "docs":
+		runDocs(args[1:])
+
 	case "next":
 		runParser(args[1:])
 
@@ -597,8 +600,9 @@ one plain-text failure line per violation (file + problem), sorted by file
 then message, when anything is invalid.
 
 Warnings go to stderr and never change the exit code: a branch value that
-matches no branch on an assertion that is not done, and a builder lock that is
-stale.
+matches no branch on an assertion that is not done, a builder lock that is
+stale, a "sources" id that names no document, and each source document in
+raw/ that is stale, has no summary, has no file, or has no stub.
 `
 
 // execValidate is the testable core of runValidate. It writes the report to
@@ -681,7 +685,10 @@ OPTIONS:
 Only SELECT (and WITH ... SELECT) statements are permitted; the database is
 opened read-only. Tables: specs(id, title, status, priority, branch, file),
 assertions(id, parent_id, title, status, priority, branch, file),
-depends_on(assertion_id, depends_on_id).
+depends_on(assertion_id, depends_on_id), documents(kind, id, path, text_path,
+title, type, created, summary, sha256, state), document_tags(kind, doc_id,
+tag), and the FTS5 table passages(heading, body, terms, kind, doc_id,
+start_line, end_line, is_header). For a ranked text search, use "spekk docs search".
 `
 
 // runIndex implements the `spekk index` subcommand.
@@ -691,7 +698,10 @@ func runIndex(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
 		"force":    {Names: []string{"--force"}, Type: cli.BoolFlag},
-		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		// --background is the refresh that a query starts when many
+		// documents changed; it is not for people, so the usage omits it.
+		"background": {Names: []string{"--background"}, Type: cli.BoolFlag},
+		"help":       {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
 	if flags.Bool("help") {
@@ -708,6 +718,13 @@ func runIndex(args []string) {
 	repoRoot := filepath.Dir(specsDir)
 	dbPath := index.DBPath(repoRoot)
 
+	if flags.Bool("background") {
+		if err := index.RefreshInBackground(specsDir, dbPath); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+
 	stats, err := index.BuildIndex(specsDir, dbPath, flags.Bool("force"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
@@ -721,7 +738,7 @@ func runIndex(args []string) {
 		fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %s\n", err)
 	}
 
-	fmt.Printf("Indexed %d specs, %d assertions, %d observations.\n", stats.Specs, stats.Assertions, stats.Observations)
+	fmt.Printf("Indexed %d specs, %d assertions, %d observations, %d documents (%d passages).\n", stats.Specs, stats.Assertions, stats.Observations, stats.Documents, stats.Passages)
 }
 
 // runQuery implements the `spekk query "<sql>"` subcommand.
@@ -2132,6 +2149,7 @@ COMMANDS:
   list      List specs and assertions with optional --status filter and --assertions-only flat output
   index     Build .spekk/index.db SQLite index from specs/ (use --force to rebuild from scratch)
   query     Execute a SELECT query against .spekk/index.db (supports --json, --tsv, --csv)
+  docs      Search specs, repository docs, and source documents (search, show, add, status)
   show      Generate and display spec explorer web interface (-w to watch, --json for data)
   status    Show comprehensive overview of all specs and assertions
   validate  Check specs/ against a fixed set of invariants; exit non-zero on any violation

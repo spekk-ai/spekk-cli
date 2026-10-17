@@ -96,6 +96,63 @@ CREATE TABLE IF NOT EXISTS index_meta (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+-- Full-text corpus (specs/source-document-index/): one row per spec,
+-- assertion, in-place doc, and raw source document. path is the document
+-- file; text_path is the plaintext file that the passage line numbers refer
+-- to (for a converted raw document, its derived text in formatted/). state
+-- is 'ok' for every kind but raw (see internal/docs).
+CREATE TABLE IF NOT EXISTS documents (
+  kind      TEXT,   -- 'spec' | 'assertion' | 'doc' | 'raw'
+  id        TEXT,
+  path      TEXT,
+  text_path TEXT,
+  title     TEXT,
+  type      TEXT,
+  created   TEXT,
+  summary   TEXT,
+  sha256    TEXT,
+  state     TEXT,
+  -- The rowids of the document's passages, so that a re-index deletes them
+  -- by rowid: the kind and doc_id columns of an FTS5 table have no index.
+  passage_first INTEGER,
+  passage_last  INTEGER,
+  PRIMARY KEY (kind, id)
+);
+CREATE TABLE IF NOT EXISTS document_tags (
+  kind   TEXT,
+  doc_id TEXT,
+  tag    TEXT
+);
+-- The manifest of the document corpus (internal/index/fresh.go): one row per
+-- file that the document part reads, so the dirty check at query time is a
+-- stat walk, and only the documents of changed files are indexed again.
+CREATE TABLE IF NOT EXISTS doc_files (
+  path     TEXT PRIMARY KEY,
+  size     INTEGER,
+  mtime_ns INTEGER,
+  sha256   TEXT
+);
+-- The manifest of the .md files under specs/ (internal/index/fresh.go): a
+-- touch that changes no content needs no rebuild of the spec part, and a
+-- rebuild indexes again only the passages of changed files.
+CREATE TABLE IF NOT EXISTS spec_files (
+  path     TEXT PRIMARY KEY,
+  size     INTEGER,
+  mtime_ns INTEGER,
+  sha256   TEXT
+);
+-- One row per passage (a heading section, or a 40-line window of a long
+-- one). A doc or raw document also has one header row (is_header = 1) that
+-- holds its title, summary, and tags, so a match on them ranks the document.
+-- The summary is not repeated on each passage: FTS5 bm25() normalizes by the
+-- length of the whole row, so a repeated summary made the shortest passage of
+-- a matching document rank first. terms holds the camelCase parts of
+-- identifiers (internal/docs.IdentifierTerms).
+CREATE VIRTUAL TABLE IF NOT EXISTS passages USING fts5(
+  heading, body, terms,
+  kind UNINDEXED, doc_id UNINDEXED, start_line UNINDEXED, end_line UNINDEXED, is_header UNINDEXED,
+  tokenize = 'porter unicode61 remove_diacritics 2'
+);
 `
 
 // dropAllTables drops every table in the database, enumerated from
@@ -106,7 +163,10 @@ CREATE TABLE IF NOT EXISTS index_meta (
 // and silently kept the rest). Dropping whatever exists makes every future
 // schema bump safe against this binary going stale.
 func dropAllTables(db *sql.DB) error {
-	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	// Virtual tables come first: dropping one drops its shadow tables, which
+	// SQLite does not let a caller drop on their own first.
+	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+		ORDER BY (sql LIKE 'CREATE VIRTUAL TABLE%') DESC, rowid`)
 	if err != nil {
 		return fmt.Errorf("cannot list tables: %w", err)
 	}
@@ -141,16 +201,53 @@ func dropAllTables(db *sql.DB) error {
 //
 // Version history: 1 = specs/assertions/depends_on; 2 adds the observation
 // tables (observations, observation_files, index_meta); 3 adds
-// frontmatter_fields; 4 adds observation rows to frontmatter_fields. Version
+// frontmatter_fields; 4 adds observation rows to frontmatter_fields; 5 adds
+// the full-text corpus (documents, document_tags, passages); 6 adds the
+// document manifest (doc_files) in place of one corpus fingerprint; 7 cuts
+// long sections into 20-line windows, not 40 (no column changes); 8 adds
+// the spec file manifest (spec_files) and the sha256 of spec and assertion
+// documents. Version
 // 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 4
+const schemaVersion = 8
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
 const observationRefsKey = "observation_refs"
+
+// busyTimeoutMS is how long a connection waits for another process's write.
+// The index is in WAL mode, so a reader never waits for a writer; a writer
+// waits for the other writer.
+const busyTimeoutMS = 10000
+
+// ReadDSN is the data source name of a read-only connection to the index.
+func ReadDSN(dbPath string) string {
+	return fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(%d)", dbPath, busyTimeoutMS)
+}
+
+// openRead opens a read-only connection to the index.
+func openRead(dbPath string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", ReadDSN(dbPath))
+	if err != nil {
+		return nil, fmt.Errorf("cannot open index.db: %w", err)
+	}
+	return db, nil
+}
+
+// openWrite opens a connection that writes the index: WAL, so that readers
+// are not blocked; synchronous NORMAL, so that a commit does not wait for a
+// disk sync (the index is derived, and a lost last commit is rebuilt on the
+// next check); and BEGIN IMMEDIATE, so that a transaction takes the write
+// lock before it reads what it will change.
+func openWrite(dbPath string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_txlock=immediate", dbPath, busyTimeoutMS))
+	if err != nil {
+		return nil, fmt.Errorf("cannot open index.db: %w", err)
+	}
+	return db, nil
+}
 
 // DBPath returns the canonical path for the index database given the repo root.
 func DBPath(repoRoot string) string {
@@ -164,7 +261,11 @@ type Stats struct {
 	Specs        int
 	Assertions   int
 	Observations int
-	Warnings     []string
+	// Documents counts kinds doc and raw; Passages counts every passage,
+	// specs and assertions included.
+	Documents int
+	Passages  int
+	Warnings  []string
 }
 
 // ErrSpecsUnparseable marks an index build that failed at the parse step and
@@ -201,109 +302,185 @@ func FormatError(err error) string {
 	return err.Error()
 }
 
-// BuildIndex creates or updates the SQLite index at dbPath from specsDir and
-// from the visible git refs (observations). If force is true all tables are
-// dropped and recreated from scratch.
+// BuildIndex creates or updates the SQLite index at dbPath from specsDir,
+// from the visible git refs (observations), and from the document corpus. If
+// force is true all tables are dropped and recreated from scratch.
 func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
+	stats, _, err := build(specsDir, dbPath, force, true, true, false)
+	return stats, err
+}
+
+// build rebuilds the spec part (specs, assertions, their passages, and the
+// observations), the document part (doc and raw documents), or both. The
+// parts go stale for different reasons, and a large document corpus must not
+// be indexed again for each spec edit.
+//
+// With skipUnchanged, when no .md file under specsDir was added, deleted, or
+// changed its content (a touch, a git checkout of the same content), build
+// records the new file stats, sets the mtime of index.db to the time it
+// started, so that the next query does not check again and a file that
+// changes during the check is still newer, and returns false without a
+// rebuild. Else it returns true.
+func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bool) (Stats, bool, error) {
 	var stats Stats
+	start := time.Now()
 
 	// Ensure the .spekk directory exists.
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return stats, fmt.Errorf("cannot create .spekk directory: %w", err)
+		return stats, false, fmt.Errorf("cannot create .spekk directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := openWrite(dbPath)
 	if err != nil {
-		return stats, fmt.Errorf("cannot open index.db: %w", err)
+		return stats, false, err
 	}
 	defer db.Close()
 
 	if force {
 		if err = dropAllTables(db); err != nil {
-			return stats, fmt.Errorf("cannot drop tables: %w", err)
+			return stats, false, fmt.Errorf("cannot drop tables: %w", err)
 		}
 	}
 
 	if _, err = db.Exec(createSchema); err != nil {
-		return stats, fmt.Errorf("cannot create schema: %w", err)
-	}
-
-	result, err := parser.ParseAllSpecs(specsDir)
-	if err != nil {
-		return stats, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
+		return stats, false, fmt.Errorf("cannot create schema: %w", err)
 	}
 
 	tx, err := db.Begin()
 	if err != nil {
-		return stats, fmt.Errorf("cannot begin transaction: %w", err)
+		return stats, false, fmt.Errorf("cannot begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	// Clear existing rows for idempotency (delete-all + re-insert).
-	for _, table := range []string{"depends_on", "frontmatter_fields", "assertions", "specs", "observation_files", "observations", "index_meta"} {
-		if _, err = tx.Exec("DELETE FROM " + table); err != nil {
-			return stats, fmt.Errorf("cannot clear %s: %w", table, err)
+	// The spec files are hashed before the parse, so a file that changes
+	// between the two has a manifest row with its old hash, and the next
+	// check rebuilds again.
+	var result *parser.ParseResult
+	var sums map[string]string
+	if specsPart {
+		var changed bool
+		if sums, changed, err = syncSpecFiles(tx, specsDir); err != nil {
+			return stats, false, err
 		}
-	}
-
-	// Insert specs.
-	for _, s := range result.Specs {
-		if _, err = tx.Exec(
-			`INSERT INTO specs (id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?)`,
-			s.ID, s.Title, s.Status, s.Priority, s.Branch, s.File,
-		); err != nil {
-			return stats, fmt.Errorf("cannot insert spec %q: %w", s.ID, err)
-		}
-		if err = insertFrontmatterFields(tx, "spec", s.ID, s.Fields); err != nil {
-			return stats, err
-		}
-	}
-
-	// Insert assertions and depends_on edges.
-	for _, a := range result.Assertions {
-		if _, err = tx.Exec(
-			`INSERT INTO assertions (id, parent_id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			a.ID, a.Parent, a.Title, a.Status, a.Priority, a.Branch, a.File,
-		); err != nil {
-			return stats, fmt.Errorf("cannot insert assertion %q: %w", a.ID, err)
-		}
-
-		if a.DependsOn != "" {
-			if _, err = tx.Exec(
-				`INSERT INTO depends_on (assertion_id, depends_on_id) VALUES (?, ?)`,
-				a.ID, a.DependsOn,
-			); err != nil {
-				return stats, fmt.Errorf("cannot insert depends_on edge for %q: %w", a.ID, err)
+		if skipUnchanged && !changed {
+			if err = tx.Commit(); err != nil {
+				return stats, false, fmt.Errorf("cannot commit transaction: %w", err)
 			}
+			if err = db.Close(); err != nil {
+				return stats, false, fmt.Errorf("cannot close index.db: %w", err)
+			}
+			if err = os.Chtimes(dbPath, start, start); err != nil {
+				return stats, false, fmt.Errorf("cannot set the mtime of index.db: %w", err)
+			}
+			return stats, false, nil
 		}
-
-		if err = insertFrontmatterFields(tx, "assertion", a.ID, a.Fields); err != nil {
-			return stats, err
+		result, err = parser.ParseAllSpecs(specsDir)
+		if err != nil {
+			return stats, false, fmt.Errorf("%w: %w", ErrSpecsUnparseable, err)
 		}
 	}
 
-	// Observation pass: read the cross-branch union from git refs.
-	obsCount, warnings, err := indexObservations(tx)
-	if err != nil {
-		return stats, err
+	// Clear the rows of each part that is rebuilt (delete + re-insert). The
+	// spec and assertion documents are not cleared: indexSpecDocuments
+	// writes again only those whose file changed.
+	var clear []string
+	if specsPart {
+		clear = append(clear,
+			"DELETE FROM depends_on", "DELETE FROM frontmatter_fields", "DELETE FROM assertions", "DELETE FROM specs",
+			"DELETE FROM observation_files", "DELETE FROM observations",
+			"DELETE FROM index_meta WHERE key = '"+observationRefsKey+"'")
+	}
+	for _, stmt := range clear {
+		if _, err = tx.Exec(stmt); err != nil {
+			return stats, false, fmt.Errorf("cannot clear the index (%s): %w", stmt, err)
+		}
+	}
+	if docsPart {
+		if err = clearDocs(tx); err != nil {
+			return stats, false, err
+		}
+	}
+
+	if specsPart {
+		if err = insertSpecs(tx, result); err != nil {
+			return stats, false, err
+		}
+		n, err := indexSpecDocuments(tx, specsDir, result, sums)
+		if err != nil {
+			return stats, false, err
+		}
+		stats.Passages += n
+
+		// Observation pass: read the cross-branch union from git refs.
+		obsCount, warnings, err := indexObservations(tx)
+		if err != nil {
+			return stats, false, err
+		}
+		stats.Specs = len(result.Specs)
+		stats.Assertions = len(result.Assertions)
+		stats.Observations = obsCount
+		stats.Warnings = append(stats.Warnings, warnings...)
+	}
+
+	if docsPart {
+		docCount, passageCount, docWarnings, err := indexCorpus(tx, filepath.Dir(specsDir))
+		if err != nil {
+			return stats, false, err
+		}
+		stats.Documents = docCount
+		stats.Passages += passageCount
+		stats.Warnings = append(docWarnings, stats.Warnings...)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return stats, fmt.Errorf("cannot commit transaction: %w", err)
+		return stats, false, fmt.Errorf("cannot commit transaction: %w", err)
 	}
 
 	// Stamp the schema version so a future binary can detect and rebuild an
 	// index built against an older schema. PRAGMA takes no bound parameters;
 	// schemaVersion is a trusted integer constant.
 	if _, err = db.Exec(fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
-		return stats, fmt.Errorf("cannot set schema version: %w", err)
+		return stats, false, fmt.Errorf("cannot set schema version: %w", err)
+	}
+	return stats, true, nil
+}
+
+// insertSpecs writes the spec, assertion, depends_on, and custom-field rows.
+func insertSpecs(tx *sql.Tx, result *parser.ParseResult) error {
+	for _, s := range result.Specs {
+		if _, err := tx.Exec(
+			`INSERT INTO specs (id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?)`,
+			s.ID, s.Title, s.Status, s.Priority, s.Branch, s.File,
+		); err != nil {
+			return fmt.Errorf("cannot insert spec %q: %w", s.ID, err)
+		}
+		if err := insertFrontmatterFields(tx, "spec", s.ID, s.Fields); err != nil {
+			return err
+		}
 	}
 
-	stats.Specs = len(result.Specs)
-	stats.Assertions = len(result.Assertions)
-	stats.Observations = obsCount
-	stats.Warnings = warnings
-	return stats, nil
+	for _, a := range result.Assertions {
+		if _, err := tx.Exec(
+			`INSERT INTO assertions (id, parent_id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			a.ID, a.Parent, a.Title, a.Status, a.Priority, a.Branch, a.File,
+		); err != nil {
+			return fmt.Errorf("cannot insert assertion %q: %w", a.ID, err)
+		}
+
+		if a.DependsOn != "" {
+			if _, err := tx.Exec(
+				`INSERT INTO depends_on (assertion_id, depends_on_id) VALUES (?, ?)`,
+				a.ID, a.DependsOn,
+			); err != nil {
+				return fmt.Errorf("cannot insert depends_on edge for %q: %w", a.ID, err)
+			}
+		}
+
+		if err := insertFrontmatterFields(tx, "assertion", a.ID, a.Fields); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // insertFrontmatterFields writes one row per distinct (key, value) for an
@@ -424,9 +601,9 @@ func indexObservations(tx *sql.Tx) (int, []string, error) {
 // A database built by a version-unaware spekk (or any fresh SQLite file) reports
 // 0, which never equals a real schemaVersion, so it is always treated as stale.
 func readSchemaVersion(dbPath string) (int, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := openRead(dbPath)
 	if err != nil {
-		return 0, fmt.Errorf("cannot open index.db: %w", err)
+		return 0, err
 	}
 	defer db.Close()
 
@@ -437,59 +614,112 @@ func readSchemaVersion(dbPath string) (int, error) {
 	return v, nil
 }
 
-// EnsureFresh rebuilds the index at dbPath from specsDir when it is absent,
-// older than the specs (mtime), stamped with a schema version other than the
-// current one, or built against a different set of observation refs (an
-// observer branch was fetched, created, or deleted since the last build). It
-// reports whether a rebuild happened. A schema-version mismatch forces a
-// drop-and-recreate so a changed schema never leaves old-shaped tables in
-// place; a plain content-staleness rebuild does not need to force.
+// Freshness is what a refresh did before a read.
+type Freshness struct {
+	// Rebuilt is true when the refresh wrote the index.
+	Rebuilt bool
+	// Pending counts the document files that changed on disk and are not
+	// in the index yet: a background refresh is indexing them, and the read
+	// answers from the current index.
+	Pending int
+}
+
+// EnsureFresh brings the index at dbPath up to date before a read, and
+// reports whether it wrote the index. It rebuilds everything when the index
+// is absent or stamped with another schema version, rebuilds the spec part
+// when a file under specsDir is newer than the index and a .md file changed
+// its content, or the observation refs changed (an observer
+// branch was fetched, created, or deleted), and
+// re-indexes the documents of changed corpus files. A large document change
+// goes to a background refresh, so a read never waits for it (Refresh).
 //
 // This is the single freshness gate every index reader should call, so the
 // "when do we rebuild" rule lives in exactly one place.
 func EnsureFresh(specsDir, dbPath string) (bool, error) {
+	f, err := Refresh(specsDir, dbPath, true)
+	return f.Rebuilt, err
+}
+
+// Refresh is EnsureFresh with the full result. With background true, a
+// document change of more than InlineLimit files, or any change while a
+// background refresh holds the lock, is left to the background refresh and
+// counted in Pending. With no index at all, the build is inline: there is
+// nothing to answer from.
+func Refresh(specsDir, dbPath string, background bool) (Freshness, error) {
+	var f Freshness
 	if _, err := os.Stat(dbPath); err != nil {
-		if os.IsNotExist(err) {
-			if _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
-				return false, buildErr
-			}
-			return true, nil
+		if !os.IsNotExist(err) {
+			return f, fmt.Errorf("cannot stat index.db: %w", err)
 		}
-		return false, fmt.Errorf("cannot stat index.db: %w", err)
+		if _, err := BuildIndex(specsDir, dbPath, false); err != nil {
+			return f, err
+		}
+		f.Rebuilt = true
+		return f, nil
 	}
 
 	// The database exists: a schema-version mismatch requires a force rebuild.
 	v, err := readSchemaVersion(dbPath)
 	if err != nil {
-		return false, err
+		return f, err
 	}
 	if v != schemaVersion {
-		if _, buildErr := BuildIndex(specsDir, dbPath, true); buildErr != nil {
-			return false, buildErr
+		if _, err := BuildIndex(specsDir, dbPath, true); err != nil {
+			return f, err
 		}
-		return true, nil
+		f.Rebuilt = true
+		return f, nil
 	}
 
-	// Schema is current: rebuild if the specs are newer than the index, or
-	// the observation refs changed since the last build.
-	stale, err := IsStale(specsDir, dbPath)
+	specsStale, err := specsNewer(specsDir, dbPath)
 	if err != nil {
-		return false, err
+		return f, err
 	}
-	if !stale {
-		stale, err = observationRefsChanged(dbPath)
-		if err != nil {
-			return false, err
-		}
+	refsStale, err := observationRefsChanged(dbPath)
+	if err != nil {
+		return f, err
 	}
-	if stale {
-		if _, buildErr := BuildIndex(specsDir, dbPath, false); buildErr != nil {
-			return false, buildErr
+	if specsStale || refsStale {
+		if _, f.Rebuilt, err = build(specsDir, dbPath, false, true, false, !refsStale); err != nil {
+			return f, err
 		}
-		return true, nil
 	}
 
-	return false, nil
+	root := filepath.Dir(specsDir)
+	c, err := checkDocs(root, dbPath)
+	if err != nil {
+		return f, err
+	}
+	if c.count() == 0 {
+		return f, nil
+	}
+	// A background refresh that failed left its error: this refresh is
+	// inline, so the error reaches the caller.
+	if background {
+		if _, err := os.Stat(errorPath(root)); err == nil {
+			_ = os.Remove(errorPath(root))
+			background = false
+		}
+	}
+	if background {
+		lock := LockPath(root)
+		if lockHeld(lock) {
+			f.Pending = c.count()
+			return f, nil
+		}
+		// A background start that fails falls back to the inline refresh.
+		if n := c.count(); n > InlineLimit {
+			if n = contentChanges(root, c); n > InlineLimit && startBackground(root) == nil {
+				f.Pending = n
+				return f, nil
+			}
+		}
+	}
+	if _, _, err := RefreshDocs(specsDir, dbPath); err != nil {
+		return f, err
+	}
+	f.Rebuilt = true
+	return f, nil
 }
 
 // observationRefsChanged reports whether the observation-relevant refs
@@ -500,9 +730,9 @@ func observationRefsChanged(dbPath string) (bool, error) {
 		return false, fmt.Errorf("cannot fingerprint observation refs: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	db, err := openRead(dbPath)
 	if err != nil {
-		return false, fmt.Errorf("cannot open index.db: %w", err)
+		return false, err
 	}
 	defer db.Close()
 
@@ -517,40 +747,47 @@ func observationRefsChanged(dbPath string) (bool, error) {
 	return stored != current, nil
 }
 
-// IsStale reports whether the index at dbPath is absent or older than the
-// most recently modified file under specsDir. Returns (true, nil) when the
-// index should be rebuilt, (false, nil) when it is fresh, and (false, err)
-// on unexpected I/O errors.
+// IsStale reports whether the index at dbPath is absent, older than a file
+// or directory under specsDir (a directory counts, so a deleted spec file
+// makes the index stale), or built from document files other than the ones
+// on disk. Returns (true, nil) when the index should be rebuilt, (false, nil)
+// when it is fresh, and (false, err) on unexpected I/O errors.
 func IsStale(specsDir, dbPath string) (bool, error) {
-	dbInfo, err := os.Stat(dbPath)
-	if err != nil {
+	if _, err := os.Stat(dbPath); err != nil {
 		if os.IsNotExist(err) {
 			return true, nil // absent → stale
 		}
 		return false, fmt.Errorf("cannot stat index.db: %w", err)
 	}
-	dbMtime := dbInfo.ModTime()
+	stale, err := specsNewer(specsDir, dbPath)
+	if err != nil || stale {
+		return stale, err
+	}
+	c, err := checkDocs(filepath.Dir(specsDir), dbPath)
+	return c.count() > 0, err
+}
 
-	// Walk specs dir to find the most recent mtime.
-	var newestSpec time.Time
+// specsNewer reports whether a file or directory under specsDir is newer than
+// the index.
+func specsNewer(specsDir, dbPath string) (bool, error) {
+	dbInfo, err := os.Stat(dbPath)
+	if err != nil {
+		return false, fmt.Errorf("cannot stat index.db: %w", err)
+	}
+	var newest time.Time
 	walkErr := filepath.WalkDir(specsDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		info, err := d.Info()
 		if err != nil {
 			return nil
 		}
-		if info.ModTime().After(newestSpec) {
-			newestSpec = info.ModTime()
+		if info, err := d.Info(); err == nil && info.ModTime().After(newest) {
+			newest = info.ModTime()
 		}
 		return nil
 	})
 	if walkErr != nil {
 		return false, fmt.Errorf("cannot walk specs directory: %w", walkErr)
 	}
-
-	return newestSpec.After(dbMtime), nil
+	return newest.After(dbInfo.ModTime()), nil
 }
 
 // EnsureGitignored adds .spekk/index.db (or .spekk/) to .gitignore at repoRoot
