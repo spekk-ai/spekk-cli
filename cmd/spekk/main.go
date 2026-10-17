@@ -1287,6 +1287,7 @@ func launchSandbox(args []string) {
 		}
 		if name == "" {
 			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force] [--ignore-revoke-failure]")
+			fmt.Fprintln(os.Stderr, "       spekk sandbox destroy <name> --machine --force   (DigitalOcean token as JSON on stdin)")
 			os.Exit(1)
 		}
 		if err := sandbox.ValidateSandboxName(name); err != nil {
@@ -1492,6 +1493,14 @@ OPTIONS:
   spekk does not provision a machine it did not create. The machine must
   already carry /opt/spekk/.provisioned; spekk then injects credentials
   and deploys the agent onto it.
+
+  Machine mode (for a server worker, DigitalOcean only):
+  spekk sandbox create <name> --machine --size <size> --region <region>
+      [--one-off [--expires <when>]] [--label <key>=<value> ...]
+      [--release <tag>] [--provision-timeout <duration>]
+                         Reads one JSON object with every secret on stdin,
+                         and writes one JSON line for each stage on stdout.
+                         See "Machine mode" in docs/cli-reference.md
 `
 
 func createSandbox(args []string) {

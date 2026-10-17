@@ -35,10 +35,10 @@ The token comes from the `SPEKK_AGENT_TOKEN` environment variable on the sandbox
 
 ## Protocol version
 
-The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. This agent declares `1.1`.
+The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. This agent declares `1.2`.
 
-1. **The client declares.** Every dial sends an `X-Spekk-Protocol: 1.1` header next to the `Authorization` header.
-2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field. That version can be different from the agent's version. For example, a control host that speaks `1.0` replies to a `1.1` agent with:
+1. **The client declares.** Every dial sends an `X-Spekk-Protocol: 1.2` header next to the `Authorization` header.
+2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field. That version can be different from the agent's version. For example, a control host that speaks `1.0` replies to a `1.2` agent with:
 
 ```json
 {
@@ -54,7 +54,9 @@ Either side can update first. An old agent sends no header, and the control host
 
 **Version rules:** a change that breaks a message type, a frame field, or a close code bumps the major. An addition bumps the minor.
 
-Version `1.1` is additive. It adds only the `terminal` field to the `result` frame (see [Turn progress](#turn-progress)). No existing frame loses a field or changes its meaning, so a `1.0` side and a `1.1` side work together. The `turn_keepalive` frame type is reserved for version `1.2`.
+Version `1.1` is additive. It adds only the `terminal` field to the `result` frame (see [Turn progress](#turn-progress)). No existing frame loses a field or changes its meaning, so a `1.0` side and a `1.1` side work together.
+
+Version `1.2` is additive. It adds only the `claude_auth` field to the `heartbeat` frame (see [Claude sign-in state](#claude-sign-in-state)). The `turn_keepalive` frame type is reserved for version `1.3`.
 
 ## Message protocol
 
@@ -93,7 +95,7 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 | `stream` | One line of Claude's streaming JSON output | `data`, `agent_session_id` |
 | `result` | Claude finished with exit code 0 | `session_id`, `agent_session_id`, `output`, `terminal` |
 | `error` | Something went wrong | `error`, `detail`, `agent_session_id` |
-| `heartbeat` | Keep-alive, every 30 seconds | none |
+| `heartbeat` | Keep-alive, every 30 seconds | `claude_auth` |
 | `conversation_open` | Ask for a conversation with a person (from the spool) | `session_id`, `title`, `body`, `severity` |
 
 ### Routing
@@ -152,9 +154,18 @@ The `result` frame always carries `terminal`, a JSON boolean. It is `false` when
 
 The `terminal` field needs no rollout order, because an absent field means `true`. Either side can update first.
 
-### `turn_keepalive` (reserved for version 1.2)
+### Claude sign-in state
 
-The agent heartbeat is connection-scoped and says nothing about a turn, so without a turn-scoped signal a long tool call is indistinguishable from a hang. A planned `turn_keepalive` frame will fill that gap. It will carry the `agent_session_id` of the turn, and the agent will send it only while a tool call of that turn is in flight. It comes with version `1.2`.
+A sandbox that a server launched with no model credential has no way to call Claude until a person signs in to Claude Code on the machine, with Claude Code's own login. Each `heartbeat` frame carries `claude_auth`, so the control host can show that state before anyone sends a turn:
+
+- `ready`: the environment of the agent has `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`, or the sign-in file of Claude Code exists (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `~/.claude/.credentials.json` of `agent`).
+- `sign_in_required`: none of these. The agent refuses each turn with an `error` frame that tells the person to sign in on the sandbox, and does not start `claude`.
+
+The agent reads the state again for each heartbeat and each turn, so a sign-in takes effect with no restart. A control host that does not know the field ignores it.
+
+### `turn_keepalive` (reserved for version 1.3)
+
+The agent heartbeat is connection-scoped and says nothing about a turn, so without a turn-scoped signal a long tool call is indistinguishable from a hang. A planned `turn_keepalive` frame will fill that gap. It will carry the `agent_session_id` of the turn, and the agent will send it only while a tool call of that turn is in flight. It comes with version `1.3`.
 
 The control host must accept and attribute `turn_keepalive` before any agent sends it. A control host that does not know a frame type logs it and replies with an `error` frame. This agent does not send `turn_keepalive`.
 
