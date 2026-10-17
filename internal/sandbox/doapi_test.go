@@ -2,8 +2,10 @@ package sandbox
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -360,5 +362,71 @@ func TestListProjects(t *testing.T) {
 	}
 	if projects[0].Name != "My Project" {
 		t.Errorf("expected 'My Project', got %s", projects[0].Name)
+	}
+}
+
+// A DigitalOcean image is a snapshot of the shut-down droplet, copied to
+// each region it is not in yet, with each action polled to the end. A copy
+// that fails still returns the snapshot, so the build records it and it can
+// be deleted.
+func TestDOCreateImage(t *testing.T) {
+	origPoll := doActionPoll
+	doActionPoll = 0
+	t.Cleanup(func() { doActionPoll = origPoll })
+
+	for _, tc := range []struct {
+		name        string
+		failRegion  string
+		wantRegions string
+		wantErr     bool
+	}{
+		{name: "copied to each region", wantRegions: "nyc1,nyc3"},
+		{name: "a failed copy keeps the snapshot", failRegion: "nyc3", wantRegions: "nyc1", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var actions []string
+			polls := map[string]int{}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]string
+				json.NewDecoder(r.Body).Decode(&body)
+				switch {
+				case r.Method == "POST" && r.URL.Path == "/v2/droplets/77/actions":
+					actions = append(actions, body["type"]+":"+body["name"])
+					fmt.Fprintf(w, `{"action": {"id": %d, "status": "in-progress"}}`, len(actions))
+				case r.Method == "POST" && r.URL.Path == "/v2/images/5005/actions":
+					actions = append(actions, "transfer:"+body["region"])
+					fmt.Fprint(w, `{"action": {"id": 99, "status": "in-progress"}}`)
+				case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/v2/actions/"):
+					polls[r.URL.Path]++
+					status := "in-progress"
+					if polls[r.URL.Path] > 1 {
+						status = "completed"
+						if r.URL.Path == "/v2/actions/99" && tc.failRegion != "" {
+							status = "errored"
+						}
+					}
+					fmt.Fprintf(w, `{"action": {"id": %s, "status": %q}}`, strings.TrimPrefix(r.URL.Path, "/v2/actions/"), status)
+				case r.Method == "GET" && r.URL.Path == "/v2/droplets/77/snapshots":
+					fmt.Fprint(w, `{"snapshots": [{"id": 4004, "name": "older"}, {"id": 5005, "name": "web-app", "regions": ["nyc1"]}]}`)
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(404)
+				}
+			}))
+			defer srv.Close()
+
+			p := &DOProvider{client: NewClientWithToken("tok", srv.URL)}
+			captureStderr(t)
+			img, err := p.CreateImage(&SandboxMeta{DropletID: 77, Region: "nyc1"}, "web-app", []string{"nyc1", "nyc3"})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, want error %v", err, tc.wantErr)
+			}
+			if img.ImageID != "5005" || strings.Join(img.Regions, ",") != tc.wantRegions {
+				t.Errorf("image = %+v, want snapshot 5005 in %s", img, tc.wantRegions)
+			}
+			if got := strings.Join(actions, " "); got != "shutdown: snapshot:web-app transfer:nyc3" {
+				t.Errorf("actions = %s", got)
+			}
+		})
 	}
 }

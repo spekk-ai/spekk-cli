@@ -1131,6 +1131,7 @@ SUBCOMMANDS:
   ssh         SSH into a sandbox
   destroy     Destroy a sandbox, or deregister a machine you own
   deploy      Deploy agent client to a sandbox
+  image       Build, list, and delete template images
 
 OPTIONS:
   --help, -h  Show this help message
@@ -1325,6 +1326,8 @@ func launchSandbox(args []string) {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
+	case "image":
+		imageSandbox(subArgs)
 	case "deploy":
 		flags := cli.ParseFlags(subArgs, cli.FlagSet{
 			"release": {Names: []string{"--release"}, Type: cli.StringFlag},
@@ -1353,6 +1356,113 @@ func launchSandbox(args []string) {
 		fmt.Fprintf(os.Stderr, "Unknown sandbox command: %s\n", subcommand)
 		fmt.Fprintln(os.Stderr, `Run "spekk sandbox --help" for available subcommands.`)
 		os.Exit(1)
+	}
+}
+
+// sandboxImageHelpText is the help for `spekk sandbox image`.
+const sandboxImageHelpText = `
+spekk sandbox image - Build, list, and delete template images
+
+USAGE:
+  spekk sandbox image build --name <image> [options]
+  spekk sandbox image list
+  spekk sandbox image delete <image>
+
+BUILD OPTIONS:
+  --name <image>         Image name (required): lowercase letters, digits and
+                         hyphens, starting with a letter, at most 63 characters
+  --setup <script>       Run this script as root on the builder before the
+                         image is made, for example to install a browser
+  --provider <provider>  digitalocean (default) or gcp
+  --size <size>          Size of the builder (default: the provider default)
+  --regions <r1,r2>      DigitalOcean: the builder region, then the regions the
+                         snapshot is copied to (default: nyc1,nyc3).
+                         GCP: the zone of the builder; the image is global
+  --project <id>         GCP project (default: gcloud project)
+  --help, -h             Show this help message
+
+build creates a temporary builder sandbox "image-<image>" with the normal
+cloud-init, runs --setup, cleans the builder (SSH host keys, machine ID,
+authorized keys, shell history, logs, cloud-init state), and checks it for
+credentials. A credential file on the builder fails the build. Then the
+provider makes a private image, and the build records it in images.json.
+The builder is destroyed on success, on failure, and on Ctrl-C.
+
+Create a sandbox from the image with: spekk sandbox create --image <image>
+
+Rebuild an image for security updates (weekly) and with each spekk release.
+create warns when an image is older than 14 days.
+`
+
+// imageSandbox runs `spekk sandbox image <build|list|delete>`.
+func imageSandbox(args []string) {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
+		fmt.Print(sandboxImageHelpText)
+		return
+	}
+	fail := func(err error) {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "build":
+		flags := cli.ParseFlags(args[1:], cli.FlagSet{
+			"name":     {Names: []string{"--name"}, Type: cli.StringFlag},
+			"setup":    {Names: []string{"--setup"}, Type: cli.StringFlag},
+			"provider": {Names: []string{"--provider"}, Type: cli.StringFlag},
+			"size":     {Names: []string{"--size"}, Type: cli.StringFlag},
+			"regions":  {Names: []string{"--regions"}, Type: cli.StringFlag},
+			"project":  {Names: []string{"--project"}, Type: cli.StringFlag},
+			"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		})
+		if flags.Bool("help") {
+			fmt.Print(sandboxImageHelpText)
+			return
+		}
+		if flags.Err != nil {
+			fail(flags.Err)
+		}
+		if flags.String("name") == "" {
+			fail(fmt.Errorf("--name is required for sandbox image build"))
+		}
+		providerName := flags.String("provider")
+		if providerName == "" {
+			providerName = "digitalocean"
+		}
+		opts := sandbox.ImageBuildOptions{
+			Name:    flags.String("name"),
+			Setup:   flags.String("setup"),
+			Size:    flags.String("size"),
+			Project: flags.String("project"),
+		}
+		if r := flags.String("regions"); r != "" {
+			opts.Regions = strings.Split(r, ",")
+		} else if providerName == "digitalocean" {
+			opts.Regions = sandbox.DefaultImageRegions
+		}
+		if providerName == sandbox.ProviderNone {
+			fail(fmt.Errorf("an image needs a cloud provider: digitalocean or gcp"))
+		}
+		p, err := sandbox.ProviderByName(providerName)
+		if err != nil {
+			fail(err)
+		}
+		if err := sandbox.BuildImage(p, opts); err != nil {
+			fail(err)
+		}
+	case "list":
+		if err := sandbox.ListImages(os.Stdout, time.Now()); err != nil {
+			fail(err)
+		}
+	case "delete":
+		if len(args) != 2 || strings.HasPrefix(args[1], "-") {
+			fail(fmt.Errorf("usage: spekk sandbox image delete <image>"))
+		}
+		if err := sandbox.DeleteImage(args[1], sandbox.ProviderByName); err != nil {
+			fail(err)
+		}
+	default:
+		fail(fmt.Errorf("unknown image command %q: use build, list, or delete", args[0]))
 	}
 }
 
@@ -1481,6 +1591,13 @@ OPTIONS:
                          (uses CLAUDE_CODE_OAUTH_TOKEN from your environment,
                          minted by "claude setup-token")
 
+  Template image (DigitalOcean and GCP):
+  --image <name>         Create the machine from an image that "spekk sandbox
+                         image build" made. Only the first-boot steps run.
+                         With no such image for the provider or region,
+                         create says so in one line and uses the full
+                         cloud-init. Warns when the image is older than 14 days
+
   Release:
   --release <tag>        Pull the cloud-init template and agent binary from a
                          specific spekk release instead of the latest, e.g. an
@@ -1543,6 +1660,7 @@ func createSandbox(args []string) {
 		"one-off":           {Names: []string{"--one-off"}, Type: cli.BoolFlag},
 		"expires":           {Names: []string{"--expires"}, Type: cli.StringFlag},
 		"purpose":           {Names: []string{"--purpose"}, Type: cli.StringFlag},
+		"image":             {Names: []string{"--image"}, Type: cli.StringFlag},
 		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
@@ -1592,6 +1710,7 @@ func createSandbox(args []string) {
 		"--ip":       flags.String("ip") != "",
 		"--ssh-key":  flags.String("ssh-key") != "",
 		"--ssh-user": flags.String("ssh-user") != "",
+		"--image":    flags.String("image") != "",
 	}
 
 	// Naming an existing machine is what says there is nothing to create.
@@ -1630,6 +1749,8 @@ func createSandbox(args []string) {
 		Kind:      kind,
 		ExpiresAt: expiresAt,
 		Purpose:   flags.String("purpose"),
+
+		ImageName: flags.String("image"),
 	}
 	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)

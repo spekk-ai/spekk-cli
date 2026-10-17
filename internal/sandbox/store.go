@@ -59,6 +59,9 @@ type SandboxMeta struct {
 	Purpose   string `json:"purpose,omitempty"`
 	ExpiresAt string `json:"expiresAt,omitempty"`
 	CreatedBy string `json:"createdBy,omitempty"`
+	// Image is the template image the machine was created from. Empty
+	// means the stock image with the full cloud-init.
+	Image string `json:"image,omitempty"`
 
 	// unknown holds the fields of the record that this CLI does not know,
 	// for example ones that a newer CLI wrote, as a JSON object. A save

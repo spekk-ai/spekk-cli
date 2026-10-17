@@ -61,6 +61,8 @@ Create stdin:
 {"kind": "bedrock", "aws_access_key_id": "<id>", "aws_secret_access_key": "<secret>", "aws_region": "<region>"}
 ```
 
+An optional `"image": "<name>"` names a template image (`specs/sandbox-template-images/`). The CLI finds it by name in the account's private images. Without it, or when the region has no copy, the droplet gets the full cloud-init, and the stage lines are the same.
+
 Destroy stdin: `{"digitalocean_token": "<token>"}`.
 
 Stage lines on stdout, in this order:

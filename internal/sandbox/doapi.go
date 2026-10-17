@@ -107,10 +107,11 @@ func (d *Droplet) PublicIP() string {
 
 // CreateDropletRequest contains options for creating a droplet.
 type CreateDropletRequest struct {
-	Name     string   `json:"name"`
-	Region   string   `json:"region"`
-	Size     string   `json:"size"`
-	Image    string   `json:"image"`
+	Name   string `json:"name"`
+	Region string `json:"region"`
+	Size   string `json:"size"`
+	// Image is a slug (a string) or the ID of a snapshot (an int).
+	Image    any      `json:"image"`
 	SSHKeys  []int    `json:"ssh_keys,omitempty"`
 	UserData string   `json:"user_data,omitempty"`
 	Tags     []string `json:"tags"`
@@ -148,7 +149,7 @@ func (e *APIError) Error() string {
 
 // CreateDroplet creates a new droplet.
 func (c *Client) CreateDroplet(req CreateDropletRequest) (*Droplet, error) {
-	if req.Image == "" {
+	if req.Image == nil {
 		req.Image = "ubuntu-24-04-x64"
 	}
 	if req.Tags == nil {
@@ -201,6 +202,94 @@ func (c *Client) ListDroplets(tag string) ([]Droplet, error) {
 // DeleteDroplet destroys a droplet by ID.
 func (c *Client) DeleteDroplet(id int) error {
 	return c.doRequest("DELETE", fmt.Sprintf("/v2/droplets/%d", id), nil, nil)
+}
+
+// --- Action and image operations ---
+
+// Action is a DigitalOcean action on a droplet or an image, for example a
+// shutdown, a snapshot, or a transfer to another region.
+type Action struct {
+	ID     int    `json:"id"`
+	Status string `json:"status"` // in-progress, completed, or errored
+	Type   string `json:"type"`
+}
+
+// DOImage is a private image of the account, for example a snapshot.
+type DOImage struct {
+	ID        int      `json:"id"`
+	Name      string   `json:"name"`
+	Regions   []string `json:"regions"`
+	CreatedAt string   `json:"created_at"`
+}
+
+// DropletAction starts an action on a droplet, for example
+// {"type": "shutdown"} or {"type": "snapshot", "name": "..."}.
+func (c *Client) DropletAction(dropletID int, action map[string]string) (*Action, error) {
+	var resp struct {
+		Action *Action `json:"action"`
+	}
+	if err := c.doRequest("POST", fmt.Sprintf("/v2/droplets/%d/actions", dropletID), action, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Action, nil
+}
+
+// TransferImage starts a copy of an image to another region.
+func (c *Client) TransferImage(imageID int, region string) (*Action, error) {
+	var resp struct {
+		Action *Action `json:"action"`
+	}
+	payload := map[string]string{"type": "transfer", "region": region}
+	if err := c.doRequest("POST", fmt.Sprintf("/v2/images/%d/actions", imageID), payload, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Action, nil
+}
+
+// GetAction reads the state of an action.
+func (c *Client) GetAction(id int) (*Action, error) {
+	var resp struct {
+		Action *Action `json:"action"`
+	}
+	if err := c.doRequest("GET", fmt.Sprintf("/v2/actions/%d", id), nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Action, nil
+}
+
+// ListDropletSnapshots lists the snapshots that were taken of a droplet.
+func (c *Client) ListDropletSnapshots(dropletID int) ([]DOImage, error) {
+	var resp struct {
+		Snapshots []DOImage `json:"snapshots"`
+	}
+	if err := c.doRequest("GET", fmt.Sprintf("/v2/droplets/%d/snapshots?per_page=200", dropletID), nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Snapshots, nil
+}
+
+// ListPrivateImages lists the images of the account. It reads every page.
+func (c *Client) ListPrivateImages() ([]DOImage, error) {
+	const perPage = 200
+	var all []DOImage
+	for page := 1; ; page++ {
+		query := url.Values{"private": {"true"}, "per_page": {strconv.Itoa(perPage)}, "page": {strconv.Itoa(page)}}
+		var resp struct {
+			Images []DOImage `json:"images"`
+		}
+		if err := c.doRequest("GET", "/v2/images?"+query.Encode(), nil, &resp); err != nil {
+			return nil, err
+		}
+		all = append(all, resp.Images...)
+		if len(resp.Images) < perPage {
+			return all, nil
+		}
+	}
+}
+
+// DeleteImage deletes a private image in each region that has it.
+func (c *Client) DeleteImage(id int) error {
+	return c.doRequest("DELETE", fmt.Sprintf("/v2/images/%d", id), nil, nil)
 }
 
 // --- SSH Key operations ---

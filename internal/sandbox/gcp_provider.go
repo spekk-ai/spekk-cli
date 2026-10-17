@@ -62,8 +62,15 @@ func gcloudCannotExist(err error) bool {
 	return gcloudNotFound(err) || strings.Contains(err.Error(), "Invalid value for field")
 }
 
-// GCPProvider can label its machines.
-var _ Labeler = (*GCPProvider)(nil)
+// GCPProvider can label its machines and make images of them.
+var (
+	_ Labeler = (*GCPProvider)(nil)
+	_ Imager  = (*GCPProvider)(nil)
+)
+
+// gcpImageLabel is the label on each image that spekk makes, so ListImages
+// finds them.
+const gcpImageLabel = "spekk-image"
 
 // GCPProvider implements Provider for Google Compute Engine through the
 // gcloud CLI, which brings the operator's credentials and configuration.
@@ -158,8 +165,17 @@ func (p *GCPProvider) Create(name string, opts CreateOptions, meta *SandboxMeta)
 	args := instanceArgs("create", meta)
 	args = append(args,
 		"--machine-type", size,
-		"--image-family", gcpImageFamily,
-		"--image-project", gcpImageProject,
+	)
+	if opts.Image != nil {
+		imageProject := opts.Image.Project
+		if imageProject == "" {
+			imageProject = project
+		}
+		args = append(args, "--image", opts.Image.ImageID, "--image-project", imageProject)
+	} else {
+		args = append(args, "--image-family", gcpImageFamily, "--image-project", gcpImageProject)
+	}
+	args = append(args,
 		"--boot-disk-size", gcpBootDiskSize,
 		// The agent runs code from repositories it clones, so the VM gets
 		// no service account: a token from the metadata server would
@@ -290,6 +306,72 @@ func (p *GCPProvider) ListLabeled() ([]RemoteSandbox, error) {
 		}
 		metaFromLabels(&meta, vm.Labels)
 		found = append(found, RemoteSandbox{Name: strings.TrimPrefix(vm.Name, "spekk-"), Meta: meta})
+	}
+	return found, nil
+}
+
+// ImageRegion is empty: a GCP custom image is global.
+func (p *GCPProvider) ImageRegion(CreateOptions) string { return "" }
+
+// CreateImage stops the VM and makes a custom image of its boot disk, which
+// has the VM's name. The image is global and private to the project.
+func (p *GCPProvider) CreateImage(meta *SandboxMeta, name string, _ []string) (ImageMeta, error) {
+	if meta.GCPInstance == "" {
+		return ImageMeta{}, ErrNoMachineRecorded
+	}
+	fmt.Fprintf(os.Stderr, "Stopping VM %s...\n", meta.GCPInstance)
+	if _, err := runGcloud(instanceArgs("stop", meta)...); err != nil {
+		return ImageMeta{}, fmt.Errorf("stopping VM: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Making image %q from the boot disk of %s. This takes several minutes...\n", name, meta.GCPInstance)
+	if _, err := runGcloud("compute", "images", "create", name, "--project", meta.Project,
+		"--source-disk", meta.GCPInstance, "--source-disk-zone", meta.Region,
+		"--labels", gcpImageLabel+"=true", "--format", "value(name)"); err != nil {
+		return ImageMeta{}, fmt.Errorf("making the image: %w", err)
+	}
+	return ImageMeta{ImageID: name, Project: meta.Project}, nil
+}
+
+// DeleteImage deletes the custom image.
+func (p *GCPProvider) DeleteImage(img ImageMeta) error {
+	if _, err := runGcloud("compute", "images", "delete", img.ImageID, "--project", img.Project, "--quiet"); err != nil {
+		if gcloudNotFound(err) {
+			return fmt.Errorf("%w: %s", ErrImageNotFound, err)
+		}
+		return err
+	}
+	return nil
+}
+
+// ListImages lists the images with the spekk-image label in the default
+// gcloud project.
+func (p *GCPProvider) ListImages() ([]ImageMeta, error) {
+	project, err := gcloudConfig("", "project")
+	if err != nil {
+		return nil, fmt.Errorf("reading the gcloud project: %w", err)
+	}
+	if project == "" {
+		return nil, fmt.Errorf("no default gcloud project: run gcloud config set project <project-id>")
+	}
+	out, err := runGcloud("compute", "images", "list", "--project", project, "--no-standard-images",
+		"--filter", "labels."+gcpImageLabel+":*", "--format", "json")
+	if err != nil {
+		return nil, err
+	}
+	var images []struct {
+		Name              string `json:"name"`
+		CreationTimestamp string `json:"creationTimestamp"`
+	}
+	if err := json.Unmarshal([]byte(out), &images); err != nil {
+		return nil, fmt.Errorf("reading the gcloud image list: %w", err)
+	}
+	found := make([]ImageMeta, 0, len(images))
+	for _, im := range images {
+		img := ImageMeta{Name: im.Name, Provider: ProviderGCP, ImageID: im.Name, Project: project}
+		if t, err := time.Parse(time.RFC3339, im.CreationTimestamp); err == nil {
+			img.CreatedAt = t.UTC().Format(time.RFC3339)
+		}
+		found = append(found, img)
 	}
 	return found, nil
 }

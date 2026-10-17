@@ -4,11 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
+	"time"
 )
 
-// DOProvider can label its machines.
-var _ Labeler = (*DOProvider)(nil)
+// DOProvider can label its machines and make images of them.
+var (
+	_ Labeler = (*DOProvider)(nil)
+	_ Imager  = (*DOProvider)(nil)
+)
+
+// doDefaultRegion is the region of a droplet when --region does not say.
+const doDefaultRegion = "nyc1"
 
 // DOProvider implements Provider using the DigitalOcean API.
 type DOProvider struct {
@@ -34,7 +43,7 @@ func (p *DOProvider) Name() string { return "digitalocean" }
 func (p *DOProvider) Create(name string, opts CreateOptions, meta *SandboxMeta) error {
 	region := opts.Region
 	if region == "" {
-		region = "nyc1"
+		region = doDefaultRegion
 	}
 	size := opts.Size
 	if size == "" {
@@ -88,10 +97,19 @@ func (p *DOProvider) Create(name string, opts CreateOptions, meta *SandboxMeta) 
 	// Create droplet.
 	dropletName := "spekk-" + name
 	fmt.Fprintf(os.Stderr, "Creating droplet %q in %s (%s)...\n", dropletName, region, size)
+	var image any
+	if opts.Image != nil {
+		id, err := strconv.Atoi(opts.Image.ImageID)
+		if err != nil {
+			return fmt.Errorf("image %s has ID %q, which is not a DigitalOcean image ID", opts.Image.Name, opts.Image.ImageID)
+		}
+		image = id
+	}
 	droplet, err := p.client.CreateDroplet(CreateDropletRequest{
 		Name:   dropletName,
 		Region: region,
 		Size:   size,
+		Image:  image,
 		// Only the generated key. A key from the account would give its
 		// holder root on the droplet, and root reads the credentials
 		// spekk injects. The operator logs in with spekk sandbox ssh.
@@ -216,6 +234,142 @@ func (p *DOProvider) ListLabeled() ([]RemoteSandbox, error) {
 		meta := SandboxMeta{Provider: p.Name(), DropletID: d.ID, IP: d.PublicIP(), Region: d.Region.Slug, CreatedAt: d.CreatedAt}
 		metaFromLabels(&meta, labels)
 		found = append(found, RemoteSandbox{Name: strings.TrimPrefix(d.Name, "spekk-"), Meta: meta})
+	}
+	return found, nil
+}
+
+// ImageRegion is the region of the droplet, which must have a copy of the
+// image: a DigitalOcean snapshot belongs to the regions it was copied to.
+func (p *DOProvider) ImageRegion(opts CreateOptions) string {
+	if opts.Region != "" {
+		return opts.Region
+	}
+	return doDefaultRegion
+}
+
+// doActionPoll is how often the provider reads the state of an action, and
+// doActionTimeout is how long it waits for one. Variables so a test can make
+// them short.
+var (
+	doActionPoll    = 10 * time.Second
+	doActionTimeout = time.Hour
+)
+
+// waitForAction waits until an action is completed, and fails when it errored
+// or did not end in time.
+func (p *DOProvider) waitForAction(a *Action, what string) error {
+	start := time.Now()
+	lastReport := start
+	for {
+		if a.Status == "completed" {
+			return nil
+		}
+		if a.Status == "errored" {
+			return fmt.Errorf("%s: action %d errored", what, a.ID)
+		}
+		if time.Since(start) > doActionTimeout {
+			return fmt.Errorf("%s: action %d did not complete within %s", what, a.ID, doActionTimeout)
+		}
+		if time.Since(lastReport) >= time.Minute {
+			lastReport = time.Now()
+			fmt.Fprintf(os.Stderr, "Still waiting for %s after %s...\n", what, time.Since(start).Round(time.Second))
+		}
+		time.Sleep(doActionPoll)
+		next, err := p.client.GetAction(a.ID)
+		if err != nil {
+			return fmt.Errorf("%s: %w", what, err)
+		}
+		a = next
+	}
+}
+
+// dropletAction starts an action on the droplet and waits for it.
+func (p *DOProvider) dropletAction(dropletID int, action map[string]string, what string) error {
+	a, err := p.client.DropletAction(dropletID, action)
+	if err != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	return p.waitForAction(a, what)
+}
+
+// CreateImage shuts the droplet down, takes a snapshot named name, and copies
+// it to each region of regions that does not have it. A snapshot is private
+// to the account.
+func (p *DOProvider) CreateImage(meta *SandboxMeta, name string, regions []string) (ImageMeta, error) {
+	if meta.DropletID == 0 {
+		return ImageMeta{}, ErrNoMachineRecorded
+	}
+	fmt.Fprintf(os.Stderr, "Shutting down droplet %d...\n", meta.DropletID)
+	if err := p.dropletAction(meta.DropletID, map[string]string{"type": "shutdown"}, "the shutdown"); err != nil {
+		// A shutdown that the droplet does not answer is a power off.
+		fmt.Fprintf(os.Stderr, "Warning: %s; powering the droplet off.\n", err)
+		if err := p.dropletAction(meta.DropletID, map[string]string{"type": "power_off"}, "the power off"); err != nil {
+			return ImageMeta{}, err
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Taking snapshot %q of droplet %d. This takes several minutes...\n", name, meta.DropletID)
+	if err := p.dropletAction(meta.DropletID, map[string]string{"type": "snapshot", "name": name}, "the snapshot"); err != nil {
+		return ImageMeta{}, err
+	}
+	snapshots, err := p.client.ListDropletSnapshots(meta.DropletID)
+	if err != nil {
+		return ImageMeta{}, fmt.Errorf("finding the snapshot: %w", err)
+	}
+	var snap *DOImage
+	for i := range snapshots {
+		if snapshots[i].Name == name {
+			snap = &snapshots[i]
+		}
+	}
+	if snap == nil {
+		return ImageMeta{}, fmt.Errorf("droplet %d has no snapshot named %q after the snapshot action", meta.DropletID, name)
+	}
+	img := ImageMeta{ImageID: strconv.Itoa(snap.ID), Regions: slices.Clone(snap.Regions)}
+	if len(img.Regions) == 0 {
+		img.Regions = []string{meta.Region}
+	}
+	for _, region := range regions {
+		if slices.Contains(img.Regions, region) {
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "Copying snapshot %d to %s...\n", snap.ID, region)
+		a, err := p.client.TransferImage(snap.ID, region)
+		if err == nil {
+			err = p.waitForAction(a, "the copy to "+region)
+		}
+		if err != nil {
+			return img, fmt.Errorf("copying the snapshot to %s: %w", region, err)
+		}
+		img.Regions = append(img.Regions, region)
+	}
+	return img, nil
+}
+
+// DeleteImage deletes the snapshot in each region that has it.
+func (p *DOProvider) DeleteImage(img ImageMeta) error {
+	id, err := strconv.Atoi(img.ImageID)
+	if err != nil {
+		return fmt.Errorf("image ID %q is not a DigitalOcean image ID", img.ImageID)
+	}
+	if err := p.client.DeleteImage(id); err != nil {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+			return fmt.Errorf("%w: %s", ErrImageNotFound, err)
+		}
+		return err
+	}
+	return nil
+}
+
+// ListImages lists the private images of the account.
+func (p *DOProvider) ListImages() ([]ImageMeta, error) {
+	images, err := p.client.ListPrivateImages()
+	if err != nil {
+		return nil, err
+	}
+	found := make([]ImageMeta, 0, len(images))
+	for _, im := range images {
+		found = append(found, ImageMeta{Name: im.Name, Provider: p.Name(), ImageID: strconv.Itoa(im.ID), Regions: im.Regions, CreatedAt: im.CreatedAt})
 	}
 	return found, nil
 }
