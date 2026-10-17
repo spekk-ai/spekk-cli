@@ -2,7 +2,9 @@ package index
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,8 +122,11 @@ func indexCorpus(tx *sql.Tx, root string) (int, int, []string, error) {
 	}
 	for rel, st := range stats {
 		sum, err := docs.FileSHA256(filepath.Join(root, filepath.FromSlash(rel)))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // gone since the stat: the next check sees it
+		}
 		if err != nil {
-			continue
+			return 0, 0, nil, fmt.Errorf("cannot hash %s: %w", rel, err)
 		}
 		if _, err := tx.Exec(`INSERT OR REPLACE INTO doc_files (path, size, mtime_ns, sha256) VALUES (?, ?, ?, ?)`,
 			rel, st.Size, st.MTime, sum); err != nil {

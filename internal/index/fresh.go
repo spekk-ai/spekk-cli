@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -187,8 +188,11 @@ func refreshDocs(tx *sql.Tx, root string) (int, []string, error) {
 	var changed []string
 	for _, p := range c.touched {
 		sum, err := docs.FileSHA256(filepath.Join(root, filepath.FromSlash(p)))
-		if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
 			continue // gone since the stat: the next check sees it
+		}
+		if err != nil {
+			return 0, nil, fmt.Errorf("cannot hash %s: %w", p, err)
 		}
 		sums[p] = sum
 		if sum != c.manifest[p].sha {
@@ -196,10 +200,15 @@ func refreshDocs(tx *sql.Tx, root string) (int, []string, error) {
 		}
 	}
 	for _, p := range c.added {
-		if sum, err := docs.FileSHA256(filepath.Join(root, filepath.FromSlash(p))); err == nil {
-			sums[p] = sum
-			changed = append(changed, p)
+		sum, err := docs.FileSHA256(filepath.Join(root, filepath.FromSlash(p)))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
 		}
+		if err != nil {
+			return 0, nil, fmt.Errorf("cannot hash %s: %w", p, err)
+		}
+		sums[p] = sum
+		changed = append(changed, p)
 	}
 	changed = append(changed, c.deleted...)
 
@@ -406,15 +415,25 @@ func RefreshDocs(specsDir, dbPath string) (int, []string, error) {
 
 // RefreshInBackground is `spekk index --background`: it takes the lock, or
 // returns at once when another process holds it, and refreshes the index.
+// The process has no terminal, so a failure is written to the error file,
+// and the next query refreshes inline, where the error reaches a person.
 func RefreshInBackground(specsDir, dbPath string) error {
-	lock := LockPath(filepath.Dir(specsDir))
-	release, ok := takeLock(lock)
+	root := filepath.Dir(specsDir)
+	release, ok := takeLock(LockPath(root))
 	if !ok {
 		return nil
 	}
 	defer release()
-	_, err := EnsureFreshInline(specsDir, dbPath)
+	_, err := Refresh(specsDir, dbPath, false)
+	if err != nil {
+		_ = os.WriteFile(errorPath(root), []byte(err.Error()+"\n"), 0o644)
+	}
 	return err
+}
+
+// errorPath is the file where a background refresh writes its failure.
+func errorPath(repoRoot string) string {
+	return filepath.Join(repoRoot, ".spekk", "index.error")
 }
 
 // takeLock creates the lock file with O_EXCL. A lock older than lockStale

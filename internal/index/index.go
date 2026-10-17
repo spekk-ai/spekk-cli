@@ -600,13 +600,6 @@ func EnsureFresh(specsDir, dbPath string) (bool, error) {
 	return f.Rebuilt, err
 }
 
-// EnsureFreshInline is EnsureFresh with no background refresh: every change
-// is indexed before it returns.
-func EnsureFreshInline(specsDir, dbPath string) (bool, error) {
-	f, err := Refresh(specsDir, dbPath, false)
-	return f.Rebuilt, err
-}
-
 // Refresh is EnsureFresh with the full result. With background true, a
 // document change of more than InlineLimit files, or any change while a
 // background refresh holds the lock, is left to the background refresh and
@@ -662,6 +655,14 @@ func Refresh(specsDir, dbPath string, background bool) (Freshness, error) {
 	}
 	if c.count() == 0 {
 		return f, nil
+	}
+	// A background refresh that failed left its error: this refresh is
+	// inline, so the error reaches the caller.
+	if background {
+		if _, err := os.Stat(errorPath(root)); err == nil {
+			_ = os.Remove(errorPath(root))
+			background = false
+		}
 	}
 	if background {
 		lock := LockPath(root)
