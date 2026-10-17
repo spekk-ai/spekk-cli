@@ -23,8 +23,8 @@ The CLI also has a defect in both modes: `injectCredentials`, `configureGitCrede
 
 - **Input.** One JSON object on stdin. Flags carry no secret. Machine mode reads no secret from its environment.
 - **Output.** One JSON line on stdout for each stage. Human logs go to stderr. No output holds a secret.
-- **Cloud.** DigitalOcean only, with the token from stdin. The `Provider` interface does not change, so another cloud fits later.
-- **Model credential.** `none`, `anthropic_api_key`, or `bedrock`. Never a Claude subscription token: that token is for one person. With `none`, the person signs in to Claude Code on the box later, and the agent reports `sign_in_required` until then.
+- **Cloud.** DigitalOcean only, with the token from stdin: the token of the DigitalOcean connection of an organization, or of spekk's own account. The `Provider` interface does not change, so another cloud fits later.
+- **Harness and model credential.** `harness` is `claude-code`, the only harness now. The model credential is `none`, `anthropic_api_key`, or `bedrock`. Never a Claude subscription token: that token is for one person. With `none`, the person signs in to Claude Code on the box later, and the heartbeat of the agent says `claude_signed_in: false` until then.
 - **Registration.** `POST /api/agents/register/` with `Authorization: Bearer <registration token>`. The CLI makes the agent token and sends it in the body.
 - **Git.** The CLI clones the repository into the workspace, and installs a git credential helper that asks the control host for a new installation token when git needs one.
 - **Secrets on SSH stdin.** Each script that holds a secret goes to the machine on the stdin of `ssh`, in both modes.
@@ -48,16 +48,17 @@ Create stdin:
   "spekk_host": "<host>",
   "github_token": "<installation token>",
   "github_repository": "<owner>/<repository>",
-  "model_credential": {"type": "none"}
+  "harness": "claude-code",
+  "model_credential": {"kind": "none"}
 }
 ```
 
 `model_credential` is one of:
 
 ```json
-{"type": "none"}
-{"type": "anthropic_api_key", "api_key": "<key>"}
-{"type": "bedrock", "aws_access_key_id": "<id>", "aws_secret_access_key": "<secret>", "aws_region": "<region>"}
+{"kind": "none"}
+{"kind": "anthropic_api_key", "api_key": "<key>"}
+{"kind": "bedrock", "aws_access_key_id": "<id>", "aws_secret_access_key": "<secret>", "aws_region": "<region>"}
 ```
 
 Destroy stdin: `{"digitalocean_token": "<token>"}`.
@@ -84,7 +85,10 @@ The server side of both calls does not exist yet. Go tests use a fake server.
 
 ## Security rule
 
-The rule of `specs/sandbox-self-register/` stays: no request to the control host API carries a cloud credential or a model credential. In machine mode the CLI runs on the control host, so the worker holds those credentials. They still go from the CLI to the machine only, on the stdin of `ssh`. The registration request carries the registration token and the new agent token, and no other credential.
+There are two paths, and the rule of `specs/sandbox-self-register/` names both:
+
+- **From a terminal.** The control host never receives a cloud credential or a model credential of the user. They go from the user's machine to the user's sandbox only.
+- **Machine mode.** The control host keeps the DigitalOcean token and the model key of an organization (sealed), and its worker gives them to the CLI on stdin. The CLI sends them to the machine only, on the stdin of `ssh`, and writes the DigitalOcean token to no file. No request from the CLI to the control host API carries a cloud credential or a model credential: the registration request carries the registration token and the new agent token only.
 
 ## Rejected
 
@@ -102,8 +106,8 @@ The rule of `specs/sandbox-self-register/` stays: no request to the control host
 2. [machine-create-input](assertions/machine-create-input.md) - `create --machine` reads one strict JSON object on stdin, and refuses a bad one before any cloud call
 3. [machine-stage-lines](assertions/machine-stage-lines.md) - `create --machine` writes one JSON line for each stage, and nothing else on stdout
 4. [machine-registers-with-one-time-token](assertions/machine-registers-with-one-time-token.md) - The box registers with the registration token, and the CLI makes the agent token
-5. [machine-model-credential](assertions/machine-model-credential.md) - The env file carries the model credential of the chosen type, and nothing of the other types
-6. [agent-reports-sign-in-required](assertions/agent-reports-sign-in-required.md) - An agent with no Claude credential reports `sign_in_required`, and refuses turns with a clear message
+5. [machine-model-credential](assertions/machine-model-credential.md) - The env file carries the model credential of the chosen kind, and nothing of the other kinds
+6. [agent-reports-sign-in-required](assertions/agent-reports-sign-in-required.md) - An agent with no Claude credential reports `claude_signed_in: false`, and refuses turns with a clear message
 7. [machine-git-access](assertions/machine-git-access.md) - The box clones its repository, and a git credential helper renews the token through the control host
 8. [machine-destroy](assertions/machine-destroy.md) - `destroy --machine --force` reads the DigitalOcean token on stdin
 9. [machine-mode-docs](assertions/machine-mode-docs.md) - The CLI reference describes machine mode

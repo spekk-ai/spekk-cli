@@ -3,7 +3,7 @@ id: machine-mode-docs
 parent: sandbox-machine-mode
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: done
+status: not_started
 branch: feature/sandbox-machine-mode
 depends-on: machine-destroy
 ---
@@ -14,7 +14,7 @@ depends-on: machine-destroy
 
 - `docs/cli-reference.md` has a section on machine mode: the two commands, the stdin JSON of each, the stage lines, the exit status, the labels, and the rule that no secret is in a flag, an environment variable, or stdout.
 - `spekk sandbox create --help` and `spekk sandbox destroy --help` list `--machine`.
-- `docs/advanced/sandbox-architecture.md` names the `claude_auth` heartbeat field and protocol `1.2`.
+- `docs/advanced/sandbox-architecture.md` names the `claude_signed_in` heartbeat field and protocol `1.2`, and `specs/sandbox-self-register/` names the two paths of its security rule.
 - No doc names a private host, a customer, or an internal URL.
 
 ## Verification
