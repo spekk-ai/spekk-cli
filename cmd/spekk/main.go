@@ -68,6 +68,9 @@ func main() {
 	case "query":
 		runQuery(args[1:])
 
+	case "docs":
+		runDocs(args[1:])
+
 	case "next":
 		runParser(args[1:])
 
@@ -2113,6 +2116,7 @@ COMMANDS:
   list      List specs and assertions with optional --status filter and --assertions-only flat output
   index     Build .spekk/index.db SQLite index from specs/ (use --force to rebuild from scratch)
   query     Execute a SELECT query against .spekk/index.db (supports --json, --tsv, --csv)
+  docs      Search specs, repository docs, and source documents (search, show, add, status)
   show      Generate and display spec explorer web interface (-w to watch, --json for data)
   status    Show comprehensive overview of all specs and assertions
   validate  Check specs/ against a fixed set of invariants; exit non-zero on any violation

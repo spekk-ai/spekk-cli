@@ -3,7 +3,7 @@ id: identifier-aware-search
 parent: source-document-index
 created: 2026-10-17T16:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/source-document-index
 depends-on: index-holds-full-text
 ---
