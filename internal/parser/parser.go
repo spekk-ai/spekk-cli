@@ -978,18 +978,23 @@ func computeParentStatus(parentID string, assertions []Assertion) string {
 		}
 	}
 
-	allDone := true
+	allDone, started := true, false
 	for _, c := range active {
 		if c.Status != "done" {
 			allDone = false
-			break
+		}
+		if c.Status == "done" || c.Status == "in_progress" {
+			started = true
 		}
 	}
 	if allDone {
 		return "done"
 	}
+	if started {
+		return "in_progress"
+	}
 
-	return "in_progress"
+	return "not_started"
 }
 
 // detectCircularDependencies checks all assertions for dependency cycles.
@@ -1067,6 +1072,60 @@ type FindOptions struct {
 	CurrentBranch string
 }
 
+// Reasons that an open assertion is not eligible for FindNextAssertion.
+const (
+	ReasonDraft       = "draft"
+	ReasonOtherBranch = "other_branch"
+	ReasonBlocked     = "blocked"
+	ReasonLocked      = "locked"
+)
+
+// eligibility holds what FindNextAssertion and CountIneligible need to judge
+// one assertion, so that both use the same rule.
+type eligibility struct {
+	opts            FindOptions
+	specStatus      map[string]string
+	assertionStatus map[string]string
+}
+
+func newEligibility(assertions []Assertion, specs []Spec, opts FindOptions) eligibility {
+	e := eligibility{opts: opts, specStatus: map[string]string{}, assertionStatus: map[string]string{}}
+	for _, s := range specs {
+		e.specStatus[s.ID] = s.Status
+	}
+	for _, a := range assertions {
+		e.assertionStatus[a.ID] = a.Status
+	}
+	return e
+}
+
+// inScope reports whether a is open work that the options ask about.
+func (e eligibility) inScope(a Assertion) bool {
+	if a.Status == "done" {
+		return false
+	}
+	return e.opts.SpecID == "" || a.Parent == e.opts.SpecID
+}
+
+// reason returns why an in-scope assertion is not eligible, or "" when it is.
+func (e eligibility) reason(a Assertion) string {
+	if a.Status == "draft" || e.specStatus[a.Parent] == "draft" {
+		return ReasonDraft
+	}
+	if !e.opts.AllBranches && e.opts.CurrentBranch != "" {
+		if a.Branch != "" && a.Branch != e.opts.CurrentBranch {
+			return ReasonOtherBranch
+		}
+	}
+	if a.DependsOn != "" && e.assertionStatus[a.DependsOn] != "done" {
+		return ReasonBlocked
+	}
+	if a.Status == "in_progress" && a.LockedBy != "" && !IsLockStale(a.LockedBy) {
+		return ReasonLocked
+	}
+	return ""
+}
+
 // FindNextAssertion selects the highest-priority incomplete assertion.
 // It filters by branch (unless AllBranches is true), dependency satisfaction,
 // and lock staleness.
@@ -1080,45 +1139,12 @@ func FindNextAssertion(assertions []Assertion, specs []Spec, opts FindOptions) *
 		return nil
 	}
 
-	specStatus := make(map[string]string)
-	for _, s := range specs {
-		specStatus[s.ID] = s.Status
-	}
-
-	assertionStatus := make(map[string]string)
-	for _, a := range assertions {
-		assertionStatus[a.ID] = a.Status
-	}
-
+	e := newEligibility(assertions, specs, opts)
 	var candidates []Assertion
 	for _, a := range assertions {
-		if a.Status == "done" || a.Status == "draft" {
-			continue
+		if e.inScope(a) && e.reason(a) == "" {
+			candidates = append(candidates, a)
 		}
-
-		if specStatus[a.Parent] == "draft" {
-			continue
-		}
-
-		if !opts.AllBranches && opts.CurrentBranch != "" {
-			if a.Branch != "" && a.Branch != opts.CurrentBranch {
-				continue
-			}
-		}
-
-		if opts.SpecID != "" && a.Parent != opts.SpecID {
-			continue
-		}
-
-		if a.DependsOn != "" && assertionStatus[a.DependsOn] != "done" {
-			continue
-		}
-
-		if a.Status == "in_progress" && a.LockedBy != "" && !IsLockStale(a.LockedBy) {
-			continue
-		}
-
-		candidates = append(candidates, a)
 	}
 
 	if len(candidates) == 0 {
@@ -1136,4 +1162,21 @@ func FindNextAssertion(assertions []Assertion, specs []Spec, opts FindOptions) *
 	})
 
 	return &candidates[0]
+}
+
+// CountIneligible counts the open (not done) assertions in scope of opts that
+// FindNextAssertion passes over, by reason. Call it when FindNextAssertion
+// returns nil: an empty map then means that no open work remains.
+func CountIneligible(assertions []Assertion, specs []Spec, opts FindOptions) map[string]int {
+	e := newEligibility(assertions, specs, opts)
+	counts := map[string]int{}
+	for _, a := range assertions {
+		if !e.inScope(a) {
+			continue
+		}
+		if r := e.reason(a); r != "" {
+			counts[r]++
+		}
+	}
+	return counts
 }

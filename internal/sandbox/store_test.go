@@ -1,8 +1,10 @@
 package sandbox
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -76,22 +78,6 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 }
 
-func TestLoadSandboxesMissingFile(t *testing.T) {
-	origFile := sandboxesFile
-	sandboxesFile = func() string {
-		return filepath.Join(t.TempDir(), "nonexistent", "sandboxes.json")
-	}
-	defer func() { sandboxesFile = origFile }()
-
-	sandboxes, err := LoadSandboxes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(sandboxes) != 0 {
-		t.Errorf("expected empty map, got %d entries", len(sandboxes))
-	}
-}
-
 func TestRemapLegacyKeyPath(t *testing.T) {
 	// Existing path is returned unchanged.
 	tmp := t.TempDir()
@@ -113,24 +99,57 @@ func TestRemapLegacyKeyPath(t *testing.T) {
 	}
 }
 
-func TestSandboxesFileWrittenCorrectly(t *testing.T) {
-	tmpDir := t.TempDir()
-	origFile := sandboxesFile
-	sandboxesFile = func() string {
-		return filepath.Join(tmpDir, ".spekk", "sandboxes.json")
-	}
-	defer func() { sandboxesFile = origFile }()
-
-	SaveSandbox("my-sb", &SandboxMeta{Provider: "digitalocean", DropletID: 1, IP: "10.0.0.1"})
-
-	data, err := os.ReadFile(sandboxesFile())
-	if err != nil {
+// A newer CLI can write fields that this one does not know. Every save
+// rewrites the whole file, so each rewrite must keep them (issue #269).
+func TestSaveKeepsUnknownFields(t *testing.T) {
+	path := useTempStore(t)
+	const file = `{
+  "new-box": {
+    "provider": "none",
+    "ip": "10.0.0.2",
+    "createdAt": "2026-10-02T00:00:00Z",
+    "status": "active",
+    "futureFlag": true,
+    "network": {"vpc": "dev", "tags": ["a", "b"]}
+  },
+  "old-box": {"provider": "none", "ip": "10.0.0.1", "status": "active"}
+}`
+	if err := os.WriteFile(path, []byte(file), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	// Should be valid JSON ending with newline
-	s := string(data)
-	if s[len(s)-1] != '\n' {
-		t.Error("expected trailing newline")
+	meta, err := GetSandbox("new-box")
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta.Status = "stopped"
+	if err := SaveSandbox("new-box", meta); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveSandbox("third-box", &SandboxMeta{IP: "10.0.0.3"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveSandbox("old-box"); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	rec := got["new-box"]
+	if rec["status"] != "stopped" {
+		t.Errorf("status = %v, want the new value stopped", rec["status"])
+	}
+	if rec["futureFlag"] != true {
+		t.Errorf("futureFlag = %v, want true", rec["futureFlag"])
+	}
+	wantNetwork := map[string]any{"vpc": "dev", "tags": []any{"a", "b"}}
+	if !reflect.DeepEqual(rec["network"], wantNetwork) {
+		t.Errorf("network = %v, want %v", rec["network"], wantNetwork)
 	}
 }

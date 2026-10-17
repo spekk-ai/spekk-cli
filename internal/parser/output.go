@@ -88,6 +88,16 @@ type CompleteOutput struct {
 	Message string `json:"message"`
 }
 
+// NoneEligibleOutput is the JSON output when open assertions remain but none
+// is eligible. Reasons counts them by reason (see CountIneligible).
+type NoneEligibleOutput struct {
+	Type      string         `json:"type"`
+	Status    string         `json:"status"`
+	Message   string         `json:"message"`
+	Remaining int            `json:"remaining"`
+	Reasons   map[string]int `json:"reasons"`
+}
+
 // EmptyOutput is the JSON output when no specs are found.
 type EmptyOutput struct {
 	Status  string `json:"status"`
@@ -263,6 +273,49 @@ func FormatComplete() ([]byte, error) {
 		Message: "All specifications are complete",
 	}
 	return marshalJSON(out)
+}
+
+// FormatNoneEligible formats the output for open assertions that are not
+// eligible, from the counts of CountIneligible.
+func FormatNoneEligible(reasons map[string]int) ([]byte, error) {
+	out := NoneEligibleOutput{
+		Type:      "none_eligible",
+		Status:    "none_eligible",
+		Message:   NoneEligibleMessage(reasons),
+		Remaining: sumCounts(reasons),
+		Reasons:   reasons,
+	}
+	return marshalJSON(out)
+}
+
+// NoneEligibleMessage tells the user why no assertion is eligible, from the
+// counts of CountIneligible.
+func NoneEligibleMessage(reasons map[string]int) string {
+	remaining := sumCounts(reasons)
+	noun := "open assertions remain"
+	if remaining == 1 {
+		noun = "open assertion remains"
+	}
+	var parts []string
+	for _, r := range []struct{ key, text string }{
+		{ReasonOtherBranch, "on a different branch (an assertion with no branch field belongs to main; see them with spekk next --all-branches)"},
+		{ReasonBlocked, "blocked by a dependency that is not done"},
+		{ReasonLocked, "locked by a live builder"},
+		{ReasonDraft, "draft"},
+	} {
+		if n := reasons[r.key]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, r.text))
+		}
+	}
+	return fmt.Sprintf("No assertion is eligible. %d %s: %s.", remaining, noun, strings.Join(parts, ", "))
+}
+
+func sumCounts(counts map[string]int) int {
+	n := 0
+	for _, c := range counts {
+		n += c
+	}
+	return n
 }
 
 // FormatEmpty formats the "no specs found" output as JSON.

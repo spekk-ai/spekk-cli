@@ -1395,7 +1395,8 @@ TOKEN=$(echo '%s' | base64 -d)
 su - agent -c 'git config --global credential.helper store'
 su - agent -c "cat > ~/.git-credentials" <<< "https://x-access-token:${TOKEN}@github.com"
 su - agent -c 'chmod 600 ~/.git-credentials'
-echo "${TOKEN}" | su - agent -c 'gh auth login --with-token 2>/dev/null || true'`,
+echo "${TOKEN}" | su - agent -c 'gh auth login --with-token'
+su - agent -c 'gh auth status' >/dev/null 2>&1 || { echo 'spekk: gh auth status fails: the agent user is not logged in to GitHub' >&2; exit 1; }`,
 		encodedToken,
 	)
 }

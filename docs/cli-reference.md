@@ -77,7 +77,7 @@ An assertion is a JSON object with `type: "assertion"` and these fields:
 | `content` | The markdown body |
 | `spec` | The parent spec: `id`, `file`, `title` |
 
-When nothing is ready, the output has `type: "complete"`. When `specs/` has no specs, it has `status: "empty"`. A parse error that stops the whole tree prints `{"error": true, "message": ...}` and exits 1.
+When no assertion is open (all are `done`), the output has `type: "complete"`. When open assertions remain but none is ready, the output has `type: "none_eligible"`, with `remaining` (the number of open assertions), `reasons` (a count for each of `other_branch`, `blocked`, `locked` and `draft`), and a `message` that names them. An assertion with no `branch` field belongs to `main`, so on another branch it counts as `other_branch`: run `spekk next --all-branches` to see it. When `specs/` has no specs, it has `status: "empty"`. A parse error that stops the whole tree prints `{"error": true, "message": ...}` and exits 1.
 
 ## `spekk list`
 
