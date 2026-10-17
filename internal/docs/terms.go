@@ -197,3 +197,26 @@ func MatchingLines(body string, start int, query string, max int) []Line {
 	}
 	return out
 }
+
+// WordsNotIn returns the terms of query (as MatchExpression splits them)
+// that have a word that title does not hold, joined by spaces. A "quoted
+// phrase" stays one term.
+func WordsNotIn(query, title string) string {
+	have := map[string]bool{}
+	for _, w := range wordsOf(title) {
+		have[w] = true
+	}
+	var out []string
+	for _, t := range splitQuery(query) {
+		for _, w := range wordsOf(t) {
+			if !have[w] && !stopwords[w] {
+				if strings.ContainsAny(t, " \t") {
+					t = `"` + t + `"`
+				}
+				out = append(out, t)
+				break
+			}
+		}
+	}
+	return strings.Join(out, " ")
+}

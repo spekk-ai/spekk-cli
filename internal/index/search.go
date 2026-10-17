@@ -169,17 +169,64 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 	rows.Close()
 
 	for i := range out {
+		// The title already tells the agent which document this is, so the
+		// shown passage is the best one for the other query words.
+		query := opts.Query
+		if rest := docs.WordsNotIn(opts.Query, out[i].Title); rest != "" && rest != opts.Query {
+			if m, err := docs.MatchExpression(rest); err == nil {
+				if err := bestPassageFor(db, m, &out[i], &shownRow[i]); err != nil {
+					return nil, err
+				}
+				query = rest
+			}
+		}
 		var body string
 		if err := db.QueryRow(`SELECT body FROM passages WHERE rowid = ?`, shownRow[i]).Scan(&body); err != nil {
 			return nil, fmt.Errorf("search: passage of %q: %w", out[i].ID, err)
 		}
-		lines := docs.MatchingLines(body, out[i].StartLine, opts.Query, shownLines[min(i, len(shownLines)-1)])
+		lines := docs.MatchingLines(body, out[i].StartLine, query, shownLines[min(i, len(shownLines)-1)])
 		for j := range lines {
 			lines[j].Text = docs.Truncate(docs.CleanLine(lines[j].Text), maxLineRunes)
 		}
 		out[i].Lines = lines
 	}
 	return out, nil
+}
+
+// bestPassageFor replaces the best passage of r, and the other ranges, with
+// the passages of the same document that rank best for match. A document
+// with no passage that matches keeps the passages it had.
+func bestPassageFor(db *sql.DB, match string, r *SearchResult, row *int64) error {
+	// The rowid range of the document keeps the query to its passages.
+	rows, err := db.Query(`SELECT p.rowid, p.start_line, p.end_line FROM documents d, passages p
+		WHERE d.kind = ? AND d.id = ? AND p.passages MATCH ? AND p.rowid BETWEEN d.passage_first AND d.passage_last AND p.is_header = 0
+		ORDER BY bm25(passages, 2.0, 1.0, 1.0) LIMIT ?`, r.Kind, r.ID, match, maxAlso+1)
+	if err != nil {
+		return fmt.Errorf("search: passages of %q: %w", r.ID, err)
+	}
+	defer rows.Close()
+	var ranges []string
+	first := true
+	for rows.Next() {
+		var rowid int64
+		var start, end int
+		if err := rows.Scan(&rowid, &start, &end); err != nil {
+			return fmt.Errorf("search: passages of %q: %w", r.ID, err)
+		}
+		if first {
+			*row, r.StartLine, r.EndLine = rowid, start, end
+			first = false
+			continue
+		}
+		ranges = append(ranges, fmt.Sprintf("%d-%d", start, end))
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("search: passages of %q: %w", r.ID, err)
+	}
+	if !first {
+		r.Also = append([]string{}, ranges...)
+	}
+	return nil
 }
 
 // staleLine is the text line of a search that answered from an index that a

@@ -164,3 +164,24 @@ func hasLine(lines []docs.Line, n int, text string) bool {
 	}
 	return false
 }
+
+func TestShownPassageIsBestForWordsNotInTheTitle(t *testing.T) {
+	// The title words are rare in the corpus and the other words are
+	// common, so the whole query ranks the intro of the document first.
+	files := map[string]string{
+		"docs/zebra.md": "# Zebra Crossing\n\nZebra crossing, zebra crossing.\n\n## Signals\n\nThe light turns amber, and a car must stop.\n",
+	}
+	for i := range 5 {
+		files[fmt.Sprintf("docs/road%d.md", i)] = "# Road\n\nA car stops at a light. The light is amber or red.\n"
+	}
+	dbPath := buildCorpus(t, files)
+
+	rs, err := index.Search(dbPath, index.SearchOptions{Query: "zebra crossing light amber car"})
+	must(t, err)
+	if len(rs) == 0 || rs[0].ID != "docs-zebra" {
+		t.Fatalf("results = %+v, want docs-zebra first", rs)
+	}
+	if !hasLine(rs[0].Lines, 7, "light turns amber") {
+		t.Errorf("shown lines %d-%d %+v, want the Signals passage: the title holds the other words", rs[0].StartLine, rs[0].EndLine, rs[0].Lines)
+	}
+}
