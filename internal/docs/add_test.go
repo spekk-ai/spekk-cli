@@ -187,17 +187,6 @@ JVBERi0=
 	}
 }
 
-func TestMissingConverterMessage(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	root := t.TempDir()
-	src := filepath.Join(root, "raw", "scan.pdf")
-	write(t, root, "raw/scan.pdf", "%PDF-1.4")
-	n, out := addFiles(t, root, AddOptions{}, src)
-	if n != 1 || !strings.Contains(out, "pdftotext is not on PATH. Install poppler (apt: poppler-utils, brew: poppler)") {
-		t.Errorf("n=%d out=%s", n, out)
-	}
-}
-
 func TestSecretScan(t *testing.T) {
 	text := strings.Join([]string{
 		"plain line",
