@@ -179,8 +179,12 @@ func ReadInPlace(root, rel string) (Document, error) {
 	return d, nil
 }
 
+// metadataField matches a field label such as "Author: " or "Post-History: ".
+var metadataField = regexp.MustCompile(`(?:^|\s)[A-Z][A-Za-z-]+: `)
+
 // firstParagraph returns the first paragraph of body text (not a heading, not
-// frontmatter, not a code block), cut to 300 characters.
+// frontmatter, not a code block, not a block of two or more metadata fields),
+// cut to 300 characters.
 func firstParagraph(text string) string {
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	var para []string
@@ -195,6 +199,11 @@ func firstParagraph(text string) string {
 		setext := i+1 < len(lines) && t != "" && isSetextUnderline(lines[i+1])
 		skip := fence || atx || setext || isSetextUnderline(t) || strings.HasPrefix(t, "|") || strings.HasPrefix(t, "<")
 		if t == "" || skip {
+			if len(metadataField.FindAllStringIndex(strings.Join(para, " "), 2)) == 2 {
+				// A header block ("PEP: 8 Title: ... Author: ...") tells
+				// nothing about the content; the next paragraph does.
+				para = nil
+			}
 			if len(para) > 0 {
 				break
 			}

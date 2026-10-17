@@ -139,3 +139,14 @@ func TestCorpusStaysInsideTheRoot(t *testing.T) {
 		t.Errorf("warnings = %q, want one for each of the 4 stubs that leave the corpus", c.Warnings)
 	}
 }
+
+func TestFirstParagraphSkipsAMetadataBlock(t *testing.T) {
+	for text, want := range map[string]string{
+		"# PEP 9\n\nPEP: 9 Title: Sample Author: A. Person\nStatus: Final\n\n# Abstract\n\nThe real summary.\n": "The real summary.",
+		"# Notes\n\nNote: one field is a sentence, not metadata.\n":                                             "Note: one field is a sentence, not metadata.",
+	} {
+		if got := firstParagraph(text); got != want {
+			t.Errorf("firstParagraph(%q) = %q, want %q", text, got, want)
+		}
+	}
+}

@@ -17,7 +17,7 @@ depends-on: index-holds-full-text
 - Files under `specs/`, `raw/`, `formatted/`, `.spekk/`, and `.git/` are never in-place documents, whatever the globs say.
 - Only `.md`, `.markdown`, and `.txt` files are in-place documents. Other matched files are skipped without a warning.
 - Each in-place document has kind `doc`, id = kebab-case of its path without the extension (`docs/advanced/index.md` -> `docs-advanced-index`, `README.md` -> `readme`).
-- Frontmatter on the file is optional. When present, `title`, `summary`, `type`, `tags`, and `created` are read. Without a `title`, the first heading is the title, else the file name. Without a `summary`, the first paragraph of the body (cut to 300 characters) is the summary.
+- Frontmatter on the file is optional. When present, `title`, `summary`, `type`, `tags`, and `created` are read. Without a `title`, the first heading is the title, else the file name. Without a `summary`, the first paragraph of the body (cut to 300 characters) is the summary. A paragraph that holds two or more metadata fields (`Name: value`, such as a `PEP: 8 Title: ... Author: ...` header block) is skipped for the next one.
 - Two documents with the same id: the first in path order is indexed, and the build reports a warning that names both paths.
 - A stub in `formatted/` that does not parse is skipped with a warning (from `spekk index` and `spekk validate`), so one broken stub does not stop every command.
 
