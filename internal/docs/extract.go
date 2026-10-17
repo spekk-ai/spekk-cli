@@ -3,6 +3,7 @@ package docs
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/xml"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/net/html"
 )
@@ -108,14 +110,58 @@ func (c converter) run(file string) (string, error) {
 	if _, err := exec.LookPath(c.tool); err != nil {
 		return "", fmt.Errorf("%s is not on PATH. Install %s (apt: %s, brew: %s), or convert the file to text and add the text file", c.tool, c.pkg, c.apt, c.brew)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), converterTimeout)
+	defer cancel()
 	var stderr bytes.Buffer
-	cmd := exec.Command(c.tool, c.args(file)...)
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
+	out := &capWriter{max: converterOutputCap}
+	cmd := exec.CommandContext(ctx, c.tool, c.args(file)...)
+	cmd.Stdout, cmd.Stderr = out, &capWriter{w: &stderr, max: 64 << 10, drop: true}
+	// A child of the tool can keep the pipes open after the kill; do not
+	// wait for it.
+	cmd.WaitDelay = 2 * time.Second
+	err := cmd.Run()
+	switch {
+	case ctx.Err() != nil:
+		return "", fmt.Errorf("%s did not finish in %s", c.tool, converterTimeout)
+	case out.over:
+		return "", fmt.Errorf("%s wrote more than %d MB of text", c.tool, converterOutputCap>>20)
+	case err != nil:
 		return "", fmt.Errorf("%s failed: %v: %s", c.tool, err, strings.TrimSpace(stderr.String()))
 	}
-	return string(out), nil
+	return out.b.String(), nil
+}
+
+// Converter limits: a hostile PDF or DOCX must not hang `docs add` or fill
+// the memory.
+const (
+	converterTimeout   = 60 * time.Second
+	converterOutputCap = 64 << 20
+)
+
+// capWriter keeps at most max bytes, in b or in w. A write past max is an
+// error, which stops the copy from the tool, or with drop, is discarded (the
+// tail of a long stderr does not matter).
+type capWriter struct {
+	b    bytes.Buffer
+	w    *bytes.Buffer
+	max  int
+	drop bool
+	over bool
+}
+
+func (c *capWriter) Write(p []byte) (int, error) {
+	dst := &c.b
+	if c.w != nil {
+		dst = c.w
+	}
+	if dst.Len()+len(p) > c.max {
+		if c.drop {
+			return len(p), nil
+		}
+		c.over = true
+		return 0, errors.New("output cap")
+	}
+	return dst.Write(p)
 }
 
 // blockTags end a line of text.
