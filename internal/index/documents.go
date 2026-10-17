@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -29,7 +28,7 @@ func insertDocument(tx *sql.Tx, d docs.Document, file string) (int, error) {
 			return 0, fmt.Errorf("cannot insert tag of %q: %w", d.ID, err)
 		}
 	}
-	raw, err := os.ReadFile(file)
+	raw, err := docs.ReadRegular(file)
 	if err != nil {
 		// A raw document whose text is absent keeps its row, so status and
 		// search can name it, and has no passages.

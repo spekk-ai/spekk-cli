@@ -2,7 +2,6 @@ package docs
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -28,7 +27,7 @@ type Stub struct {
 // ReadStub reads a stub file. Hand edits are fine: a value may be quoted or
 // bare, and tags may use any list spelling the spec parser accepts.
 func ReadStub(p string) (Stub, error) {
-	raw, err := os.ReadFile(p)
+	raw, err := ReadRegular(p)
 	if err != nil {
 		return Stub{}, err
 	}

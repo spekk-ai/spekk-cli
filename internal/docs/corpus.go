@@ -148,7 +148,7 @@ func ID(rel string) string {
 
 // ReadInPlace reads one in-place document. Frontmatter is optional.
 func ReadInPlace(root, rel string) (Document, error) {
-	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+	raw, err := ReadRegular(filepath.Join(root, filepath.FromSlash(rel)))
 	if err != nil {
 		return Document{}, fmt.Errorf("cannot read %s: %w", rel, err)
 	}
@@ -378,8 +378,11 @@ func rawState(root string, d Document, ignored bool) string {
 	return StateOK
 }
 
-// FileSHA256 returns the hex sha256 of a file.
+// FileSHA256 returns the hex sha256 of a regular file.
 func FileSHA256(p string) (string, error) {
+	if err := regular(p); err != nil {
+		return "", err
+	}
 	f, err := os.Open(p)
 	if err != nil {
 		return "", err
@@ -390,6 +393,38 @@ func FileSHA256(p string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// regular returns an error when p, after symlinks, is not a regular file. A
+// committed symlink to /dev/zero reads without end, and the open of a FIFO
+// blocks, so the corpus never opens either one.
+func regular(p string) error {
+	info, err := os.Stat(p)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a regular file", filepath.Base(p))
+	}
+	return nil
+}
+
+// ReadRegular is os.ReadFile for a regular file only.
+func ReadRegular(p string) ([]byte, error) {
+	if err := regular(p); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(p)
+}
+
+// regularEntry reports whether the walk entry de at p is a regular file,
+// after a symlink.
+func regularEntry(p string, de fs.DirEntry) bool {
+	if de.Type()&fs.ModeSymlink == 0 {
+		return de.Type().IsRegular()
+	}
+	info, err := os.Stat(p)
+	return err == nil && info.Mode().IsRegular()
 }
 
 // RawIgnored reads raw/.gitignore: the pointer entries that `docs add`
@@ -540,6 +575,9 @@ func inPlaceWalk(root string, fn func(rel string, de fs.DirEntry)) error {
 			if de.IsDir() || found[rel] || !inPlaceExts[strings.ToLower(path.Ext(rel))] {
 				return
 			}
+			if !regularEntry(filepath.Join(root, filepath.FromSlash(rel)), de) {
+				return
+			}
 			if anyMatch(inc, rel) && !anyMatch(exc, rel) {
 				found[rel] = true
 				fn(rel, de)
@@ -622,9 +660,10 @@ type FileStat struct {
 }
 
 // CorpusStat returns the size and mtime of every file the document corpus
-// reads: each in-place document, each file under raw/ and formatted/, and
-// .spekk/docs-paths when it exists. It reads no file content, and takes each
-// stat from the directory walk. The index keeps a manifest of these files, so
+// reads: each in-place document, each regular file under raw/ and
+// formatted/, and .spekk/docs-paths when it exists. It reads no file
+// content, and takes each stat from the directory walk. A FIFO, a device,
+// and a symlink out of the repository are not in it, so no hash reads them. The index keeps a manifest of these files, so
 // a new, edited, or deleted document is seen, and an unrelated file is not.
 func CorpusStat(root string) (map[string]FileStat, error) {
 	out := map[string]FileStat{}
@@ -645,7 +684,10 @@ func CorpusStat(root string) (map[string]FileStat, error) {
 	}
 	for _, dir := range []string{RawDir, FormattedDir} {
 		err := filepath.WalkDir(filepath.Join(root, dir), func(p string, de fs.DirEntry, err error) error {
-			if err != nil || de.IsDir() {
+			if err != nil || de.IsDir() || !regularEntry(p, de) {
+				return nil
+			}
+			if de.Type()&fs.ModeSymlink != 0 && !resolvesInside(root, p) {
 				return nil
 			}
 			rel, _ := filepath.Rel(root, p)
