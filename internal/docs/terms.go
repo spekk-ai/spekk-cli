@@ -66,15 +66,25 @@ var ErrEmptyQuery = errors.New("search: the query has no words")
 // AND, *, :, parentheses, and - are plain characters). The terms are joined
 // with OR, and BM25 ranks a passage that matches more of them first.
 func MatchExpression(query string) (string, error) {
-	var terms []string
+	var words []string
 	for _, t := range splitQuery(query) {
-		if !strings.ContainsFunc(t, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
-			continue
+		if strings.ContainsFunc(t, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
+			words = append(words, t)
 		}
-		terms = append(terms, `"`+strings.ReplaceAll(t, `"`, `""`)+`"`)
 	}
-	if len(terms) == 0 {
+	if len(words) == 0 {
 		return "", ErrEmptyQuery
+	}
+	quote := func(t string) string { return `"` + strings.ReplaceAll(t, `"`, `""`) + `"` }
+	var terms []string
+	for _, w := range words {
+		terms = append(terms, quote(w))
+	}
+	// Each pair of adjacent words is also a phrase. A rare pair ("pep 508",
+	// "kinds of") has a high IDF, so a passage that holds the words side by
+	// side ranks above one that holds them apart.
+	for i := 0; i+1 < len(words); i++ {
+		terms = append(terms, quote(words[i]+" "+words[i+1]))
 	}
 	return strings.Join(terms, " OR "), nil
 }

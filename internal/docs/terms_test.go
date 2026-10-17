@@ -9,12 +9,14 @@ func TestMatchExpression(t *testing.T) {
 	cases := []struct {
 		query, want string
 	}{
-		{`index rebuild`, `"index" OR "rebuild"`},
-		{`snake_case dotted.name kebab-case`, `"snake_case" OR "dotted.name" OR "kebab-case"`},
-		{`"exact phrase" word`, `"exact phrase" OR "word"`},
+		// Each pair of adjacent terms is also a phrase.
+		{`index rebuild`, `"index" OR "rebuild" OR "index rebuild"`},
+		{`snake_case dotted.name`, `"snake_case" OR "dotted.name" OR "snake_case dotted.name"`},
+		{`"exact phrase" word`, `"exact phrase" OR "word" OR "exact phrase word"`},
 		// FTS5 operators and syntax are plain text.
-		{`NOT a* (b) col:c -d`, `"NOT" OR "a*" OR "(b)" OR "col:c" OR "-d"`},
-		{`say"hi`, `"say" OR "hi"`},
+		{`NOT a*`, `"NOT" OR "a*" OR "NOT a*"`},
+		{`(b) col:c -d`, `"(b)" OR "col:c" OR "-d" OR "(b) col:c" OR "col:c -d"`},
+		{`say"hi`, `"say" OR "hi" OR "say hi"`},
 		// A term with no letter or digit is dropped.
 		{`-- * fix`, `"fix"`},
 	}
