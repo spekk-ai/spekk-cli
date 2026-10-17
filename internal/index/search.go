@@ -296,7 +296,9 @@ func RenderSearchText(query string, results []SearchResult, pending int) string 
 		if left := len(results) - n; left > 0 {
 			fmt.Fprintf(&b, "\n%d more results left out by the %d-byte output cap. Narrow the query, or filter with --kind, --type, or --tag.\n", left, SearchCap)
 		}
-		b.WriteString("\nRead a passage: spekk docs show <id> --lines <a:b>\n")
+		// Agents read again a passage whose answer they had, to be sure of
+		// it; the footer says that the lines are the file's own.
+		b.WriteString("\nThe numbered lines are the document's own lines: quote them as they are. To read more: spekk docs show <id> --lines <a:b>\n")
 		return b.String()
 	}
 	return fit(results, render)
