@@ -1,6 +1,8 @@
 package sandbox
 
 import (
+	"encoding/base64"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -74,6 +76,81 @@ func TestNoCloudCredentialReachesTheControlHost(t *testing.T) {
 			if k != "Authorization" && (strings.Contains(lower, "auth") || strings.Contains(lower, "token")) {
 				t.Errorf("%s has an unexpected credential header %s", where, k)
 			}
+		}
+	}
+}
+
+// base64Run finds the runs of text that may be base64.
+var base64Run = regexp.MustCompile(`[A-Za-z0-9+/]{16,}={0,2}`)
+
+// holdsSecret reports whether text holds secret in clear text, or in a
+// base64 run that decodes to text that holds it. sudoWrap encodes a script
+// that already holds base64, so the search goes down each level.
+func holdsSecret(text, secret string) bool {
+	if strings.Contains(text, secret) {
+		return true
+	}
+	for _, run := range base64Run.FindAllString(text, -1) {
+		if decoded, err := base64.StdEncoding.DecodeString(run); err == nil && holdsSecret(string(decoded), secret) {
+			return true
+		}
+	}
+	return false
+}
+
+// Each process on the host can read the argument list of ssh in
+// /proc/<pid>/cmdline. Each step that sends a secret to the machine runs
+// here, for root and for a sudo login, and no ssh argument may hold one,
+// in clear text or in base64. The secrets must reach the machine on stdin,
+// so the test also fails when a step stops sending them. See
+// specs/sandbox-machine-mode/assertions/secrets-on-ssh-stdin.md.
+func TestNoSecretInTheSSHArgumentList(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	host := useControlHost(t)
+
+	secrets := map[string]string{"agent token": "agent-token-for-the-machine"}
+	for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", oauthTokenVar, "GITHUB_TOKEN"} {
+		secrets[v] = "secret-of-" + strings.ToLower(v)
+		t.Setenv(v, secrets[v])
+	}
+	var argv []string
+	var stdin strings.Builder
+	orig := sshExec
+	sshExec = func(args []string, in string) ([]byte, error) {
+		argv = append(argv, strings.Join(args, " "))
+		stdin.WriteString(in)
+		return nil, nil
+	}
+	t.Cleanup(func() { sshExec = orig })
+
+	for _, user := range []string{"root", "ubuntu"} {
+		for _, mode := range []AuthMode{AuthBedrock, AuthSubscription} {
+			if err := injectCredentials("9.9.9.9", "", "box", user, secrets["agent token"], mode, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := configureGitCredentials("9.9.9.9", "", "box", user); err != nil {
+			t.Fatal(err)
+		}
+		if err := SaveSandbox("box", &SandboxMeta{Provider: ProviderNone, IP: "9.9.9.9", SSHUser: user}); err != nil {
+			t.Fatal(err)
+		}
+		if err := Register("box", ""); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := GetSandbox("box")
+		secrets["registered agent token as "+user] = host.agent(got.AgentID).Token
+	}
+
+	for name, secret := range secrets {
+		for _, args := range argv {
+			if holdsSecret(args, secret) {
+				t.Errorf("an ssh argument list holds the %s: %s", name, args)
+			}
+		}
+		if !holdsSecret(stdin.String(), secret) {
+			t.Errorf("the %s did not reach the machine on stdin", name)
 		}
 	}
 }

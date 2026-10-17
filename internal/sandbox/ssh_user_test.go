@@ -114,7 +114,7 @@ func TestCreateRecordsTheLoginUser(t *testing.T) {
 func TestEveryPrivilegedStepEscalatesForANonRootLogin(t *testing.T) {
 	var sent []string
 	origExec := sshExec
-	sshExec = func(args []string) ([]byte, error) {
+	sshExec = func(args []string, stdin string) ([]byte, error) {
 		sent = append(sent, args[len(args)-1])
 		return nil, nil
 	}
@@ -140,7 +140,7 @@ func TestEveryPrivilegedStepEscalatesForANonRootLogin(t *testing.T) {
 			if len(sent) != 1 {
 				t.Fatalf("%s sent %d commands, want 1", name, len(sent))
 			}
-			if !strings.Contains(sent[0], "| sudo bash") {
+			if !strings.Contains(sent[0], "sudo bash") {
 				t.Errorf("%s does not escalate for a non-root login: %q", name, sent[0])
 			}
 
@@ -166,7 +166,7 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 	}
 	// Every command reads a current Claude Code, so the deploy reads the
 	// version and installs the agent, and nothing else.
-	sshExec = func(args []string) ([]byte, error) {
+	sshExec = func(args []string, stdin string) ([]byte, error) {
 		sshCommands = append(sshCommands, args[len(args)-1])
 		return []byte("2.1.301 (Claude Code)\n"), nil
 	}

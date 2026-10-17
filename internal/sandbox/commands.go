@@ -869,10 +869,15 @@ systemctl restart spekk-agent`, spekkAgentUnit)
 // stagedBinary is the upload path relative to the SSH login user's home.
 const stagedBinary = "agent-client.staged"
 
-// sshExec runs an ssh command. It is a variable so a test can read what the
-// privileged steps actually send, with no machine to send it to.
-var sshExec = func(args []string) ([]byte, error) {
-	return exec.Command("ssh", args...).CombinedOutput()
+// sshExec runs an ssh command, with stdin as its standard input when it is
+// not empty. It is a variable so a test can read what the privileged steps
+// actually send, with no machine to send it to.
+var sshExec = func(args []string, stdin string) ([]byte, error) {
+	cmd := exec.Command("ssh", args...)
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
+	return cmd.CombinedOutput()
 }
 
 // scpExec copies a file with scp. It is a seam for the same reason sshExec
@@ -1247,7 +1252,30 @@ func runSSHCombined(ip, keyPath, name, user, command string) (string, error) {
 		args = append(args, "-i", keyPath)
 	}
 	args = append(args, fmt.Sprintf("%s@%s", user, ip), command)
-	out, err := sshExec(args)
+	out, err := sshExec(args, "")
+	return string(out), err
+}
+
+// runSecretScript runs a script that holds a secret as root on the host. The
+// script goes on the stdin of ssh, never in its argument list: each process
+// on this host can read the argument list of ssh in /proc/<pid>/cmdline, and
+// a secret in base64 there is still the secret. The remote command is only
+// "bash -s", or "sudo bash -s" for a login user that is not root.
+func runSecretScript(ip, keyPath, name, user, script string) (string, error) {
+	args := sshHostKeyOpts(name)
+	args = append(args, "-o", "ConnectTimeout=10")
+	if keyPath != "" {
+		args = append(args, "-i", keyPath)
+	}
+	shell := "bash -s"
+	if user != "root" {
+		shell = "sudo bash -s"
+	}
+	args = append(args, fmt.Sprintf("%s@%s", user, ip), shell)
+	// bash reads a script on stdin one command at a time, so a command in
+	// it that reads stdin would eat the rest of the script. The braces make
+	// bash read the whole script first, and give each command /dev/null.
+	out, err := sshExec(args, "{\n"+script+"\n} </dev/null\n")
 	return string(out), err
 }
 
@@ -1285,20 +1313,12 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 	spekkHost := os.Getenv("SPEKK_HOST")
 
 	envContent := buildEnvContent(mode, envVars, name, agentToken, spekkHost)
-	script := privilegedScript(user, buildInjectScript(envContent, marker))
-
-	args := sshHostKeyOpts(name)
-	args = append(args, "-o", "ConnectTimeout=10")
-	if keyPath != "" {
-		args = append(args, "-i", keyPath)
-	}
-	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
-	out, err := sshExec(args)
+	out, err := runSecretScript(ip, keyPath, name, user, buildInjectScript(envContent, marker))
 	if err != nil {
-		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
+		return fmt.Errorf("SSH command failed: %s\n%s", err, out)
 	}
-	if strings.Contains(string(out), markerNotWritten) {
-		cause := strings.TrimSpace(strings.Replace(string(out), markerNotWritten, "", 1))
+	if strings.Contains(out, markerNotWritten) {
+		cause := strings.TrimSpace(strings.Replace(out, markerNotWritten, "", 1))
 		fmt.Fprintf(os.Stderr, "Warning: could not write %s. The sandbox works without it.\n%s\n", sandboxMarker, cause)
 	}
 	return nil
@@ -1324,7 +1344,7 @@ func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken,
 // write the sandbox marker, so injectCredentials can warn about it.
 const markerNotWritten = "spekk: marker not written"
 
-// buildInjectScript produces the SSH command string for injecting credentials
+// buildInjectScript produces the script for injecting credentials
 // and writing the sandbox marker. It base64-encodes both to prevent shell
 // injection. The marker goes to a temp file and then mv -f, so the write does
 // not follow a symlink at the marker path. A failed marker write prints
@@ -1343,21 +1363,13 @@ func buildInjectScript(envContent string, marker []byte) string {
 func configureGitCredentials(ip, keyPath, name, user string) error {
 	ghToken := os.Getenv("GITHUB_TOKEN")
 
-	script := privilegedScript(user, buildGitCredentialScript(ghToken))
-
-	args := sshHostKeyOpts(name)
-	args = append(args, "-o", "ConnectTimeout=10")
-	if keyPath != "" {
-		args = append(args, "-i", keyPath)
-	}
-	args = append(args, fmt.Sprintf("%s@%s", user, ip), script)
-	if out, err := sshExec(args); err != nil {
-		return fmt.Errorf("SSH command failed: %s\n%s", err, string(out))
+	if out, err := runSecretScript(ip, keyPath, name, user, buildGitCredentialScript(ghToken)); err != nil {
+		return fmt.Errorf("SSH command failed: %s\n%s", err, out)
 	}
 	return nil
 }
 
-// buildGitCredentialScript produces the SSH command string for configuring git credentials.
+// buildGitCredentialScript produces the script for configuring git credentials.
 // It base64-encodes the token to prevent shell injection. Exported for testing.
 func buildGitCredentialScript(ghToken string) string {
 	encodedToken := base64.StdEncoding.EncodeToString([]byte(ghToken))

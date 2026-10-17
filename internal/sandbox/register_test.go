@@ -268,13 +268,22 @@ func TestCreateWithoutAPITokenCallsNoControlHost(t *testing.T) {
 	}
 }
 
+// sentScript is what an ssh call ran on the machine: the script on its stdin
+// when it has one, else the remote command.
+func sentScript(args []string, stdin string) string {
+	if stdin != "" {
+		return stdin
+	}
+	return args[len(args)-1]
+}
+
 // stubSSH records each remote command and answers with err.
 func stubSSH(t *testing.T, err error) *[]string {
 	t.Helper()
 	var sent []string
 	orig := sshExec
-	sshExec = func(args []string) ([]byte, error) {
-		sent = append(sent, args[len(args)-1])
+	sshExec = func(args []string, stdin string) ([]byte, error) {
+		sent = append(sent, sentScript(args, stdin))
 		return nil, err
 	}
 	t.Cleanup(func() { sshExec = orig })

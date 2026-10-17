@@ -238,8 +238,8 @@ func TestCreateOneOffOnAnExistingMachine(t *testing.T) {
 	t.Cleanup(func() { fetchAgent = origFetch })
 	var injected string
 	origExec := sshExec
-	sshExec = func(args []string) ([]byte, error) {
-		injected = args[len(args)-1]
+	sshExec = func(args []string, stdin string) ([]byte, error) {
+		injected = sentScript(args, stdin)
 		return nil, errors.New("stop here")
 	}
 	t.Cleanup(func() { sshExec = origExec })

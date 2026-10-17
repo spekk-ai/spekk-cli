@@ -120,7 +120,7 @@ func stopAgentService(sandbox *SandboxMeta, name string) error {
 	// Teardown touches root-owned units and files, so a non-root user
 	// runs it under sudo.
 	args := append(sshBatchArgs(sandbox, name), privilegedScript(sshUser(sandbox), teardownCommand()))
-	if out, err := sshExec(args); err != nil {
+	if out, err := sshExec(args, ""); err != nil {
 		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
