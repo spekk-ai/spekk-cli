@@ -151,7 +151,7 @@ func (c *AgentClient) heartbeat(ctx context.Context, conn *websocket.Conn) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			err := wsjson.Write(ctx, conn, map[string]string{"type": "heartbeat"})
+			err := wsjson.Write(ctx, conn, map[string]string{"type": "heartbeat", "claude_auth": claudeAuthState()})
 			if err != nil {
 				return
 			}

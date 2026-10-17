@@ -41,6 +41,10 @@ func main() {
 		log.Printf("WARNING: %s Every turn is refused until then.", status)
 	}
 
+	if claudeAuthState() == claudeAuthSignInRequired {
+		log.Print("WARNING: Claude Code is not signed in. Every turn is refused until a person signs in on this sandbox.")
+	}
+
 	if err := os.MkdirAll(cfg.Workspace, 0755); err != nil {
 		log.Fatalf("Failed to create workspace: %v", err)
 	}

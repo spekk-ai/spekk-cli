@@ -15,6 +15,14 @@ import (
 )
 
 func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg Message) {
+	// A turn with no model credential would fail inside claude with no
+	// cause that the person can act on.
+	if claudeAuthState() == claudeAuthSignInRequired {
+		log.Print("Refusing a turn: Claude Code is not signed in.")
+		sendError(ctx, conns, msg.AgentSessionID, signInRequiredDetail)
+		return
+	}
+
 	// Each turn reads the version again: a self-update or a deploy can change
 	// it while the client runs, and the read takes about 20 ms.
 	switch status, check := checkClaudeCode(); check {
