@@ -3,7 +3,7 @@ id: prompts-and-docs-use-docs-search
 parent: source-document-index
 created: 2026-10-17T16:00:00Z
 priority: 2
-status: not_started
+status: done
 branch: feature/source-document-index
 depends-on: assertion-sources-links
 ---

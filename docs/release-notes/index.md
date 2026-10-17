@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.37.0 -- Search Specs, Docs, and Source Documents From One Index](RELEASE-NOTES-1.37.0.md)
+
+New `spekk docs search|show|add|status`. One FTS5 index in `.spekk/index.db` now holds the bodies of specs and assertions, the docs in the repository, and source documents (`raw/`, with stubs in `formatted/`). A search returns the best passage of each document with its line range, in at most 4,000 bytes. `docs add` converts HTML, email, and XLSX in the binary, and PDF and DOCX with `pdftotext` and `pandoc`. `sources:` in a spec cites documents, and `spekk validate` checks the ids.
+
 ## [1.33.0 -- A Sandbox Registers Itself, and Sees Its Background Tasks End](RELEASE-NOTES-1.33.0.md)
 
 With `SPEKK_API_TOKEN`, `spekk sandbox create` registers the agent on the control host, and `destroy` revokes it first (`--ignore-revoke-failure` continues after a failed revoke). New `spekk sandbox register`, `spekk schedule`, and `--organization`. Every sandbox runs Claude Code 2.1.292 or newer, which keeps a turn alive while its background task runs, and `spekk sandbox deploy` upgrades an older one. Protocol `1.1` adds `terminal` to the `result` frame, and works with a control host on `1.0`. `spekk observer --mcp-config` now gives its MCP servers to Claude Code.
