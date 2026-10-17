@@ -72,8 +72,9 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 	}
 	defer db.Close()
 
-	q := `SELECT passages.kind, passages.doc_id, passages.start_line, passages.end_line, passages.is_header,
-	             snippet(passages, 1, '', '', '…', 24),
+	// The ranking query takes no snippet: snippet() costs more than the rest
+	// of the query for each row, and only the rows shown need one.
+	q := `SELECT passages.rowid, passages.kind, passages.doc_id, passages.start_line, passages.end_line, passages.is_header,
 	             d.title, d.path, d.text_path, d.summary, d.state
 	      FROM passages JOIN documents d ON d.kind = passages.kind AND d.id = passages.doc_id
 	      WHERE passages MATCH ?`
@@ -111,6 +112,7 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 	limit = min(limit, MaxSearchLimit)
 
 	var out []SearchResult
+	var shownRow []int64
 	byDoc := map[string]int{}
 	// headerShown marks a result whose passage is still the header row: the
 	// header ranks the document, but the agent needs a passage of the text,
@@ -118,9 +120,9 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 	headerShown := map[int]bool{}
 	for rows.Next() {
 		var r SearchResult
-		var snippet string
+		var rowid int64
 		var header int
-		if err := rows.Scan(&r.Kind, &r.ID, &r.StartLine, &r.EndLine, &header, &snippet, &r.Title, &r.Path, &r.TextPath, &r.Summary, &r.State); err != nil {
+		if err := rows.Scan(&rowid, &r.Kind, &r.ID, &r.StartLine, &r.EndLine, &header, &r.Title, &r.Path, &r.TextPath, &r.Summary, &r.State); err != nil {
 			return nil, fmt.Errorf("search: %w", err)
 		}
 		key := r.Kind + "\x00" + r.ID
@@ -129,7 +131,7 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 			case header == 1:
 			case headerShown[i]:
 				out[i].StartLine, out[i].EndLine = r.StartLine, r.EndLine
-				out[i].Excerpt = docs.Truncate(docs.CleanLine(snippet), 400)
+				shownRow[i] = rowid
 				headerShown[i] = false
 			case len(out[i].Also) < maxAlso:
 				out[i].Also = append(out[i].Also, fmt.Sprintf("%d-%d", r.StartLine, r.EndLine))
@@ -146,14 +148,24 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 		r.Path, r.TextPath = docs.CleanLine(r.Path), docs.CleanLine(r.TextPath)
 		r.Title = docs.Truncate(docs.CleanLine(r.Title), 200)
 		r.Summary = docs.Truncate(docs.CleanLine(r.Summary), 300)
-		r.Excerpt = docs.Truncate(docs.CleanLine(snippet), 400)
 		r.Also = []string{}
 		byDoc[key] = len(out)
 		headerShown[len(out)] = header == 1
+		shownRow = append(shownRow, rowid)
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("search: %w", err)
+	}
+	rows.Close()
+
+	for i := range out {
+		var snippet string
+		if err := db.QueryRow(`SELECT snippet(passages, 1, '', '', '…', 24) FROM passages WHERE passages MATCH ? AND rowid = ?`,
+			match, shownRow[i]).Scan(&snippet); err != nil {
+			return nil, fmt.Errorf("search: excerpt of %q: %w", out[i].ID, err)
+		}
+		out[i].Excerpt = docs.Truncate(docs.CleanLine(snippet), 400)
 	}
 	return out, nil
 }
