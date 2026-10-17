@@ -103,7 +103,8 @@ func RenderShow(d Document, text string, start, end int) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s - %s\n", d.Kind, d.ID, CleanLine(d.Title))
+	// A heading of one long line is the title, so the title is cut too.
+	fmt.Fprintf(&b, "%s %s - %s\n", d.Kind, d.ID, Truncate(CleanLine(d.Title), 160))
 	d.TextPath = CleanLine(d.TextPath)
 	if start > total {
 		fmt.Fprintf(&b, "%s has %d lines; nothing to show from line %d.\n", d.TextPath, total, start)

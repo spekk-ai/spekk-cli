@@ -41,12 +41,15 @@ func TestRenderShowCapsLinesAndCleansText(t *testing.T) {
 	}
 
 	// A hostile 2 MB line: the call before it stops at the line, and the
-	// call at it prints a cut start, both under the byte cap.
+	// call at it prints a cut start, both under the byte cap. A heading of
+	// that length is the title, so the title is cut too.
 	long := "intro\nx" + strings.Repeat("é", 1<<20) + "\nafter\n"
 	if out := RenderShow(d, long, 1, 0); !strings.Contains(out, "lines 1-1 of 3") || !strings.Contains(out, "--lines 2:") {
 		t.Errorf("the line over the byte cap must start the next range:\n%s", out)
 	}
-	out = RenderShow(d, long, 2, 0)
+	big := d
+	big.Title = strings.Repeat("T", 2<<20)
+	out = RenderShow(big, long, 2, 0)
 	if len(out) > ShowByteCap+1000 || !utf8.ValidString(out) || !strings.Contains(out, "Line 2 has 2097153 bytes") || !strings.Contains(out, "--lines 3:") {
 		t.Errorf("a 2 MB line must print cut, under the byte cap, with a note and the next range: %d bytes, ends %q", len(out), out[len(out)-200:])
 	}

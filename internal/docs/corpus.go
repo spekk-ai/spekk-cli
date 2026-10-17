@@ -663,8 +663,9 @@ type FileStat struct {
 // reads: each in-place document, each regular file under raw/ and
 // formatted/, and .spekk/docs-paths when it exists. It reads no file
 // content, and takes each stat from the directory walk. A FIFO, a device,
-// and a symlink out of the repository are not in it, so no hash reads them. The index keeps a manifest of these files, so
-// a new, edited, or deleted document is seen, and an unrelated file is not.
+// and a symlink out of the repository are not in it, so no hash reads them.
+// The index keeps a manifest of these files, so a new, edited, or deleted
+// document is seen, and an unrelated file is not.
 func CorpusStat(root string) (map[string]FileStat, error) {
 	out := map[string]FileStat{}
 	add := func(rel, p string, de fs.DirEntry) {

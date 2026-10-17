@@ -33,18 +33,28 @@ func TestRefreshSkipsFilesThatAreNotRegular(t *testing.T) {
 	must(t, syscall.Mkfifo(filepath.Join(root, "formatted", "pipe.md"), 0o644))
 	must(t, syscall.Mkfifo(filepath.Join(root, "docs", "pipe.md"), 0o644))
 
+	// The forced rebuild with the entries reads every stub and document,
+	// so it also reaches the readers that the manifest does not.
+	withEntries := filepath.Join(t.TempDir(), "with.db")
 	done := make(chan error, 1)
 	go func() {
-		_, err := index.Refresh(specsDir, dbPath, false)
+		if _, err := index.Refresh(specsDir, dbPath, false); err != nil {
+			done <- err
+			return
+		}
+		_, err := index.BuildIndex(specsDir, withEntries, true)
 		done <- err
 	}()
 	select {
 	case err := <-done:
 		must(t, err)
 	case <-time.After(10 * time.Second):
-		t.Fatal("Refresh did not return in 10 s")
+		t.Fatal("Refresh and a forced rebuild did not return in 10 s")
 	}
-	if got, want := docRows(t, dbPath), docRows(t, forced); got != want {
-		t.Errorf("rows differ from a forced rebuild without the special files:\n%s\nwant:\n%s", got, want)
+	want := docRows(t, forced)
+	for _, db := range []string{dbPath, withEntries} {
+		if got := docRows(t, db); got != want {
+			t.Errorf("rows of %s differ from a forced rebuild without the special files:\n%s\nwant:\n%s", filepath.Base(db), got, want)
+		}
 	}
 }
