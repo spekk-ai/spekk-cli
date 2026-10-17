@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/maphash"
+	"html"
 	"io/fs"
 	"maps"
 	"net"
@@ -117,6 +118,15 @@ func injectSSEClient(html string) string {
 		return html
 	}
 	return html[:idx] + sseClientScript + "\n" + html[idx:]
+}
+
+// errorPage is the watch-mode page for specs that do not parse. It shows the
+// error and carries the live-reload client, so it reloads when the specs
+// parse again.
+func errorPage(err error) string {
+	return injectSSEClient("<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Spec Explorer - error</title></head>\n" +
+		"<body><pre>" + html.EscapeString(err.Error()) + "</pre>\n" +
+		"<p>The page reloads when the specs parse again.</p>\n</body></html>\n")
 }
 
 // RunWatch starts the watch-mode HTTP server with SSE live reload.
@@ -298,7 +308,11 @@ func RunWatch(specsDir string, opts Options) error {
 		}
 		html, err := getHTML()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			// The error page keeps the live-reload client, so it reloads
+			// by itself when the user fixes the specs.
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(errorPage(err)))
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")

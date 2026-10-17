@@ -3,7 +3,7 @@ id: watch-error-page-reloads
 parent: show-command
 created: 2026-10-17T00:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # The `spekk show --watch` error page reloads when the specs parse again
