@@ -11,7 +11,17 @@ const (
 	// AuthSubscription authenticates with a long-lived Claude subscription
 	// token, minted by `claude setup-token`.
 	AuthSubscription AuthMode = "subscription"
+
+	// AuthAPIKey and AuthNone are for machine mode only, so ParseAuthMode
+	// does not accept them. AuthAPIKey bills through an Anthropic API key.
+	// AuthNone writes no model credential: the person signs in to Claude
+	// Code on the machine later.
+	AuthAPIKey AuthMode = "api-key"
+	AuthNone   AuthMode = "none"
 )
+
+// apiKeyVar is the variable Claude Code reads an Anthropic API key from.
+const apiKeyVar = "ANTHROPIC_API_KEY"
 
 // oauthTokenVar is the variable Claude Code reads a subscription token from.
 const oauthTokenVar = "CLAUDE_CODE_OAUTH_TOKEN"
@@ -48,8 +58,13 @@ func requiredEnvVars(mode AuthMode) []string {
 // read first — and a sandbox switched to a subscription could keep billing
 // through Bedrock with nothing to show for it.
 func authLines(mode AuthMode, envVars map[string]string) []string {
-	if mode == AuthSubscription {
+	switch mode {
+	case AuthSubscription:
 		return []string{oauthTokenVar + "=" + envVars[oauthTokenVar]}
+	case AuthAPIKey:
+		return []string{apiKeyVar + "=" + envVars[apiKeyVar]}
+	case AuthNone:
+		return nil
 	}
 	return []string{
 		"AWS_ACCESS_KEY_ID=" + envVars["AWS_ACCESS_KEY_ID"],

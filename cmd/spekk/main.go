@@ -1222,6 +1222,10 @@ func launchSandbox(args []string) {
 
 	switch subcommand {
 	case "create":
+		if isMachineMode(subArgs) {
+			createMachineSandbox(subArgs)
+			return
+		}
 		createSandbox(subArgs)
 	case "provision":
 		provisionSandbox(subArgs)
@@ -1266,6 +1270,10 @@ func launchSandbox(args []string) {
 			os.Exit(1)
 		}
 	case "destroy":
+		if isMachineMode(subArgs) {
+			destroyMachineSandbox(subArgs)
+			return
+		}
 		name := ""
 		var opts sandbox.DestroyOptions
 		for _, a := range subArgs {

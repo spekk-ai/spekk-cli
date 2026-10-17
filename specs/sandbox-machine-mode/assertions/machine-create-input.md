@@ -3,7 +3,7 @@ id: machine-create-input
 parent: sandbox-machine-mode
 created: 2026-10-17T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/sandbox-machine-mode
 depends-on: secrets-on-ssh-stdin
 ---
@@ -24,7 +24,7 @@ The worker gives each secret of a launch to the CLI on stdin, and on stdin only.
 - `model_credential.type` is `none`, `anthropic_api_key`, or `bedrock`. Any other value is an error that names the three values.
 - Each error above writes `{"stage": "failed", "at": "creating", ...}` on stdout, and exits 1. No call to DigitalOcean, the control host, or GitHub happens, and no record or key is written.
 - Machine mode reads no secret from its environment: `DO_API_TOKEN`, `DIGITALOCEAN_TOKEN`, `SPEKK_API_TOKEN`, `SPEKK_HOST`, `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, and the AWS variables have no effect.
-- Without `--release`, machine mode deploys the agent of the release of the CLI itself (a `vX.Y.Z` or `exp-*` version), so the pinned CLI and its agent match. A development build uses the latest release, and says so on stderr.
+- Without `--release`, machine mode deploys the agent of the release of the CLI itself, so the pinned CLI and its agent match: a CLI with the version `vX.Y.Z` deploys the agent of the tag `vX.Y.Z`. A CLI with any other version (a development build, or an `exp-*` build, whose version has no prefix) needs `--release <tag>`, and without it fails at `creating`. The agent of another release can lack the git credential helper of `machine-git-access`.
 
 ## Verification
 

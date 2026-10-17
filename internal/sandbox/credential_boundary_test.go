@@ -81,7 +81,7 @@ func TestNoCloudCredentialReachesTheControlHost(t *testing.T) {
 }
 
 // base64Run finds the runs of text that may be base64.
-var base64Run = regexp.MustCompile(`[A-Za-z0-9+/]{16,}={0,2}`)
+var base64Run = regexp.MustCompile(`[A-Za-z0-9+/]{8,}={0,2}`)
 
 // holdsSecret reports whether text holds secret in clear text, or in a
 // base64 run that decodes to text that holds it. sudoWrap encodes a script
