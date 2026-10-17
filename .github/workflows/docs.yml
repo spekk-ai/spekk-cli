@@ -18,7 +18,7 @@ jobs:
   # fallen behind blocks publication instead of shipping a site with
   # unreachable pages.
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
@@ -45,7 +45,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/configure-pages@v6
       - uses: actions/checkout@v6
