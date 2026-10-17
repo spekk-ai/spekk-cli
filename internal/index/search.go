@@ -36,18 +36,27 @@ type SearchOptions struct {
 
 // SearchResult is one document with its best passage.
 type SearchResult struct {
-	Kind      string   `json:"kind"`
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Path      string   `json:"path"`
-	TextPath  string   `json:"text_path,omitempty"`
-	StartLine int      `json:"start_line"`
-	EndLine   int      `json:"end_line"`
-	Summary   string   `json:"summary"`
-	Excerpt   string   `json:"excerpt"`
-	State     string   `json:"state"`
-	Also      []string `json:"also"`
+	Kind      string `json:"kind"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Path      string `json:"path"`
+	TextPath  string `json:"text_path,omitempty"`
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+	Summary   string `json:"summary"`
+	// Lines are the lines of the best passage that hold the most query
+	// words, so the answer is often in the search output itself.
+	Lines []docs.Line `json:"lines"`
+	State string      `json:"state"`
+	Also  []string    `json:"also"`
 }
+
+// shownLines is the most matching lines printed for the result at each rank;
+// a later rank gets the last value.
+var shownLines = []int{6, 3, 2}
+
+// maxLineRunes is the most characters printed of one matching line.
+const maxLineRunes = 160
 
 // untrusted reports whether a kind holds text that someone else wrote.
 func untrusted(kind string) bool { return kind == docs.KindRaw || kind == docs.KindDoc }
@@ -160,12 +169,15 @@ func Search(dbPath string, opts SearchOptions) ([]SearchResult, error) {
 	rows.Close()
 
 	for i := range out {
-		var snippet string
-		if err := db.QueryRow(`SELECT snippet(passages, 1, '', '', '…', 24) FROM passages WHERE passages MATCH ? AND rowid = ?`,
-			match, shownRow[i]).Scan(&snippet); err != nil {
-			return nil, fmt.Errorf("search: excerpt of %q: %w", out[i].ID, err)
+		var body string
+		if err := db.QueryRow(`SELECT body FROM passages WHERE rowid = ?`, shownRow[i]).Scan(&body); err != nil {
+			return nil, fmt.Errorf("search: passage of %q: %w", out[i].ID, err)
 		}
-		out[i].Excerpt = docs.Truncate(docs.CleanLine(snippet), 400)
+		lines := docs.MatchingLines(body, out[i].StartLine, opts.Query, shownLines[min(i, len(shownLines)-1)])
+		for j := range lines {
+			lines[j].Text = docs.Truncate(docs.CleanLine(lines[j].Text), maxLineRunes)
+		}
+		out[i].Lines = lines
 	}
 	return out, nil
 }
@@ -215,7 +227,9 @@ func RenderSearchText(query string, results []SearchResult, pending int) string 
 			if r.Summary != "" && r.Summary != r.Title {
 				fmt.Fprintf(&b, "   summary: %s\n", r.Summary)
 			}
-			fmt.Fprintf(&b, "   excerpt: %s\n", r.Excerpt)
+			for _, l := range r.Lines {
+				fmt.Fprintf(&b, "   %d: %s\n", l.N, l.Text)
+			}
 		}
 		if left := len(results) - n; left > 0 {
 			fmt.Fprintf(&b, "\n%d more results left out by the %d-byte output cap. Narrow the query, or filter with --kind, --type, or --tag.\n", left, SearchCap)

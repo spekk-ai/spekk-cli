@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spekk-ai/spekk-cli/internal/docs"
 	"github.com/spekk-ai/spekk-cli/internal/index"
 )
 
@@ -90,7 +91,7 @@ func TestSearchOutputCap(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		rs = append(rs, index.SearchResult{
 			Kind: "raw", ID: fmt.Sprintf("doc-%d", i), Title: strings.Repeat("T", 200), Path: "raw/x.pdf",
-			Summary: strings.Repeat("s", 300), Excerpt: strings.Repeat("e", 400), State: "ok", Also: []string{"1-2"},
+			Summary: strings.Repeat("s", 300), Lines: []docs.Line{{N: 1, Text: strings.Repeat("e", 160)}, {N: 2, Text: strings.Repeat("e", 160)}}, State: "ok", Also: []string{"1-2"},
 		})
 	}
 	text := index.RenderSearchText("q", rs, 0)
@@ -150,7 +151,16 @@ func TestSearchShowsATextPassageNotAShortFooter(t *testing.T) {
 	if len(rs) == 0 || rs[0].ID != "docs-patch" {
 		t.Fatalf("results = %+v, want docs-patch first", rs)
 	}
-	if rs[0].StartLine != 5 || !strings.Contains(rs[0].Excerpt, "compares the value") {
-		t.Errorf("best passage = lines %d-%d %q, want the Operations section (line 5) with the match", rs[0].StartLine, rs[0].EndLine, rs[0].Excerpt)
+	if rs[0].StartLine != 5 || !hasLine(rs[0].Lines, 37, "compares the value") {
+		t.Errorf("best passage = lines %d-%d %+v, want the Operations section (line 5) with the match on line 37", rs[0].StartLine, rs[0].EndLine, rs[0].Lines)
 	}
+}
+
+func hasLine(lines []docs.Line, n int, text string) bool {
+	for _, l := range lines {
+		if l.N == n && strings.Contains(l.Text, text) {
+			return true
+		}
+	}
+	return false
 }

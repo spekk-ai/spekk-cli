@@ -2,6 +2,7 @@ package docs
 
 import (
 	"errors"
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -116,6 +117,83 @@ func splitQuery(q string) []string {
 	}
 	if cur.Len() > 0 {
 		out = append(out, cur.String())
+	}
+	return out
+}
+
+// stopwords are the English words that are on almost every line, so a line
+// that holds one tells nothing about the query.
+var stopwords = map[string]bool{
+	"a": true, "an": true, "and": true, "are": true, "as": true, "at": true, "be": true, "by": true,
+	"can": true, "do": true, "does": true, "for": true, "from": true, "has": true, "have": true,
+	"how": true, "in": true, "is": true, "it": true, "its": true, "of": true, "on": true, "or": true,
+	"that": true, "the": true, "this": true, "to": true, "was": true, "what": true, "when": true,
+	"which": true, "who": true, "why": true, "with": true,
+}
+
+// wordsOf returns the lowercase runs of letters and digits in s, as the
+// FTS5 unicode61 tokenizer splits them.
+func wordsOf(s string) []string {
+	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+}
+
+// stemPrefix cuts a word to a prefix that its inflections share
+// ("tolerance", "tolerances", "tolerant"), in place of the porter stemmer
+// of the index.
+func stemPrefix(w string) string {
+	if len(w) <= 5 {
+		return w
+	}
+	return w[:max(5, len(w)-3)]
+}
+
+// Line is one numbered line of a document.
+type Line struct {
+	N    int    `json:"line"`
+	Text string `json:"text"`
+}
+
+// MatchingLines returns up to max lines of a passage that hold the most
+// distinct query words, in line order. body is the passage text and start
+// its first line number. A stopword does not count.
+func MatchingLines(body string, start int, query string, max int) []Line {
+	var terms []string
+	seen := map[string]bool{}
+	for _, w := range wordsOf(query) {
+		if stopwords[w] || seen[w] {
+			continue
+		}
+		seen[w] = true
+		terms = append(terms, stemPrefix(w))
+	}
+	type scored struct {
+		Line
+		score int
+	}
+	var cands []scored
+	for i, line := range strings.Split(body, "\n") {
+		words := wordsOf(line)
+		score := 0
+		for _, t := range terms {
+			for _, w := range words {
+				if strings.HasPrefix(w, t) {
+					score++
+					break
+				}
+			}
+		}
+		if score > 0 {
+			cands = append(cands, scored{Line{start + i, line}, score})
+		}
+	}
+	sort.SliceStable(cands, func(i, j int) bool { return cands[i].score > cands[j].score })
+	if len(cands) > max {
+		cands = cands[:max]
+	}
+	sort.Slice(cands, func(i, j int) bool { return cands[i].N < cands[j].N })
+	out := make([]Line, len(cands))
+	for i, c := range cands {
+		out[i] = c.Line
 	}
 	return out
 }

@@ -301,7 +301,7 @@ spekk docs status
 
 ### `spekk docs search "<words>"`
 
-Rank passages with BM25 and print the best passage of each document: kind, id, title, path, line range, summary, and an excerpt. Up to three other matching passages of the same document are listed by line range. The output is at most 4,000 bytes, and results that do not fit are counted, not printed.
+Rank passages with BM25 and print the best passage of each document: kind, id, title, path, line range, summary, and the numbered lines of the passage that hold the most query words, so the answer is often in the search output. Up to three other matching passages of the same document are listed by line range. The output is at most 4,000 bytes, and results that do not fit are counted, not printed.
 
 | Flag | Description |
 |------|-------------|
