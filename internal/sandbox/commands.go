@@ -1358,8 +1358,7 @@ func configureGitCredentials(ip, keyPath, name, user string) error {
 }
 
 // buildGitCredentialScript produces the SSH command string for configuring git credentials.
-// It base64-encodes the token to prevent shell injection. A failed login, or a
-// login that gh auth status does not confirm, fails the script (issue #48).
+// It base64-encodes the token to prevent shell injection. Exported for testing.
 func buildGitCredentialScript(ghToken string) string {
 	encodedToken := base64.StdEncoding.EncodeToString([]byte(ghToken))
 	return fmt.Sprintf(`set -e
