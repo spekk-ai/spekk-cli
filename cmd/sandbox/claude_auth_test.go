@@ -38,38 +38,38 @@ func writeCredentials(t *testing.T, dir string) {
 	}
 }
 
-func TestClaudeAuthState(t *testing.T) {
+func TestClaudeSignedIn(t *testing.T) {
 	cases := map[string]struct {
 		set  func(t *testing.T, home string)
-		want string
+		want bool
 	}{
-		"nothing": {func(t *testing.T, home string) {}, claudeAuthSignInRequired},
+		"nothing": {func(t *testing.T, home string) {}, false},
 		"sign-in file in HOME": {func(t *testing.T, home string) {
 			writeCredentials(t, filepath.Join(home, ".claude"))
-		}, claudeAuthReady},
+		}, true},
 		"sign-in file in CLAUDE_CONFIG_DIR": {func(t *testing.T, home string) {
 			dir := filepath.Join(home, "config")
 			t.Setenv("CLAUDE_CONFIG_DIR", dir)
 			writeCredentials(t, dir)
-		}, claudeAuthReady},
+		}, true},
 		// Claude Code reads only CLAUDE_CONFIG_DIR when it is set.
 		"sign-in file in HOME, CLAUDE_CONFIG_DIR elsewhere": {func(t *testing.T, home string) {
 			writeCredentials(t, filepath.Join(home, ".claude"))
 			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, "config"))
-		}, claudeAuthSignInRequired},
+		}, false},
 	}
 	for _, v := range claudeAuthEnvVars {
 		cases[v] = struct {
 			set  func(t *testing.T, home string)
-			want string
-		}{func(t *testing.T, home string) { t.Setenv(v, "1") }, claudeAuthReady}
+			want bool
+		}{func(t *testing.T, home string) { t.Setenv(v, "1") }, true}
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			home := noClaudeCredential(t)
 			tc.set(t, home)
-			if got := claudeAuthState(); got != tc.want {
-				t.Errorf("claudeAuthState() = %q, want %q", got, tc.want)
+			if got := claudeSignedIn(); got != tc.want {
+				t.Errorf("claudeSignedIn() = %v, want %v", got, tc.want)
 			}
 		})
 	}

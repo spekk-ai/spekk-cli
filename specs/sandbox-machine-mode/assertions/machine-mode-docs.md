@@ -3,7 +3,7 @@ id: machine-mode-docs
 parent: sandbox-machine-mode
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: not_started
+status: done
 branch: feature/sandbox-machine-mode
 depends-on: machine-destroy
 ---

@@ -17,7 +17,7 @@ import (
 func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg Message) {
 	// A turn with no model credential would fail inside claude with no
 	// cause that the person can act on.
-	if claudeAuthState() == claudeAuthSignInRequired {
+	if !claudeSignedIn() {
 		log.Print("Refusing a turn: Claude Code is not signed in.")
 		sendError(ctx, conns, msg.AgentSessionID, signInRequiredDetail)
 		return

@@ -17,7 +17,7 @@ import (
 // control host at host.
 func validMachineInput(host, mc string) string {
 	return `{"digitalocean_token": "do-secret", "registration_token": "reg-secret", "spekk_host": "` + host +
-		`", "github_token": "ghs-secret", "github_repository": "acme/widgets", "model_credential": ` + mc + `}`
+		`", "github_token": "ghs-secret", "github_repository": "acme/widgets", "harness": "claude-code", "model_credential": ` + mc + `}`
 }
 
 func TestReadMachineInput(t *testing.T) {
@@ -26,22 +26,23 @@ func TestReadMachineInput(t *testing.T) {
 		name, stdin string
 		auth        AuthMode // empty: the input is refused
 	}{
-		{"none", validMachineInput(host, `{"type": "none"}`), AuthNone},
-		{"api key", validMachineInput(host, `{"type": "anthropic_api_key", "api_key": "sk-secret"}`), AuthAPIKey},
-		{"bedrock", validMachineInput(host, `{"type": "bedrock", "aws_access_key_id": "a", "aws_secret_access_key": "b", "aws_region": "us-east-1"}`), AuthBedrock},
-		{"missing field", `{"digitalocean_token": "x", "registration_token": "x", "spekk_host": "h", "github_token": "x", "model_credential": {"type": "none"}}`, ""},
-		{"empty field", strings.Replace(validMachineInput(host, `{"type": "none"}`), `"reg-secret"`, `""`, 1), ""},
-		{"unknown field", strings.Replace(validMachineInput(host, `{"type": "none"}`), `{`, `{"aws_access_key_id": "x", `, 1), ""},
-		{"unknown credential field", validMachineInput(host, `{"type": "none", "extra": "x"}`), ""},
-		{"field of another type", validMachineInput(host, `{"type": "bedrock", "api_key": "x", "aws_access_key_id": "a", "aws_secret_access_key": "b", "aws_region": "r"}`), ""},
-		{"missing credential field", validMachineInput(host, `{"type": "anthropic_api_key"}`), ""},
-		{"subscription token", validMachineInput(host, `{"type": "subscription", "oauth_token": "x"}`), ""},
-		{"no model credential", strings.Replace(validMachineInput(host, `{"type": "none"}`), `, "model_credential": {"type": "none"}`, ``, 1), ""},
-		{"trailing data", validMachineInput(host, `{"type": "none"}`) + `{}`, ""},
-		{"bad repository", strings.Replace(validMachineInput(host, `{"type": "none"}`), "acme/widgets", "acme/../x", 1), ""},
-		{"dot repository", strings.Replace(validMachineInput(host, `{"type": "none"}`), "acme/widgets", "acme/..", 1), ""},
-		{"http host", validMachineInput("http://spekk.example.com", `{"type": "none"}`), ""},
-		{"too large", validMachineInput(host, `{"type": "none"}`) + strings.Repeat(" ", maxMachineInput), ""},
+		{"none", validMachineInput(host, `{"kind": "none"}`), AuthNone},
+		{"api key", validMachineInput(host, `{"kind": "anthropic_api_key", "api_key": "sk-secret"}`), AuthAPIKey},
+		{"bedrock", validMachineInput(host, `{"kind": "bedrock", "aws_access_key_id": "a", "aws_secret_access_key": "b", "aws_region": "us-east-1"}`), AuthBedrock},
+		{"missing field", `{"digitalocean_token": "x", "registration_token": "x", "spekk_host": "h", "github_token": "x", "model_credential": {"kind": "none"}}`, ""},
+		{"empty field", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"reg-secret"`, `""`, 1), ""},
+		{"unknown field", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `{`, `{"aws_access_key_id": "x", `, 1), ""},
+		{"unknown credential field", validMachineInput(host, `{"kind": "none", "extra": "x"}`), ""},
+		{"field of another type", validMachineInput(host, `{"kind": "bedrock", "api_key": "x", "aws_access_key_id": "a", "aws_secret_access_key": "b", "aws_region": "r"}`), ""},
+		{"missing credential field", validMachineInput(host, `{"kind": "anthropic_api_key"}`), ""},
+		{"subscription token", validMachineInput(host, `{"kind": "subscription", "oauth_token": "x"}`), ""},
+		{"no model credential", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `, "model_credential": {"kind": "none"}`, ``, 1), ""},
+		{"unknown harness", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"claude-code"`, `"other-harness"`, 1), ""},
+		{"trailing data", validMachineInput(host, `{"kind": "none"}`) + `{}`, ""},
+		{"bad repository", strings.Replace(validMachineInput(host, `{"kind": "none"}`), "acme/widgets", "acme/../x", 1), ""},
+		{"dot repository", strings.Replace(validMachineInput(host, `{"kind": "none"}`), "acme/widgets", "acme/..", 1), ""},
+		{"http host", validMachineInput("http://spekk.example.com", `{"kind": "none"}`), ""},
+		{"too large", validMachineInput(host, `{"kind": "none"}`) + strings.Repeat(" ", maxMachineInput), ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -200,7 +201,7 @@ func TestCreateMachine(t *testing.T) {
 		do = useFakeDigitalOcean(t)
 		host, regs := useRegisterHost(t, registerStatus)
 		argv, stdin = machineSSH(t, failOn)
-		input = validMachineInput(host, `{"type": "anthropic_api_key", "api_key": "sk-ant-secret"}`)
+		input = validMachineInput(host, `{"kind": "anthropic_api_key", "api_key": "sk-ant-secret"}`)
 		return do, regs, argv, stdin, input
 	}
 	secrets := []string{"do-secret", "reg-secret", "ghs-secret", "sk-ant-secret"}

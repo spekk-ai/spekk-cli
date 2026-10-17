@@ -110,6 +110,7 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 		SpekkHost         string          `json:"spekk_host"`
 		GitHubToken       string          `json:"github_token"`
 		GitHubRepository  string          `json:"github_repository"`
+		Harness           string          `json:"harness"`
 		ModelCredential   json.RawMessage `json:"model_credential"`
 	}
 	if err := readStdinJSON(r, &raw); err != nil {
@@ -121,9 +122,13 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 		"spekk_host", raw.SpekkHost,
 		"github_token", raw.GitHubToken,
 		"github_repository", raw.GitHubRepository,
+		"harness", raw.Harness,
 		"model_credential", string(raw.ModelCredential),
 	); err != nil {
 		return nil, err
+	}
+	if raw.Harness != "claude-code" {
+		return nil, fmt.Errorf("harness %q is not claude-code, the only harness that machine mode installs", raw.Harness)
 	}
 	owner, repo, _ := strings.Cut(raw.GitHubRepository, "/")
 	if !repositoryRe.MatchString(raw.GitHubRepository) || owner == "." || owner == ".." || repo == "." || repo == ".." {
@@ -146,19 +151,19 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 	return in, nil
 }
 
-// readModelCredential reads model_credential. Each type has its own fields,
-// so a field of another type is an unknown field.
+// readModelCredential reads model_credential. Each kind has its own fields,
+// so a field of another kind is an unknown field.
 func readModelCredential(data []byte) (AuthMode, map[string]string, error) {
 	var head struct {
-		Type string `json:"type"`
+		Kind string `json:"kind"`
 	}
 	if err := json.Unmarshal(data, &head); err != nil {
 		return "", nil, fmt.Errorf("model_credential is not a JSON object: %w", err)
 	}
-	switch head.Type {
+	switch head.Kind {
 	case "none":
 		var c struct {
-			Type string `json:"type"`
+			Kind string `json:"kind"`
 		}
 		if err := decodeStrict(data, &c); err != nil {
 			return "", nil, fmt.Errorf("model_credential: %w", err)
@@ -166,7 +171,7 @@ func readModelCredential(data []byte) (AuthMode, map[string]string, error) {
 		return AuthNone, map[string]string{}, nil
 	case "anthropic_api_key":
 		var c struct {
-			Type   string `json:"type"`
+			Kind   string `json:"kind"`
 			APIKey string `json:"api_key"`
 		}
 		if err := decodeStrict(data, &c); err != nil {
@@ -178,7 +183,7 @@ func readModelCredential(data []byte) (AuthMode, map[string]string, error) {
 		return AuthAPIKey, map[string]string{apiKeyVar: c.APIKey}, nil
 	case "bedrock":
 		var c struct {
-			Type               string `json:"type"`
+			Kind               string `json:"kind"`
 			AWSAccessKeyID     string `json:"aws_access_key_id"`
 			AWSSecretAccessKey string `json:"aws_secret_access_key"`
 			AWSRegion          string `json:"aws_region"`
@@ -199,7 +204,7 @@ func readModelCredential(data []byte) (AuthMode, map[string]string, error) {
 			"AWS_DEFAULT_REGION":    c.AWSRegion,
 		}, nil
 	}
-	return "", nil, fmt.Errorf("model_credential.type %q is not none, anthropic_api_key, or bedrock", head.Type)
+	return "", nil, fmt.Errorf("model_credential.kind %q is not none, anthropic_api_key, or bedrock", head.Kind)
 }
 
 // stageLine is one line of machine-mode stdout.

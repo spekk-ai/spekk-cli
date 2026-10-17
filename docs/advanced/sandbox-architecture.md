@@ -56,7 +56,7 @@ Either side can update first. An old agent sends no header, and the control host
 
 Version `1.1` is additive. It adds only the `terminal` field to the `result` frame (see [Turn progress](#turn-progress)). No existing frame loses a field or changes its meaning, so a `1.0` side and a `1.1` side work together.
 
-Version `1.2` is additive. It adds only the `claude_auth` field to the `heartbeat` frame (see [Claude sign-in state](#claude-sign-in-state)). The `turn_keepalive` frame type is reserved for version `1.3`.
+Version `1.2` is additive. It adds only the `claude_signed_in` field to the `heartbeat` frame (see [Claude sign-in state](#claude-sign-in-state)). The `turn_keepalive` frame type is reserved for version `1.3`.
 
 ## Message protocol
 
@@ -95,7 +95,7 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 | `stream` | One line of Claude's streaming JSON output | `data`, `agent_session_id` |
 | `result` | Claude finished with exit code 0 | `session_id`, `agent_session_id`, `output`, `terminal` |
 | `error` | Something went wrong | `error`, `detail`, `agent_session_id` |
-| `heartbeat` | Keep-alive, every 30 seconds | `claude_auth` |
+| `heartbeat` | Keep-alive, every 30 seconds | `claude_signed_in` |
 | `conversation_open` | Ask for a conversation with a person (from the spool) | `session_id`, `title`, `body`, `severity` |
 
 ### Routing
@@ -156,10 +156,10 @@ The `terminal` field needs no rollout order, because an absent field means `true
 
 ### Claude sign-in state
 
-A sandbox that a server launched with no model credential has no way to call Claude until a person signs in to Claude Code on the machine, with Claude Code's own login. Each `heartbeat` frame carries `claude_auth`, so the control host can show that state before anyone sends a turn:
+A sandbox that a server launched with no model credential has no way to call Claude until a person signs in to Claude Code on the machine, with Claude Code's own login. Each `heartbeat` frame carries `claude_signed_in`, a JSON boolean, so the control host can show that state before anyone sends a turn:
 
-- `ready`: the environment of the agent has `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`, or the sign-in file of Claude Code exists (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `~/.claude/.credentials.json` of `agent`).
-- `sign_in_required`: none of these. The agent refuses each turn with an `error` frame that tells the person to sign in on the sandbox, and does not start `claude`.
+- `true`: the environment of the agent has `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`, or the sign-in file of Claude Code exists (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `~/.claude/.credentials.json` of `agent`).
+- `false`: none of these. The agent refuses each turn with an `error` frame that tells the person to sign in on the sandbox, and does not start `claude`.
 
 The agent reads the state again for each heartbeat and each turn, so a sign-in takes effect with no restart. A control host that does not know the field ignores it.
 

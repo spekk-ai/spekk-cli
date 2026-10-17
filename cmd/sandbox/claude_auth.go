@@ -5,13 +5,6 @@ import (
 	"path/filepath"
 )
 
-// The states of the model credential of the agent, which each heartbeat
-// reports in its claude_auth field (specs/sandbox-machine-mode/).
-const (
-	claudeAuthReady          = "ready"
-	claudeAuthSignInRequired = "sign_in_required"
-)
-
 // claudeAuthEnvVars each give Claude Code a model credential, or select a
 // cloud provider that has its own.
 var claudeAuthEnvVars = []string{
@@ -28,28 +21,27 @@ var claudeAuthEnvVars = []string{
 // must sign in.
 const signInRequiredDetail = "Claude Code is not signed in on this sandbox. Sign in on the sandbox with `claude` as the agent user, then send the message again."
 
-// claudeAuthState reports whether Claude Code has a model credential: a
+// claudeSignedIn reports whether Claude Code has a model credential: a
 // variable of the environment, or the file that Claude Code's own login
 // writes. A sandbox launched with no model credential has neither until the
 // person signs in. It reads them again on each call, so a sign-in takes
 // effect with no restart. A sign-in file that is not valid counts as one:
-// Claude Code reports that itself, better than a guess here.
-func claudeAuthState() string {
+// Claude Code reports that itself, better than a guess here. Each heartbeat
+// reports it as claude_signed_in (specs/sandbox-machine-mode/).
+func claudeSignedIn() bool {
 	for _, v := range claudeAuthEnvVars {
 		if os.Getenv(v) != "" {
-			return claudeAuthReady
+			return true
 		}
 	}
 	dir := os.Getenv("CLAUDE_CONFIG_DIR")
 	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return claudeAuthSignInRequired
+			return false
 		}
 		dir = filepath.Join(home, ".claude")
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".credentials.json")); err == nil {
-		return claudeAuthReady
-	}
-	return claudeAuthSignInRequired
+	_, err := os.Stat(filepath.Join(dir, ".credentials.json"))
+	return err == nil
 }

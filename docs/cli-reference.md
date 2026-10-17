@@ -893,15 +893,16 @@ spekk sandbox destroy <name> --machine --force < destroy.json
   "spekk_host": "<control host>",
   "github_token": "<GitHub App installation token>",
   "github_repository": "<owner>/<repository>",
-  "model_credential": {"type": "none"}
+  "harness": "claude-code",
+  "model_credential": {"kind": "none"}
 }
 ```
 
-`model_credential` is one of these. Each type takes only its own fields. A Claude subscription token is not a choice in machine mode, because it belongs to one person:
+`harness` must be `claude-code`. `model_credential` is one of these kinds. Each kind takes only its own fields. A Claude subscription token is not a choice in machine mode, because it belongs to one person:
 
-| Type | Fields | Env file on the machine |
+| `kind` | Fields | Env file on the machine |
 |------|--------|-------------------------|
-| `none` | none | No model credential. A person signs in to Claude Code on the machine later. Until then the agent reports `sign_in_required` (see [Claude sign-in state](advanced/sandbox-architecture.md#claude-sign-in-state)) |
+| `none` | none | No model credential. A person signs in to Claude Code on the machine later. Until then the heartbeat of the agent says `claude_signed_in: false` (see [Claude sign-in state](advanced/sandbox-architecture.md#claude-sign-in-state)) |
 | `anthropic_api_key` | `api_key` | `ANTHROPIC_API_KEY` |
 | `bedrock` | `aws_access_key_id`, `aws_secret_access_key`, `aws_region` | The AWS keys, `AWS_DEFAULT_REGION`, and `CLAUDE_CODE_USE_BEDROCK=1` |
 
