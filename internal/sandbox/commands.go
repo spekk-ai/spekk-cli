@@ -1358,7 +1358,8 @@ func configureGitCredentials(ip, keyPath, name, user string) error {
 }
 
 // buildGitCredentialScript produces the SSH command string for configuring git credentials.
-// It base64-encodes the token to prevent shell injection. Exported for testing.
+// It base64-encodes the token to prevent shell injection. A failed login, or a
+// login that gh auth status does not confirm, fails the script (issue #48).
 func buildGitCredentialScript(ghToken string) string {
 	encodedToken := base64.StdEncoding.EncodeToString([]byte(ghToken))
 	return fmt.Sprintf(`set -e
@@ -1366,7 +1367,8 @@ TOKEN=$(echo '%s' | base64 -d)
 su - agent -c 'git config --global credential.helper store'
 su - agent -c "cat > ~/.git-credentials" <<< "https://x-access-token:${TOKEN}@github.com"
 su - agent -c 'chmod 600 ~/.git-credentials'
-echo "${TOKEN}" | su - agent -c 'gh auth login --with-token 2>/dev/null || true'`,
+echo "${TOKEN}" | su - agent -c 'gh auth login --with-token'
+su - agent -c 'gh auth status' >/dev/null 2>&1 || { echo 'spekk: gh auth status fails: the agent user is not logged in to GitHub' >&2; exit 1; }`,
 		encodedToken,
 	)
 }

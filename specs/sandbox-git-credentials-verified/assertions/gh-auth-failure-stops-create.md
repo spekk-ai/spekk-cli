@@ -3,7 +3,7 @@ id: gh-auth-failure-stops-create
 parent: sandbox-git-credentials-verified
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # A failed `gh auth login` stops the credential stage with a clear error
