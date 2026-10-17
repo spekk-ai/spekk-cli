@@ -133,7 +133,7 @@ func TestXLSXToText(t *testing.T) {
 	}
 }
 
-func TestXLSXColumnBound(t *testing.T) {
+func TestXLSXLimits(t *testing.T) {
 	sheet := func(body string) map[string]string {
 		return map[string]string{
 			"xl/workbook.xml":          `<workbook><sheets><sheet name="S" sheetId="1"/></sheets></workbook>`,
@@ -150,6 +150,11 @@ func TestXLSXColumnBound(t *testing.T) {
 	writeZip(t, last, sheet(`<row r="1"><c r="XFD1"><v>1</v></c></row>`))
 	if _, err := Extract(last); err != nil {
 		t.Errorf("column XFD must be read: %v", err)
+	}
+	bomb := filepath.Join(dir, "bomb.xlsx")
+	writeZip(t, bomb, sheet(`<row r="1"><c r="A1"><v>`+strings.Repeat("0", maxXLSXPart)+`</v></c></row>`))
+	if _, err := Extract(bomb); err == nil || !strings.Contains(err.Error(), "larger than 64 MB") {
+		t.Errorf("a part above the limit: err = %v", err)
 	}
 }
 

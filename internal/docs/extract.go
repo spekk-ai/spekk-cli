@@ -222,10 +222,12 @@ func HTMLToText(src string) string {
 	}
 }
 
-// XLSX limits. A spreadsheet is someone else's file: a cell reference can
-// name any column.
+// XLSX limits. A spreadsheet is someone else's file: a zip part can inflate
+// to gigabytes, and a cell reference can name any column.
 const (
-	maxColumns = 16384 // column XFD, the last one Excel has
+	maxXLSXPart = 64 << 20 // bytes of one uncompressed part
+	maxXLSXText = 64 << 20 // bytes of the text of all sheets
+	maxColumns  = 16384    // column XFD, the last one Excel has
 )
 
 // xlsxToText writes one `# <sheet>` heading for each sheet, then one line for
@@ -246,12 +248,23 @@ func xlsxToText(file string) (string, error) {
 		if !ok {
 			return fmt.Errorf("%s is %w", name, errMissing)
 		}
+		if f.UncompressedSize64 > maxXLSXPart {
+			return fmt.Errorf("%s is larger than %d MB uncompressed", name, maxXLSXPart>>20)
+		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
 		defer rc.Close()
-		return xml.NewDecoder(rc).Decode(v)
+		// The size in the zip header can be false, so the read has a limit too.
+		lr := &io.LimitedReader{R: rc, N: maxXLSXPart + 1}
+		if err := xml.NewDecoder(lr).Decode(v); err != nil {
+			if lr.N <= 0 {
+				return fmt.Errorf("%s is larger than %d MB uncompressed", name, maxXLSXPart>>20)
+			}
+			return err
+		}
+		return nil
 	}
 
 	var wb struct {
@@ -346,6 +359,9 @@ func xlsxToText(file string) (string, error) {
 				cells = append(cells, strings.Join(strings.Fields(v), " "))
 			}
 			b.WriteString(strings.TrimRight(strings.Join(cells, "\t"), "\t") + "\n")
+			if b.Len() > maxXLSXText {
+				return "", fmt.Errorf("the text of the sheets is larger than %d MB", maxXLSXText>>20)
+			}
 		}
 		b.WriteString("\n")
 	}
