@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
+	"github.com/spekk-ai/spekk-cli/internal/docs"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
 
@@ -203,6 +204,7 @@ func Run(specsDir string) (*Result, error) {
 	checkDependsOn(assertions, assertionIDs, result)
 	checkCycles(assertions, result)
 	checkBranchRefs(assertions, discoveredBranchNames(specsDir), result)
+	checkDocuments(filepath.Dir(specsDir), specs, assertions, result)
 
 	result.SpecCount = len(specs)
 	result.AssertionCount = len(assertions)
@@ -467,5 +469,45 @@ func checkCycles(assertions []parser.Assertion, result *Result) {
 			path = append(path, current)
 			current = dependsOn[current]
 		}
+	}
+}
+
+// checkDocuments warns about the source-document corpus: a `sources` id in a
+// spec or an assertion that names no document, a cited document whose file is
+// gone, and each source document that needs work. A source link is evidence,
+// not structure, so each is a warning and never a failure. It reads the
+// corpus from the files, with the same scan the index uses.
+func checkDocuments(root string, specs []parser.Spec, assertions []parser.Assertion, result *Result) {
+	corpus, err := docs.Scan(root)
+	if err != nil {
+		result.Warnings = append(result.Warnings, "cannot read the document corpus: "+err.Error())
+		return
+	}
+	state := map[string]string{}
+	for _, d := range corpus.Docs {
+		state[d.ID] = d.State
+	}
+	check := func(file string, fields map[string][]string) {
+		for _, id := range fields["sources"] {
+			st, ok := state[id]
+			switch {
+			case !ok:
+				result.Warnings = append(result.Warnings, fmt.Sprintf("%s: sources: unknown document %q", file, id))
+			case st == docs.StateMissingRaw:
+				result.Warnings = append(result.Warnings, fmt.Sprintf("%s: sources: document %q has no file (run spekk docs status)", file, id))
+			}
+		}
+	}
+	for _, s := range specs {
+		check(s.File, s.Fields)
+	}
+	for _, a := range assertions {
+		check(a.File, a.Fields)
+	}
+	for _, p := range docs.Problems(corpus) {
+		if p.State == docs.StatePointer {
+			continue
+		}
+		result.Warnings = append(result.Warnings, fmt.Sprintf("%s: source document is %s: %s", p.Path, p.State, p.Fix))
 	}
 }

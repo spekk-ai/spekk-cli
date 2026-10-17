@@ -595,8 +595,9 @@ one plain-text failure line per violation (file + problem), sorted by file
 then message, when anything is invalid.
 
 Warnings go to stderr and never change the exit code: a branch value that
-matches no branch on an assertion that is not done, and a builder lock that is
-stale.
+matches no branch on an assertion that is not done, a builder lock that is
+stale, a "sources" id that names no document, and each source document in
+raw/ that is stale, has no summary, has no file, or has no stub.
 `
 
 // execValidate is the testable core of runValidate. It writes the report to

@@ -3,7 +3,7 @@ id: docs-add-guards
 parent: source-document-index
 created: 2026-10-17T16:00:00Z
 priority: 2
-status: not_started
+status: done
 branch: feature/source-document-index
 depends-on: docs-add-text-formats
 ---

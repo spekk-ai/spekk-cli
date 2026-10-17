@@ -120,7 +120,7 @@ func (c converter) run(file string) (string, error) {
 
 // blockTags end a line of text.
 var blockTags = map[string]bool{
-	"p": true, "div": true, "br": true, "li": true, "tr": true, "table": true,
+	"p": true, "div": true, "br": true, "tr": true, "table": true,
 	"ul": true, "ol": true, "dl": true, "dt": true, "dd": true, "pre": true,
 	"blockquote": true, "section": true, "article": true, "header": true,
 	"footer": true, "nav": true, "aside": true, "main": true, "hr": true,
@@ -175,8 +175,10 @@ func HTMLToText(src string) string {
 				} else {
 					b.WriteString("\n\n")
 				}
-			case tag == "li" && start:
-				b.WriteString("\n- ")
+			case tag == "li":
+				if start {
+					b.WriteString("\n- ")
+				}
 			case tag == "td" || tag == "th":
 				if start {
 					b.WriteString(" | ")

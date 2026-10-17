@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/index"
 )
@@ -52,5 +53,38 @@ status: not_started
 	// the bullet on line 12.
 	if kind != "assertion" || id != "assert-three" || start != 8 || end != 12 {
 		t.Errorf("match = %s %s %d-%d, want assertion assert-three 8-12", kind, id, start, end)
+	}
+}
+
+func TestEnsureFreshSeesDeletedDocument(t *testing.T) {
+	specsDir := makeSpecs(t)
+	root := filepath.Dir(specsDir)
+	writeFile(t, root, "docs/guide.md", "# Guide\n\nThe wombat setting.\n")
+	writeFile(t, root, "docs/other.md", "# Other\n\nText.\n")
+	dbPath := filepath.Join(root, ".spekk", "index.db")
+	_, err := index.BuildIndex(specsDir, dbPath, false)
+	must(t, err)
+
+	// Age the database, so that only the deletion can make it stale. A
+	// deletion changes no file mtime, only the mtime of its directory.
+	old := time.Now().Add(-time.Hour)
+	for _, p := range []string{specsDir, filepath.Join(root, "docs"), filepath.Join(root, "docs", "other.md")} {
+		must(t, filepath.WalkDir(p, func(path string, _ os.DirEntry, _ error) error { return os.Chtimes(path, old, old) }))
+	}
+	must(t, os.Chtimes(root, old, old))
+	if stale, err := index.IsStale(specsDir, dbPath); err != nil || stale {
+		t.Fatalf("IsStale before the deletion = %v, %v; want false", stale, err)
+	}
+	must(t, os.Remove(filepath.Join(root, "docs", "guide.md")))
+
+	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
+	must(t, err)
+	if !rebuilt {
+		t.Fatal("EnsureFresh did not rebuild after a document was deleted")
+	}
+	rs, err := index.Search(dbPath, index.SearchOptions{Query: "wombat"})
+	must(t, err)
+	if len(rs) != 0 {
+		t.Errorf("search still finds the deleted document: %+v", rs)
 	}
 }

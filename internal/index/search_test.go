@@ -65,8 +65,8 @@ func TestSearchMatchesIdentifiers(t *testing.T) {
 
 func TestSearchFilters(t *testing.T) {
 	dbPath := buildCorpus(t, map[string]string{
-		"docs/old.md": "---\ntitle: Old\ntype: manual\ntags: [pump]\ncreated: 2025-01-02\n---\n\nThe valve torque is 40 Nm.\n",
-		"docs/new.md": "---\ntitle: New\ntype: notes\ntags: [pump, field]\ncreated: 2026-05-01\n---\n\nThe valve was replaced.\n",
+		"docs/old.md":  "---\ntitle: Old\ntype: manual\ntags: [pump]\ncreated: 2025-01-02\n---\n\nThe valve torque is 40 Nm.\n",
+		"docs/new.md":  "---\ntitle: New\ntype: notes\ntags: [pump, field]\ncreated: 2026-05-01\n---\n\nThe valve was replaced.\n",
 		"docs/bare.md": "# Bare\n\nA valve with no frontmatter.\n",
 	})
 	cases := []struct {

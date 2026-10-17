@@ -251,3 +251,27 @@ func TestRun_NoSpecsDir_PassesEmpty(t *testing.T) {
 		t.Fatalf("expected no specs/ dir to pass trivially, got: %v", result.Failures)
 	}
 }
+
+func TestValidateWarnsOnUnknownSource(t *testing.T) {
+	root := t.TempDir()
+	specsDir := filepath.Join(root, "specs")
+	writeSpec(t, specsDir, "pump", "")
+	writeAssertion(t, specsDir, "pump", "torque", "id: torque\nparent: pump\ncreated: 2026-01-01T00:00:00Z\npriority: 1\nstatus: not_started\nsources: [docs-manual, no-such-doc]\n")
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "manual.md"), []byte("# Manual\n\nTorque.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Run(specsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Passed() {
+		t.Fatalf("an unknown source must not fail validation: %v", r.Failures)
+	}
+	joined := strings.Join(r.Warnings, "\n")
+	if !strings.Contains(joined, `sources: unknown document "no-such-doc"`) || strings.Contains(joined, `"docs-manual"`) {
+		t.Errorf("warnings = %q, want one for no-such-doc and none for docs-manual", joined)
+	}
+}
