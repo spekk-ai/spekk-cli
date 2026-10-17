@@ -2,6 +2,7 @@ package docs
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -42,7 +43,11 @@ func TestRenderShowCapsLinesAndCleansText(t *testing.T) {
 	if strings.ContainsAny(out, "\x1b\x07") || !strings.Contains(out, "ok[2J text") {
 		t.Errorf("control characters not removed: %q", out)
 	}
-	if !strings.Contains(out, "begin untrusted document text") || !strings.Contains(out, "end untrusted document text") {
-		t.Errorf("raw text is not between untrusted markers: %q", out)
+	begin := regexp.MustCompile(`begin untrusted document text ([0-9a-f]{8}):`).FindStringSubmatch(out)
+	if begin == nil || !strings.Contains(out, "end untrusted document text "+begin[1]+" -----") {
+		t.Fatalf("raw text is not between untrusted markers with one nonce: %q", out)
+	}
+	if again := RenderShow(d, "ok\n", 1, 0); strings.Contains(again, begin[1]) {
+		t.Errorf("the nonce must be new for each call: %q", again)
 	}
 }
