@@ -274,6 +274,12 @@ func scanRaw(root string) ([]Document, []string, []string, error) {
 		if d.TextPath == "" {
 			d.TextPath = d.Path
 		}
+		// A stub is a committed file that anyone can write, so its paths
+		// must not lead the index or `show` to a file outside the corpus.
+		if !Within(root, d.Path, RawDir) || (stub.Text != "" && !Within(root, d.TextPath, FormattedDir)) {
+			warnings = append(warnings, fmt.Sprintf("%s names a file outside %s/ or %s/, so its document is not indexed", stubRel, RawDir, FormattedDir))
+			continue
+		}
 		referenced[d.Path] = true
 		d.State = rawState(root, d, ignored[d.Path])
 		docs = append(docs, d)
@@ -302,6 +308,38 @@ func scanRaw(root string) ([]Document, []string, []string, error) {
 	}
 	sort.Strings(noStub)
 	return docs, noStub, warnings, nil
+}
+
+// Within reports whether rel, a repository-relative path with forward
+// slashes, is a path under dir in root: not absolute, no ".." out of dir,
+// and, when the file exists, no symlink that resolves outside root.
+func Within(root, rel, dir string) bool {
+	if rel == "" || path.IsAbs(rel) || filepath.IsAbs(rel) || filepath.VolumeName(rel) != "" {
+		return false
+	}
+	clean := path.Clean(rel)
+	if dir != "" && !strings.HasPrefix(clean, dir+"/") {
+		return false
+	}
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return false
+	}
+	return resolvesInside(root, filepath.Join(root, filepath.FromSlash(clean)))
+}
+
+// resolvesInside reports whether the file at p, after symlinks, is under
+// root. A file that does not exist is inside: nothing will be read from it.
+func resolvesInside(root, p string) bool {
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return os.IsNotExist(err)
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(realRoot, real)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // rawState computes the state of a raw document. stale wins over no_summary:

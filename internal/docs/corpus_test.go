@@ -99,3 +99,37 @@ func TestScanRawStates(t *testing.T) {
 		t.Errorf("NoStub = %v, want [raw/dropped.md]", c.NoStub)
 	}
 }
+
+func TestCorpusStaysInsideTheRoot(t *testing.T) {
+	outside := t.TempDir()
+	write(t, outside, "secret.txt", "outside the repository")
+	root := t.TempDir()
+	write(t, root, "docs/ok.md", "# Ok\n")
+	write(t, root, "raw/r.txt", "a raw file")
+	for name, fields := range map[string]string{
+		"up":       "path: raw/r.txt\ntext: ../" + filepath.Base(outside) + "/secret.txt",
+		"absolute": "path: " + filepath.Join(outside, "secret.txt"),
+		"sideways": "path: docs/ok.md",
+	} {
+		write(t, root, "formatted/"+name+".md", "---\ntitle: x\n"+fields+"\n---\n")
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret.txt"), filepath.Join(root, "raw", "via-link.txt")); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "formatted/via-link.md", "---\ntitle: x\npath: raw/via-link.txt\n---\n")
+
+	c, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, d := range c.Docs {
+		ids = append(ids, d.ID)
+	}
+	if strings.Join(ids, ",") != "docs-ok" {
+		t.Errorf("indexed %v, want only docs-ok", ids)
+	}
+	if len(c.Warnings) != 4 {
+		t.Errorf("warnings = %q, want one for each of the 4 stubs that leave the corpus", c.Warnings)
+	}
+}
