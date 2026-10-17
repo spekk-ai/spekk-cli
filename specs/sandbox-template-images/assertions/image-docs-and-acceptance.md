@@ -3,12 +3,14 @@ id: image-docs-and-acceptance
 parent: sandbox-template-images
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: create-from-image
 branch: feature/sandbox-template-images
 ---
 
 # The Docs and an Acceptance Script Cover Template Images
+
+**Tests:** scripts/image-acceptance.sh (run against a local fake cloud)
 
 ## Success Criteria
 

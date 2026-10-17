@@ -3,12 +3,14 @@ id: machine-mode-image
 parent: sandbox-template-images
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: create-from-image
 branch: feature/sandbox-template-images
 ---
 
 # The Machine-Mode Launch JSON Takes an Optional `image`
+
+**Tests:** internal/sandbox/machine_test.go
 
 ## Success Criteria
 

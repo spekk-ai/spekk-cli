@@ -65,6 +65,23 @@ var exit = os.Exit
 // handler, which exits: Ctrl-C also stops the ssh children, and the failure
 // that follows must not race the handler to the revoke.
 func revokeOnSignal(id, name string) (stop func()) {
+	return cleanupOnSignal(func() {
+		if revokeAbandoned(id, name) {
+			if meta, err := GetSandbox(name); err == nil && meta != nil && meta.AgentID == id {
+				meta.AgentID = ""
+				if err := SaveSandbox(name, meta); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not record that the agent is revoked: %s\n", err)
+				}
+			}
+		}
+	})
+}
+
+// cleanupOnSignal runs cleanup and then exits when SIGINT or SIGTERM
+// arrives. The returned stop ends the watch. When a signal came first, stop
+// waits for the handler, which exits: Ctrl-C also stops the ssh children,
+// and the failure that follows must not race the handler to the cleanup.
+func cleanupOnSignal(cleanup func()) (stop func()) {
 	signals := make(chan os.Signal, 1)
 	done := make(chan struct{})
 	finished := make(chan struct{})
@@ -75,14 +92,7 @@ func revokeOnSignal(id, name string) (stop func()) {
 		case sig := <-signals:
 			signal.Stop(signals)
 			fmt.Fprintf(os.Stderr, "\nInterrupted (%s).\n", sig)
-			if revokeAbandoned(id, name) {
-				if meta, err := GetSandbox(name); err == nil && meta != nil && meta.AgentID == id {
-					meta.AgentID = ""
-					if err := SaveSandbox(name, meta); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: could not record that the agent is revoked: %s\n", err)
-					}
-				}
-			}
+			cleanup()
 			code := 130
 			if sig == syscall.SIGTERM {
 				code = 143

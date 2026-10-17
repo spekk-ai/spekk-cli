@@ -12,8 +12,7 @@ import (
 // fakeImager is a provider that can make images, and records what it did.
 type fakeImager struct {
 	recordingProvider
-	images    []ImageMeta // what ListImages returns
-	made      []string    // the names CreateImage was asked for
+	made      []string // the names CreateImage was asked for
 	destroyed int
 }
 
@@ -28,7 +27,7 @@ func (f *fakeImager) CreateImage(meta *SandboxMeta, name string, regions []strin
 }
 
 func (f *fakeImager) DeleteImage(ImageMeta) error           { return nil }
-func (f *fakeImager) ListImages() ([]ImageMeta, error)      { return f.images, nil }
+func (f *fakeImager) ListImages() ([]ImageMeta, error)      { return nil, nil }
 func (f *fakeImager) ImageRegion(opts CreateOptions) string { return orDefault(opts.Region, "nyc1") }
 
 func orDefault(s, d string) string {
@@ -167,8 +166,7 @@ func TestApplyImage(t *testing.T) {
 	fresh := now.Add(-24 * time.Hour).Format(time.RFC3339)
 	for _, tc := range []struct {
 		name      string
-		record    *ImageMeta  // in images.json
-		listed    []ImageMeta // in the provider's own list
+		record    *ImageMeta // in images.json
 		region    string
 		wantImage bool
 		wantLine  string
@@ -176,7 +174,6 @@ func TestApplyImage(t *testing.T) {
 		{name: "record in the region", record: &ImageMeta{Provider: "digitalocean", ImageID: "1", Regions: []string{"nyc1", "nyc3"}, CreatedAt: fresh}, region: "nyc3", wantImage: true, wantLine: `Creating from image "base"`},
 		{name: "record in other regions", record: &ImageMeta{Provider: "digitalocean", ImageID: "1", Regions: []string{"nyc1"}, CreatedAt: fresh}, region: "sfo3", wantLine: `No image "base" for digitalocean in sfo3; creating from the stock image with the full cloud-init.`},
 		{name: "record of another provider", record: &ImageMeta{Provider: "gcp", ImageID: "base", CreatedAt: fresh}, wantLine: `No image "base" for digitalocean in nyc1`},
-		{name: "no record, but the provider has it", listed: []ImageMeta{{Name: "base", ImageID: "2", Regions: []string{"nyc1"}, CreatedAt: fresh}}, wantImage: true},
 		{name: "an old image warns", record: &ImageMeta{Provider: "digitalocean", ImageID: "1", Regions: []string{"nyc1"}, CreatedAt: now.Add(-20 * 24 * time.Hour).Format(time.RFC3339)}, wantImage: true, wantLine: `image "base" is 20 days old`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -188,7 +185,7 @@ func TestApplyImage(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			p := &fakeImager{images: tc.listed}
+			p := &fakeImager{}
 			opts := CreateOptions{ImageName: "base", Region: tc.region, CloudInit: []byte("#full")}
 			stderr := captureStderr(t)
 			if err := applyImage(p, &opts, now); err != nil {

@@ -3,11 +3,13 @@ id: image-build
 parent: sandbox-template-images
 created: 2026-10-17T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/sandbox-template-images
 ---
 
 # `spekk sandbox image build` Makes a Provider Image and Always Destroys Its Builder
+
+**Tests:** internal/sandbox/image_test.go, internal/sandbox/doapi_test.go, internal/sandbox/gcp_provider_test.go
 
 ## Success Criteria
 

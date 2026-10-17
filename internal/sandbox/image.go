@@ -10,14 +10,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/config"
@@ -217,6 +215,7 @@ func BuildImage(p Provider, opts ImageBuildOptions) (err error) {
 		CreatedBy: hostname(),
 	}
 	var once sync.Once
+	// Ctrl-C during a build must not leave a builder that bills.
 	cleanup := func() { once.Do(func() { destroyBuilder(p, name, meta) }) }
 	stop := cleanupOnSignal(cleanup)
 	defer func() {
@@ -308,37 +307,6 @@ func destroyBuilder(p Provider, name string, meta *SandboxMeta) {
 		fmt.Fprintf(os.Stderr, "Warning: could not remove the record of builder %s: %s\n", name, err)
 	}
 	fmt.Fprintf(os.Stderr, "Removed builder %s, its record, and its key pair.\n", ref)
-}
-
-// cleanupOnSignal runs cleanup and exits when SIGINT or SIGTERM arrives,
-// so Ctrl-C during a build does not leave a builder that bills. The
-// returned stop ends the watch; when a signal came first, stop waits for
-// the handler, which exits.
-func cleanupOnSignal(cleanup func()) (stop func()) {
-	signals := make(chan os.Signal, 1)
-	done := make(chan struct{})
-	finished := make(chan struct{})
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		defer close(finished)
-		select {
-		case sig := <-signals:
-			signal.Stop(signals)
-			fmt.Fprintf(os.Stderr, "\nInterrupted (%s). Removing the builder...\n", sig)
-			cleanup()
-			code := 130
-			if sig == syscall.SIGTERM {
-				code = 143
-			}
-			exit(code)
-		case <-done:
-		}
-	}()
-	return func() {
-		signal.Stop(signals)
-		close(done)
-		<-finished
-	}
 }
 
 // runSetup is the seam the build runs the setup script through.
@@ -473,7 +441,7 @@ func applyImage(p Provider, opts *CreateOptions, now time.Time) error {
 		return nil
 	}
 	if age := img.age(now); age > imageMaxAge {
-		fmt.Fprintf(os.Stderr, "Warning: image %q is %d days old. Rebuild it for security updates: spekk sandbox image delete %s, then spekk sandbox image build --name %s\n",
+		fmt.Fprintf(os.Stderr, "Warning: image %q is %d days old. Rebuild it for security updates: spekk sandbox image delete %s, then spekk sandbox image build --name %s with the same --setup\n",
 			img.Name, int(age.Hours()/24), img.Name, img.Name)
 	}
 	fmt.Fprintf(os.Stderr, "Creating from image %q (%s).\n", img.Name, img.ImageID)

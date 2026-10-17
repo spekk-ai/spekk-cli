@@ -3,11 +3,13 @@ id: records-load-unchanged
 parent: sandbox-template-images
 created: 2026-10-17T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/sandbox-template-images
 ---
 
 # Records That v1.33.0 Wrote Load and Save Unchanged
+
+**Tests:** internal/sandbox/store_test.go
 
 ## Success Criteria
 

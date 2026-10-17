@@ -3,12 +3,14 @@ id: image-list-delete
 parent: sandbox-template-images
 created: 2026-10-17T00:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: image-build
 branch: feature/sandbox-template-images
 ---
 
 # `spekk sandbox image list` and `image delete` Keep the Images in Order
+
+**Tests:** internal/sandbox/gcp_provider_test.go (provider delete); the walkthrough covers the commands
 
 ## Success Criteria
 

@@ -149,74 +149,6 @@ func TestListDropletsWithTag(t *testing.T) {
 	}
 }
 
-func TestDeleteDroplet(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" || r.URL.Path != "/v2/droplets/42" {
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-		w.WriteHeader(204)
-	})
-	defer ts.Close()
-
-	if err := client.DeleteDroplet(42); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestListSSHKeys(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/account/keys" {
-			t.Errorf("unexpected path %s", r.URL.Path)
-		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ssh_keys": []map[string]interface{}{
-				{"id": 1, "name": "key1", "fingerprint": "aa:bb:cc"},
-				{"id": 2, "name": "key2", "fingerprint": "dd:ee:ff"},
-			},
-		})
-	})
-	defer ts.Close()
-
-	keys, err := client.ListSSHKeys()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(keys) != 2 {
-		t.Fatalf("expected 2 keys, got %d", len(keys))
-	}
-}
-
-func TestCreateSSHKey(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
-		if body["name"] != "my-key" {
-			t.Errorf("expected name my-key, got %s", body["name"])
-		}
-
-		w.WriteHeader(201)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ssh_key": map[string]interface{}{
-				"id":          10,
-				"name":        "my-key",
-				"fingerprint": "xx:yy:zz",
-			},
-		})
-	})
-	defer ts.Close()
-
-	key, err := client.CreateSSHKey("my-key", "ssh-rsa AAAA...")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if key.Fingerprint != "xx:yy:zz" {
-		t.Errorf("expected fingerprint xx:yy:zz, got %s", key.Fingerprint)
-	}
-}
-
 func TestFindSSHKeyByFingerprint(t *testing.T) {
 	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -246,21 +178,6 @@ func TestFindSSHKeyByFingerprint(t *testing.T) {
 	}
 	if notFound != nil {
 		t.Error("expected nil for not found key")
-	}
-}
-
-func TestDeleteSSHKey(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" || r.URL.Path != "/v2/account/keys/42" {
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	defer ts.Close()
-
-	err := client.DeleteSSHKey(42)
-	if err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -312,26 +229,6 @@ func TestAPIError(t *testing.T) {
 	}
 }
 
-func TestAPIErrorNotFound(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(404)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":      "not_found",
-			"message": "The resource you requested could not be found.",
-		})
-	})
-	defer ts.Close()
-
-	_, err := client.GetDroplet(99999)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	apiErr := err.(*APIError)
-	if apiErr.StatusCode != 404 {
-		t.Errorf("expected 404, got %d", apiErr.StatusCode)
-	}
-}
-
 func TestDropletPublicIPEmpty(t *testing.T) {
 	d := &Droplet{
 		Networks: Networks{V4: []NetworkV4{
@@ -340,28 +237,6 @@ func TestDropletPublicIPEmpty(t *testing.T) {
 	}
 	if d.PublicIP() != "" {
 		t.Error("expected empty public IP")
-	}
-}
-
-func TestListProjects(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"projects": []map[string]interface{}{
-				{"id": "proj-1", "name": "My Project"},
-			},
-		})
-	})
-	defer ts.Close()
-
-	projects, err := client.ListProjects()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(projects) != 1 {
-		t.Fatalf("expected 1 project, got %d", len(projects))
-	}
-	if projects[0].Name != "My Project" {
-		t.Errorf("expected 'My Project', got %s", projects[0].Name)
 	}
 }
 

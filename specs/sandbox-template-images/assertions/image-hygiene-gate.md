@@ -3,12 +3,14 @@ id: image-hygiene-gate
 parent: sandbox-template-images
 created: 2026-10-17T00:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: image-build
 branch: feature/sandbox-template-images
 ---
 
 # The Hygiene Check Fails the Build When the Builder Has a Credential
+
+**Tests:** internal/sandbox/image_test.go
 
 ## Success Criteria
 
