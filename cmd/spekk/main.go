@@ -212,8 +212,10 @@ func runParser(args []string) {
 	next := parser.FindNextAssertion(result.Assertions, result.Specs, opts)
 	if next == nil {
 		out, _ := parser.FormatComplete()
-		if reasons := parser.CountIneligible(result.Assertions, result.Specs, opts); len(reasons) > 0 && opts.AssertionID == "" {
-			out, _ = parser.FormatNoneEligible(reasons)
+		if opts.AssertionID == "" {
+			if reasons := parser.CountIneligible(result.Assertions, result.Specs, opts); len(reasons) > 0 {
+				out, _ = parser.FormatNoneEligible(reasons)
+			}
 		}
 		fmt.Println(string(out))
 		return
