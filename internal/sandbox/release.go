@@ -53,6 +53,7 @@ type releaseArtifacts struct {
 	// file has its staged name, so one scp puts both in the login home.
 	BinaryPath string
 	CLIPath    string
+	dir        string
 	// AgentSHA256 and CLISHA256 are the hex digests that the release
 	// publishes for the two files. The machine checks the uploads with them.
 	AgentSHA256 string
@@ -61,8 +62,8 @@ type releaseArtifacts struct {
 
 // cleanup removes the downloaded binaries.
 func (a *releaseArtifacts) cleanup() {
-	if a.BinaryPath != "" {
-		os.RemoveAll(filepath.Dir(a.BinaryPath))
+	if a.dir != "" {
+		os.RemoveAll(a.dir)
 	}
 }
 
@@ -147,7 +148,7 @@ func (a *releaseArtifacts) downloadBinaries(arch string) (err error) {
 		}
 	}
 
-	a.BinaryPath, a.CLIPath = filepath.Join(dir, stagedBinary), filepath.Join(dir, stagedCLI)
+	a.dir, a.BinaryPath, a.CLIPath = dir, filepath.Join(dir, stagedBinary), filepath.Join(dir, stagedCLI)
 	a.AgentSHA256, a.CLISHA256 = digests[agent], digests[cli]
 	return nil
 }
@@ -170,9 +171,8 @@ func (a *releaseArtifacts) downloadAsset(name, dest string) error {
 	return nil
 }
 
-// releaseAPIURL is the GitHub API path of a release by tag. A variable so a
-// test can point it at a fake.
-var releaseAPIURL = "https://api.github.com/repos/" + releaseRepo + "/releases/tags/"
+// releaseAPIURL is the GitHub API path of a release by tag.
+const releaseAPIURL = "https://api.github.com/repos/" + releaseRepo + "/releases/tags/"
 
 // fetchDigests is the seam downloadBinaries reads the digests through.
 var fetchDigests = releaseDigests

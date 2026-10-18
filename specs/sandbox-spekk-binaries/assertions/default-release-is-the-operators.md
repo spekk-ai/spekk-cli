@@ -3,7 +3,7 @@ id: default-release-is-the-operators
 parent: sandbox-spekk-binaries
 created: 2026-10-18T05:40:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-spekk-binaries
 ---
 
@@ -15,3 +15,5 @@ branch: feat/sandbox-spekk-binaries
 - From any other build, they install the latest release, and print `This spekk is "<version>", not a release, so the sandbox gets the latest release, <tag>.` on stderr.
 - `--release <tag>` still wins.
 - The help text and `docs/cli-reference.md` say this, and no longer say "the latest spekk release".
+
+**Tests:** `internal/sandbox/release_test.go` (`TestReleaseTag`). Live check (2026-10-18): `create` from a CLI stamped `v1.38.1` printed `Using sandbox release v1.38.1`; from a `dev` build it printed `This spekk is "dev", not a release, so the sandbox gets the latest release, v1.38.1.`

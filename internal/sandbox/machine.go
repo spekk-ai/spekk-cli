@@ -470,7 +470,7 @@ func equipMachineSandbox(meta *SandboxMeta, name, agentToken string, in *machine
 		return &stageError{"cloning " + in.repository, fmt.Errorf("%w\n%s", err, strings.TrimSpace(out))}
 	}
 
-	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
+	fmt.Fprintln(os.Stderr, "Deploying the agent and the spekk CLI...")
 	if err := deployAgent(meta.IP, meta.SSHKeyPath, name, user, artifacts); err != nil {
 		return &stageError{"deploying agent", err}
 	}

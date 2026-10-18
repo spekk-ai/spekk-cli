@@ -311,7 +311,7 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 		return &stageError{"configuring git credentials", err}
 	}
 
-	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
+	fmt.Fprintln(os.Stderr, "Deploying the agent and the spekk CLI...")
 	if err := deployAgent(meta.IP, meta.SSHKeyPath, name, user, artifacts); err != nil {
 		return &stageError{"deploying agent", err}
 	}
