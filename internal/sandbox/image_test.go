@@ -72,10 +72,13 @@ func builderOnDisk(t *testing.T) string {
 		"home/agent/.docker/config.json":   `{"credsStore": "desktop"}`,
 		"home/agent/.claude/settings.json": `{"autoUpdatesChannel": "stable"}`,
 		// Not secrets: code that names a key header, a test key of an
-		// installed package, and the key of the AWS documentation.
+		// installed package, the key of the AWS documentation, a token
+		// prefix inside base64, and a test value with a token prefix.
 		"opt/app/keys.py":                       `START = b"-----BEGIN OPENSSH PRIVATE KEY-----"` + "\n",
 		"opt/app/node_modules/x/test/key.pem":   "-----BEGIN RSA PRIVATE KEY-----\nMIIB\n",
 		"home/agent/.local/lib/aws/example.txt": "aws_access_key_id = AKIAIOSFODNN7EXAMPLE\n",
+		"opt/app/font.py":                       `FONT = b"AAEAAAAPAIAAAwBwRkZUTWAKIAAQAAAAAABAAHAM0AAAAA"` + "\n",
+		"opt/app/tests/test_slack.py":           `TOKEN = "xoxb-test-token"` + "\n",
 	} {
 		full := filepath.Join(root, path)
 		os.MkdirAll(filepath.Dir(full), 0o755)
@@ -128,6 +131,7 @@ func TestBuildImage(t *testing.T) {
 				os.Symlink("../../keys", filepath.Join(root, "home/y/.ssh"))
 			}, wantErr: "/home/y/.ssh/id_rsa is on the builder"},
 		{name: "a token in a known format fails the build", plant: "opt/app/notes.txt", content: "deploy with ghp_" + strings.Repeat("a1B2", 9) + "\n", wantErr: "/opt/app/notes.txt has a token"},
+		{name: "a key file with CRLF line ends outside .ssh fails the build", plant: "opt/app/config/key.pem", content: "-----BEGIN PRIVATE KEY-----\r\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\r\n-----END PRIVATE KEY-----\r\n", wantErr: "/opt/app/config/key.pem has a private key"},
 		{name: "a private key in a JSON file fails the build", plant: "srv/app/sa.json", content: `{"private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END PRIVATE KEY-----\n"}`, wantErr: "/srv/app/sa.json has a private key"},
 		{name: "an extra HTTP header in a git config fails the build", plant: "srv/app/.git/config", content: "[http \"https://github.com/\"]\n\textraHeader = AUTHORIZATION: basic eDp5\n", wantErr: "/srv/app/.git/config has an extra HTTP header"},
 	} {

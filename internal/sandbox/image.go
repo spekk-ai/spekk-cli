@@ -417,15 +417,17 @@ done
 # A key header ends its line, or is followed by an escaped newline and the
 # key (a key in a JSON file). Code that only names the header does not
 # match. Installed packages often ship test keys, so their directories are
-# not searched.
+# not searched. archive-v0 in the uv cache has the unpacked wheels.
 key='-----BEGIN ([A-Z0-9]+ )?PRIVATE KEY-----([[:space:]]*$|\\n[A-Za-z0-9+/]{20})'
 while IFS= read -r f; do bad "${f#"$R"} has a private key"; done < <(
-  grep -rlIsE --exclude-dir=node_modules --exclude-dir=site-packages --exclude-dir=dist-packages -e "$key" "${roots[@]}" |
-    awk '!seen[$0]++')
-# AKIAIOSFODNN7EXAMPLE is the key in the AWS documentation.
-token='gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|dop_v1_[a-f0-9]{64}|glpat-[A-Za-z0-9_-]{20}|xox[abprs]-[A-Za-z0-9-]{10,}'
+  grep -rlIsE --exclude-dir=node_modules --exclude-dir=site-packages --exclude-dir=dist-packages --exclude-dir=archive-v0 \
+    -e "$key" "${roots[@]}" | awk '!seen[$0]++')
+# A token is a full word in its real shape, so a match inside base64 or a
+# short test value is not a finding. AKIAIOSFODNN7EXAMPLE is the key in the
+# AWS documentation.
+token='(^|[^A-Za-z0-9_])(gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|sk-ant-[a-z]+[0-9]{2}-[A-Za-z0-9_-]{80,}|AKIA[0-9A-Z]{16}|dop_v1_[a-f0-9]{64}|glpat-[A-Za-z0-9_-]{20}|xox[abprs]-[0-9]{6,}-[A-Za-z0-9-]{10,})([^A-Za-z0-9_]|$)'
 while IFS= read -r f; do
-  if grep -oIsE -e "$token" "$f" | grep -qv 'EXAMPLE$'; then bad "${f#"$R"} has a token"; fi
+  if grep -oIsE -e "$token" "$f" | grep -qvE 'EXAMPLE[^A-Za-z0-9_]?$'; then bad "${f#"$R"} has a token"; fi
 done < <(grep -rlIsE -e "$token" "${roots[@]}" "$R/etc" | awk '!seen[$0]++')
 
 # Each git config: a user or token in a URL, or an extra HTTP header (the
