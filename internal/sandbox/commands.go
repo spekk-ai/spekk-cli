@@ -73,6 +73,12 @@ type CreateOptions struct {
 	// Labels are extra labels for the machine, from --label in machine mode.
 	Labels map[string]string
 
+	// ImageName is the image of --image. Image is that image when the
+	// provider has it in the region of the create; Create resolves it, and
+	// a provider that supports images creates the machine from it.
+	ImageName string
+	Image     *ImageMeta
+
 	// CloudInit is the provisioning payload from the release artifacts.
 	// Create fills it in; no flag sets it. A provider that does not use
 	// cloud-init ignores it.
@@ -167,6 +173,9 @@ func Create(p Provider, opts CreateOptions) (err error) {
 	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
 
 	opts.CloudInit = artifacts.CloudInit
+	if err := applyImage(p, &opts, time.Now()); err != nil {
+		return err
+	}
 
 	// Register before anything billable exists, so a refused registration
 	// costs nothing. From here on, a failure revokes the agent again.
@@ -192,6 +201,9 @@ func Create(p Provider, opts CreateOptions) (err error) {
 	}
 	if !opts.ExpiresAt.IsZero() {
 		meta.ExpiresAt = opts.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	if opts.Image != nil {
+		meta.Image = opts.Image.Name
 	}
 	defer func() {
 		if err != nil && meta.AgentID != "" && revokeAbandoned(meta.AgentID, opts.Name) {

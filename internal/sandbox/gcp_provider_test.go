@@ -186,3 +186,46 @@ func TestProviderByNameGCPWithoutGcloud(t *testing.T) {
 		t.Errorf("p = %#v, want an untyped nil", p)
 	}
 }
+
+// GCP images go through gcloud: the build stops the VM and makes a labeled
+// image of its boot disk, a create from the image names it and its project
+// instead of the Ubuntu family, the list reads the labeled images, and a
+// delete of an image that is gone reads as not found.
+func TestGCPImages(t *testing.T) {
+	isolateConfig(t)
+	calls := fakeGcloud(t, func(cmd string) (string, error) {
+		switch {
+		case cmd == "config get-value project":
+			return "proj-a", nil
+		case strings.HasPrefix(cmd, "compute instances create"):
+			return "203.0.113.7", nil
+		case strings.HasPrefix(cmd, "compute images list"):
+			return `[{"name": "web-app", "creationTimestamp": "2026-10-10T08:00:00.000-07:00"}]`, nil
+		case strings.HasPrefix(cmd, "compute images delete gone"):
+			return "", errors.New("The resource 'projects/proj-a/global/images/gone' was not found")
+		}
+		return "", nil
+	})
+	p := &GCPProvider{}
+	meta := &SandboxMeta{GCPInstance: "spekk-image-web-app", Project: "proj-a", Region: "us-east1-b"}
+
+	img, err := p.CreateImage(meta, "web-app", nil)
+	if err != nil || img.ImageID != "web-app" || img.Project != "proj-a" || len(img.Regions) != 0 {
+		t.Fatalf("CreateImage = %+v, %v", img, err)
+	}
+	if err := p.Create("box", CreateOptions{Image: &ImageMeta{Name: "web-app", ImageID: "web-app", Project: "proj-a"}}, &SandboxMeta{}); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := p.ListImages()
+	if err != nil || len(listed) != 1 || listed[0].Name != "web-app" || listed[0].CreatedAt != "2026-10-10T15:00:00Z" {
+		t.Fatalf("ListImages = %+v, %v", listed, err)
+	}
+	if err := p.DeleteImage(ImageMeta{ImageID: "gone", Project: "proj-a"}); !errors.Is(err, ErrImageNotFound) {
+		t.Errorf("DeleteImage of a missing image = %v, want ErrImageNotFound", err)
+	}
+
+	got := strings.Join(*calls, "\n")
+	if strings.Contains(got, "--image-family") {
+		t.Errorf("a create from an image still names the Ubuntu family:\n%s", got)
+	}
+}

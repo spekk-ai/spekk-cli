@@ -737,6 +737,7 @@ spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box
 spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --ssh-user ubuntu
 spekk sandbox create --name tmp-fix-login --one-off --purpose "fix the login test"
 spekk sandbox create --name tmp-migration --one-off --expires 3d
+spekk sandbox create --name my-sandbox --image base
 ```
 
 **Flags:**
@@ -756,6 +757,7 @@ spekk sandbox create --name tmp-migration --one-off --expires 3d
 | `--ssh-user <user>` | SSH login user for that machine (default: `root`). A non-root user must have passwordless sudo |
 | `--release <tag>` | Pull the agent binary from a specific spekk release instead of the latest, e.g. an `exp-*` prerelease. The cloud-init template always comes from the installed CLI |
 | `--organization <id>` | The control host organization to register the agent in. Needed only when you belong to more than one |
+| `--image <name>` | Create the machine from a template image that `spekk sandbox image build` made. DigitalOcean and GCP. See [`spekk sandbox image`](#spekk-sandbox-image) |
 | `--one-off` | Mark the sandbox one-off: one task, then destroy it. It expires 48 hours after `create` unless `--expires` says when. Without it, the sandbox is persistent and has no expiry |
 | `--expires <when>` | Expiry of a one-off sandbox: a Go duration (`36h`), days (`3d`), a date (`2026-10-17`, which means 00:00 UTC), or an RFC 3339 time. It must be in the future, and it needs `--one-off` |
 | `--purpose <text>` | Why the sandbox exists. It is kept in the record and in the marker on the machine. It is one line: `create` refuses a newline, a tab or any other control character |
@@ -948,6 +950,60 @@ The agent goes to `/opt/spekk/agent-client`. The CLI goes to `/opt/spekk/cli/spe
 
 Before the restart, it reads the version of the `claude` that the service runs, with the service's user and `agent.env`. When the version is older than the minimum (`MinVersion` in `internal/claudecode`), or cannot be read, it installs the `stable` release as `agent` with the native installer, and reads the version again. When the version is still older, the deploy fails and does not restart the agent, because the new agent refuses every turn on an older Claude Code. When the version still cannot be read, the deploy prints a warning and continues. A `claude` process that runs keeps its own binary, so this step stops no turn. `create` and `provision` run the same step when they deploy the agent.
 
+### `spekk sandbox image`
+
+Build, list, and delete template images. A sandbox made from an image skips the package installation of cloud-init, so a create takes about a minute instead of about four.
+
+```bash
+spekk sandbox image build --name base
+spekk sandbox image build --name web-app --setup infrastructure/sandbox/image-setup.sh
+spekk sandbox image build --name base --provider gcp --regions us-east1-b
+spekk sandbox image list
+spekk sandbox image delete web-app
+```
+
+**`image build` flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--name <image>` | Image name (required): lowercase letters, digits, and hyphens, starting with a letter, at most 63 characters |
+| `--setup <script>` | A script that runs as root on the builder before the image is made. A project keeps its own script in its own repository |
+| `--provider <provider>` | `digitalocean` (default) or `gcp` |
+| `--size <size>` | Size of the builder (default: the provider default) |
+| `--regions <r1,r2>` | DigitalOcean: the builder region, then the regions that the snapshot is copied to (default: `nyc1,nyc3`). GCP: the zone of the builder. A GCP image is global |
+| `--project <id>` | GCP project (default: the gcloud project) |
+
+**Build steps.** The build creates a temporary builder sandbox, `image-<name>`, with the normal cloud-init, and records it in `sandboxes.json` with the status `building`. It registers no agent and injects no credential. It runs `--setup` as root, with its output on the terminal. Then one SSH session cleans the builder and checks it (see below). Then the provider makes a private image: a snapshot of the shut-down droplet, copied to each region of `--regions`, or a custom image of the boot disk of the stopped GCP VM. The build records the image in `images.json` beside `sandboxes.json`: name, provider, provider image ID, regions, GCP project, created date, spekk version, OS version, and the SHA-256 of the setup script.
+
+The builder is destroyed on success, on each failure, and on Ctrl-C or SIGTERM, with its record, its key pair, and its known_hosts file, and the build prints what it removed. When the destroy fails, the build prints the `spekk sandbox destroy image-<name> --force` command that removes it. When the provider made the image but a later step failed (for example, a copy to a region), the record is still written with the regions that have the image, so `image delete` can remove it.
+
+**Image hygiene.** "Each home" is `/root`, each directory in `/home`, and the home of each user in `/etc/passwd`. The clean step removes what makes each machine its own, and the logs: the SSH host keys, the content of `/etc/machine-id`, `/opt/spekk/.provisioned`, the cloud-init state (`cloud-init clean --logs`), the content of the files in `/var/log`, and in each home the authorized keys, each `.*_history` file, `.viminfo`, and the Claude Code settings (`.claude`, `.claude.json`) when they hold no sign-in. The clean step does not remove credentials. The check fails the build, with one line for each finding, when the builder has:
+
+- `/etc/spekk/agent.env`
+- in a home: a file in `.ssh` (also when `.ssh` is a symlink) other than `known_hosts`, `config`, or a `*.pub` file; a Claude Code sign-in (`.claude/.credentials.json`) or `.claude.json`; `.netrc`, `.aws/credentials`, `.git-credentials`, `.config/git/credentials`, `.config/gcloud`, a DigitalOcean CLI login (`.config/doctl/config.yaml`), or a GitHub CLI login (`.config/gh/hosts.yml`)
+- in a text file in a home, `/opt`, `/srv`, or `/var/lib` (but not `/var/lib/docker` or `/var/lib/containerd`): a private key (a `-----BEGIN ... PRIVATE KEY-----` line, or the same header followed by `\n` in a JSON string). The directories `node_modules`, `site-packages`, `dist-packages`, and `archive-v0` (the unpacked wheels in the uv cache) are not searched for keys, because installed packages often ship test keys
+- in a text file in the same directories or in `/etc`: a token in a known format (GitHub, Anthropic, AWS, DigitalOcean, GitLab, or Slack), as a full word in its real length. A match inside a longer string (for example in base64) or a short test value such as `xoxb-test-token` is not a finding
+- a git config (a `*.git/config` file in the same directories, `.gitconfig` or `.config/git/config` in a home, or `/etc/gitconfig`) with a user or token in an `http(s)://` URL, or with an `extraheader` line
+- a Docker registry login, an npm token, or a line that sets a variable whose name has `TOKEN`, `SECRET`, `API_KEY`, `PASSWORD`, or `ACCESS_KEY`, in `/etc/environment`, `/etc/bash.bashrc`, `/etc/profile.d/`, a bash or zsh startup file in a home, a `.env` file in the same directories, or an `Environment=` line in `/etc/systemd/system`
+
+It also fails when a step of the clean step did not take effect. The check is best effort: it fails on known secret shapes and locations, but it cannot find every secret, and the author of the setup script stays responsible for what the image contains. A setup script that needs a credential must remove it before it ends. The setup script gets `/dev/null` as stdin, so a step that reads stdin does not skip the steps after it.
+
+**Create from an image.** `spekk sandbox create --image <name>` finds the image in `images.json`, or, when there is no record, by name in the provider's own image list. That list has only the images that `image build` made: on DigitalOcean, the snapshots named `spekk-image-<name>`, and on GCP, the images with the `spekk-image` label. The machine starts from the image with a short first-boot cloud-init: the `agent` user with the sandbox key, then `/opt/spekk/.provisioned`. Cloud-init makes new SSH host keys and systemd makes a new `/etc/machine-id`, so two sandboxes from one image do not share them. The marker check, the credential injection, and the agent deploy are the same as for a fresh machine. The deploy still upgrades a Claude Code that is older than the minimum, and the agent binary always comes from the release, never from the image. The sandbox record has `image: <name>`.
+
+When the provider has no image with that name, or a DigitalOcean image has no copy in the region of the create, `create` prints one line and uses the full cloud-init:
+
+```
+No image "web-app" for digitalocean in sfo3; creating from the stock image with the full cloud-init.
+```
+
+`--image` with a machine you already have (`--ip`, `--provider none`) is an error. When the image is older than 14 days, `create` prints a warning with the age and continues.
+
+**Rebuild, do not upgrade at boot.** Rebuild each image every week, for security updates, and with each spekk release: `image delete`, then `image build` with the same `--setup`. The first boot does not run `apt upgrade`, because that removes the time saving. Images are private to the account: a DigitalOcean snapshot and a GCP custom image are private by default, and the build does not share them.
+
+**`image list`** prints one row for each record: name, provider, image ID, regions, created date, age in days, spekk version, and OS version. **`image delete <name>`** deletes the provider image (on DigitalOcean, every regional copy), then removes the record. When the provider no longer has the image, it prints a warning and removes the record.
+
+**AWS.** spekk does not make AMIs. To start the CloudFormation sandbox from your own AMI, see [A Sandbox on AWS](advanced/sandbox-aws.md#start-from-your-own-ami).
+
 ### Machine mode (`--machine`)
 
 Machine mode is the interface for a server worker that launches sandboxes for its users. A person at a terminal does not use it. The worker gives each secret to the CLI on stdin, and reads the progress from stdout. No secret is in a flag, in the environment of the CLI, or on stdout, and machine mode reads no credential from its environment. Machine mode is for DigitalOcean only.
@@ -957,7 +1013,7 @@ spekk sandbox create <name> --machine --size <size> --region <region> [--one-off
 spekk sandbox destroy <name> --machine --force < destroy.json
 ```
 
-**Create input.** One JSON object on stdin. Each field is required and must not be empty. A field that is not in this list, data after the object, or more than 64 KiB is an error:
+**Create input.** One JSON object on stdin. Each field is required and must not be empty, except `image` (see below). A field that is not in this list, data after the object, or more than 64 KiB is an error:
 
 ```json
 {
@@ -970,6 +1026,8 @@ spekk sandbox destroy <name> --machine --force < destroy.json
   "model_credential": {"kind": "none"}
 }
 ```
+
+The object can also have `"image": "<name>"`, which is optional. It names a template image. The CLI finds the image by that name in the private images of the DigitalOcean account, because the worker has no `images.json`. Without the field, or when the region has no copy of the image, the droplet gets the full cloud-init. The stage lines are the same either way.
 
 `harness` must be `claude-code`. `model_credential` is one of these kinds. Each kind takes only its own fields. A Claude subscription token is not a choice in machine mode, because it belongs to one person:
 

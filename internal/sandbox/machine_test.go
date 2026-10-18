@@ -70,7 +70,11 @@ type fakeDigitalOcean struct {
 	requests   []string
 	createTags []string // the tags of the droplet create request
 	tags       []string // the tags added after the create
-	auth       []string
+	// createImage and createUserData are the image and the cloud-init of
+	// the droplet create request.
+	createImage    any
+	createUserData string
+	auth           []string
 }
 
 func useFakeDigitalOcean(t *testing.T) *fakeDigitalOcean {
@@ -87,10 +91,17 @@ func useFakeDigitalOcean(t *testing.T) *fakeDigitalOcean {
 		case r.Method == "POST" && r.URL.Path == "/v2/account/keys":
 			fmt.Fprint(w, `{"ssh_key": {"id": 11}}`)
 		case r.Method == "POST" && r.URL.Path == "/v2/droplets":
-			var req struct{ Tags []string }
+			var req struct {
+				Tags     []string
+				Image    any
+				UserData string `json:"user_data"`
+			}
 			json.Unmarshal(body, &req)
 			f.createTags = req.Tags
+			f.createImage, f.createUserData = req.Image, req.UserData
 			fmt.Fprint(w, `{"droplet": {"id": 4242}}`)
+		case r.Method == "GET" && r.URL.Path == "/v2/images":
+			fmt.Fprint(w, `{"images": [{"id": 666, "name": "web-app", "regions": ["nyc3"], "created_at": "2026-10-17T00:00:00Z"}, {"id": 31337, "name": "spekk-image-web-app", "regions": ["nyc3"], "created_at": "2026-10-16T00:00:00Z"}]}`)
 		case r.Method == "GET" && r.URL.Path == "/v2/droplets/4242":
 			fmt.Fprint(w, `{"droplet": {"id": 4242, "status": "active", "networks": {"v4": [{"ip_address": "203.0.113.10", "type": "public"}]}}}`)
 		case r.Method == "POST" && r.URL.Path == "/v2/tags":
@@ -345,6 +356,33 @@ func TestCreateMachine(t *testing.T) {
 		}
 		if got := strings.Join(stages, " "); got != "creating provisioning registering online" {
 			t.Errorf("stages = %s", got)
+		}
+	})
+
+	// The launch JSON may name a template image. The worker has no
+	// images.json, so the account's own list finds it, and only a snapshot
+	// that image build named counts. The droplet starts from it with the
+	// first-boot cloud-init. The stages stay.
+	t.Run("an image in the launch JSON", func(t *testing.T) {
+		do, _, _, _, input := setUp(t, 201, "")
+		input = strings.Replace(input, `"harness"`, `"image": "web-app", "harness"`, 1)
+		var stdout strings.Builder
+		captureStderr(t)
+		if err := CreateMachine(strings.NewReader(input), &stdout, machineOptions()); err != nil {
+			t.Fatal(err)
+		}
+		if do.createImage != float64(31337) || !strings.Contains(do.createUserData, "First-boot cloud-init") {
+			t.Errorf("droplet create image = %v, user data %.60q; want the snapshot and the first-boot cloud-init", do.createImage, do.createUserData)
+		}
+		var stages []string
+		for _, l := range stageLines(t, stdout.String()) {
+			stages = append(stages, l.Stage)
+		}
+		if got := strings.Join(stages, " "); got != "creating provisioning registering online" {
+			t.Errorf("stages = %s", got)
+		}
+		if got, _ := GetSandbox("launch-1"); got == nil || got.Image != "web-app" {
+			t.Errorf("record = %+v, want image web-app", got)
 		}
 	})
 

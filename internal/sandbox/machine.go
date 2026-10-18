@@ -43,6 +43,7 @@ type machineInput struct {
 	repository        string // owner/name
 	auth              AuthMode
 	modelEnv          map[string]string // the variables of the model credential
+	image             string            // optional template image name
 }
 
 // secrets lists each secret of the input, for redaction.
@@ -113,6 +114,9 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 		GitHubRepository  string          `json:"github_repository"`
 		Harness           string          `json:"harness"`
 		ModelCredential   json.RawMessage `json:"model_credential"`
+		// Image is optional: a template image name. Without it, the
+		// droplet gets the full cloud-init, as before.
+		Image string `json:"image"`
 	}
 	if err := readStdinJSON(r, &raw); err != nil {
 		return nil, err
@@ -145,6 +149,7 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 		controlHost:       base,
 		githubToken:       raw.GitHubToken,
 		repository:        raw.GitHubRepository,
+		image:             strings.TrimSpace(raw.Image),
 	}
 	if in.auth, in.modelEnv, err = readModelCredential(raw.ModelCredential); err != nil {
 		return nil, err
@@ -391,6 +396,12 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 	opts.CloudInit = artifacts.CloudInit
 
 	p := &DOProvider{client: machineDOClient(in.doToken)}
+	// The worker has no images.json, so the image is found in the
+	// account's own list. No image means the full cloud-init.
+	opts.ImageName = in.image
+	if err := applyImage(p, &opts, time.Now()); err != nil {
+		return st.fail(err)
+	}
 	meta := &SandboxMeta{
 		Provider:  p.Name(),
 		Auth:      string(in.auth),
@@ -404,6 +415,9 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 	}
 	if !opts.ExpiresAt.IsZero() {
 		meta.ExpiresAt = opts.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	if opts.Image != nil {
+		meta.Image = opts.Image.Name
 	}
 	createErr := p.Create(opts.Name, opts, meta)
 	if namesMachine(meta) {
