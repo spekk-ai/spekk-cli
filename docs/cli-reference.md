@@ -881,7 +881,7 @@ spekk sandbox list --all-hosts           # Also the labeled sandboxes that other
 
 ### `spekk sandbox status <name>`
 
-Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and four SSH checks: the provisioned marker, the `spekk-agent` service, and the version of the spekk CLI and of the agent binary on the machine.
+Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and four SSH checks: the provisioned marker, the `spekk-agent` service, and the version of the spekk CLI and of the agent binary on the machine. The two version commands run as `agent`, which owns both binaries, and not as the login user.
 
 ```bash
 spekk sandbox status my-sandbox
@@ -946,7 +946,7 @@ Without `--release`, a CLI with the version `vX.Y.Z` installs the release `vX.Y.
 
 Before it downloads, `deploy` reads the SHA-256 that GitHub publishes for each release asset (`digest` in `GET /repos/spekk-ai/spekk-cli/releases/tags/<tag>`, an anonymous API call). An asset with no digest stops the deploy. It copies both files, and on the machine `sha256sum -c` checks each one before anything is replaced: a file that does not match stops the deploy with `spekk: <file> does not match the release sha256`, and the installed binaries and the running service stay as they were.
 
-The agent goes to `/opt/spekk/agent-client`. The CLI goes to `/opt/spekk/cli/spekk`, owned by `agent`, so `spekk update` as `agent` can replace it, and `/usr/local/bin/spekk` links to it. When `~agent/.local/bin/spekk` is there (an earlier install put a copy there), it becomes a link to the same file. Then `deploy` writes the `spekk-agent` systemd unit and restarts the service. Every login stages the uploads in its home directory, then installs each beside its target and renames it into place, so a deploy replaces an agent that is running.
+The agent goes to `/opt/spekk/agent-client`. The CLI goes to `/opt/spekk/cli/spekk`, owned by `agent`, so `spekk update` as `agent` can replace it, and `/usr/local/bin/spekk` links to it. When `~agent/.local/bin/spekk` is there (an earlier install put a copy there), it becomes a link to the same file. `agent` owns `/opt/spekk` and its home, so `deploy` does not follow a link there: a link at `/opt/spekk/cli` is replaced with a directory, and when `~agent/.local` or `~agent/.local/bin` is a link, `deploy` does not change `spekk` in it and says so. Then `deploy` writes the `spekk-agent` systemd unit and restarts the service. Every login stages the uploads in its home directory, then installs each beside its target and renames it into place, so a deploy replaces an agent that is running.
 
 Before the restart, it reads the version of the `claude` that the service runs, with the service's user and `agent.env`. When the version is older than the minimum (`MinVersion` in `internal/claudecode`), or cannot be read, it installs the `stable` release as `agent` with the native installer, and reads the version again. When the version is still older, the deploy fails and does not restart the agent, because the new agent refuses every turn on an older Claude Code. When the version still cannot be read, the deploy prints a warning and continues. A `claude` process that runs keeps its own binary, so this step stops no turn. `create` and `provision` run the same step when they deploy the agent.
 
