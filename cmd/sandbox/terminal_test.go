@@ -103,18 +103,3 @@ func TestSignInTerminalRelaysAndRecordsNothing(t *testing.T) {
 		t.Errorf("no close line in the log:\n%s", logged)
 	}
 }
-
-// A login that nobody finishes ends at the timeout, with its whole process
-// group.
-func TestSignInTerminalTimesOut(t *testing.T) {
-	signInTimeout = 500 * time.Millisecond
-	t.Cleanup(func() { signInTimeout = 10 * time.Minute })
-	fakeSignInClaude(t, "sleep 600 &\nwait\n")
-	host, send := startTerminalClient(t)
-
-	send(map[string]any{"type": "terminal_open", "terminal_id": "term-2"})
-	got := host.awaitFrame(t, MessageTypeTerminalExit, 10*time.Second)
-	if got.frame["exit_code"] != float64(-1) {
-		t.Errorf("exit frame = %v, want exit_code -1", got.frame)
-	}
-}

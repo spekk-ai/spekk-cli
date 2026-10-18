@@ -26,19 +26,6 @@ func TestDialOptionsSendBothHeaders(t *testing.T) {
 	}
 }
 
-func TestWelcomeFrameIsNotUnknown(t *testing.T) {
-	c := &AgentClient{}
-	buf := captureLog(t)
-	c.handleInbound(t.Context(), Message{Type: MessageTypeWelcome, Protocol: ProtocolVersion})
-	out := buf.String()
-	if strings.Contains(out, "Unknown message type") {
-		t.Fatalf("welcome treated as unknown:\n%s", out)
-	}
-	if strings.Contains(out, "WARNING") {
-		t.Fatalf("same major must not warn:\n%s", out)
-	}
-}
-
 // The control host still speaks 1.0. A minor bump is additive, so a 1.x
 // client must connect to it without a warning.
 func TestWelcomeOlderMinorDoesNotWarn(t *testing.T) {

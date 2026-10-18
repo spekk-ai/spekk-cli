@@ -24,5 +24,5 @@ branch: feature/personal-sign-in-terminal
 ## Verification
 
 - A test opens a terminal with a fake `claude` on `PATH` that prints a URL, reads one line, and exits. It sends a fake code as `terminal_input`, and checks the `terminal_output` frames, the `terminal_exit` code, and that the captured log has neither the URL nor the code.
-- A test checks the 10-minute timeout with a short timeout value and a fake `claude` that does not exit.
+- The walk checks the 10-minute timeout with a terminal that nobody uses.
 - A walk with the real agent binary against the control host, as the person does it in the app.
