@@ -28,7 +28,7 @@ Cut an experimental build with an `exp-*` tag on the feature branch that holds t
 ## After the tag
 
 1. **Raise the pins.** Both examples in [`ci.md`](ci.md), the pre-commit hook `rev` and `SPEKK_VERSION`, and the same two pins in every downstream project that validates specs in CI. They do not float on purpose, so nothing raises them but a person. Confirm that `spekk validate` exits 0 at the new version against that project's tree before you merge its change, not after.
-2. **Update the deployed sandboxes.** A sandbox runs two things from a release: the `spekk` CLI and the agent binary. Update both together, so a sandbox is not half a release behind. `spekk sandbox deploy <name>` installs the agent binary.
+2. **Update the deployed sandboxes.** A sandbox runs two things from a release: the `spekk` CLI and the agent binary. Update both together, so a sandbox is not half a release behind. `spekk sandbox deploy <name>`, from a CLI of the new release, installs both, and `spekk sandbox status <name>` shows the version of each, with a warning for drift.
 
 ## Known sharp edges
 

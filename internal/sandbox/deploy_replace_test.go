@@ -2,10 +2,13 @@ package sandbox
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -61,7 +64,7 @@ func TestInstallCommandReplacesRunningExecutable(t *testing.T) {
 			}
 			probe := startInstallProbe(t, target)
 			probe()
-			command := replaceInstallTarget(t, installCommand(user, "printf "+serviceReady), target)
+			command := localInstallCommand(t, installCommand(user, sha256Hex(replacementAgent), sha256Hex(replacementCLI), "printf "+serviceReady), target, home)
 			if output, err := exec.Command("bash", "-c", command).CombinedOutput(); err == nil || strings.Contains(string(output), serviceReady) {
 				t.Fatalf("missing upload must stop installation before service commands: %v, output %q", err, output)
 			}
@@ -71,9 +74,7 @@ func TestInstallCommandReplacesRunningExecutable(t *testing.T) {
 			probe()
 			assertNoTemporaryBinaries(t, target)
 
-			if err := os.WriteFile(filepath.Join(home, stagedBinary), []byte("#!/bin/sh\nprintf replacement\n"), 0o600); err != nil {
-				t.Fatal(err)
-			}
+			stageUploads(t, home)
 			if output, err := exec.Command("bash", "-c", command).CombinedOutput(); err != nil || string(output) != serviceReady {
 				t.Fatalf("installation failed: %v, output %q", err, output)
 			}
@@ -96,10 +97,48 @@ func TestInstallCommandReplacesRunningExecutable(t *testing.T) {
 	}
 }
 
-// Keep the generated command intact except for its destination in the test directory.
-func replaceInstallTarget(t *testing.T, command, target string) string {
+// The uploads of the tests, and the sha256 that the release publishes for them.
+const (
+	replacementAgent = "#!/bin/sh\nprintf replacement\n"
+	replacementCLI   = "#!/bin/sh\necho v9.9.9\n"
+)
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+// stageUploads writes both uploads to home, where scp puts them.
+func stageUploads(t *testing.T, home string) {
 	t.Helper()
-	const installedPath = "/opt/spekk/agent-client"
+	for name, content := range map[string]string{stagedBinary: replacementAgent, stagedCLI: replacementCLI} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// localInstallCommand keeps the generated command intact except for the
+// machine paths and the owner: the agent goes to target, the CLI to cli/spekk
+// beside it, the PATH link to bin-spekk beside it, and the CLI belongs to the
+// user that runs the test, whose home is ownerHome.
+func localInstallCommand(t *testing.T, command, target, ownerHome string) string {
+	t.Helper()
+	if _, err := exec.LookPath("sha256sum"); err != nil {
+		t.Skip("the remote installation script needs sha256sum")
+	}
+	me, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(target)
+	replacer := strings.NewReplacer(
+		`installed="/opt/spekk/agent-client"`, `installed="`+target+`"`,
+		`cli="/opt/spekk/cli/spekk"`, `cli="`+filepath.Join(dir, "cli", "spekk")+`"`,
+		`cli_link="/usr/local/bin/spekk"`, `cli_link="`+filepath.Join(dir, "bin-spekk")+`"`,
+		`owner="agent"`, `owner="`+me.Username+`"`,
+		`owner_home=$(getent passwd "$owner" | cut -d: -f6)`, `owner_home="`+ownerHome+`"`,
+	)
 	if strings.Contains(command, "| sudo bash") {
 		parts := strings.SplitN(command, "'", 3)
 		if len(parts) != 3 {
@@ -109,10 +148,10 @@ func replaceInstallTarget(t *testing.T, command, target string) string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		parts[1] = base64.StdEncoding.EncodeToString([]byte(strings.ReplaceAll(string(script), installedPath, target)))
-		command = strings.Join(parts, "'")
+		parts[1] = base64.StdEncoding.EncodeToString([]byte(replacer.Replace(string(script))))
+		return strings.Join(parts, "'")
 	}
-	return strings.ReplaceAll(command, installedPath, target)
+	return replacer.Replace(command)
 }
 
 func startInstallProbe(t *testing.T, target string) func() {
@@ -164,25 +203,72 @@ func assertNoTemporaryBinaries(t *testing.T, target string) {
 }
 
 // A machine an operator provisioned by hand may not carry the install
-// directory. The script creates it before it writes the temporary file. With
-// the two lines in the other order `set -e` aborts at mktemp, and the mkdir
-// downstream of the failure never runs, so no retry heals the machine.
-func TestInstallCommandCreatesTheDestinationDirectory(t *testing.T) {
+// directories. The script creates them before it writes the temporary files.
+// With the two lines in the other order `set -e` aborts at mktemp, and the
+// mkdir downstream of the failure never runs, so no retry heals the machine.
+// The CLI lands beside the agent, linked from the PATH, and an old copy in
+// the owner's ~/.local/bin becomes a link to it.
+func TestInstallCommandInstallsBothIntoMissingDirectories(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the remote installation script requires a Unix shell")
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := os.WriteFile(filepath.Join(home, stagedBinary), []byte("#!/bin/sh\nprintf replacement\n"), 0o600); err != nil {
+	stageUploads(t, home)
+	oldCopy := filepath.Join(home, ".local", "bin", "spekk")
+	if err := os.MkdirAll(filepath.Dir(oldCopy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldCopy, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// A space in the path also proves the script quotes the install path.
 	target := filepath.Join(t.TempDir(), "absent dir", "agent-client")
-	command := replaceInstallTarget(t, installCommand("root", "printf ready"), target)
+	command := localInstallCommand(t, installCommand("root", sha256Hex(replacementAgent), sha256Hex(replacementCLI), "printf ready"), target, home)
 	if output, err := exec.Command("bash", "-c", command).CombinedOutput(); err != nil {
 		t.Fatalf("installation into a missing directory failed: %v, output %q", err, output)
 	}
 	if _, err := os.Stat(target); err != nil {
 		t.Fatalf("the installed executable is missing: %v", err)
+	}
+	cli := filepath.Join(filepath.Dir(target), "cli", "spekk")
+	for _, link := range []string{filepath.Join(filepath.Dir(target), "bin-spekk"), oldCopy} {
+		if out, err := exec.Command(link).Output(); err != nil || string(out) != "v9.9.9\n" {
+			t.Errorf("%s must run the installed CLI %s: %v, output %q", link, cli, err, out)
+		}
+	}
+}
+
+// A file that does not match the release sha256 replaces nothing: not the
+// agent, not the CLI, and the service setup does not run.
+func TestInstallCommandRefusesAWrongSHA256(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the remote installation script requires a Unix shell")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	stageUploads(t, home)
+	target := filepath.Join(t.TempDir(), "agent-client")
+	if err := os.WriteFile(target, []byte("old agent"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := localInstallCommand(t, installCommand("root", sha256Hex(replacementAgent), sha256Hex("another CLI"), "printf ready"), target, home)
+	output, err := exec.Command("bash", "-c", command).CombinedOutput()
+	if err == nil || strings.Contains(string(output), "ready") {
+		t.Fatalf("a wrong sha256 must stop the installation: %v, output %q", err, output)
+	}
+	if want := "spekk: " + stagedCLI + " does not match the release sha256"; !strings.Contains(string(output), want) {
+		t.Errorf("output %q must contain %q", output, want)
+	}
+	if content, _ := os.ReadFile(target); string(content) != "old agent" {
+		t.Errorf("the agent was replaced: %q", content)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(target), "cli")); !os.IsNotExist(err) {
+		t.Errorf("the CLI directory was made: %v", err)
+	}
+	for _, name := range []string{stagedBinary, stagedCLI} {
+		if _, err := os.Stat(filepath.Join(home, name)); !os.IsNotExist(err) {
+			t.Errorf("the upload %s must be removed: %v", name, err)
+		}
 	}
 }

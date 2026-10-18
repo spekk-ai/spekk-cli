@@ -386,7 +386,7 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 	if err != nil {
 		return st.fail(fmt.Errorf("fetching release artifacts: %w", err))
 	}
-	defer func() { os.Remove(artifacts.BinaryPath) }()
+	defer func() { artifacts.cleanup() }()
 	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
 	opts.CloudInit = artifacts.CloudInit
 
