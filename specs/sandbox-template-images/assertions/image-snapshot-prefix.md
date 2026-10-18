@@ -3,7 +3,7 @@ id: image-snapshot-prefix
 parent: sandbox-template-images
 created: 2026-10-18T00:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: machine-mode-image
 branch: feature/sandbox-template-images
 ---

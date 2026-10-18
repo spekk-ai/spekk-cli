@@ -225,7 +225,9 @@ func BuildImage(p Provider, opts ImageBuildOptions) (err error) {
 
 	// A known_hosts file from an earlier builder of this name holds its old
 	// host key, and each probe of the new builder would fail on it.
-	os.Remove(KnownHostsFile(name))
+	if err := os.Remove(KnownHostsFile(name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("removing the old host key of %s: %w", name, err)
+	}
 	createOpts := CreateOptions{Name: name, Size: opts.Size, Project: opts.Project, CloudInit: cloudInitTemplate}
 	if len(opts.Regions) > 0 {
 		createOpts.Region = opts.Regions[0]
@@ -294,8 +296,8 @@ func regionsOrGlobal(img ImageMeta) string {
 }
 
 // destroyBuilder destroys the builder machine, its record, its key pair, and
-// its known_hosts file, and says what it removed. A builder that failed to destroy keeps its
-// record, so `spekk sandbox destroy` can reach it.
+// its known_hosts file, and says what it removed. A builder that failed to
+// destroy keeps its record, so `spekk sandbox destroy` can reach it.
 func destroyBuilder(p Provider, name string, meta *SandboxMeta) {
 	if !namesMachine(meta) {
 		return
@@ -306,11 +308,13 @@ func destroyBuilder(p Provider, name string, meta *SandboxMeta) {
 		return
 	}
 	removeGeneratedKeyPair(meta.SSHKeyPath)
-	os.Remove(KnownHostsFile(name))
+	if err := os.Remove(KnownHostsFile(name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintf(os.Stderr, "Warning: could not remove the host key of builder %s: %s\n", name, err)
+	}
 	if err := RemoveSandbox(name); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not remove the record of builder %s: %s\n", name, err)
 	}
-	fmt.Fprintf(os.Stderr, "Removed builder %s, its record, and its key pair.\n", ref)
+	fmt.Fprintf(os.Stderr, "Removed builder %s, its record, its key pair, and its host key.\n", ref)
 }
 
 // runSetup is the seam the build runs the setup script through.
