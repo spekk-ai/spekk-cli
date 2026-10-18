@@ -19,7 +19,7 @@ var existingMachineFlags = []string{"--ip", "--ssh-key", "--ssh-user"}
 
 // cloudFlags configure a machine spekk creates, so they are meaningless for
 // one it does not.
-var cloudFlags = []string{"--region", "--size", "--vpc", "--project"}
+var cloudFlags = []string{"--region", "--size", "--vpc", "--project", "--image"}
 
 // NamesExistingMachine reports whether the flags name a machine that already
 // exists. The inference and the validation read the same list here, so they
