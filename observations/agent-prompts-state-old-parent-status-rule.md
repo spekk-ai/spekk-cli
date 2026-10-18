@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-10-18T00:00:00Z
+announced: 2026-10-18T01:26:37Z
 affected:
   - specs/coach-agent/coach.prompt.md
   - specs/builder-agent/builder.prompt.md
