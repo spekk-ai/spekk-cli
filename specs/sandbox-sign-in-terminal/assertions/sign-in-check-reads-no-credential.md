@@ -3,7 +3,7 @@ id: sign-in-check-reads-no-credential
 parent: sandbox-sign-in-terminal
 created: 2026-10-18T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/personal-sign-in-terminal
 depends-on: agent-sign-in-terminal
 ---
@@ -14,6 +14,8 @@ depends-on: agent-sign-in-terminal
 
 - `claudeSignedIn` is true when one of the credential variables of `agent-reports-sign-in-required` is set, or when the Claude Code sign-in file (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `$HOME/.claude/.credentials.json`) is a regular file that the agent can open and whose size is more than zero. The agent opens the file and closes it with no read. It never reads the content. This replaces the rule "not empty after the white space is removed" of `agent-reports-sign-in-required`.
 - When a sign-in terminal ends, the agent sends a heartbeat frame (with `claude_signed_in`) before the `terminal_exit` frame, so that the control host knows the new state when the browser hears of the exit.
+
+**Tests:** cmd/sandbox/terminal_test.go, cmd/sandbox/claude_auth_test.go
 
 ## Verification
 

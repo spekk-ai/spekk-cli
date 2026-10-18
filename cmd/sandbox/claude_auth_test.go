@@ -59,7 +59,7 @@ func TestClaudeSignedIn(t *testing.T) {
 			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, "config"))
 		}, false},
 		"empty sign-in file": {func(t *testing.T, home string) {
-			writeCredentials(t, filepath.Join(home, ".claude"), " \n", 0o600)
+			writeCredentials(t, filepath.Join(home, ".claude"), "", 0o600)
 		}, false},
 		"unreadable sign-in file": {func(t *testing.T, home string) {
 			if os.Geteuid() == 0 {

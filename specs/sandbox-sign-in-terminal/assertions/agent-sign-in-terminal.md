@@ -3,7 +3,7 @@ id: agent-sign-in-terminal
 parent: sandbox-sign-in-terminal
 created: 2026-10-18T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/personal-sign-in-terminal
 ---
 
@@ -18,6 +18,8 @@ branch: feature/personal-sign-in-terminal
 - The agent log has one line when a terminal opens (the agent id, the user id, the terminal id) and one when it closes (the same, plus the duration and the exit code). No log line holds `data`.
 - If `claude` is not on the `PATH`, the agent sends a short `terminal_output` that says so and a `terminal_exit` with code `127`.
 - `ProtocolVersion` is `1.3`.
+
+**Tests:** cmd/sandbox/terminal_test.go, cmd/sandbox/claude_auth_test.go
 
 ## Verification
 
