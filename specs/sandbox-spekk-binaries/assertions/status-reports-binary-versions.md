@@ -12,7 +12,7 @@ depends-on: default-release-is-the-operators
 
 ## Success Criteria
 
-- `spekk sandbox status <name>` prints `spekk CLI: <version>` and `Agent client: <version>`, read on the machine from `/opt/spekk/cli/spekk version` and `/opt/spekk/agent-client --version`.
+- `spekk sandbox status <name>` prints `spekk CLI: <version>` and `Agent client: <version>`, read on the machine from `/opt/spekk/cli/spekk version` and `/opt/spekk/agent-client --version`, which run as `agent` (see `root-does-not-trust-agent-paths`).
 - The expected version is the release that a `deploy` with no `--release` installs (see `default-release-is-the-operators`).
 - A line gets ` WARNING: <reason>; update with: spekk sandbox deploy <name>` when the version is `dev` (no release stamp), not read (`missing`), or not the expected version. A version that matches has no warning. When the expected version cannot be found (no network), only `dev` and `missing` warn, and status says that it did not compare.
 - Test: the classification of a match, a different version, `dev`, and a missing version.
