@@ -56,7 +56,9 @@ Either side can update first. An old agent sends no header, and the control host
 
 Version `1.1` is additive. It adds only the `terminal` field to the `result` frame (see [Turn progress](#turn-progress)). No existing frame loses a field or changes its meaning, so a `1.0` side and a `1.1` side work together.
 
-Version `1.2` is additive. It adds only the `claude_signed_in` field to the `heartbeat` frame (see [Claude sign-in state](#claude-sign-in-state)). The `turn_keepalive` frame type is reserved for version `1.3`.
+Version `1.2` is additive. It adds only the `claude_signed_in` field to the `heartbeat` frame (see [Claude sign-in state](#claude-sign-in-state)).
+
+Version `1.3` is additive. It adds the frames of the [sign-in terminal](#sign-in-terminal). The `turn_keepalive` frame type is reserved for version `1.4`.
 
 ## Message protocol
 
@@ -87,6 +89,10 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 | `cancel` | Stop the running Claude process of a session | `agent_session_id` |
 | `heartbeat_ack` | Reply to the agent's heartbeat | none |
 | `error` | Report an error, for example a rejected `conversation_open` | `error`, `detail` |
+| `terminal_open` | Start the Claude Code login in a terminal | `terminal_id`, `cols`, `rows`, `agent_id`, `user_id` |
+| `terminal_input` | Bytes that the person typed | `terminal_id`, `data` (base64) |
+| `terminal_resize` | New size of the terminal | `terminal_id`, `cols`, `rows` |
+| `terminal_close` | End the terminal | `terminal_id` |
 
 #### Outbound (agent to control host)
 
@@ -97,6 +103,8 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 | `error` | Something went wrong | `error`, `detail`, `agent_session_id` |
 | `heartbeat` | Keep-alive, every 30 seconds | `claude_signed_in` |
 | `conversation_open` | Ask for a conversation with a person (from the spool) | `session_id`, `title`, `body`, `severity` |
+| `terminal_output` | Bytes from the terminal | `terminal_id`, `data` (base64) |
+| `terminal_exit` | The terminal ended | `terminal_id`, `exit_code` |
 
 ### Routing
 
@@ -158,14 +166,22 @@ The `terminal` field needs no rollout order, because an absent field means `true
 
 A sandbox that a server launched with no model credential has no way to call Claude until a person signs in to Claude Code on the machine, with Claude Code's own login. Each `heartbeat` frame carries `claude_signed_in`, a JSON boolean, so the control host can show that state before anyone sends a turn:
 
-- `true`: the environment of the agent has `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`, or the sign-in file of Claude Code (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `~/.claude/.credentials.json` of `agent`) is readable by `agent` and is not empty.
+- `true`: the environment of the agent has `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`, or the sign-in file of Claude Code (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `~/.claude/.credentials.json` of `agent`) is a regular file that `agent` can open and is not empty. The agent opens the file and reads none of it.
 - `false`: none of these. The agent refuses each turn with an `error` frame that tells the person to sign in on the sandbox, and does not start `claude`.
 
 The agent reads the state again for each heartbeat and each turn, so a sign-in takes effect with no restart. A control host that does not know the field ignores it.
 
-### `turn_keepalive` (reserved for version 1.3)
+### Sign-in terminal
 
-The agent heartbeat is connection-scoped and says nothing about a turn, so without a turn-scoped signal a long tool call is indistinguishable from a hang. A planned `turn_keepalive` frame will fill that gap. It will carry the `agent_session_id` of the turn, and the agent will send it only while a tool call of that turn is in flight. It comes with version `1.3`.
+The person signs in from the browser, through a terminal that the control host relays (version `1.3`). The control host sends `terminal_open`, and the agent starts `claude auth login`, with the `claude` on its `PATH`, in a pseudo-terminal, as `agent`. No frame names a program: the agent runs that login and nothing else. The bytes go both ways as base64 in `terminal_input` and `terminal_output`.
+
+- One terminal at a time. A second `terminal_open` ends the first.
+- The terminal ends when the login exits, on `terminal_close`, or after 10 minutes. The agent stops the whole process group of the login, sends a `heartbeat` at once, and then sends `terminal_exit`. Input for a terminal that ended goes nowhere.
+- The agent writes no terminal byte to its log or to a file. Its log has one line when a terminal opens and one when it closes, with the agent id, the user id, the terminal id, the duration, and the exit code.
+
+### `turn_keepalive` (reserved for version 1.4)
+
+The agent heartbeat is connection-scoped and says nothing about a turn, so without a turn-scoped signal a long tool call is indistinguishable from a hang. A planned `turn_keepalive` frame will fill that gap. It will carry the `agent_session_id` of the turn, and the agent will send it only while a tool call of that turn is in flight. It comes with version `1.4`.
 
 The control host must accept and attribute `turn_keepalive` before any agent sends it. A control host that does not know a frame type logs it and replies with an `error` frame. This agent does not send `turn_keepalive`.
 
@@ -220,7 +236,7 @@ A control host that works with the agent must provide:
 | **WebSocket endpoint** | Serve `wss://<host>/ws/agent/` and accept the upgrade with the agent's token |
 | **Authentication** | Validate the `Authorization: Bearer <token>` header |
 | **Protocol handshake** | Read the `X-Spekk-Protocol` header, send a `welcome` frame with its own version, and close with code `4004` on a major-version mismatch. A dial with no header is a legacy client |
-| **Inbound frames** | Handle `stream`, `result`, `error`, `heartbeat`, and `conversation_open` from the agent |
+| **Inbound frames** | Handle `stream`, `result`, `error`, `heartbeat`, and `conversation_open` from the agent, and `terminal_output` and `terminal_exit` when it uses the sign-in terminal |
 | **Turn result** | Read `terminal` from the `result` frame. An absent field means `true` |
 | **Outbound frames** | Send `welcome`, `message`, `cancel`, `heartbeat_ack`, and `error` to the agent |
 | **Attachments** | Serve `GET /api/agents/attachments/<id>/download/` with Bearer authentication, when attachments are used |

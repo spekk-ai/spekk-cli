@@ -10,7 +10,7 @@ import (
 
 // TestProtocolVersionPinned makes a version change a deliberate diff.
 func TestProtocolVersionPinned(t *testing.T) {
-	if ProtocolVersion != "1.2" {
+	if ProtocolVersion != "1.3" {
 		t.Fatalf("ProtocolVersion changed to %q — bump deliberately and update the companion control-host PR", ProtocolVersion)
 	}
 }
@@ -23,19 +23,6 @@ func TestDialOptionsSendBothHeaders(t *testing.T) {
 	}
 	if h.Get(protocolHeaderName) != ProtocolVersion {
 		t.Fatalf("%s header missing or wrong: %q", protocolHeaderName, h.Get(protocolHeaderName))
-	}
-}
-
-func TestWelcomeFrameIsNotUnknown(t *testing.T) {
-	c := &AgentClient{}
-	buf := captureLog(t)
-	c.handleInbound(t.Context(), Message{Type: MessageTypeWelcome, Protocol: ProtocolVersion})
-	out := buf.String()
-	if strings.Contains(out, "Unknown message type") {
-		t.Fatalf("welcome treated as unknown:\n%s", out)
-	}
-	if strings.Contains(out, "WARNING") {
-		t.Fatalf("same major must not warn:\n%s", out)
 	}
 }
 

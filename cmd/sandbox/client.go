@@ -23,6 +23,7 @@ type AgentClient struct {
 	cfg   Config
 	pool  *WorkerPool
 	conns *connHolder
+	terms terminals
 
 	// procCtx is the process lifetime, handed to Run by main. Workers get this
 	// context and never the per-connection one: a turn belongs to the process,
@@ -151,7 +152,7 @@ func (c *AgentClient) heartbeat(ctx context.Context, conn *websocket.Conn) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			err := wsjson.Write(ctx, conn, map[string]any{"type": "heartbeat", "claude_signed_in": claudeSignedIn()})
+			err := wsjson.Write(ctx, conn, heartbeatFrame())
 			if err != nil {
 				return
 			}
@@ -189,6 +190,8 @@ func (c *AgentClient) handleInbound(ctx context.Context, msg Message) {
 		handleErrorFrame(msg)
 	case MessageTypeWelcome:
 		c.handleWelcome(msg)
+	case MessageTypeTerminalOpen, MessageTypeTerminalInput, MessageTypeTerminalResize, MessageTypeTerminalClose:
+		c.handleTerminal(msg)
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
 	}
