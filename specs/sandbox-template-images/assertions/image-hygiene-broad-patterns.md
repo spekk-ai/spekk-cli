@@ -25,4 +25,4 @@ branch: feature/sandbox-template-images
 
 ## Verification
 
-- `TestBuildImage` has one row for each of these: an SSH private key, a Claude Code sign-in of root, a credential file (`.netrc`) of a user, a token in a remote URL of a clone in `/opt`, and a `.python_history` that the clean step removes. Each row fails on the code before this assertion.
+- `TestBuildImage` has one row for each of these: an SSH private key, a Claude Code sign-in of root, a credential file (`/etc/spekk/agent.env`), a token in a remote URL of a clone in `/opt`, and a `.python_history` that the clean step removes. There is no `.netrc` row: the remote URL row tests the same rule for a credential in a file. Each row fails on the code before this assertion.

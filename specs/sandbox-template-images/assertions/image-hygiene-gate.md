@@ -25,6 +25,7 @@ branch: feature/sandbox-template-images
   - a line that sets a variable whose name has `TOKEN`, `SECRET`, `API_KEY`, `PASSWORD`, or `ACCESS_KEY` to a value, in `/etc/environment`, `/etc/profile.d/`, or the shell startup files of root or of a user
   - a shell history file, an SSH host key, a `/etc/machine-id` that is not empty, an authorized keys file, the marker, `/var/lib/cloud/instance`, or a cloud-init log in `/var/log`
 - When the check fails, no image is made, and the builder is destroyed.
+- The check is best effort. It fails the build on known secret shapes and known secret locations, but it cannot find every secret. The author of the setup script stays responsible for what the image contains.
 - Images are private to the account: a DigitalOcean snapshot and a GCP custom image are private by default, and the build does not share them.
 
 ## Verification
