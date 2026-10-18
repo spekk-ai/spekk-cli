@@ -16,11 +16,11 @@ A personal sandbox (`model_credential` of kind `none`) has no model credential u
 
 ## Success Criteria
 
-- The agent client has a model credential when its environment has a non-empty `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`, or when the Claude Code sign-in file (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `$HOME/.claude/.credentials.json`) exists, is readable by the agent, and is not empty after the white space is removed. The client reads this again for each heartbeat and each turn, so a sign-in takes effect with no restart.
+- The agent client has a model credential when its environment has a non-empty `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`, or when the Claude Code sign-in file (`$CLAUDE_CONFIG_DIR/.credentials.json`, else `$HOME/.claude/.credentials.json`) is a regular file that the agent can open and whose size is more than zero. The agent does not read its content (`sign-in-check-reads-no-credential`). The client reads this again for each heartbeat and each turn, so a sign-in takes effect with no restart.
 - Each heartbeat frame has a field `claude_signed_in`, a JSON boolean: `true` when the client has a model credential, else `false`. The server shows "Sign in to Claude" while it is `false`.
 - A turn on a client with no model credential does not start `claude`. The client answers with an error frame for that turn: "Claude Code is not signed in on this sandbox. Sign in on the sandbox with `claude` as the agent user, then send the message again."
 - The field is additive, so `ProtocolVersion` goes from `1.1` to `1.2`. A control host that does not know the field ignores it.
-- The CLI does not parse a readable, non-empty sign-in file. When it is not valid, Claude Code gives its own error for it, which is better than a guess.
+- The CLI does not read or parse the sign-in file. When it is not valid, Claude Code gives its own error for it, which is better than a guess.
 
 ## Verification
 
