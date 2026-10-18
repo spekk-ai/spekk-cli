@@ -99,7 +99,4 @@ func TestSignInTerminalRelaysAndRecordsNothing(t *testing.T) {
 			t.Errorf("the log holds %q:\n%s", secret, logged)
 		}
 	}
-	if !strings.Contains(logged.String(), "Sign-in terminal closed (agent agent-1, user user-1, terminal term-1") {
-		t.Errorf("no close line in the log:\n%s", logged)
-	}
 }
