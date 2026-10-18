@@ -481,10 +481,10 @@ Use proper format:
 - Never write a `locked-by` value. A lock names a live builder session, and you have no session to name. `not_started` needs no lock, which is why it is the value above.
 
 **Computed parent status (for reference - the parser handles this):**
-- If ANY child assertion is `failed` → parent becomes `failed`
+- If ANY active child assertion is `failed` → parent becomes `failed`
 - If ALL active children are `done` → parent becomes `done`
-- If any child is incomplete → parent becomes `in_progress`
-- If no active children exist → parent becomes `not_started`
+- If at least one active child is `in_progress` or `done` (and not all are `done`) → parent becomes `in_progress`
+- If all active children are `not_started`, or no active children exist → parent becomes `not_started`
 - Draft assertions are excluded from computation
 
 ### 7. Commit Changes
