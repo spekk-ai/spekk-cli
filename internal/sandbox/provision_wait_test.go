@@ -45,16 +45,23 @@ func TestParseProvisionTimeout(t *testing.T) {
 
 // The probe is one SSH round trip whose output the wait reads back. A failed
 // connection returns nothing at all, which must read as "nothing known yet"
-// rather than as any decision.
+// rather than as any decision. The errors of cloud-init come as a YAML list,
+// inline or one item on each line.
 func TestParseProvisionProbe(t *testing.T) {
-	got := parseProvisionProbe("marker=no\nstatus=running\nlog=Get:12 https://deb.nodesource.com/node_22.x nodistro InRelease\n")
-	want := provisionProbe{cloudInit: "running", lastLog: "Get:12 https://deb.nodesource.com/node_22.x nodistro InRelease"}
+	got := parseProvisionProbe("marker=no\nlog=Get:12 https://deb.nodesource.com/node_22.x nodistro InRelease\ncloud-init: status: running\ncloud-init: errors: []\n")
+	want := provisionProbe{cloudInit: "running", status: "status: running\nerrors: []", lastLog: "Get:12 https://deb.nodesource.com/node_22.x nodistro InRelease"}
 	if got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 
-	if got := parseProvisionProbe("marker=yes\nstatus=done\nlog=\n"); !got.marker {
+	if got := parseProvisionProbe("marker=yes\nlog=\ncloud-init: status: done\n"); !got.marker {
 		t.Errorf("marker=yes should read as provisioned: %+v", got)
+	}
+
+	for _, errs := range []string{"cloud-init: errors: ['scripts_user failed']\n", "cloud-init: errors:\ncloud-init: \t- scripts_user failed\ncloud-init: recoverable_errors: {}\n"} {
+		if got := parseProvisionProbe("marker=no\ncloud-init: status: done\n" + errs); !got.hasErrors {
+			t.Errorf("%q should read as errors: %+v", errs, got)
+		}
 	}
 
 	if got := parseProvisionProbe(""); got != (provisionProbe{}) {
@@ -62,14 +69,15 @@ func TestParseProvisionProbe(t *testing.T) {
 	}
 }
 
-// Waiting out the clock tells the operator nothing once cloud-init has
-// reported an error, or has finished without the marker it writes last.
-func TestWaitForMarkerStopsEarlyWhenCloudInitWillNotFinish(t *testing.T) {
+// Only a real cloud-init failure stops the wait on the first probe, and the
+// message carries the status and the last log line. "done" without the
+// marker gets the grace period, then stops with its own message.
+func TestWaitForMarkerStopsOnCloudInitFailure(t *testing.T) {
 	quietWait(t)
 
 	for name, probe := range map[string]provisionProbe{
-		"error": {cloudInit: "error", lastLog: "E: Unable to locate package nodejs"},
-		"done":  {cloudInit: "done", lastLog: "Cloud-init v. 24.4 finished"},
+		"error":  {cloudInit: "error", status: "status: error", lastLog: "E: Unable to locate package nodejs"},
+		"errors": {cloudInit: "done", hasErrors: true, status: "status: done\nerrors: [x]", lastLog: "Cloud-init v. 24.4 finished"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			calls := 0
@@ -81,16 +89,30 @@ func TestWaitForMarkerStopsEarlyWhenCloudInitWillNotFinish(t *testing.T) {
 				t.Fatal("expected the wait to stop")
 			}
 			if calls != 1 {
-				t.Errorf("probed %d times; cloud-init %s should stop the wait on the first probe", calls, name)
+				t.Errorf("probed %d times; a cloud-init failure should stop the wait on the first probe", calls)
 			}
-			if !strings.Contains(err.Error(), provisionedMarker) {
-				t.Errorf("error %q should say the marker was not written", err)
-			}
-			if !strings.Contains(err.Error(), probe.lastLog) {
-				t.Errorf("error %q should carry the last log line so the operator sees what failed", err)
+			for _, want := range []string{provisionedMarker, probe.status, probe.lastLog} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q should contain %q", err, want)
+				}
 			}
 		})
 	}
+
+	t.Run("done without the marker after the grace period", func(t *testing.T) {
+		markerGrace = 20 * time.Millisecond
+		calls := 0
+		err := waitForMarker(time.Now().Add(time.Hour), func() provisionProbe {
+			calls++
+			return provisionProbe{cloudInit: "done", status: "status: done", lastLog: "finished"}
+		})
+		if err == nil || !strings.Contains(err.Error(), "finished without writing") || !strings.Contains(err.Error(), "status: done") {
+			t.Fatalf("error = %v, want the finished-without-marker message with the status", err)
+		}
+		if calls < 2 {
+			t.Errorf("probed %d times; done without the marker should poll through the grace period", calls)
+		}
+	})
 }
 
 // A marker that appears, or a deadline that passes, are the two ways the
@@ -174,7 +196,7 @@ func TestCreatePassesTheProvisionTimeoutToTheWait(t *testing.T) {
 // quietWait removes the real delays from the wait loop for one test.
 func quietWait(t *testing.T) {
 	t.Helper()
-	origPoll, origReport := provisionPollInterval, provisionReportInterval
+	origPoll, origReport, origGrace := provisionPollInterval, provisionReportInterval, markerGrace
 	provisionPollInterval = 0
-	t.Cleanup(func() { provisionPollInterval, provisionReportInterval = origPoll, origReport })
+	t.Cleanup(func() { provisionPollInterval, provisionReportInterval, markerGrace = origPoll, origReport, origGrace })
 }
