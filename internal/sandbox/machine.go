@@ -391,7 +391,7 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 	if err != nil {
 		return st.fail(fmt.Errorf("fetching release artifacts: %w", err))
 	}
-	defer func() { os.Remove(artifacts.BinaryPath) }()
+	defer func() { artifacts.cleanup() }()
 	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
 	opts.CloudInit = artifacts.CloudInit
 
@@ -484,7 +484,7 @@ func equipMachineSandbox(meta *SandboxMeta, name, agentToken string, in *machine
 		return &stageError{"cloning " + in.repository, fmt.Errorf("%w\n%s", err, strings.TrimSpace(out))}
 	}
 
-	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
+	fmt.Fprintln(os.Stderr, "Deploying the agent and the spekk CLI...")
 	if err := deployAgent(meta.IP, meta.SSHKeyPath, name, user, artifacts); err != nil {
 		return &stageError{"deploying agent", err}
 	}

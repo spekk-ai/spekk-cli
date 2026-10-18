@@ -764,7 +764,7 @@ spekk sandbox create --name my-sandbox --image base
 
 The cloud flags and the existing-machine flags exclude each other. For the `gcp` defaults and what spekk creates in the project, see [A Sandbox on Google Cloud](advanced/sandbox-gcp.md). `create` refuses a name that is already recorded: destroy the old sandbox first.
 
-**A DigitalOcean sandbox.** `create` checks that the environment variables for the auth mode are set, generates an SSH key pair under spekk's config directory, creates the droplet with the cloud-init template that ships in the CLI, and records it. The template installs Claude Code as `agent` with the native installer, from the `stable` release. A `gcp` sandbox follows the same steps on a Compute Engine VM. It then waits for SSH and for cloud-init to write `/opt/spekk/.provisioned`. While it waits, it prints a progress line at most once a minute with the time waited and the last line of `/var/log/cloud-init-output.log`. When `cloud-init status --long` reports `error`, or a list of errors that is not empty, the wait stops at once and prints that status. When cloud-init reports `done` without the marker, the wait polls for 30 more seconds, because the last `runcmd` step can write the marker just after cloud-init reports `done`. When the marker appears, `create` injects the credentials, configures git for the agent, downloads the agent binary for the machine's CPU architecture from the latest spekk release and deploys it, marks the sandbox `active`, and prints the result.
+**A DigitalOcean sandbox.** `create` checks that the environment variables for the auth mode are set, generates an SSH key pair under spekk's config directory, creates the droplet with the cloud-init template that ships in the CLI, and records it. The template installs Claude Code as `agent` with the native installer, from the `stable` release. A `gcp` sandbox follows the same steps on a Compute Engine VM. It then waits for SSH and for cloud-init to write `/opt/spekk/.provisioned`. While it waits, it prints a progress line at most once a minute with the time waited and the last line of `/var/log/cloud-init-output.log`. When `cloud-init status --long` reports `error`, or a list of errors that is not empty, the wait stops at once and prints that status. When cloud-init reports `done` without the marker, the wait polls for 30 more seconds, because the last `runcmd` step can write the marker just after cloud-init reports `done`. When the marker appears, `create` injects the credentials, configures git for the agent, downloads the agent binary and the spekk CLI for the machine's CPU architecture from the release of this spekk (see [`deploy`](#spekk-sandbox-deploy-name)) and deploys them, marks the sandbox `active`, and prints the result.
 
 **Registration.** With `SPEKK_API_TOKEN` set, `create` registers the agent on the control host (`POST /api/agents/`) after it fetches the release artifacts and before it asks the provider for a machine. A refused registration costs nothing. The token that the control host returns is the `SPEKK_AGENT_TOKEN` that `create` writes to the machine, and the record stores the agent id. When a later step fails, or when you press Ctrl-C (`SIGINT`) or the process gets `SIGTERM`, `create` revokes the agent again and says so. If that revoke also fails, the record keeps the agent id, so `destroy` can revoke it. On success, `create` prints the agent id and not the token. Without `SPEKK_API_TOKEN`, `create` makes the token itself, prints it to register by hand, and tells you how to run `spekk sandbox register` later. When you belong to more than one organization and give no `--organization`, the control host refuses the registration, and the error tells you to pass `--organization <id>`. The id is in the `organization` field of an agent you already have (`GET /api/agents/` on the control host), or an admin of the organization can give it to you.
 
@@ -783,7 +783,7 @@ It installs the `agent` user, Docker, the Claude Code CLI (the native binary fro
 
 The agent owns `/opt/spekk/workspace`, so on a machine you also use interactively your login user cannot edit what the agent writes. Pass `SPEKK_SHARE_USER=<login>` (e.g. `sudo SPEKK_SHARE_USER=pi bash prepare-machine.sh`) to grant that user read/write on the workspace with ACLs. ACLs, not group ownership: `deploy` re-runs `chown -R agent:agent /opt/spekk` on every deploy, which preserves ACLs but would wipe a group change, and the default ACL also covers the files the agent creates later.
 
-The agent binary spekk deploys matches the machine's CPU architecture, so an arm64 host (a Raspberry Pi, an arm64 droplet) is served an arm64 build. spekk pulls that build from the latest release by default; a release only carries the architectures it published. To use a build that only exists in a prerelease, pin it with `--release <tag>` (e.g. `--release exp-arm64`).
+The agent binary spekk deploys matches the machine's CPU architecture, so an arm64 host (a Raspberry Pi, an arm64 droplet) is served an arm64 build. spekk pulls that build from the release of this spekk by default (the latest release for a dev build); a release only carries the architectures it published. To use a build that only exists in a prerelease, pin it with `--release <tag>` (e.g. `--release exp-arm64`).
 
 **Setup recipes.** Each recipe pairs a provider with an auth mode. Export the variables the mode needs first ([Sandbox provisioning](configuration.md#sandbox-provisioning) lists them all), then run one command.
 
@@ -881,13 +881,22 @@ spekk sandbox list --all-hosts           # Also the labeled sandboxes that other
 
 ### `spekk sandbox status <name>`
 
-Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and two SSH checks: the provisioned marker, and the `spekk-agent` service.
+Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and four SSH checks: the provisioned marker, the `spekk-agent` service, and the version of the spekk CLI and of the agent binary on the machine. The two version commands run as `agent`, which owns both binaries, and not as the login user.
 
 ```bash
 spekk sandbox status my-sandbox
 ```
 
 When the cloud API cannot be reached, or the provider cannot be built because its token is missing, `status` prints a warning and shows the stored status marked `(stored)`. For a machine spekk did not create there is no live state, and the stored status is shown with no warning.
+
+A version line gets `WARNING:` and the command that fixes it when the version is not the release that `spekk sandbox deploy <name>` installs (the release of this spekk, or the latest release for a dev build), when it is `dev` (a binary with no release stamp), or when it is `missing`. For example:
+
+```
+spekk CLI: v1.32.0  WARNING: not v1.38.1, the release of this spekk; update with: spekk sandbox deploy my-sandbox
+Agent client: v1.38.1
+```
+
+Nothing updates a sandbox on its own. A sandbox runs real work, so the update is the one command, `deploy`.
 
 ### `spekk sandbox ssh <name> [ssh-flags...]`
 
@@ -926,13 +935,18 @@ The local SSH key pair is deleted only when spekk generated it. The test is wher
 
 ### `spekk sandbox deploy <name>`
 
-Download the agent binary from the latest spekk release and install it on a sandbox.
+Download the agent binary and the spekk CLI of one release and install them on a sandbox.
 
 ```bash
 spekk sandbox deploy my-sandbox
+spekk sandbox deploy my-sandbox --release v1.38.1
 ```
 
-It copies the binary, writes the `spekk-agent` systemd unit, and restarts the service. Every login stages the upload in its home directory, then installs it beside the target and renames it into place, so a deploy replaces an agent that is running.
+Without `--release`, a CLI with the version `vX.Y.Z` installs the release `vX.Y.Z`, so the sandbox matches the CLI that manages it. Any other build (`dev`) installs the latest release, and says so. `create` and `provision` pick the release the same way.
+
+Before it downloads, `deploy` reads the SHA-256 that GitHub publishes for each release asset (`digest` in `GET /repos/spekk-ai/spekk-cli/releases/tags/<tag>`, an anonymous API call). An asset with no digest stops the deploy. It copies both files, and on the machine `sha256sum -c` checks each one before anything is replaced: a file that does not match stops the deploy with `spekk: <file> does not match the release sha256`, and the installed binaries and the running service stay as they were.
+
+The agent goes to `/opt/spekk/agent-client`. The CLI goes to `/opt/spekk/cli/spekk`, owned by `agent`, so `spekk update` as `agent` can replace it, and `/usr/local/bin/spekk` links to it. When `~agent/.local/bin/spekk` is there (an earlier install put a copy there), it becomes a link to the same file. `agent` owns `/opt/spekk` and its home, so `deploy` does not follow a link there: a link at `/opt/spekk/cli` is replaced with a directory, and when `~agent/.local` or `~agent/.local/bin` is a link, `deploy` does not change `spekk` in it and says so. Then `deploy` writes the `spekk-agent` systemd unit and restarts the service. Every login stages the uploads in its home directory, then installs each beside its target and renames it into place, so a deploy replaces an agent that is running.
 
 Before the restart, it reads the version of the `claude` that the service runs, with the service's user and `agent.env`. When the version is older than the minimum (`MinVersion` in `internal/claudecode`), or cannot be read, it installs the `stable` release as `agent` with the native installer, and reads the version again. When the version is still older, the deploy fails and does not restart the agent, because the new agent refuses every turn on an older Claude Code. When the version still cannot be read, the deploy prints a warning and continues. A `claude` process that runs keeps its own binary, so this step stops no turn. `create` and `provision` run the same step when they deploy the agent.
 

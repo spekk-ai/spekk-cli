@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/spekk-ai/spekk-cli/internal/config"
+	"github.com/spekk-ai/spekk-cli/internal/version"
 )
 
 var sandboxNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
@@ -100,12 +101,31 @@ type ProvisionOptions struct {
 }
 
 // releaseTag is the release the artifacts come from: the tag the operator
-// pinned with --release, or the latest published release when they did not.
+// pinned with --release, else the release of this CLI, so the operator and
+// the sandbox match. A build that is not a release gets the latest release.
 func releaseTag(pinned string) string {
-	if pinned == "" {
-		return "latest"
+	if pinned != "" {
+		return pinned
 	}
-	return pinned
+	if releaseVersionRe.MatchString(version.Version) {
+		return version.Version
+	}
+	return "latest"
+}
+
+// fetchRelease fetches the artifacts of the release that releaseTag picks,
+// and says so when that is the latest release and not the one of this CLI.
+func fetchRelease(pinned string) (*releaseArtifacts, error) {
+	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
+	tag := releaseTag(pinned)
+	artifacts, err := fetchArtifacts(tag)
+	if err != nil {
+		return nil, fmt.Errorf("fetching release artifacts: %w", err)
+	}
+	if tag == "latest" {
+		fmt.Fprintf(os.Stderr, "This spekk is %q, not a release, so the sandbox gets the latest release, %s.\n", version.Version, artifacts.Version)
+	}
+	return artifacts, nil
 }
 
 // checkRequiredEnv reports every variable the auth mode needs that is not
@@ -144,13 +164,12 @@ func Create(p Provider, opts CreateOptions) (err error) {
 	}
 
 	// Fetch release artifacts before creating billable resources.
-	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchArtifacts(releaseTag(opts.Release))
+	artifacts, err := fetchRelease(opts.Release)
 	if err != nil {
-		return fmt.Errorf("fetching release artifacts: %w", err)
+		return err
 	}
-	// BinaryPath is set later (arch is not known yet), so defer over it.
-	defer func() { os.Remove(artifacts.BinaryPath) }()
+	// The binaries are downloaded later (arch is not known yet), so defer over them.
+	defer func() { artifacts.cleanup() }()
 	fmt.Fprintf(os.Stderr, "Using sandbox release %s\n", artifacts.Version)
 
 	opts.CloudInit = artifacts.CloudInit
@@ -304,7 +323,7 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 		return &stageError{"configuring git credentials", err}
 	}
 
-	fmt.Fprintln(os.Stderr, "Deploying agent binary...")
+	fmt.Fprintln(os.Stderr, "Deploying the agent and the spekk CLI...")
 	if err := deployAgent(meta.IP, meta.SSHKeyPath, name, user, artifacts); err != nil {
 		return &stageError{"deploying agent", err}
 	}
@@ -322,7 +341,7 @@ func fetchAgentBinary(meta *SandboxMeta, name string, artifacts *releaseArtifact
 	if err != nil {
 		return err
 	}
-	return artifacts.downloadAgentBinary(arch)
+	return artifacts.downloadBinaries(arch)
 }
 
 // detectArch reads `uname -m` from stdout only. ssh writes its own warnings
@@ -435,13 +454,12 @@ func Provision(name string, opts ProvisionOptions) error {
 		return fmt.Errorf("checking the machine: %w", err)
 	}
 
-	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchArtifacts(releaseTag(opts.Release))
+	artifacts, err := fetchRelease(opts.Release)
 	if err != nil {
-		return fmt.Errorf("fetching release artifacts: %w", err)
+		return err
 	}
-	// BinaryPath is set later (arch is not known yet), so defer over it.
-	defer func() { os.Remove(artifacts.BinaryPath) }()
+	// The binaries are downloaded later (arch is not known yet), so defer over them.
+	defer func() { artifacts.cleanup() }()
 
 	// A registered sandbox keeps its agent: a new token would disconnect
 	// it, and a new agent would lose its schedules and its history. Only a
@@ -607,7 +625,67 @@ func Status(p Provider, name string) error {
 	agentStatus := sshCheck(sandbox, name, "systemctl is-active spekk-agent 2>/dev/null || echo unknown")
 	fmt.Printf("Agent service: %s\n", agentStatus)
 
+	printBinaryVersions(sandbox, name)
 	return nil
+}
+
+// versionCommand prints the version of a binary alone, or "missing" when
+// the binary is not there or prints no version. An old agent-client prints
+// "version: dev". The binary runs as agent, which owns it and can replace
+// it, so the login user (root, or a user with sudo) never runs it.
+func versionCommand(user, run, filter string) string {
+	asAgent := "sudo -n -u agent "
+	if user == "root" {
+		asAgent = "runuser -u agent -- "
+	}
+	return asAgent + run + " 2>/dev/null" + filter + " | grep . || echo missing"
+}
+
+// printBinaryVersions prints the version of each spekk binary on the
+// machine, with a warning when it is not the release that a deploy with no
+// --release installs.
+func printBinaryVersions(sandbox *SandboxMeta, name string) {
+	want := releaseTag("")
+	wantName := want + ", the release of this spekk"
+	if want == "latest" {
+		latest, err := resolveReleaseTag(want)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: versions not compared with the latest release: %s\n", err)
+			want, wantName = "", ""
+		} else {
+			want, wantName = latest, latest+", the latest release"
+		}
+	}
+	user := sshUser(sandbox)
+	for _, b := range []struct{ label, command string }{
+		{"spekk CLI", versionCommand(user, "/opt/spekk/cli/spekk version", "")},
+		{"Agent client", versionCommand(user, "/opt/spekk/agent-client --version", ` | sed -n 's/^version: //p'`)},
+	} {
+		got := sshCheck(sandbox, name, b.command)
+		line := fmt.Sprintf("%s: %s", b.label, got)
+		if reason := versionDrift(got, want, wantName); reason != "" {
+			line += fmt.Sprintf("  WARNING: %s; update with: spekk sandbox deploy %s", reason, name)
+		}
+		fmt.Println(line)
+	}
+}
+
+// versionDrift is why a binary version read on a machine needs a deploy,
+// or "" when it does not. want is the expected release, and wantName says
+// what it is; an empty want compares nothing. "unknown" is no SSH answer,
+// which the other checks of status already show.
+func versionDrift(got, want, wantName string) string {
+	switch {
+	case got == "unknown":
+		return ""
+	case got == "missing":
+		return "not installed, or no version"
+	case got == "dev":
+		return "a dev build, with no release stamp"
+	case want != "" && got != want:
+		return "not " + wantName
+	}
+	return ""
 }
 
 // --- SSH ---
@@ -792,8 +870,9 @@ func machineRef(meta *SandboxMeta) string {
 
 // --- Deploy ---
 
-// Deploy downloads and deploys the agent binary to a sandbox. release pins the
-// spekk release to pull from; empty means the latest published release.
+// Deploy downloads and deploys the agent binary and the spekk CLI to a
+// sandbox. release pins the spekk release to pull from; empty means the one
+// releaseTag picks.
 func Deploy(name, release string) error {
 	sandbox, err := GetSandbox(name)
 	if err != nil {
@@ -804,13 +883,12 @@ func Deploy(name, release string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Deploying agent to %s...\n", sandbox.IP)
-	fmt.Fprintln(os.Stderr, "Fetching sandbox release artifacts...")
-	artifacts, err := fetchArtifacts(releaseTag(release))
+	artifacts, err := fetchRelease(release)
 	if err != nil {
-		return fmt.Errorf("fetching release artifacts: %w", err)
+		return err
 	}
-	// BinaryPath is set later (arch is not known yet), so defer over it.
-	defer func() { os.Remove(artifacts.BinaryPath) }()
+	// The binaries are downloaded later (arch is not known yet), so defer over them.
+	defer func() { artifacts.cleanup() }()
 
 	if err := fetchAgentBinary(sandbox, name, artifacts); err != nil {
 		return fmt.Errorf("fetching agent binary: %w", err)
@@ -819,7 +897,7 @@ func Deploy(name, release string) error {
 		return fmt.Errorf("deploy failed: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Agent %s deployed to %q.\n", artifacts.Version, name)
+	fmt.Fprintf(os.Stderr, "Agent and spekk CLI %s deployed to %q.\n", artifacts.Version, name)
 	return nil
 }
 
@@ -845,9 +923,10 @@ StandardError=append:/var/log/spekk/agent.log
 WantedBy=multi-user.target
 `
 
-// deployAgent copies the agent binary to /opt/spekk/agent-client, upgrades
-// Claude Code when it is older than the minimum, installs the systemd unit,
-// and (re)starts the service. Shared by Create and Deploy.
+// deployAgent copies the agent binary to /opt/spekk/agent-client and the
+// spekk CLI to /opt/spekk/cli/spekk, upgrades Claude Code when it is older
+// than the minimum, installs the systemd unit, and (re)starts the service.
+// Shared by Create and Deploy.
 func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) error {
 	// Upload into the login user's home so SCP cannot overwrite the running executable.
 	scp := sshHostKeyOpts(name)
@@ -855,7 +934,7 @@ func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) er
 	if keyPath != "" {
 		scp = append(scp, "-i", keyPath)
 	}
-	scp = append(scp, artifacts.BinaryPath, scpTarget(user, ip))
+	scp = append(scp, artifacts.BinaryPath, artifacts.CLIPath, scpTarget(user, ip))
 	if out, err := scpExec(scp); err != nil {
 		return fmt.Errorf("copying binary: %s\n%s", err, string(out))
 	}
@@ -880,14 +959,25 @@ systemctl daemon-reload
 systemctl enable spekk-agent
 systemctl restart spekk-agent`, spekkAgentUnit)
 
-	if out, err := runSSHCombined(ip, keyPath, name, user, installCommand(user, script)); err != nil {
+	out, err := runSSHCombined(ip, keyPath, name, user, installCommand(user, artifacts.AgentSHA256, artifacts.CLISHA256, script))
+	if err != nil {
 		return fmt.Errorf("installing service: %s\n%s", err, out)
+	}
+	// The install script says "spekk: ..." for a step that it skipped.
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "spekk: ") {
+			fmt.Fprintln(os.Stderr, line)
+		}
 	}
 	return nil
 }
 
-// stagedBinary is the upload path relative to the SSH login user's home.
-const stagedBinary = "agent-client.staged"
+// stagedBinary and stagedCLI are the upload paths relative to the SSH login
+// user's home.
+const (
+	stagedBinary = "agent-client.staged"
+	stagedCLI    = "spekk.staged"
+)
 
 // sshExec runs an ssh command, with stdin as its standard input when it is
 // not empty. It is a variable so a test can read what the privileged steps
@@ -919,27 +1009,57 @@ func privilegedScript(user, script string, shellArgs ...string) string {
 	return sudoWrap(script, shellArgs...)
 }
 
-// scpTarget stages each upload in the SSH login user's home.
+// scpTarget stages each upload in the SSH login user's home. The uploads
+// keep their file names, which are the staged names.
 func scpTarget(user, ip string) string {
-	return fmt.Sprintf("%s@%s:%s", user, ip, stagedBinary)
+	return fmt.Sprintf("%s@%s:", user, ip)
 }
 
-// installCommand replaces the executable before it runs the service setup script.
-func installCommand(user, script string) string {
+// installCommand checks the uploads against the release sha256, replaces
+// the agent and the CLI, and then runs the service setup script.
+func installCommand(user, agentSHA256, cliSHA256, script string) string {
+	// The check comes before any change, so a bad file replaces nothing.
 	// Prepare on the destination filesystem so the final rename is atomic.
 	// The directory comes first: a machine an operator provisioned by hand may
-	// not carry it, and every later step writes inside it.
+	// not carry it, and every later step writes inside it. The CLI belongs to
+	// agent, so `spekk update` as agent can replace it. A copy in agent's
+	// ~/.local/bin, which an earlier install made, becomes a link to it, so
+	// what calls that path gets this release too. agent owns /opt/spekk and
+	// its home, so root does not follow a link that agent can put there.
 	install := fmt.Sprintf(`set -e
 installed="/opt/spekk/agent-client"
-mkdir -p "$(dirname "$installed")"
+cli="/opt/spekk/cli/spekk"
+cli_dir=$(dirname "$cli")
+cli_link="/usr/local/bin/spekk"
+owner="agent"
+group=$(id -gn "$owner")
+owner_home=$(getent passwd "$owner" | cut -d: -f6)
+agent_upload="$1"
+cli_upload="$2"
+trap 'rm -f "$agent_upload" "$cli_upload" ${next:+"$next"} ${next_cli:+"$next_cli"}' EXIT
+check() { echo "$2  $1" | sha256sum -c --status || { echo "spekk: $(basename "$1") does not match the release sha256" >&2; exit 1; }; }
+check "$agent_upload" '%s'
+check "$cli_upload" '%s'
+if [ -L "$cli_dir" ]; then rm -f "$cli_dir"; fi
+mkdir -p "$(dirname "$installed")" "$cli_dir"
 next=$(mktemp "$installed.XXXXXX")
-trap 'rm -f "$next"' EXIT
-install -m 755 "$1" "$next"
+install -m 755 "$agent_upload" "$next"
+next_cli=$(mktemp "$cli.XXXXXX")
+install -m 755 -o "$owner" -g "$group" "$cli_upload" "$next_cli"
 mv -f "$next" "$installed"
-rm -f "$1"
-%s`, script)
-	// Resolve the upload path before sudo can change HOME or the working directory.
-	return privilegedScript(user, install, fmt.Sprintf(`"$HOME/%s"`, stagedBinary))
+mv -f "$next_cli" "$cli"
+chown -h "$owner:$group" "$cli_dir"
+ln -sf "$cli" "$cli_link"
+if [ -n "$owner_home" ] && { [ -e "$owner_home/.local/bin/spekk" ] || [ -L "$owner_home/.local/bin/spekk" ]; }; then
+  if [ -L "$owner_home/.local" ] || [ -L "$owner_home/.local/bin" ]; then
+    echo "spekk: skipped $owner_home/.local/bin/spekk: a directory in that path is a link"
+  else
+    ln -sfn "$cli" "$owner_home/.local/bin/spekk"
+  fi
+fi
+%s`, agentSHA256, cliSHA256, script)
+	// Resolve the upload paths before sudo can change HOME or the working directory.
+	return privilegedScript(user, install, fmt.Sprintf(`"$HOME/%s"`, stagedBinary), fmt.Sprintf(`"$HOME/%s"`, stagedCLI))
 }
 
 // sudoWrap base64-encodes a script and pipes it through `sudo bash`, running

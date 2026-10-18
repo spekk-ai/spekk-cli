@@ -1,11 +1,15 @@
 package sandbox
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -24,6 +28,11 @@ func sandboxAssetName(arch string) string {
 	return "sandbox-linux-" + arch
 }
 
+// cliAssetName is the spekk CLI published for a given GOARCH of the machine.
+func cliAssetName(arch string) string {
+	return "spekk-linux-" + arch
+}
+
 // githubHTTPClient downloads release assets. spekk-cli is a public repo, so we
 // fetch from the anonymous release CDN (github.com/<repo>/releases/download/...)
 // rather than the api.github.com asset endpoint: no token, and no exposure to
@@ -34,11 +43,28 @@ var githubHTTPClient = &http.Client{Timeout: 60 * time.Second}
 
 // releaseArtifacts are the files needed to provision and deploy a sandbox.
 // CloudInit stays in memory because it is sent straight to the DO API as
-// droplet user-data; only the binary is written to disk so scp can copy it.
+// droplet user-data; only the binaries are written to disk so scp can copy
+// them.
 type releaseArtifacts struct {
-	Version    string // concrete tag the binary is pulled from, e.g. "v1.30.0"
-	CloudInit  []byte
-	BinaryPath string // temp file; set by downloadAgentBinary, caller removes when done
+	Version   string // concrete tag the binaries are pulled from, e.g. "v1.30.0"
+	CloudInit []byte
+	// BinaryPath (the agent) and CLIPath (the spekk CLI) are set by
+	// downloadBinaries, in a temp directory that cleanup removes. Each
+	// file has its staged name, so one scp puts both in the login home.
+	BinaryPath string
+	CLIPath    string
+	dir        string
+	// AgentSHA256 and CLISHA256 are the hex digests that the release
+	// publishes for the two files. The machine checks the uploads with them.
+	AgentSHA256 string
+	CLISHA256   string
+}
+
+// cleanup removes the downloaded binaries.
+func (a *releaseArtifacts) cleanup() {
+	if a.dir != "" {
+		os.RemoveAll(a.dir)
+	}
 }
 
 // fetchArtifacts is the seam Create fetches through. It is a variable so a
@@ -92,12 +118,44 @@ func resolveReleaseTag(tag string) (string, error) {
 	return path.Base(loc), nil
 }
 
-// downloadAgentBinary fetches the agent build for arch into a temp file and
-// records it in BinaryPath; the caller os.Removes it when done.
-func (a *releaseArtifacts) downloadAgentBinary(arch string) error {
-	name := sandboxAssetName(arch)
-	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", releaseRepo, a.Version, name)
+// downloadBinaries fetches the agent and the CLI builds for arch from the
+// release into a temp directory, with the sha256 that the release publishes
+// for each. The caller runs cleanup when done.
+func (a *releaseArtifacts) downloadBinaries(arch string) (err error) {
+	digests, err := fetchDigests(a.Version)
+	if err != nil {
+		return err
+	}
+	agent, cli := sandboxAssetName(arch), cliAssetName(arch)
+	for _, name := range []string{agent, cli} {
+		if digests[name] == "" {
+			return fmt.Errorf("release %q publishes no sha256 for %q, so spekk cannot check it; choose another release with --release", a.Version, name)
+		}
+	}
 
+	dir, err := os.MkdirTemp("", "spekk-sandbox-*")
+	if err != nil {
+		return fmt.Errorf("creating temp dir for binaries: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			os.RemoveAll(dir)
+		}
+	}()
+	for _, f := range []struct{ asset, file string }{{agent, stagedBinary}, {cli, stagedCLI}} {
+		if err := a.downloadAsset(f.asset, filepath.Join(dir, f.file)); err != nil {
+			return err
+		}
+	}
+
+	a.dir, a.BinaryPath, a.CLIPath = dir, filepath.Join(dir, stagedBinary), filepath.Join(dir, stagedCLI)
+	a.AgentSHA256, a.CLISHA256 = digests[agent], digests[cli]
+	return nil
+}
+
+// downloadAsset writes the release asset name to dest.
+func (a *releaseArtifacts) downloadAsset(name, dest string) error {
+	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", releaseRepo, a.Version, name)
 	binary, err := downloadReleaseAsset(url)
 	if err != nil {
 		// A release only carries the architectures it published; a 404 means this
@@ -107,23 +165,54 @@ func (a *releaseArtifacts) downloadAgentBinary(arch string) error {
 		}
 		return fmt.Errorf("downloading %s: %w", name, err)
 	}
-
-	f, err := os.CreateTemp("", "spekk-sandbox-*")
-	if err != nil {
-		return fmt.Errorf("creating temp file for binary: %w", err)
+	if err := os.WriteFile(dest, binary, 0o600); err != nil {
+		return fmt.Errorf("writing %s: %w", name, err)
 	}
-	if _, err := f.Write(binary); err != nil {
-		f.Close()
-		os.Remove(f.Name())
-		return fmt.Errorf("writing binary: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(f.Name())
-		return fmt.Errorf("closing binary: %w", err)
-	}
-
-	a.BinaryPath = f.Name()
 	return nil
+}
+
+// releaseAPIURL is the GitHub API path of a release by tag.
+const releaseAPIURL = "https://api.github.com/repos/" + releaseRepo + "/releases/tags/"
+
+// fetchDigests is the seam downloadBinaries reads the digests through.
+var fetchDigests = releaseDigests
+
+var sha256Re = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// releaseDigests returns the hex sha256 of each asset of the release tag, as
+// GitHub publishes it in the asset's digest field. This is one anonymous API
+// call for each deploy, well inside the 60 an hour that GitHub allows.
+func releaseDigests(tag string) (map[string]string, error) {
+	req, err := http.NewRequest(http.MethodGet, releaseAPIURL+url.PathEscape(tag), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := githubHTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("reading the sha256 digests of release %q: %w", tag, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("reading the sha256 digests of release %q: HTTP %d from the GitHub API", tag, resp.StatusCode)
+	}
+	var release struct {
+		Assets []struct {
+			Name   string `json:"name"`
+			Digest string `json:"digest"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, fmt.Errorf("reading the sha256 digests of release %q: %w", tag, err)
+	}
+	digests := map[string]string{}
+	for _, asset := range release.Assets {
+		// Only a well-formed digest goes into the install script.
+		if sum, ok := strings.CutPrefix(asset.Digest, "sha256:"); ok && sha256Re.MatchString(sum) {
+			digests[asset.Name] = sum
+		}
+	}
+	return digests, nil
 }
 
 // errAssetNotFound is the 404 sentinel: the release exists but has no asset at

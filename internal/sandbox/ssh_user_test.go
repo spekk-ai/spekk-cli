@@ -183,12 +183,8 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 			if len(scpArgs) != 1 || len(sshCommands) != 2 {
 				t.Fatalf("expected one upload, a version read and an installation, got %v and %v", scpArgs, sshCommands)
 			}
-			if want := user + "@9.9.9.9:" + stagedBinary; scpArgs[0] != want {
+			if want := user + "@9.9.9.9:"; scpArgs[0] != want {
 				t.Errorf("staged at %q, want %q", scpArgs[0], want)
-			}
-			_, uploadPath, _ := strings.Cut(scpArgs[0], ":")
-			if filepath.Base(uploadPath) != uploadPath {
-				t.Errorf("upload must use a file name in the login user's home: %q", uploadPath)
 			}
 			for _, cmd := range sshCommands {
 				if got := strings.Contains(cmd, "| sudo bash"); got != (user != "root") {

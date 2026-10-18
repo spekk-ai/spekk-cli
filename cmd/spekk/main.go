@@ -1149,8 +1149,9 @@ USAGE:
 OPTIONS:
   --auth <mode>    bedrock or subscription. Default: the mode the sandbox was
                    created with
-  --release <tag>  Pull the agent from a specific spekk release instead of the
-                   latest, e.g. an exp-* prerelease
+  --release <tag>  Pull the agent and the spekk CLI from a specific spekk
+                   release, e.g. an exp-* prerelease. Default: the release of
+                   this spekk, or the latest release for a dev build
   --force, -f      Provision a sandbox whose status is not "provisioning"
   --organization <id>
                    Control host organization, when provision registers a new
@@ -1335,8 +1336,9 @@ func launchSandbox(args []string) {
 		})
 		if flags.Bool("help") {
 			fmt.Println("Usage: spekk sandbox deploy <name> [--release <tag>]")
-			fmt.Println("\nRedeploy the agent binary to a sandbox. --release pulls it from a")
-			fmt.Println("specific spekk release (e.g. an exp-* prerelease) instead of the latest.")
+			fmt.Println("\nRedeploy the agent binary and the spekk CLI to a sandbox, from the release")
+			fmt.Println("of this spekk (the latest release for a dev build). --release pulls them")
+			fmt.Println("from a specific spekk release, e.g. an exp-* prerelease.")
 			return
 		}
 		name := sandboxPositional(subArgs, "--release")
@@ -1599,9 +1601,10 @@ OPTIONS:
                          cloud-init. Warns when the image is older than 14 days
 
   Release:
-  --release <tag>        Pull the cloud-init template and agent binary from a
-                         specific spekk release instead of the latest, e.g. an
-                         exp-* prerelease. Default: the latest published release
+  --release <tag>        Pull the agent binary and the spekk CLI from a specific
+                         spekk release, e.g. an exp-* prerelease. Default: the
+                         release of this spekk, or the latest release for a
+                         dev build
 
   Sandbox kind:
   --one-off              One task, then destroy. Expires 48h after create
