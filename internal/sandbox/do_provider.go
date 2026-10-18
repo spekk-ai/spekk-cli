@@ -292,13 +292,19 @@ func (p *DOProvider) dropletAction(dropletID int, action map[string]string, what
 	return p.waitForAction(a, what)
 }
 
-// CreateImage shuts the droplet down, takes a snapshot named name, and copies
-// it to each region of regions that does not have it. A snapshot is private
-// to the account.
+// doImagePrefix starts the name of each snapshot that image build makes.
+// ListImages returns only those, so a create never trusts a snapshot that
+// the hygiene check did not pass, as the spekk-image label does on GCP.
+const doImagePrefix = "spekk-image-"
+
+// CreateImage shuts the droplet down, takes a snapshot named doImagePrefix
+// plus name, and copies it to each region of regions that does not have it.
+// A snapshot is private to the account.
 func (p *DOProvider) CreateImage(meta *SandboxMeta, name string, regions []string) (ImageMeta, error) {
 	if meta.DropletID == 0 {
 		return ImageMeta{}, ErrNoMachineRecorded
 	}
+	name = doImagePrefix + name
 	fmt.Fprintf(os.Stderr, "Shutting down droplet %d...\n", meta.DropletID)
 	if err := p.dropletAction(meta.DropletID, map[string]string{"type": "shutdown"}, "the shutdown"); err != nil {
 		// A shutdown that the droplet does not answer is a power off.
@@ -361,15 +367,20 @@ func (p *DOProvider) DeleteImage(img ImageMeta) error {
 	return nil
 }
 
-// ListImages lists the private images of the account.
+// ListImages lists the private images of the account that image build made,
+// by their image name.
 func (p *DOProvider) ListImages() ([]ImageMeta, error) {
 	images, err := p.client.ListPrivateImages()
 	if err != nil {
 		return nil, err
 	}
-	found := make([]ImageMeta, 0, len(images))
+	var found []ImageMeta
 	for _, im := range images {
-		found = append(found, ImageMeta{Name: im.Name, Provider: p.Name(), ImageID: strconv.Itoa(im.ID), Regions: im.Regions, CreatedAt: im.CreatedAt})
+		name, ok := strings.CutPrefix(im.Name, doImagePrefix)
+		if !ok {
+			continue
+		}
+		found = append(found, ImageMeta{Name: name, Provider: p.Name(), ImageID: strconv.Itoa(im.ID), Regions: im.Regions, CreatedAt: im.CreatedAt})
 	}
 	return found, nil
 }

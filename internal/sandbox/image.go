@@ -223,6 +223,9 @@ func BuildImage(p Provider, opts ImageBuildOptions) (err error) {
 		cleanup()
 	}()
 
+	// A known_hosts file from an earlier builder of this name holds its old
+	// host key, and each probe of the new builder would fail on it.
+	os.Remove(KnownHostsFile(name))
 	createOpts := CreateOptions{Name: name, Size: opts.Size, Project: opts.Project, CloudInit: cloudInitTemplate}
 	if len(opts.Regions) > 0 {
 		createOpts.Region = opts.Regions[0]
@@ -290,8 +293,8 @@ func regionsOrGlobal(img ImageMeta) string {
 	return strings.Join(img.Regions, ", ")
 }
 
-// destroyBuilder destroys the builder machine, its record, and its key pair,
-// and says what it removed. A builder that failed to destroy keeps its
+// destroyBuilder destroys the builder machine, its record, its key pair, and
+// its known_hosts file, and says what it removed. A builder that failed to destroy keeps its
 // record, so `spekk sandbox destroy` can reach it.
 func destroyBuilder(p Provider, name string, meta *SandboxMeta) {
 	if !namesMachine(meta) {
@@ -303,6 +306,7 @@ func destroyBuilder(p Provider, name string, meta *SandboxMeta) {
 		return
 	}
 	removeGeneratedKeyPair(meta.SSHKeyPath)
+	os.Remove(KnownHostsFile(name))
 	if err := RemoveSandbox(name); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not remove the record of builder %s: %s\n", name, err)
 	}
@@ -320,7 +324,9 @@ func runSetupScript(meta *SandboxMeta, name, script string) error {
 		shell = "sudo bash -s"
 	}
 	cmd := exec.Command("ssh", append(sshBatchArgs(meta, name), shell)...)
-	cmd.Stdin = strings.NewReader(script)
+	// As in runSecretScript: a step that reads stdin must not eat the rest
+	// of the script.
+	cmd.Stdin = strings.NewReader("{\n" + script + "\n} </dev/null\n")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -348,12 +354,14 @@ echo "os=$os"
 rm -f "$R"/etc/ssh/ssh_host_*
 if [ -f "$R/etc/machine-id" ]; then : > "$R/etc/machine-id"; fi
 if [ ! -L "$R/var/lib/dbus/machine-id" ]; then rm -f "$R/var/lib/dbus/machine-id"; fi
-rm -f "$R/root/.ssh/authorized_keys" "$R"/home/*/.ssh/authorized_keys
-rm -f "$R/root/.bash_history" "$R"/home/*/.bash_history
 rm -f "$R` + provisionedMarker + `"
-# The Claude Code installer writes its settings as agent. A sign-in in them
-# is a credential, so it stays, and the check below fails on it.
-if [ ! -e "$R/home/agent/.claude/.credentials.json" ]; then rm -rf "$R/home/agent/.claude" "$R/home/agent/.claude.json"; fi
+for H in "$R/root" "$R"/home/*; do
+  [ -d "$H" ] || continue
+  rm -f "$H/.ssh/authorized_keys" "$H"/.*_history "$H/.viminfo"
+  # The Claude Code installer writes its settings. A sign-in in them is a
+  # credential, so it stays, and the check below fails on it.
+  if [ ! -e "$H/.claude/.credentials.json" ]; then rm -rf "$H/.claude" "$H/.claude.json"; fi
+done
 if [ -z "$R" ]; then
   cloud-init clean --logs
   journalctl --rotate >/dev/null 2>&1 || true
@@ -365,15 +373,26 @@ fi
 found=0
 bad() { echo "hygiene: $1"; found=1; }
 for f in "$R/etc/spekk/agent.env" "$R/home/agent/.bashrc.d/spekk.sh" \
-  "$R"/root/.git-credentials "$R"/home/*/.git-credentials \
-  "$R"/root/.config/gh/hosts.yml "$R"/home/*/.config/gh/hosts.yml \
-  "$R/home/agent/.claude" "$R/home/agent/.claude.json" \
-  "$R"/root/.bash_history "$R"/home/*/.bash_history \
-  "$R"/root/.ssh/authorized_keys "$R"/home/*/.ssh/authorized_keys \
   "$R"/etc/ssh/ssh_host_* "$R` + provisionedMarker + `" "$R/var/lib/cloud/instance" \
   "$R"/var/log/cloud-init.log "$R"/var/log/cloud-init-output.log; do
   if [ -e "$f" ] || [ -L "$f" ]; then bad "${f#"$R"} is on the builder"; fi
 done
+for H in "$R/root" "$R"/home/*; do
+  [ -d "$H" ] || continue
+  for f in "$H/.git-credentials" "$H/.config/git/credentials" "$H/.config/gh/hosts.yml" \
+    "$H/.netrc" "$H/.aws/credentials" "$H/.config/gcloud" \
+    "$H/.claude/.credentials.json" "$H/.claude.json" "$H"/.*_history "$H/.viminfo"; do
+    if [ -e "$f" ] || [ -L "$f" ]; then bad "${f#"$R"} is on the builder"; fi
+  done
+  # Any file in .ssh can be a private key, whatever its name.
+  if [ -d "$H/.ssh" ]; then
+    while IFS= read -r f; do bad "${f#"$R"} is on the builder"; done < <(
+      find "$H/.ssh" -mindepth 1 ! -type d ! -name known_hosts ! -name config ! -name '*.pub' 2>/dev/null)
+  fi
+done
+while IFS= read -r f; do
+  if grep -Eq 'https?://[^/@[:space:]]+@' "$f"; then bad "${f#"$R"} has a credential in a remote URL"; fi
+done < <(find "$R/root" "$R/home" "$R/opt" -path '*/.git/*' -name config -type f 2>/dev/null)
 if [ -s "$R/etc/machine-id" ]; then bad "/etc/machine-id is not empty"; fi
 for f in "$R"/root/.docker/config.json "$R"/home/*/.docker/config.json; do
   if [ -f "$f" ] && grep -q '"auth"' "$f"; then bad "${f#"$R"} has a registry login"; fi

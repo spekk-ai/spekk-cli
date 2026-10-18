@@ -282,7 +282,7 @@ func TestDOCreateImage(t *testing.T) {
 					}
 					fmt.Fprintf(w, `{"action": {"id": %s, "status": %q}}`, strings.TrimPrefix(r.URL.Path, "/v2/actions/"), status)
 				case r.Method == "GET" && r.URL.Path == "/v2/droplets/77/snapshots":
-					fmt.Fprint(w, `{"snapshots": [{"id": 4004, "name": "older"}, {"id": 5005, "name": "web-app", "regions": ["nyc1"]}]}`)
+					fmt.Fprint(w, `{"snapshots": [{"id": 4004, "name": "older"}, {"id": 5005, "name": "spekk-image-web-app", "regions": ["nyc1"]}]}`)
 				default:
 					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 					w.WriteHeader(404)
@@ -299,7 +299,7 @@ func TestDOCreateImage(t *testing.T) {
 			if img.ImageID != "5005" || strings.Join(img.Regions, ",") != tc.wantRegions {
 				t.Errorf("image = %+v, want snapshot 5005 in %s", img, tc.wantRegions)
 			}
-			if got := strings.Join(actions, " "); got != "shutdown: snapshot:web-app transfer:nyc3" {
+			if got := strings.Join(actions, " "); got != "shutdown: snapshot:spekk-image-web-app transfer:nyc3" {
 				t.Errorf("actions = %s", got)
 			}
 		})

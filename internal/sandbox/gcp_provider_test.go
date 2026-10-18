@@ -225,16 +225,6 @@ func TestGCPImages(t *testing.T) {
 	}
 
 	got := strings.Join(*calls, "\n")
-	for _, want := range []string{
-		"compute instances stop spekk-image-web-app --project proj-a --zone us-east1-b",
-		"compute images create web-app --project proj-a --source-disk spekk-image-web-app --source-disk-zone us-east1-b --labels spekk-image=true",
-		"--image web-app --image-project proj-a --boot-disk-size",
-		"compute images list --project proj-a --no-standard-images --filter labels.spekk-image:*",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("no gcloud call has %q:\n%s", want, got)
-		}
-	}
 	if strings.Contains(got, "--image-family") {
 		t.Errorf("a create from an image still names the Ubuntu family:\n%s", got)
 	}

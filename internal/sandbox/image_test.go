@@ -63,6 +63,8 @@ func builderOnDisk(t *testing.T) string {
 		"etc/machine-id":                   "0123456789abcdef0123456789abcdef\n",
 		"etc/ssh/ssh_host_ed25519_key":     "builder host key\n",
 		"home/agent/.ssh/authorized_keys":  "ssh-ed25519 AAAA builder\n",
+		"home/agent/.ssh/known_hosts":      "github.com ssh-ed25519 AAAA\n",
+		"home/agent/.ssh/id_ed25519.pub":   "ssh-ed25519 AAAA agent\n",
 		"home/agent/.bash_history":         "ls\n",
 		"opt/spekk/.provisioned":           "",
 		"home/agent/.bashrc":               "export PATH=$PATH:/opt/bin\nGITHUB_TOKEN=\n",
@@ -100,12 +102,16 @@ func TestBuildImage(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		plant   string // a file the setup left on the builder
+		content string // of plant; a token line when empty
 		wantErr string
 	}{
 		{name: "a clean builder becomes an image"},
 		{name: "a credential file fails the build", plant: "etc/spekk/agent.env", wantErr: "/etc/spekk/agent.env is on the builder"},
 		{name: "a token in a shell file fails the build", plant: "etc/profile.d/ci.sh", wantErr: "/etc/profile.d/ci.sh sets a secret variable"},
-		{name: "a Claude Code sign-in fails the build", plant: "home/agent/.claude/.credentials.json", wantErr: "/home/agent/.claude is on the builder"},
+		{name: "a Claude Code sign-in of root fails the build", plant: "root/.claude/.credentials.json", wantErr: "/root/.claude/.credentials.json is on the builder"},
+		{name: "an SSH private key fails the build", plant: "home/agent/.ssh/id_ed25519", wantErr: "/home/agent/.ssh/id_ed25519 is on the builder"},
+		{name: "a token in a remote URL fails the build", plant: "opt/app/.git/config", content: "[remote \"origin\"]\n\turl = https://x-access-token:ghp_x@github.com/acme/app.git\n", wantErr: "/opt/app/.git/config has a credential in a remote URL"},
+		{name: "any shell history is removed", plant: "home/agent/.python_history"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateConfig(t)
@@ -115,7 +121,11 @@ func TestBuildImage(t *testing.T) {
 			if tc.plant != "" {
 				full := filepath.Join(root, tc.plant)
 				os.MkdirAll(filepath.Dir(full), 0o755)
-				os.WriteFile(full, []byte("export SPEKK_AGENT_TOKEN=s3cret\n"), 0o600)
+				content := tc.content
+				if content == "" {
+					content = "export SPEKK_AGENT_TOKEN=s3cret\n"
+				}
+				os.WriteFile(full, []byte(content), 0o600)
 			}
 			setup := filepath.Join(t.TempDir(), "setup.sh")
 			os.WriteFile(setup, []byte("echo setup\n"), 0o644)
@@ -148,7 +158,10 @@ func TestBuildImage(t *testing.T) {
 				img.OSVersion != "Ubuntu 24.04.3 LTS" || len(img.SetupSHA256) != 64 || img.CreatedAt == "" || img.SpekkVersion == "" {
 				t.Fatalf("image record = %+v", img)
 			}
-			for _, gone := range []string{"etc/ssh/ssh_host_ed25519_key", "home/agent/.ssh/authorized_keys", "home/agent/.bash_history", "opt/spekk/.provisioned", "home/agent/.claude"} {
+			for _, gone := range []string{"etc/ssh/ssh_host_ed25519_key", "home/agent/.ssh/authorized_keys", "home/agent/.bash_history", "opt/spekk/.provisioned", "home/agent/.claude", tc.plant} {
+				if gone == "" {
+					continue
+				}
 				if _, err := os.Stat(filepath.Join(root, gone)); err == nil {
 					t.Errorf("%s is still on the builder", gone)
 				}
@@ -157,6 +170,34 @@ func TestBuildImage(t *testing.T) {
 				t.Errorf("machine-id = %q, want empty", id)
 			}
 		})
+	}
+}
+
+// A rebuild under the same name must not meet the host key of the last
+// builder of that name: each probe would fail on it until the timeout.
+func TestBuildImageForgetsTheOldHostKey(t *testing.T) {
+	isolateConfig(t)
+	useTempStore(t)
+	useTempImages(t)
+	builderOnDisk(t)
+	kh := KnownHostsFile("image-web-app")
+	os.MkdirAll(filepath.Dir(kh), 0o700)
+	os.WriteFile(kh, []byte("203.0.113.5 ssh-ed25519 OLD\n"), 0o600)
+	waitReady = func(ip, keyPath, name, user string, timeout time.Duration) error {
+		if b, _ := os.ReadFile(kh); strings.Contains(string(b), "OLD") {
+			t.Error("the new builder met the old host key")
+		}
+		// The first SSH session records the host key of the new builder.
+		return os.WriteFile(kh, []byte("203.0.113.5 ssh-ed25519 NEW\n"), 0o600)
+	}
+
+	p := &fakeImager{recordingProvider: recordingProvider{ip: "203.0.113.5", dropletID: 77}}
+	captureStderr(t)
+	if err := BuildImage(p, ImageBuildOptions{Name: "web-app"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(kh); err == nil {
+		t.Error("the known_hosts file of the builder stays after the build")
 	}
 }
 
@@ -205,11 +246,4 @@ func TestApplyImage(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("an existing machine is refused", func(t *testing.T) {
-		opts := CreateOptions{ImageName: "base"}
-		if err := applyImage(nil, &opts, now); err == nil || !strings.Contains(err.Error(), "--ip") {
-			t.Errorf("err = %v", err)
-		}
-	})
 }

@@ -101,7 +101,7 @@ func useFakeDigitalOcean(t *testing.T) *fakeDigitalOcean {
 			f.createImage, f.createUserData = req.Image, req.UserData
 			fmt.Fprint(w, `{"droplet": {"id": 4242}}`)
 		case r.Method == "GET" && r.URL.Path == "/v2/images":
-			fmt.Fprint(w, `{"images": [{"id": 31337, "name": "web-app", "regions": ["nyc3"], "created_at": "2026-10-16T00:00:00Z"}]}`)
+			fmt.Fprint(w, `{"images": [{"id": 666, "name": "web-app", "regions": ["nyc3"], "created_at": "2026-10-17T00:00:00Z"}, {"id": 31337, "name": "spekk-image-web-app", "regions": ["nyc3"], "created_at": "2026-10-16T00:00:00Z"}]}`)
 		case r.Method == "GET" && r.URL.Path == "/v2/droplets/4242":
 			fmt.Fprint(w, `{"droplet": {"id": 4242, "status": "active", "networks": {"v4": [{"ip_address": "203.0.113.10", "type": "public"}]}}}`)
 		case r.Method == "POST" && r.URL.Path == "/v2/tags":
@@ -360,8 +360,9 @@ func TestCreateMachine(t *testing.T) {
 	})
 
 	// The launch JSON may name a template image. The worker has no
-	// images.json, so the account's own list finds it, and the droplet
-	// starts from it with the first-boot cloud-init. The stages stay.
+	// images.json, so the account's own list finds it, and only a snapshot
+	// that image build named counts. The droplet starts from it with the
+	// first-boot cloud-init. The stages stay.
 	t.Run("an image in the launch JSON", func(t *testing.T) {
 		do, _, _, _, input := setUp(t, 201, "")
 		input = strings.Replace(input, `"harness"`, `"image": "web-app", "harness"`, 1)
