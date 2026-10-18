@@ -239,36 +239,94 @@ func TestInstallCommandInstallsBothIntoMissingDirectories(t *testing.T) {
 	}
 }
 
-// A file that does not match the release sha256 replaces nothing: not the
-// agent, not the CLI, and the service setup does not run.
-func TestInstallCommandRefusesAWrongSHA256(t *testing.T) {
+// agent owns /opt/spekk and its home, so it can put a link where the
+// script writes as root. The script does not write through a link at the
+// CLI directory or at ~/.local/bin, and it says what it skipped.
+func TestInstallCommandDoesNotFollowLinksThatAgentOwns(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the remote installation script requires a Unix shell")
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	stageUploads(t, home)
-	target := filepath.Join(t.TempDir(), "agent-client")
-	if err := os.WriteFile(target, []byte("old agent"), 0o755); err != nil {
+	rootOnly := t.TempDir()
+	rootFile := filepath.Join(rootOnly, "spekk")
+	if err := os.WriteFile(rootFile, []byte("root file"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	command := localInstallCommand(t, installCommand("root", sha256Hex(replacementAgent), sha256Hex("another CLI"), "printf ready"), target, home)
-	output, err := exec.Command("bash", "-c", command).CombinedOutput()
-	if err == nil || strings.Contains(string(output), "ready") {
-		t.Fatalf("a wrong sha256 must stop the installation: %v, output %q", err, output)
+	if err := os.MkdirAll(filepath.Join(home, ".local"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if want := "spekk: " + stagedCLI + " does not match the release sha256"; !strings.Contains(string(output), want) {
+	if err := os.Symlink(rootOnly, filepath.Join(home, ".local", "bin")); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "agent-client")
+	cliDir := filepath.Join(filepath.Dir(target), "cli")
+	if err := os.Symlink(rootOnly, cliDir); err != nil {
+		t.Fatal(err)
+	}
+	command := localInstallCommand(t, installCommand("root", sha256Hex(replacementAgent), sha256Hex(replacementCLI), "printf ready"), target, home)
+	output, err := exec.Command("bash", "-c", command).CombinedOutput()
+	if err != nil {
+		t.Fatalf("installation failed: %v, output %q", err, output)
+	}
+	if want := "spekk: skipped " + home + "/.local/bin/spekk"; !strings.Contains(string(output), want) {
 		t.Errorf("output %q must contain %q", output, want)
 	}
-	if content, _ := os.ReadFile(target); string(content) != "old agent" {
-		t.Errorf("the agent was replaced: %q", content)
+	if info, err := os.Lstat(cliDir); err != nil || !info.IsDir() {
+		t.Errorf("%s must be a real directory: %v", cliDir, err)
 	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(target), "cli")); !os.IsNotExist(err) {
-		t.Errorf("the CLI directory was made: %v", err)
+	if content, _ := os.ReadFile(rootFile); string(content) != "root file" {
+		t.Errorf("the target of a link was written: %q", content)
 	}
-	for _, name := range []string{stagedBinary, stagedCLI} {
-		if _, err := os.Stat(filepath.Join(home, name)); !os.IsNotExist(err) {
-			t.Errorf("the upload %s must be removed: %v", name, err)
-		}
+}
+
+// A file that does not match the release sha256 replaces nothing: not the
+// agent, not the CLI, and the service setup does not run. Each upload has
+// its own check, so each one gets a wrong digest.
+func TestInstallCommandRefusesAWrongSHA256(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the remote installation script requires a Unix shell")
+	}
+	for _, tc := range []struct {
+		wrong, agentSHA256, cliSHA256 string
+	}{
+		{stagedBinary, sha256Hex("another agent"), sha256Hex(replacementCLI)},
+		{stagedCLI, sha256Hex(replacementAgent), sha256Hex("another CLI")},
+	} {
+		t.Run(tc.wrong, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			stageUploads(t, home)
+			target := filepath.Join(t.TempDir(), "agent-client")
+			if err := os.WriteFile(target, []byte("old agent"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			cli := filepath.Join(filepath.Dir(target), "cli", "spekk")
+			if err := os.MkdirAll(filepath.Dir(cli), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(cli, []byte("old CLI"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			command := localInstallCommand(t, installCommand("root", tc.agentSHA256, tc.cliSHA256, "printf ready"), target, home)
+			output, err := exec.Command("bash", "-c", command).CombinedOutput()
+			if err == nil || strings.Contains(string(output), "ready") {
+				t.Fatalf("a wrong sha256 must stop the installation: %v, output %q", err, output)
+			}
+			if want := "spekk: " + tc.wrong + " does not match the release sha256"; !strings.Contains(string(output), want) {
+				t.Errorf("output %q must contain %q", output, want)
+			}
+			for path, old := range map[string]string{target: "old agent", cli: "old CLI"} {
+				if content, _ := os.ReadFile(path); string(content) != old {
+					t.Errorf("%s was replaced: %q", path, content)
+				}
+			}
+			for _, name := range []string{stagedBinary, stagedCLI} {
+				if _, err := os.Stat(filepath.Join(home, name)); !os.IsNotExist(err) {
+					t.Errorf("the upload %s must be removed: %v", name, err)
+				}
+			}
+		})
 	}
 }

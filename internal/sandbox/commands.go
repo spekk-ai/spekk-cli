@@ -629,12 +629,17 @@ func Status(p Provider, name string) error {
 	return nil
 }
 
-// Each line prints the version alone, or "missing" when the binary is not
-// there or prints no version. An old agent-client prints "version: dev".
-const (
-	cliVersionLine   = `/opt/spekk/cli/spekk version 2>/dev/null | grep . || echo missing`
-	agentVersionLine = `/opt/spekk/agent-client --version 2>/dev/null | sed -n 's/^version: //p' | grep . || echo missing`
-)
+// versionCommand prints the version of a binary alone, or "missing" when
+// the binary is not there or prints no version. An old agent-client prints
+// "version: dev". The binary runs as agent, which owns it and can replace
+// it, so the login user (root, or a user with sudo) never runs it.
+func versionCommand(user, run, filter string) string {
+	asAgent := "sudo -n -u agent "
+	if user == "root" {
+		asAgent = "runuser -u agent -- "
+	}
+	return asAgent + run + " 2>/dev/null" + filter + " | grep . || echo missing"
+}
 
 // printBinaryVersions prints the version of each spekk binary on the
 // machine, with a warning when it is not the release that a deploy with no
@@ -651,9 +656,10 @@ func printBinaryVersions(sandbox *SandboxMeta, name string) {
 			want, wantName = latest, latest+", the latest release"
 		}
 	}
+	user := sshUser(sandbox)
 	for _, b := range []struct{ label, command string }{
-		{"spekk CLI", cliVersionLine},
-		{"Agent client", agentVersionLine},
+		{"spekk CLI", versionCommand(user, "/opt/spekk/cli/spekk version", "")},
+		{"Agent client", versionCommand(user, "/opt/spekk/agent-client --version", ` | sed -n 's/^version: //p'`)},
 	} {
 		got := sshCheck(sandbox, name, b.command)
 		line := fmt.Sprintf("%s: %s", b.label, got)
@@ -953,8 +959,15 @@ systemctl daemon-reload
 systemctl enable spekk-agent
 systemctl restart spekk-agent`, spekkAgentUnit)
 
-	if out, err := runSSHCombined(ip, keyPath, name, user, installCommand(user, artifacts.AgentSHA256, artifacts.CLISHA256, script)); err != nil {
+	out, err := runSSHCombined(ip, keyPath, name, user, installCommand(user, artifacts.AgentSHA256, artifacts.CLISHA256, script))
+	if err != nil {
 		return fmt.Errorf("installing service: %s\n%s", err, out)
+	}
+	// The install script says "spekk: ..." for a step that it skipped.
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "spekk: ") {
+			fmt.Fprintln(os.Stderr, line)
+		}
 	}
 	return nil
 }
@@ -1011,10 +1024,12 @@ func installCommand(user, agentSHA256, cliSHA256, script string) string {
 	// not carry it, and every later step writes inside it. The CLI belongs to
 	// agent, so `spekk update` as agent can replace it. A copy in agent's
 	// ~/.local/bin, which an earlier install made, becomes a link to it, so
-	// what calls that path gets this release too.
+	// what calls that path gets this release too. agent owns /opt/spekk and
+	// its home, so root does not follow a link that agent can put there.
 	install := fmt.Sprintf(`set -e
 installed="/opt/spekk/agent-client"
 cli="/opt/spekk/cli/spekk"
+cli_dir=$(dirname "$cli")
 cli_link="/usr/local/bin/spekk"
 owner="agent"
 group=$(id -gn "$owner")
@@ -1025,17 +1040,22 @@ trap 'rm -f "$agent_upload" "$cli_upload" ${next:+"$next"} ${next_cli:+"$next_cl
 check() { echo "$2  $1" | sha256sum -c --status || { echo "spekk: $(basename "$1") does not match the release sha256" >&2; exit 1; }; }
 check "$agent_upload" '%s'
 check "$cli_upload" '%s'
-mkdir -p "$(dirname "$installed")" "$(dirname "$cli")"
+if [ -L "$cli_dir" ]; then rm -f "$cli_dir"; fi
+mkdir -p "$(dirname "$installed")" "$cli_dir"
 next=$(mktemp "$installed.XXXXXX")
 install -m 755 "$agent_upload" "$next"
 next_cli=$(mktemp "$cli.XXXXXX")
 install -m 755 -o "$owner" -g "$group" "$cli_upload" "$next_cli"
 mv -f "$next" "$installed"
 mv -f "$next_cli" "$cli"
-chown "$owner:$group" "$(dirname "$cli")"
+chown -h "$owner:$group" "$cli_dir"
 ln -sf "$cli" "$cli_link"
 if [ -n "$owner_home" ] && { [ -e "$owner_home/.local/bin/spekk" ] || [ -L "$owner_home/.local/bin/spekk" ]; }; then
-  ln -sfn "$cli" "$owner_home/.local/bin/spekk"
+  if [ -L "$owner_home/.local" ] || [ -L "$owner_home/.local/bin" ]; then
+    echo "spekk: skipped $owner_home/.local/bin/spekk: a directory in that path is a link"
+  else
+    ln -sfn "$cli" "$owner_home/.local/bin/spekk"
+  fi
 fi
 %s`, agentSHA256, cliSHA256, script)
 	// Resolve the upload paths before sudo can change HOME or the working directory.
