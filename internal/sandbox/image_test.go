@@ -71,6 +71,11 @@ func builderOnDisk(t *testing.T) string {
 		"root/.ssh/authorized_keys":        "ssh-ed25519 AAAA builder\n",
 		"home/agent/.docker/config.json":   `{"credsStore": "desktop"}`,
 		"home/agent/.claude/settings.json": `{"autoUpdatesChannel": "stable"}`,
+		// Not secrets: code that names a key header, a test key of an
+		// installed package, and the key of the AWS documentation.
+		"opt/app/keys.py":                       `START = b"-----BEGIN OPENSSH PRIVATE KEY-----"` + "\n",
+		"opt/app/node_modules/x/test/key.pem":   "-----BEGIN RSA PRIVATE KEY-----\nMIIB\n",
+		"home/agent/.local/lib/aws/example.txt": "aws_access_key_id = AKIAIOSFODNN7EXAMPLE\n",
 	} {
 		full := filepath.Join(root, path)
 		os.MkdirAll(filepath.Dir(full), 0o755)
@@ -103,6 +108,7 @@ func TestBuildImage(t *testing.T) {
 		name    string
 		plant   string // a file the setup left on the builder
 		content string // of plant; a token line when empty
+		prep    func(root string)
 		wantErr string
 	}{
 		{name: "a clean builder becomes an image"},
@@ -112,6 +118,18 @@ func TestBuildImage(t *testing.T) {
 		{name: "an SSH private key fails the build", plant: "home/agent/.ssh/id_ed25519", wantErr: "/home/agent/.ssh/id_ed25519 is on the builder"},
 		{name: "a token in a remote URL fails the build", plant: "opt/app/.git/config", content: "[remote \"origin\"]\n\turl = https://x-access-token:ghp_x@github.com/acme/app.git\n", wantErr: "/opt/app/.git/config has a credential in a remote URL"},
 		{name: "any shell history is removed", plant: "home/agent/.python_history"},
+		{name: "a home from /etc/passwd outside /home is checked", plant: "var/ci/.git-credentials", content: "https://u:p@example.com\n",
+			prep: func(root string) {
+				os.WriteFile(filepath.Join(root, "etc/passwd"), []byte("root:x:0:0:root:/root:/bin/bash\nci:x:999:999::/var/ci:/bin/sh\n"), 0o644)
+			}, wantErr: "/var/ci/.git-credentials is on the builder"},
+		{name: "a .ssh that is a symlink is searched", plant: "keys/id_rsa", content: "key\n",
+			prep: func(root string) {
+				os.MkdirAll(filepath.Join(root, "home/y"), 0o755)
+				os.Symlink("../../keys", filepath.Join(root, "home/y/.ssh"))
+			}, wantErr: "/home/y/.ssh/id_rsa is on the builder"},
+		{name: "a token in a known format fails the build", plant: "opt/app/notes.txt", content: "deploy with ghp_" + strings.Repeat("a1B2", 9) + "\n", wantErr: "/opt/app/notes.txt has a token"},
+		{name: "a private key in a JSON file fails the build", plant: "srv/app/sa.json", content: `{"private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END PRIVATE KEY-----\n"}`, wantErr: "/srv/app/sa.json has a private key"},
+		{name: "an extra HTTP header in a git config fails the build", plant: "srv/app/.git/config", content: "[http \"https://github.com/\"]\n\textraHeader = AUTHORIZATION: basic eDp5\n", wantErr: "/srv/app/.git/config has an extra HTTP header"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateConfig(t)
@@ -126,6 +144,9 @@ func TestBuildImage(t *testing.T) {
 					content = "export SPEKK_AGENT_TOKEN=s3cret\n"
 				}
 				os.WriteFile(full, []byte(content), 0o600)
+			}
+			if tc.prep != nil {
+				tc.prep(root)
 			}
 			setup := filepath.Join(t.TempDir(), "setup.sh")
 			os.WriteFile(setup, []byte("echo setup\n"), 0o644)

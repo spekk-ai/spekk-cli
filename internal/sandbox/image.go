@@ -359,13 +359,22 @@ rm -f "$R"/etc/ssh/ssh_host_*
 if [ -f "$R/etc/machine-id" ]; then : > "$R/etc/machine-id"; fi
 if [ ! -L "$R/var/lib/dbus/machine-id" ]; then rm -f "$R/var/lib/dbus/machine-id"; fi
 rm -f "$R` + provisionedMarker + `"
-for H in "$R/root" "$R"/home/*; do
-  [ -d "$H" ] || continue
+# Each home: /root, each directory in /home, and the home of each user in
+# /etc/passwd, so a service user with a home in /var/lib is not missed.
+homes() {
+  { echo /root; for d in "$R"/home/*; do echo "${d#"$R"}"; done; cut -d: -f6 "$R/etc/passwd" 2>/dev/null; } |
+    while IFS= read -r h; do
+      h=${h%/}
+      case $h in "" | /dev | /proc | /sys | /run | /run/*) continue ;; esac
+      if [ -d "$R$h" ]; then echo "$R$h"; fi
+    done | awk '!seen[$0]++'
+}
+while IFS= read -r H; do
   rm -f "$H/.ssh/authorized_keys" "$H"/.*_history "$H/.viminfo"
   # The Claude Code installer writes its settings. A sign-in in them is a
   # credential, so it stays, and the check below fails on it.
   if [ ! -e "$H/.claude/.credentials.json" ]; then rm -rf "$H/.claude" "$H/.claude.json"; fi
-done
+done < <(homes)
 if [ -z "$R" ]; then
   cloud-init clean --logs
   journalctl --rotate >/dev/null 2>&1 || true
@@ -381,35 +390,80 @@ for f in "$R/etc/spekk/agent.env" "$R/home/agent/.bashrc.d/spekk.sh" \
   "$R"/var/log/cloud-init.log "$R"/var/log/cloud-init-output.log; do
   if [ -e "$f" ] || [ -L "$f" ]; then bad "${f#"$R"} is on the builder"; fi
 done
-for H in "$R/root" "$R"/home/*; do
-  [ -d "$H" ] || continue
+while IFS= read -r H; do
   for f in "$H/.git-credentials" "$H/.config/git/credentials" "$H/.config/gh/hosts.yml" \
-    "$H/.netrc" "$H/.aws/credentials" "$H/.config/gcloud" \
+    "$H/.netrc" "$H/.aws/credentials" "$H/.config/gcloud" "$H/.config/doctl/config.yaml" \
     "$H/.claude/.credentials.json" "$H/.claude.json" "$H"/.*_history "$H/.viminfo"; do
     if [ -e "$f" ] || [ -L "$f" ]; then bad "${f#"$R"} is on the builder"; fi
   done
-  # Any file in .ssh can be a private key, whatever its name.
+  # Any file in .ssh can be a private key, whatever its name. The slash
+  # makes find follow a .ssh that is a symlink.
   if [ -d "$H/.ssh" ]; then
     while IFS= read -r f; do bad "${f#"$R"} is on the builder"; done < <(
-      find "$H/.ssh" -mindepth 1 ! -type d ! -name known_hosts ! -name config ! -name '*.pub' 2>/dev/null)
+      find "$H/.ssh/" -mindepth 1 ! -type d ! -name known_hosts ! -name config ! -name '*.pub' 2>/dev/null)
   fi
-done
-while IFS= read -r f; do
-  if grep -Eq 'https?://[^/@[:space:]]+@' "$f"; then bad "${f#"$R"} has a credential in a remote URL"; fi
-done < <(find "$R/root" "$R/home" "$R/opt" -path '*/.git/*' -name config -type f 2>/dev/null)
+done < <(homes)
 if [ -s "$R/etc/machine-id" ]; then bad "/etc/machine-id is not empty"; fi
+
+# The content checks find a secret by its shape, wherever it is in these
+# roots. Docker keeps the images it pulled in /var/lib/docker and
+# /var/lib/containerd, so they are not searched.
+roots=("$R/opt" "$R/srv")
+while IFS= read -r H; do roots+=("$H"); done < <(homes)
+for d in "$R"/var/lib/*; do
+  case ${d#"$R"} in /var/lib/docker | /var/lib/containerd) continue ;; esac
+  if [ -d "$d" ]; then roots+=("$d"); fi
+done
+# A key header ends its line, or is followed by an escaped newline and the
+# key (a key in a JSON file). Code that only names the header does not
+# match. Installed packages often ship test keys, so their directories are
+# not searched.
+key='-----BEGIN ([A-Z0-9]+ )?PRIVATE KEY-----([[:space:]]*$|\\n[A-Za-z0-9+/]{20})'
+while IFS= read -r f; do bad "${f#"$R"} has a private key"; done < <(
+  grep -rlIsE --exclude-dir=node_modules --exclude-dir=site-packages --exclude-dir=dist-packages -e "$key" "${roots[@]}" |
+    awk '!seen[$0]++')
+# AKIAIOSFODNN7EXAMPLE is the key in the AWS documentation.
+token='gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|dop_v1_[a-f0-9]{64}|glpat-[A-Za-z0-9_-]{20}|xox[abprs]-[A-Za-z0-9-]{10,}'
+while IFS= read -r f; do
+  if grep -oIsE -e "$token" "$f" | grep -qv 'EXAMPLE$'; then bad "${f#"$R"} has a token"; fi
+done < <(grep -rlIsE -e "$token" "${roots[@]}" "$R/etc" | awk '!seen[$0]++')
+
+# Each git config: a user or token in a URL, or an extra HTTP header (the
+# form that a CI checkout writes), is a credential.
+gitconfigs() {
+  find "${roots[@]}" -path '*.git/config' -type f 2>/dev/null
+  for H in "${roots[@]}"; do echo "$H/.gitconfig"; echo "$H/.config/git/config"; done
+  echo "$R/etc/gitconfig"
+}
+while IFS= read -r f; do
+  [ -f "$f" ] || continue
+  if grep -Eq 'https?://[^/@[:space:]]+@' "$f"; then bad "${f#"$R"} has a credential in a remote URL"; fi
+  if grep -iq 'extraheader' "$f"; then bad "${f#"$R"} has an extra HTTP header"; fi
+done < <(gitconfigs | awk '!seen[$0]++')
+
 for f in "$R"/root/.docker/config.json "$R"/home/*/.docker/config.json; do
   if [ -f "$f" ] && grep -q '"auth"' "$f"; then bad "${f#"$R"} has a registry login"; fi
 done
 for f in "$R"/root/.npmrc "$R"/home/*/.npmrc; do
   if [ -f "$f" ] && grep -q '_authToken' "$f"; then bad "${f#"$R"} has an npm token"; fi
 done
-for f in "$R/etc/environment" "$R"/etc/profile.d/* "$R"/root/.bashrc "$R"/root/.profile \
-  "$R"/home/*/.bashrc "$R"/home/*/.profile "$R"/home/*/.bashrc.d/*; do
-  if [ -f "$f" ] && grep -Eq '^[[:space:]]*(export[[:space:]]+)?[A-Za-z_]*(TOKEN|SECRET|API_KEY|PASSWORD|ACCESS_KEY)[A-Za-z_]*=[^[:space:]]' "$f"; then
+secretvar='[A-Za-z_]*(TOKEN|SECRET|API_KEY|PASSWORD|ACCESS_KEY)[A-Za-z_]*=[^[:space:]]'
+envfiles() {
+  echo "$R/etc/environment"; echo "$R/etc/bash.bashrc"
+  for f in "$R"/etc/profile.d/*; do echo "$f"; done
+  while IFS= read -r H; do
+    for f in .bashrc .profile .bash_profile .bash_login .bash_aliases .zshrc .zprofile .zshenv; do echo "$H/$f"; done
+    for f in "$H"/.bashrc.d/*; do echo "$f"; done
+  done < <(homes)
+  find "${roots[@]}" -name .env -type f 2>/dev/null
+}
+while IFS= read -r f; do
+  if [ -f "$f" ] && grep -Eq "^[[:space:]]*(export[[:space:]]+)?$secretvar" "$f"; then
     bad "${f#"$R"} sets a secret variable"
   fi
-done
+done < <(envfiles | awk '!seen[$0]++')
+while IFS= read -r f; do bad "${f#"$R"} sets a secret variable"; done < <(
+  grep -rlsE "^[[:space:]]*Environment=.*$secretvar" "$R/etc/systemd/system")
 exit $found`
 }
 
