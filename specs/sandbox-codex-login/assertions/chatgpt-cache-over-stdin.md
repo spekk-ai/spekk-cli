@@ -18,4 +18,4 @@ branch: sc1-codex-sandboxes
 
 ## Verification
 
-- The invalid-cache and unsafe-source tests check preflight. Existing credential boundary and teardown tests check transport and removal. The destination checks and atomic replacement still need a real sandbox run.
+- The invalid-cache and unsafe-source tests check preflight. Existing credential boundary and teardown tests check transport and removal. A sandbox run confirmed the destination file owner and mode. Atomic replacement and a completed worker task still need a real sandbox run.
