@@ -772,10 +772,10 @@ When the wait runs out, the droplet keeps running and the record stays at `provi
 
 **A machine you already have.** spekk does not provision a machine it did not create. Prepare the machine yourself, so that it carries `/opt/spekk/.provisioned`, an `agent` user, and the directories the agent needs. `create` checks the marker over SSH, then runs the same three steps: inject the credentials, configure git, deploy the agent. With `--ssh-user`, the three steps and the later teardown run under `sudo`. Everything else runs as the login user.
 
-To prepare a Debian/Ubuntu machine (amd64 or arm64, including a Raspberry Pi), copy [`scripts/prepare-machine.sh`](https://github.com/spekk-ai/spekk-cli/blob/main/scripts/prepare-machine.sh) to it and run it as root:
+To prepare a Debian/Ubuntu machine (amd64 or arm64, including a Raspberry Pi), copy `prepare-machine.sh`, `configure-agent-attribution.py`, and `assisted-by` from the same checkout to it and run the setup as root:
 
 ```bash
-scp scripts/prepare-machine.sh user@your-machine:
+scp scripts/prepare-machine.sh scripts/configure-agent-attribution.py scripts/assisted-by user@your-machine:
 ssh user@your-machine 'sudo bash prepare-machine.sh'
 ```
 

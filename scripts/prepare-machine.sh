@@ -98,13 +98,8 @@ ATTRIBUTION_TMP=$(mktemp -d)
 trap 'rm -rf "$ATTRIBUTION_TMP"' EXIT
 chmod 755 "$ATTRIBUTION_TMP"
 ATTRIBUTION_SOURCE=$(cd "$(dirname "$0")" && pwd)
-if [ -f "$ATTRIBUTION_SOURCE/configure-agent-attribution.py" ] && [ -f "$ATTRIBUTION_SOURCE/assisted-by" ]; then
-  cp "$ATTRIBUTION_SOURCE/configure-agent-attribution.py" "$ATTRIBUTION_TMP/configure.py"
-  cp "$ATTRIBUTION_SOURCE/assisted-by" "$ATTRIBUTION_TMP/assisted-by"
-else
-  curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/scripts/configure-agent-attribution.py -o "$ATTRIBUTION_TMP/configure.py"
-  curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/scripts/assisted-by -o "$ATTRIBUTION_TMP/assisted-by"
-fi
+cp "$ATTRIBUTION_SOURCE/configure-agent-attribution.py" "$ATTRIBUTION_TMP/configure.py"
+cp "$ATTRIBUTION_SOURCE/assisted-by" "$ATTRIBUTION_TMP/assisted-by"
 chmod 644 "$ATTRIBUTION_TMP/configure.py" "$ATTRIBUTION_TMP/assisted-by"
 su - agent -c "python3 '$ATTRIBUTION_TMP/configure.py' '$ATTRIBUTION_TMP/assisted-by'"
 rm -rf "$ATTRIBUTION_TMP"

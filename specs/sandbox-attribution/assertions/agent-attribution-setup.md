@@ -3,7 +3,7 @@ id: agent-attribution-setup
 parent: sandbox-attribution
 created: 2026-10-19T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/sandbox-attribution
 ---
 
