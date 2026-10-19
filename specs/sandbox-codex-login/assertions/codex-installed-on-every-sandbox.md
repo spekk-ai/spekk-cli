@@ -11,8 +11,8 @@ branch: sc1-codex-sandboxes
 
 ## Success Criteria
 
-- Cloud-init and prepare-machine install the same pinned Codex CLI for amd64 and arm64, alongside Claude Code.
-- Deploy checks the installed version and repairs a missing or different version before service restart.
+- Cloud-init and prepare-machine install the same pinned Codex CLI and code mode host for amd64 and arm64, alongside Claude Code.
+- Deploy checks the installed version and code mode host and repairs a missing or different version before service restart.
 - Failed download or extraction stops provisioning.
 
 ## Verification
