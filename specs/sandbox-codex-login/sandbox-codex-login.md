@@ -12,9 +12,9 @@ A subscription sandbox currently has Claude Code only. An operator cannot select
 
 ## Design
 
-Install a pinned Codex CLI beside Claude Code on both cloud and existing machine paths. For subscription mode, require a file-backed ChatGPT login cache before creating a machine. Copy it over SSH stdin into a private file owned by `agent`. Keep Claude's token path working. Do not use an API key or a local proxy.
+Install a pinned Codex CLI beside Claude Code on both cloud and existing machine paths. For subscription mode, allow an optional file-backed ChatGPT login cache. Copy it over SSH stdin into a private file owned by `agent`. Keep Claude's token path working. Do not use an API key or a local proxy.
 
-A copied ChatGPT refresh token cannot be treated as a durable, concurrent credential. Each machine persists its refreshed file, but independent copies can diverge. A multi-machine refresh requires separate sign-ins or another credential type, and needs a real-cloud check.
+One ChatGPT login supports one active Codex machine at a time. If a caller seeds several machines from one file, the second refresh invalidates the other copies. The CLI does not lock machines or copy refreshed caches back. The caller must serialize use and copy back the latest cache.
 
 ## Rejected
 

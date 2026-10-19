@@ -49,7 +49,7 @@ func ParseAuthMode(s string) (AuthMode, error) {
 // blocked by AWS credentials it will never use.
 func requiredEnvVars(mode AuthMode) []string {
 	if mode == AuthSubscription {
-		return []string{oauthTokenVar, codexAuthFileVar, "GITHUB_TOKEN", "SPEKK_HOST"}
+		return []string{oauthTokenVar, "GITHUB_TOKEN", "SPEKK_HOST"}
 	}
 	return []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"}
 }

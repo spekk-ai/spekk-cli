@@ -141,7 +141,7 @@ func checkRequiredEnv(mode AuthMode) error {
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
-	if mode == AuthSubscription {
+	if mode == AuthSubscription && os.Getenv(codexAuthFileVar) != "" {
 		if _, err := readCodexAuth(os.Getenv(codexAuthFileVar)); err != nil {
 			return err
 		}
@@ -1535,7 +1535,7 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 	if err := writeEnvFile(ip, keyPath, name, user, buildEnvContent(mode, envVars, name, agentToken, spekkHost), marker); err != nil {
 		return err
 	}
-	if mode == AuthSubscription {
+	if mode == AuthSubscription && os.Getenv(codexAuthFileVar) != "" {
 		return injectCodexAuth(ip, keyPath, name, user, os.Getenv(codexAuthFileVar))
 	}
 	return nil

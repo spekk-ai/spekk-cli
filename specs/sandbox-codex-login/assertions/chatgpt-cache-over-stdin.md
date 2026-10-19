@@ -7,15 +7,15 @@ status: done
 branch: sc1-codex-sandboxes
 ---
 
-# Subscription creation installs a private ChatGPT login cache
+# Optional ChatGPT cache installs as a private file
 
 ## Success Criteria
 
-- Create and provision check for a valid file-backed ChatGPT login cache before touching a machine.
-- The cache reaches the sandbox only through SSH stdin and lands at `/home/agent/.codex/auth.json` with agent ownership and mode 0600.
+- If set, create and provision check that the cache is a valid private file before touching a machine. Subscription creation can proceed without this file.
+- The cache reaches the sandbox only through SSH stdin. The install refuses unsafe existing paths and atomically replaces the cache with an agent-owned 0600 regular file.
 - Destroying an unmanaged machine removes that cache.
 - No token appears in arguments, output, or logs.
 
 ## Verification
 
-- A fake SSH test checks the stdin boundary and private install script. Existing teardown inventory test checks removal.
+- The invalid-cache and unsafe-source tests check preflight. Existing credential boundary and teardown tests check transport and removal. A real sandbox install remains unverified.

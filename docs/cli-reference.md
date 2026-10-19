@@ -804,7 +804,7 @@ export CODEX_AUTH_JSON_FILE="$HOME/.config/spekk/codex-auth.json"
 spekk sandbox create --name my-sandbox --auth subscription
 ```
 
-Subscription mode requires a file-backed Codex ChatGPT login at `CODEX_AUTH_JSON_FILE` in addition to the Claude token. Create the file with `codex login` using `cli_auth_credentials_store = "file"`; the CLI checks for `auth_mode: "chatgpt"` and a refresh token before creating a machine. It sends the file over SSH stdin and installs it as `/home/agent/.codex/auth.json`, owned by `agent` with mode 0600. Codex refreshes this file during use. Copies on different machines can diverge when a refresh token rotates, so a single login cache is not a durable concurrent login for several machines.
+Subscription mode requires the Claude token. `CODEX_AUTH_JSON_FILE` is optional. If set, it must be a regular file owned by the current user with no group or other access. Create it with `codex login` using `cli_auth_credentials_store = "file"`. The CLI checks for a ChatGPT refresh token, sends the cache over SSH stdin, and replaces `/home/agent/.codex/auth.json` as an agent-owned 0600 file. It refuses unsafe existing paths. One ChatGPT login supports one active Codex machine at a time. If a caller seeds several machines from one file, the second refresh invalidates the other copies. The CLI does not coordinate machines or copy rotated tokens back; callers must serialize use and copy back the latest cache.
 
 A machine you already have (`--provider none`), Bedrock:
 

@@ -49,7 +49,7 @@ func TestRequiredEnvVars(t *testing.T) {
 	}
 
 	subscription := requiredEnvVars(AuthSubscription)
-	for _, want := range []string{oauthTokenVar, codexAuthFileVar, "GITHUB_TOKEN", "SPEKK_HOST"} {
+	for _, want := range []string{oauthTokenVar, "GITHUB_TOKEN", "SPEKK_HOST"} {
 		if !contains(subscription, want) {
 			t.Errorf("subscription mode does not require %s", want)
 		}
