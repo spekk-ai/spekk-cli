@@ -14,7 +14,7 @@ import (
 // codes bumps the major. An additive change bumps the minor. A PR that
 // bumps the major names the companion control-host PR (server spec:
 // protocol-handshake).
-const ProtocolVersion = "1.3"
+const ProtocolVersion = "1.4"
 
 // protocolHeaderName carries the version on dial.
 const protocolHeaderName = "X-Spekk-Protocol"

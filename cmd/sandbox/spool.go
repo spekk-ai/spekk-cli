@@ -85,6 +85,9 @@ func drainOne(ctx context.Context, path, sessionID string, send frameSender) {
 		log.Printf("conversation spool: dropping %s: %v", path, err)
 		return
 	}
+	if req.Channel != "" {
+		frame["channel"] = req.Channel
+	}
 
 	if err := send(ctx, frame); err != nil {
 		log.Printf("conversation spool: send frame for %s: %v", path, err)

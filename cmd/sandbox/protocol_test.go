@@ -10,7 +10,7 @@ import (
 
 // TestProtocolVersionPinned makes a version change a deliberate diff.
 func TestProtocolVersionPinned(t *testing.T) {
-	if ProtocolVersion != "1.3" {
+	if ProtocolVersion != "1.4" {
 		t.Fatalf("ProtocolVersion changed to %q — bump deliberately and update the companion control-host PR", ProtocolVersion)
 	}
 }

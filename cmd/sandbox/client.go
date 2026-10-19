@@ -202,9 +202,10 @@ func (c *AgentClient) handleInbound(ctx context.Context, msg Message) {
 // these are logged as conversation_open rejections rather than generic
 // errors.
 var conversationOpenErrorCodes = map[string]bool{
-	"conversation_open_invalid":    true,
-	"conversation_open_no_channel": true,
-	"conversation_open_failed":     true,
+	"conversation_open_invalid":          true,
+	"conversation_open_no_channel":       true,
+	"conversation_open_failed":           true,
+	"conversation_open_channel_rejected": true,
 }
 
 // handleErrorFrame logs an inbound "error" frame legibly. It never tears

@@ -66,6 +66,19 @@ func TestDrainSpoolFireOnce(t *testing.T) {
 	})
 }
 
+func TestDrainSpoolForwardsChannel(t *testing.T) {
+	dir := t.TempDir()
+	writeRequestFile(t, dir, "req.json", `{"title":"T","body":"B","severity":"info","channel":"C_PROJECT"}`)
+	var got map[string]any
+	drainSpool(context.Background(), dir, "session-1", func(_ context.Context, frame map[string]any) error {
+		got = frame
+		return nil
+	})
+	if got == nil || got["channel"] != "C_PROJECT" || got["session_id"] != "session-1" {
+		t.Fatalf("unexpected frame: %v", got)
+	}
+}
+
 // --- drainSpool: session id not yet known ---
 
 // TestDrainSpoolDropsRequestBeforeSessionIDKnown verifies that a request

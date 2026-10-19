@@ -104,6 +104,7 @@ func TestHandleInboundErrorFrameConversationOpenCode(t *testing.T) {
 		"conversation_open_invalid",
 		"conversation_open_no_channel",
 		"conversation_open_failed",
+		"conversation_open_channel_rejected",
 	}
 
 	for _, code := range codes {

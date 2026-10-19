@@ -33,6 +33,7 @@ Worker → control host, over the existing agent WebSocket:
   "title": "<short headline>",
   "body": "<longer text>",
   "severity": "info | warning | critical",
+  "channel": "<optional Slack channel name or ID>",
   "metadata": { "...optional...": "..." }
 }
 ```
@@ -41,7 +42,7 @@ Control host → worker on rejection (a normal `type: "error"` frame):
 
 ```json
 { "type": "error",
-  "error": "conversation_open_invalid | conversation_open_no_channel | conversation_open_failed",
+  "error": "conversation_open_invalid | conversation_open_no_channel | conversation_open_failed | conversation_open_channel_rejected",
   "detail": "..." }
 ```
 
@@ -61,7 +62,7 @@ backed by a **per-session spool directory the worker drains**:
   command (`cmd.Env = append(os.Environ(), …)` in `invoke.go`), so the variable
   is scoped to that process — not the whole worker — and the agent's shell tools
   inherit it alongside the rest of the worker's environment.
-- `spekk conversation open --title … --body … [--severity …]` writes one
+- `spekk conversation open --title … --body … [--severity …] [--channel …]` writes one
   request file into that spool directory (atomically) and exits. It does **not**
   supply a session id.
 - The worker drains the spool during the session and emits one
@@ -89,8 +90,8 @@ re-declared on each side where the two copies could drift. They must agree on:
 - Location: the directory named by the environment variable the worker sets on
   the spawned process. Its name is the shared package's env-var constant
   (`SPEKK_CONVERSATION_SPOOL`), declared once and imported everywhere.
-- One request per file. The file is a JSON object carrying `title`, `body`, and
-  `severity` only — **never** `session_id` (the worker stamps that).
+- One request per file. The file is a JSON object carrying `title`, `body`,
+  `severity`, and an optional `channel` — **never** `session_id` (the worker stamps that).
 - Files are written atomically (write-then-rename) so the worker never reads a
   partial file.
 - The worker deletes each file after emitting its frame.
@@ -112,3 +113,4 @@ behavior is a later cycle).
 3. `conversation-open-cli` — the `spekk conversation open` agent trigger
 4. `worker-emits-conversation-open` — the worker drains the spool and emits
 5. `conversation-open-error-frames` — inbound typed rejections are logged
+6. `conversation-open-channel` — an optional channel is carried from CLI request to worker frame
