@@ -2,6 +2,8 @@ package sandbox
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -114,6 +116,13 @@ func TestNoSecretInTheSSHArgumentList(t *testing.T) {
 		secrets[v] = "secret-of-" + strings.ToLower(v)
 		t.Setenv(v, secrets[v])
 	}
+	codexPath := filepath.Join(t.TempDir(), "auth.json")
+	codexSecret := `{"auth_mode":"chatgpt","tokens":{"refresh_token":"secret-of-codex-refresh"}}`
+	if err := os.WriteFile(codexPath, []byte(codexSecret), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(codexAuthFileVar, codexPath)
+	secrets["codex refresh"] = "secret-of-codex-refresh"
 	var argv []string
 	var stdin strings.Builder
 	orig := sshExec

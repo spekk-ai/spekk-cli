@@ -99,6 +99,7 @@ func checkProvisioned(meta *SandboxMeta, name string) error {
 var agentSecrets = []string{
 	"/etc/spekk/agent.env",
 	"/home/agent/.git-credentials",
+	"/home/agent/.codex/auth.json",
 	// gh auth login writes the same token here.
 	"/home/agent/.config/gh",
 	// An older setup-credentials.sh exported ANTHROPIC_API_KEY into the
