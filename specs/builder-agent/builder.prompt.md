@@ -179,9 +179,11 @@ status: done
 5. If conflict (someone else claimed it), pick next assertion
 
 **Important:** Parent spec status is automatically computed from child assertions:
+- Draft assertions are excluded; the rules below count only the others
 - If ANY child is `failed` → parent becomes `failed`
 - If ALL children are `done` → parent becomes `done`
-- If any child is incomplete → parent becomes `in_progress`
+- If at least one child is `in_progress` or `done` (and not all are `done`) → parent becomes `in_progress`
+- If all children are `not_started`, or there are none → parent becomes `not_started`
 - Never manually set parent spec status - it's computed automatically
 
 ### 6. Validate System Health
