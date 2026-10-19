@@ -188,6 +188,9 @@ func machineSSH(t *testing.T, failOn string) (argv, stdin *[]string) {
 		if strings.Contains(args[len(args)-1], claudeVersionLine) {
 			return []byte("2.1.301 (Claude Code)\n"), nil
 		}
+		if strings.Contains(sentScript(args, in), "/usr/local/bin/codex --version") {
+			return []byte("codex-cli 0.163.0\n"), nil
+		}
 		return nil, nil
 	}
 	scpExec = func([]string) ([]byte, error) { return nil, nil }

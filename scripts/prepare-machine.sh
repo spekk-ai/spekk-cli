@@ -93,6 +93,21 @@ fi
 # Onto the system PATH: the spekk-agent service won't read agent's ~/.local/bin.
 ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
 
+echo "==> Codex CLI (pinned 0.163.0)"
+if [ "$(/usr/local/bin/codex --version 2>/dev/null || true)" != "codex-cli 0.163.0" ]; then
+  case "$ARCH" in
+    amd64) CODEX_ARCH=x86_64 ;;
+    arm64) CODEX_ARCH=aarch64 ;;
+    *) echo "Codex requires amd64 or arm64" >&2; exit 1 ;;
+  esac
+  CODEX_TMP=$(mktemp -d)
+  curl -fsSL "https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-${CODEX_ARCH}-unknown-linux-musl.tar.gz" -o "$CODEX_TMP/codex.tar.gz"
+  tar -xzf "$CODEX_TMP/codex.tar.gz" -C "$CODEX_TMP"
+  install -m 0755 "$CODEX_TMP/codex-${CODEX_ARCH}-unknown-linux-musl" /usr/local/bin/codex
+  rm -rf "$CODEX_TMP"
+fi
+[ "$(/usr/local/bin/codex --version)" = "codex-cli 0.163.0" ]
+
 echo "==> spekk CLI"
 # Install as agent into a directory agent owns, so `spekk update` needs no sudo,
 # and outside agent's home, which Ubuntu creates 0750, so the link on the system

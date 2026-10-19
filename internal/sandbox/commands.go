@@ -141,6 +141,11 @@ func checkRequiredEnv(mode AuthMode) error {
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
+	if mode == AuthSubscription {
+		if _, err := readCodexAuth(os.Getenv(codexAuthFileVar)); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -944,6 +949,9 @@ func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) er
 	if err := ensureClaudeCode(ip, keyPath, name, user); err != nil {
 		return err
 	}
+	if err := ensureCodexCLI(ip, keyPath, name, user); err != nil {
+		return err
+	}
 
 	// Install the unit, fix ownership, and start the service. The agent needs to
 	// own /opt/spekk so it can create its WORKSPACE (/opt/spekk/workspace) at runtime.
@@ -1524,7 +1532,13 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 	}
 	spekkHost := os.Getenv("SPEKK_HOST")
 
-	return writeEnvFile(ip, keyPath, name, user, buildEnvContent(mode, envVars, name, agentToken, spekkHost), marker)
+	if err := writeEnvFile(ip, keyPath, name, user, buildEnvContent(mode, envVars, name, agentToken, spekkHost), marker); err != nil {
+		return err
+	}
+	if mode == AuthSubscription {
+		return injectCodexAuth(ip, keyPath, name, user, os.Getenv(codexAuthFileVar))
+	}
+	return nil
 }
 
 // writeEnvFile writes envContent to /etc/spekk/agent.env, and the marker.

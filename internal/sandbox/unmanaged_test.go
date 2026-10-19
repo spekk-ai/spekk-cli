@@ -274,6 +274,8 @@ func TestAgentSecretsInventory(t *testing.T) {
 		"/etc/spekk/agent.env",
 		// configureGitCredentials writes the token twice: once here...
 		"/home/agent/.git-credentials",
+		// The ChatGPT login cache must also be removed from unmanaged machines.
+		"/home/agent/.codex/auth.json",
 		// ...and once here, through gh auth login --with-token.
 		"/home/agent/.config/gh",
 		// An older setup-credentials.sh exported ANTHROPIC_API_KEY into

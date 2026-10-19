@@ -168,6 +168,19 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 	// version and installs the agent, and nothing else.
 	sshExec = func(args []string, stdin string) ([]byte, error) {
 		sshCommands = append(sshCommands, args[len(args)-1])
+		cmd := sentScript(args, stdin)
+		if strings.Contains(cmd, "| sudo bash") {
+			start := strings.IndexByte(cmd, '\'')
+			end := strings.IndexByte(cmd[start+1:], '\'') + start + 1
+			decoded, err := base64.StdEncoding.DecodeString(cmd[start+1 : end])
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd = string(decoded)
+		}
+		if strings.Contains(cmd, "/usr/local/bin/codex --version") {
+			return []byte("codex-cli 0.163.0\n"), nil
+		}
 		return []byte("2.1.301 (Claude Code)\n"), nil
 	}
 	t.Cleanup(func() { scpExec, sshExec = origSCP, origSSH })
@@ -180,8 +193,8 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 			if err := deployAgent("9.9.9.9", "", "sb", user, artifacts); err != nil {
 				t.Fatalf("deploy: %v", err)
 			}
-			if len(scpArgs) != 1 || len(sshCommands) != 2 {
-				t.Fatalf("expected one upload, a version read and an installation, got %v and %v", scpArgs, sshCommands)
+			if len(scpArgs) != 1 || len(sshCommands) != 3 {
+				t.Fatalf("expected one upload, two version reads and an installation, got %v and %v", scpArgs, sshCommands)
 			}
 			if want := user + "@9.9.9.9:"; scpArgs[0] != want {
 				t.Errorf("staged at %q, want %q", scpArgs[0], want)

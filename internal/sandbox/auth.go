@@ -26,6 +26,10 @@ const apiKeyVar = "ANTHROPIC_API_KEY"
 // oauthTokenVar is the variable Claude Code reads a subscription token from.
 const oauthTokenVar = "CLAUDE_CODE_OAUTH_TOKEN"
 
+// codexAuthFileVar points to a local, file-backed ChatGPT login cache.
+// The cache itself is sent over SSH stdin and never placed in an argument.
+const codexAuthFileVar = "CODEX_AUTH_JSON_FILE"
+
 // ParseAuthMode maps the --auth flag's text to a mode. An empty string is
 // bedrock, so an operator who passes no flag keeps the behavior the command
 // had before the flag existed.
@@ -45,7 +49,7 @@ func ParseAuthMode(s string) (AuthMode, error) {
 // blocked by AWS credentials it will never use.
 func requiredEnvVars(mode AuthMode) []string {
 	if mode == AuthSubscription {
-		return []string{oauthTokenVar, "GITHUB_TOKEN", "SPEKK_HOST"}
+		return []string{oauthTokenVar, codexAuthFileVar, "GITHUB_TOKEN", "SPEKK_HOST"}
 	}
 	return []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"}
 }

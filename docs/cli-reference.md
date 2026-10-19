@@ -800,8 +800,11 @@ DigitalOcean droplet, Claude subscription:
 ```bash
 export DO_API_TOKEN=... SPEKK_HOST=... GITHUB_TOKEN=...
 export CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/spekk/oauth-token)"
+export CODEX_AUTH_JSON_FILE="$HOME/.config/spekk/codex-auth.json"
 spekk sandbox create --name my-sandbox --auth subscription
 ```
+
+Subscription mode requires a file-backed Codex ChatGPT login at `CODEX_AUTH_JSON_FILE` in addition to the Claude token. Create the file with `codex login` using `cli_auth_credentials_store = "file"`; the CLI checks for `auth_mode: "chatgpt"` and a refresh token before creating a machine. It sends the file over SSH stdin and installs it as `/home/agent/.codex/auth.json`, owned by `agent` with mode 0600. Codex refreshes this file during use. Copies on different machines can diverge when a refresh token rotates, so a single login cache is not a durable concurrent login for several machines.
 
 A machine you already have (`--provider none`), Bedrock:
 
