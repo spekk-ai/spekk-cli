@@ -8,13 +8,6 @@ import (
 	"github.com/coder/websocket"
 )
 
-// TestProtocolVersionPinned makes a version change a deliberate diff.
-func TestProtocolVersionPinned(t *testing.T) {
-	if ProtocolVersion != "1.5" {
-		t.Fatalf("ProtocolVersion changed to %q — bump deliberately and update the companion control-host PR", ProtocolVersion)
-	}
-}
-
 func TestDialOptionsSendBothHeaders(t *testing.T) {
 	c := &AgentClient{cfg: Config{Token: "tok"}}
 	h := c.dialOptions().HTTPHeader

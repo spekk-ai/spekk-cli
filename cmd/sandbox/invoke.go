@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"sync"
 	"syscall"
 
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
@@ -17,6 +18,10 @@ import (
 func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg Message) {
 	workspace := cfg.Workspace
 	if msg.Repository != nil {
+		lockValue, _ := repositoryLocks.LoadOrStore(msg.Repository.ID, &sync.Mutex{})
+		lock := lockValue.(*sync.Mutex)
+		lock.Lock()
+		defer lock.Unlock()
 		var err error
 		workspace, err = prepareRepository(ctx, cfg, msg.AgentSessionID, *msg.Repository)
 		if err != nil {

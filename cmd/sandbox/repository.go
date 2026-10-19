@@ -113,10 +113,6 @@ func prepareRepository(ctx context.Context, cfg Config, sessionID string, reques
 	if err != nil {
 		return "", err
 	}
-	lockValue, _ := repositoryLocks.LoadOrStore(requested.ID, &sync.Mutex{})
-	lock := lockValue.(*sync.Mutex)
-	lock.Lock()
-	defer lock.Unlock()
 	root := filepath.Join(cfg.Workspace, "repositories")
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return "", fmt.Errorf("create repository directory: %w", err)
@@ -159,7 +155,7 @@ func prepareRepository(ctx context.Context, cfg Config, sessionID string, reques
 	if err := runRepositoryGit(ctx, dir, env, "fetch", "-q", "--no-tags", "origin", "refs/heads/"+access.Ref); err != nil {
 		return "", fmt.Errorf("fetch selected ref failed; check repository access and ref: %w", err)
 	}
-	if err := runRepositoryGit(ctx, dir, env, "checkout", "-q", "--detach", "FETCH_HEAD"); err != nil {
+	if err := runRepositoryGit(ctx, dir, env, "checkout", "-q", "--no-overwrite-ignore", "--detach", "FETCH_HEAD"); err != nil {
 		return "", fmt.Errorf("checkout selected ref failed: %w", err)
 	}
 	for _, args := range [][]string{
@@ -178,7 +174,24 @@ func prepareRepository(ctx context.Context, cfg Config, sessionID string, reques
 }
 
 func verifyRepository(ctx context.Context, dir, remote string, env []string) error {
-	cmd := exec.CommandContext(ctx, "git", "config", "--local", "--get", "remote.origin.url")
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
+	cmd.Dir, cmd.Env = dir, env
+	root, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("repository directory is not a Git worktree")
+	}
+	actual, err := filepath.EvalSymlinks(strings.TrimSpace(string(root)))
+	if err != nil {
+		return fmt.Errorf("resolve repository worktree: %w", err)
+	}
+	selected, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return fmt.Errorf("resolve repository directory: %w", err)
+	}
+	if actual != selected {
+		return fmt.Errorf("repository directory is not its own Git worktree")
+	}
+	cmd = exec.CommandContext(ctx, "git", "config", "--local", "--get", "remote.origin.url")
 	cmd.Dir, cmd.Env = dir, env
 	got, err := cmd.Output()
 	if err != nil || strings.TrimSpace(string(got)) != remote {
