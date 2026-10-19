@@ -24,16 +24,7 @@ binary the machine cannot run and then reports success.
 - Any other `uname -m` value returns an error naming the unsupported
   architecture, rather than falling back to a default build.
 - `detectArch` reads the machine name from stdout only. ssh writes its own warnings to stderr, for example on a host whose sshd has no post-quantum key exchange, and a combined read refuses a supported machine by the text of the warning.
-- `fetchAgentBinary` runs `detectArch` then `downloadAgentBinary(arch)`, and is
-  invoked after the machine is reachable in all three paths: Create and
-  Provision (via `equipSandbox`) and `Deploy`.
-- A detection failure surfaces as a clear error; the empty `BinaryPath` is
-  cleaned up regardless (the `defer` removes whatever path is set, including
-  none).
+- `fetchAgentBinary` runs `detectArch` and then calls `downloadBinaries(arch)`. Create and Provision call it through `equipSandbox` after the machine is reachable. Deploy also calls it after the machine is reachable.
+- A detection failure returns an error. Create, Provision, and Deploy call `cleanup` when they finish. `cleanup` removes the temp directory when one exists. `downloadBinaries` removes its temp directory if a download fails.
 
-**Note:** the `uname -m` → GOARCH mapping and the download split currently have
-no unit test in `internal/sandbox`. The package's tests and `go build ./...`
-pass, and the arm64 build cross-compiles, but the arch mapping itself is
-unverified by a test — a regression that mis-maps an architecture would ship
-silently. A test covering the mapping (accepted values and the unsupported-arch
-error) is worth adding.
+**Tests:** `internal/sandbox/release_test.go` tests supported and unsupported architecture values in `TestArchFromUname`, SSH warnings in `TestDetectArchIgnoresSSHWarnings`, and the agent and CLI asset names in `TestDownloadBinariesSelectsArchAssets`.

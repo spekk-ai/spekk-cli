@@ -16,6 +16,9 @@ in the CLI binary (`//go:embed cloud-init.yaml` in `internal/sandbox/embed.go`)
 rather than as a separately downloaded asset, so no control-host infrastructure
 is duplicated into or fetched from a private repo.
 
-The release the artifacts come from is the latest published release by default;
-`--release <tag>` on create/provision/deploy pins a specific one (e.g. an
-`exp-*` prerelease that carries an architecture the latest release does not).
+With no `--release`, the artifacts come from the release of the operator's own
+CLI when it has a stable `vX.Y.Z` version, and from the latest published release
+for any other build (`specs/sandbox-spekk-binaries/`,
+`default-release-is-the-operators`). `--release <tag>` on
+create/provision/deploy pins a specific one (e.g. an `exp-*` prerelease that
+carries an architecture the latest release does not).

@@ -72,9 +72,9 @@ func (a *releaseArtifacts) cleanup() {
 var fetchArtifacts = fetchReleaseArtifacts
 
 // fetchReleaseArtifacts resolves tag to a concrete release and pairs it with the
-// cloud-init template. tag may be empty/"latest" or a specific tag. The agent
-// binary is downloaded later, by downloadAgentBinary, since which build to
-// fetch depends on the machine's arch — not known until it is reached.
+// cloud-init template. tag may be empty, "latest", or a specific tag. The agent
+// and CLI binaries are downloaded by downloadBinaries after the machine's
+// architecture is known.
 func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 	version, err := resolveReleaseTag(tag)
 	if err != nil {
