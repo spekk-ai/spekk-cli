@@ -21,25 +21,25 @@ architecture is known, because which build to fetch depends on that machine.
 ## Success Criteria
 
 - `internal/sandbox/release.go` defines `fetchReleaseArtifacts(tag string)` which:
-  - Fetches the release from `GET /repos/{releaseRepo}/releases/latest` when
-    `tag` is empty or `"latest"`, otherwise `/releases/tags/{tag}`, where the
+  - Resolves an empty or `"latest"` tag to the concrete tag of the newest
+    release through the redirect of `github.com/{releaseRepo}/releases/latest`
+    (`resolveReleaseTag`), and returns any other tag unchanged, where the
     `releaseRepo` constant is the public repo `spekk-ai/spekk-cli`
-  - Uses `GITHUB_TOKEN` from env for auth (returns an error if it is unset)
-  - Does NOT download the agent binary — it returns
-    `*releaseArtifacts{Version, CloudInit, release, token}`, where `Version` is
-    the release tag name, `CloudInit` is the embedded template, and `release` +
-    `token` are retained so the binary can be fetched later
-  - Returns a clear error including HTTP status and the repo when the release is
-    not found
-- `releaseArtifacts` defines the method `downloadAgentBinary(arch string)` which:
-  - Downloads the asset named `sandbox-linux-{arch}` (via `sandboxAssetName`) by
-    ID through the GitHub API asset endpoint (`/releases/assets/{id}` with
-    `Accept: application/octet-stream`), following the 302 to the presigned
-    objects host that carries its own auth
-  - Writes the binary to a temp file and records its path in `BinaryPath`, which
-    the caller removes when done
-  - Returns a clear error naming the asset when that architecture's build is not
-    present on the release
+  - Sends no credential: the repository is public
+  - Does NOT download any binary — it returns `*releaseArtifacts{Version,
+    CloudInit}`, where `Version` is the concrete tag and `CloudInit` is the
+    embedded template
+- `releaseArtifacts` defines the method `downloadBinaries(arch string)` which:
+  - Reads the sha256 digests of the release first, and fails before any download
+    when an asset has none (`specs/sandbox-spekk-binaries/`,
+    `release-binaries-sha256-checked`)
+  - Downloads `sandbox-linux-{arch}` (via `sandboxAssetName`) and
+    `spekk-linux-{arch}` (via `cliAssetName`) from
+    `github.com/{releaseRepo}/releases/download/{tag}/{name}`
+  - Writes them to a temp directory and records their paths in `BinaryPath` and
+    `CLIPath`; `cleanup` removes the directory
+  - Returns a clear error naming the asset and the release when that
+    architecture's build is not present on the release
 - The cloud-init template is provided by `//go:embed cloud-init.yaml`
   (`internal/sandbox/embed.go`), returned in the `CloudInit` field as in-memory
   bytes and sent straight to the DO API as droplet user-data — it is not a
