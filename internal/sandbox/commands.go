@@ -53,9 +53,9 @@ type CreateOptions struct {
 	// belongs to one organization.
 	Organization string
 
-	// Release is the spekk release the cloud-init template and agent binary
-	// come from. Empty means the latest published release; a specific tag
-	// (e.g. an "exp-*" prerelease) pins a build that "latest" does not carry.
+	// Release selects the spekk release for the agent and CLI binaries.
+	// Empty uses this CLI's stable release, or the latest release for a dev build.
+	// A specific tag pins the release.
 	Release string
 
 	// ProvisionTimeout is how long Create waits for cloud-init to write the
@@ -95,8 +95,8 @@ type ProvisionOptions struct {
 	// Organization is used only when provision registers a new agent. See
 	// CreateOptions.Organization.
 	Organization string
-	// Release pins the spekk release the agent binary comes from. Empty means
-	// the latest published release. See CreateOptions.Release.
+	// Release selects the spekk release for the agent and CLI binaries.
+	// Empty uses the rule in CreateOptions.Release.
 	Release string
 }
 

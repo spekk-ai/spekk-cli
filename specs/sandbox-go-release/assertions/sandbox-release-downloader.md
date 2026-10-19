@@ -7,16 +7,11 @@ status: done
 branch: feature/sandbox-go-release
 ---
 
-# Sandbox Binary Is Downloaded from the Project's Public GitHub Release
+# Sandbox Binaries Are Downloaded from the Project's Public GitHub Release
 
-`internal/sandbox/release.go` fetches the sandbox agent binary from a GitHub
-Release on this project's own public repository. The cloud-init template is not
-downloaded — it is embedded in the CLI binary — so no control-host
-infrastructure files are bundled or fetched from a private repo.
+`internal/sandbox/release.go` fetches the sandbox agent and spekk CLI binaries from a GitHub Release on this project's public repository. The cloud-init template is embedded in the CLI binary and is sent as in-memory data.
 
-Fetching is two-phase: the release metadata and cloud-init template are read up
-front, but the agent binary is downloaded only once the sandbox machine's CPU
-architecture is known, because which build to fetch depends on that machine.
+The CLI selects a release and pairs its concrete tag with the embedded cloud-init template. A pinned tag needs no release metadata request at this stage. After the machine's CPU architecture is known, the CLI reads the release digests and downloads the agent and CLI binaries for that architecture into one temp directory.
 
 ## Success Criteria
 

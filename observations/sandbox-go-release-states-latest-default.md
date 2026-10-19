@@ -2,13 +2,14 @@
 slug: sandbox-go-release-states-latest-default
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-10-19T00:00:00Z
 announced: 2026-10-19T19:02:36Z
 affected:
   - specs/sandbox-go-release/sandbox-go-release.md
   - specs/sandbox-go-release/assertions/release-tag-pins-the-source.md
   - specs/sandbox-go-release/assertions/sandbox-release-downloader.md
+  - specs/sandbox-go-release/assertions/agent-binary-matches-machine-arch.md
   - internal/sandbox/commands.go
   - internal/sandbox/release.go
 ---
