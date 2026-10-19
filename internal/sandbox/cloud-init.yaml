@@ -163,6 +163,17 @@ runcmd:
   # than the minimum in internal/claudecode. The link follows only a good install.
   - su - agent -c 'curl -fsSL -o claude-install.sh https://claude.ai/install.sh && bash claude-install.sh stable && rm claude-install.sh' && ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
 
+  # Install the shared trailer script and turn off Claude Code's own credit.
+  - |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      chmod 755 "$tmp"
+      curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/scripts/configure-agent-attribution.py -o "$tmp/configure.py"
+      curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/scripts/assisted-by -o "$tmp/assisted-by"
+      chmod 644 "$tmp/configure.py" "$tmp/assisted-by"
+      su - agent -c "python3 '$tmp/configure.py' '$tmp/assisted-by'"
+
   # Codex CLI, pinned beside Claude Code on every sandbox.
   - |
       set -e

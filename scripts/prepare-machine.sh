@@ -93,6 +93,23 @@ fi
 # Onto the system PATH: the spekk-agent service won't read agent's ~/.local/bin.
 ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
 
+echo "==> Agent attribution"
+ATTRIBUTION_TMP=$(mktemp -d)
+trap 'rm -rf "$ATTRIBUTION_TMP"' EXIT
+chmod 755 "$ATTRIBUTION_TMP"
+ATTRIBUTION_SOURCE=$(cd "$(dirname "$0")" && pwd)
+if [ -f "$ATTRIBUTION_SOURCE/configure-agent-attribution.py" ] && [ -f "$ATTRIBUTION_SOURCE/assisted-by" ]; then
+  cp "$ATTRIBUTION_SOURCE/configure-agent-attribution.py" "$ATTRIBUTION_TMP/configure.py"
+  cp "$ATTRIBUTION_SOURCE/assisted-by" "$ATTRIBUTION_TMP/assisted-by"
+else
+  curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/scripts/configure-agent-attribution.py -o "$ATTRIBUTION_TMP/configure.py"
+  curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/scripts/assisted-by -o "$ATTRIBUTION_TMP/assisted-by"
+fi
+chmod 644 "$ATTRIBUTION_TMP/configure.py" "$ATTRIBUTION_TMP/assisted-by"
+su - agent -c "python3 '$ATTRIBUTION_TMP/configure.py' '$ATTRIBUTION_TMP/assisted-by'"
+rm -rf "$ATTRIBUTION_TMP"
+trap - EXIT
+
 echo "==> Codex CLI (pinned 0.163.0)"
 if [ "$(/usr/local/bin/codex --version 2>/dev/null || true)" != "codex-cli 0.163.0" ]; then
   case "$ARCH" in
