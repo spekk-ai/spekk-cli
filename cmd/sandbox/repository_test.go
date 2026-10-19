@@ -137,6 +137,25 @@ func TestPrepareRepositoryClonesFetchesAndProtectsLocalChanges(t *testing.T) {
 	if got := gitForRepositoryTest(t, dir, "rev-parse", "HEAD"); got != second {
 		t.Fatalf("fetched checkout = %s, want %s", got, second)
 	}
+	gitForRepositoryTest(t, work, "checkout", "-qb", "pull-change")
+	if err := os.WriteFile(filepath.Join(work, "file.txt"), []byte("pull"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitForRepositoryTest(t, work, "add", "file.txt")
+	gitForRepositoryTest(t, work, "commit", "-qm", "Add pull change")
+	pull := gitForRepositoryTest(t, work, "rev-parse", "HEAD")
+	gitForRepositoryTest(t, work, "push", "-q", "origin", "HEAD:refs/pull/7/head")
+	selection.Ref = "pull/7"
+	if _, err := prepareRepository(context.Background(), cfg, "session-1", selection); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitForRepositoryTest(t, dir, "rev-parse", "HEAD"); got != pull {
+		t.Fatalf("pull checkout = %s, want %s", got, pull)
+	}
+	selection.Ref = "main"
+	if _, err := prepareRepository(context.Background(), cfg, "session-1", selection); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("local work"), 0o644); err != nil {
 		t.Fatal(err)
 	}

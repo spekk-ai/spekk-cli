@@ -30,6 +30,7 @@ const (
 )
 
 var repositoryNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$`)
+var pullRefPattern = regexp.MustCompile(`^pull/[0-9]+$`)
 var repositoryLocks sync.Map
 
 type repositoryAccess struct {
@@ -152,7 +153,11 @@ func prepareRepository(ctx context.Context, cfg Config, sessionID string, reques
 	if err := verifyRepository(ctx, dir, remote, env); err != nil {
 		return "", err
 	}
-	if err := runRepositoryGit(ctx, dir, env, "fetch", "-q", "--no-tags", "origin", "refs/heads/"+access.Ref); err != nil {
+	fetchRef := "refs/heads/" + access.Ref
+	if pullRefPattern.MatchString(access.Ref) {
+		fetchRef = "refs/" + access.Ref + "/head"
+	}
+	if err := runRepositoryGit(ctx, dir, env, "fetch", "-q", "--no-tags", "origin", fetchRef); err != nil {
 		return "", fmt.Errorf("fetch selected ref failed; check repository access and ref: %w", err)
 	}
 	if err := runRepositoryGit(ctx, dir, env, "checkout", "-q", "--no-overwrite-ignore", "--detach", "FETCH_HEAD"); err != nil {
