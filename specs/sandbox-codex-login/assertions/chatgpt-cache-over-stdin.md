@@ -3,7 +3,7 @@ id: chatgpt-cache-over-stdin
 parent: sandbox-codex-login
 created: 2026-10-19T00:00:00Z
 priority: 1
-status: done
+status: not_started
 branch: sc1-codex-sandboxes
 ---
 
@@ -18,4 +18,4 @@ branch: sc1-codex-sandboxes
 
 ## Verification
 
-- The invalid-cache and unsafe-source tests check preflight. Existing credential boundary and teardown tests check transport and removal. A real sandbox install remains unverified.
+- The invalid-cache and unsafe-source tests check preflight. Existing credential boundary and teardown tests check transport and removal. The destination checks and atomic replacement still need a real sandbox run.
