@@ -24,10 +24,10 @@ specs/
 Spekk computes a spec's status from its assertions:
 
 - Draft assertions do not count.
-- Any `failed` assertion makes the spec `failed`.
-- All assertions `done` makes the spec `done`.
-- A spec with no assertions, or with only draft assertions, is `not_started`.
-- Every other mix is `in_progress`.
+- Any counted `failed` assertion makes the spec `failed`.
+- A spec with no counted assertions, or with only `not_started` counted assertions, is `not_started`.
+- If all counted assertions are `done`, the spec is `done`.
+- A spec with a counted `done` or `in_progress` assertion is `in_progress` unless all counted assertions are `done`.
 
 Do not write a `status` on a spec. The one exception is the literal `draft`, which hides the spec and all of its assertions from the work queue.
 

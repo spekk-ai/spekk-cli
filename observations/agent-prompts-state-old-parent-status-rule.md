@@ -2,7 +2,7 @@
 slug: agent-prompts-state-old-parent-status-rule
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-10-18T00:00:00Z
 announced: 2026-10-18T01:26:37Z
 affected:
@@ -10,6 +10,8 @@ affected:
   - specs/builder-agent/builder.prompt.md
   - internal/parser/parser.go
   - specs/status-counts-match-the-work/assertions/spec-not-started-until-work-starts.md
+  - README.md
+  - docs/concepts.md
 ---
 
 # Coach and builder prompts still state the old parent-status rule

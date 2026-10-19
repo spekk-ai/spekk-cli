@@ -271,7 +271,7 @@ Describe what must exist or work for this to be complete.
 
 An assertion carries the same fields, plus `parent`: the id of its spec. `status` is optional and defaults to `not_started`.
 
-A parent spec's status is computed from its assertions. Draft assertions do not count. Any `failed` assertion makes the spec `failed`. All `done` makes it `done`. A spec with no assertions, or with only drafts, is `not_started`. Every other mix is `in_progress`. Do not write a `status` on a spec, except the literal `draft`, which hides the spec and its assertions from the queue.
+A parent spec's status is computed from its assertions. Draft assertions do not count. Any counted `failed` assertion makes the spec `failed`. A spec with no counted assertions, or with only `not_started` counted assertions, is `not_started`. If all counted assertions are `done`, the spec is `done`. If a counted assertion is `done` or `in_progress` and not all counted assertions are `done`, the spec is `in_progress`. Do not write a `status` on a spec, except the literal `draft`, which hides the spec and its assertions from the queue.
 
 ### Optional fields
 
