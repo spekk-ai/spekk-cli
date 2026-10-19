@@ -10,6 +10,7 @@ type Message struct {
 	Error          string       `json:"error"`
 	Detail         string       `json:"detail"`
 	Protocol       string       `json:"protocol"`
+	Capabilities   []string     `json:"capabilities"`
 
 	// The sign-in terminal frames (terminal.go). No field names a program.
 	TerminalID string `json:"terminal_id"`

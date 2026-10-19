@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -34,7 +36,7 @@ func TestDrainSpoolFireOnce(t *testing.T) {
 			return nil
 		}
 
-		drainSpool(context.Background(), dir, "sess-abc", send)
+		drainSpool(context.Background(), dir, "sess-abc", func() bool { return true }, send)
 
 		if got == nil {
 			t.Fatal("expected a frame to be sent")
@@ -58,7 +60,7 @@ func TestDrainSpoolFireOnce(t *testing.T) {
 			return fmt.Errorf("boom")
 		}
 
-		drainSpool(context.Background(), dir, "sess-abc", send)
+		drainSpool(context.Background(), dir, "sess-abc", func() bool { return true }, send)
 
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("expected request file removed even though send failed, stat err=%v", err)
@@ -70,12 +72,46 @@ func TestDrainSpoolForwardsChannel(t *testing.T) {
 	dir := t.TempDir()
 	writeRequestFile(t, dir, "req.json", `{"title":"T","body":"B","severity":"info","channel":"C_PROJECT"}`)
 	var got map[string]any
-	drainSpool(context.Background(), dir, "session-1", func(_ context.Context, frame map[string]any) error {
+	drainSpool(context.Background(), dir, "session-1", func() bool { return true }, func(_ context.Context, frame map[string]any) error {
 		got = frame
 		return nil
 	})
 	if got == nil || got["channel"] != "C_PROJECT" || got["session_id"] != "session-1" {
 		t.Fatalf("unexpected frame: %v", got)
+	}
+}
+
+func TestDrainSpoolChecksWelcomeCapability(t *testing.T) {
+	for _, tc := range []struct {
+		name, welcome, request string
+		wantSend               bool
+	}{
+		{"old server channel", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T","channel":"CPROJECT"}`, false},
+		{"new server channel", `{"type":"welcome","protocol":"1.1","capabilities":["conversation_open_channel"]}`, `{"title":"T","channel":"CPROJECT"}`, true},
+		{"old server home", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T"}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var welcome Message
+			if err := json.Unmarshal([]byte(tc.welcome), &welcome); err != nil {
+				t.Fatal(err)
+			}
+			client := &AgentClient{conns: newConnHolder()}
+			client.handleWelcome(welcome)
+			dir := t.TempDir()
+			writeRequestFile(t, dir, "req.json", tc.request)
+			buf := captureLog(t)
+			var sent map[string]any
+			drainSpool(context.Background(), dir, "session-1", client.conns.supportsChannel, func(_ context.Context, frame map[string]any) error {
+				sent = frame
+				return nil
+			})
+			if (sent != nil) != tc.wantSend {
+				t.Fatalf("sent frame = %v, want send %t", sent, tc.wantSend)
+			}
+			if !tc.wantSend && !strings.Contains(buf.String(), "does not support --channel") {
+				t.Fatalf("missing clear refusal: %s", buf.String())
+			}
+		})
 	}
 }
 
@@ -95,7 +131,7 @@ func TestDrainSpoolDropsRequestBeforeSessionIDKnown(t *testing.T) {
 		return nil
 	}
 
-	drainSpool(context.Background(), dir, "", send)
+	drainSpool(context.Background(), dir, "", func() bool { return true }, send)
 
 	if sent {
 		t.Error("expected no frame sent when session id is not yet known")
@@ -128,7 +164,7 @@ func TestDrainSpoolDropsMalformedRequests(t *testing.T) {
 				return nil
 			}
 
-			drainSpool(context.Background(), dir, "sess-1", send)
+			drainSpool(context.Background(), dir, "sess-1", func() bool { return true }, send)
 
 			if sent {
 				t.Errorf("expected no frame sent for malformed request (%s)", name)
@@ -154,7 +190,7 @@ func TestDrainSpoolContinuesAfterMalformedFile(t *testing.T) {
 		return nil
 	}
 
-	drainSpool(context.Background(), dir, "sess-1", send)
+	drainSpool(context.Background(), dir, "sess-1", func() bool { return true }, send)
 
 	if len(frames) != 1 {
 		t.Fatalf("expected exactly 1 frame, got %d: %v", len(frames), frames)
@@ -187,7 +223,7 @@ func TestDrainSpoolIgnoresStagingFiles(t *testing.T) {
 		return nil
 	}
 
-	drainSpool(context.Background(), dir, "sess-1", send)
+	drainSpool(context.Background(), dir, "sess-1", func() bool { return true }, send)
 
 	if len(frames) != 1 || frames[0]["title"] != "final" {
 		t.Fatalf("expected only the finalized .json request drained, got %v", frames)
