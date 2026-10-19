@@ -35,10 +35,10 @@ The token comes from the `SPEKK_AGENT_TOKEN` environment variable on the sandbox
 
 ## Protocol version
 
-The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. This agent declares `1.2`.
+The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. This agent declares `1.5`.
 
-1. **The client declares.** Every dial sends an `X-Spekk-Protocol: 1.2` header next to the `Authorization` header.
-2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field. That version can be different from the agent's version. For example, a control host that speaks `1.0` replies to a `1.2` agent with:
+1. **The client declares.** Every dial sends an `X-Spekk-Protocol: 1.5` header next to the `Authorization` header.
+2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field. That version can be different from the agent's version. For example, a control host that speaks `1.0` replies to a `1.5` agent with:
 
 ```json
 {
@@ -60,6 +60,8 @@ Version `1.2` is additive. It adds only the `claude_signed_in` field to the `hea
 
 Version `1.3` is additive. It adds the frames of the [sign-in terminal](#sign-in-terminal). The `turn_keepalive` frame type is reserved for version `1.4`.
 
+Version `1.5` is additive. It adds an optional `repository` object to a `message` frame. A frame without that object keeps the old chat path.
+
 ## Message protocol
 
 Every frame is a JSON object with a `type` field. The `Message` struct defines the inbound shape:
@@ -71,6 +73,7 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
   "system_prompt":    "optional system prompt",
   "session_id":       "resume-session-uuid",
   "agent_session_id": "routing-key",
+  "repository":     {"id": "repository-uuid", "ref": "main"},
   "attachments":      [{"id": "uuid", "filename": "spec.md", "mimetype": "text/markdown"}],
   "error":            "",
   "detail":           "",
@@ -85,7 +88,7 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 | Type | Purpose | Fields |
 |------|---------|--------|
 | `welcome` | Declare the control host's protocol version on connect | `protocol` |
-| `message` | Start or continue a Claude session | `text`, `system_prompt`, `session_id`, `agent_session_id`, `attachments` |
+| `message` | Start or continue a Claude session | `text`, `system_prompt`, `session_id`, `agent_session_id`, `attachments`, optional `repository` |
 | `cancel` | Stop the running Claude process of a session | `agent_session_id` |
 | `heartbeat_ack` | Reply to the agent's heartbeat | none |
 | `error` | Report an error, for example a rejected `conversation_open` | `error`, `detail` |
@@ -109,6 +112,12 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 ### Routing
 
 Every `message` frame carries an `agent_session_id`. The worker pool routes the frame to the worker for that id. Frames with the same `agent_session_id` queue on the same worker. The `session_id` field is Claude's session identifier, used for `--resume`.
+
+### Repository preparation
+
+The optional `repository` object has `id` and `ref` fields. Before a turn with this object starts Claude, the client sends `POST /api/agents/<agent-id>/repository-access/` with `agent_session_id`, `repository_id`, and `ref`. It authenticates with the agent token in the Authorization header. The control host must bind the session to the chat message and its sender, check the sender's current access to the repository and ref, and answer with the canonical `repository` name, the same `ref`, and a short lived `token`. A refusal ends the turn with an error frame.
+
+The client clones the repository under `<workspace>/repositories/<repository-id>`, or fetches it if it is present. It checks the selected branch out at `FETCH_HEAD`. Local changes stop the operation. Git stores a URL without a credential, and the credential helper requests a new scoped token when Git needs one. The helper checks the GitHub path against the name in the authorized answer. A frame with no `repository` starts Claude in the configured workspace as before.
 
 ## Worker pool
 
@@ -139,7 +148,7 @@ claude -p - --output-format stream-json --verbose --include-partial-messages --d
 
 - The prompt goes to stdin. When the frame has a `system_prompt`, the agent puts it before the text, with a separator.
 - When the frame has a `session_id`, the agent appends `--resume <session_id>` to continue that Claude session.
-- The working directory is the configured workspace (default: `/opt/spekk/workspace`).
+- The working directory is the configured workspace (default: `/opt/spekk/workspace`). For a repository turn, it is `<workspace>/repositories/<repository-id>` after access, fetch, and checkout succeed.
 - Each line of stdout goes back to the control host as a `stream` frame.
 - When Claude exits with code 0, the agent sends a `result` frame with the session id, the output text, and `terminal`.
 - When Claude exits with an error, the agent sends an `error` frame with up to 2000 characters of stderr.

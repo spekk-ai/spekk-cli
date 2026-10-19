@@ -1,15 +1,16 @@
 package main
 
 type Message struct {
-	Type           string       `json:"type"`
-	Text           string       `json:"text"`
-	SystemPrompt   string       `json:"system_prompt"`
-	SessionID      string       `json:"session_id"`
-	AgentSessionID string       `json:"agent_session_id"`
-	Attachments    []Attachment `json:"attachments"`
-	Error          string       `json:"error"`
-	Detail         string       `json:"detail"`
-	Protocol       string       `json:"protocol"`
+	Type           string             `json:"type"`
+	Text           string             `json:"text"`
+	SystemPrompt   string             `json:"system_prompt"`
+	SessionID      string             `json:"session_id"`
+	AgentSessionID string             `json:"agent_session_id"`
+	Attachments    []Attachment       `json:"attachments"`
+	Error          string             `json:"error"`
+	Detail         string             `json:"detail"`
+	Protocol       string             `json:"protocol"`
+	Repository     *RepositoryRequest `json:"repository,omitempty"`
 
 	// The sign-in terminal frames (terminal.go). No field names a program.
 	TerminalID string `json:"terminal_id"`
@@ -18,6 +19,11 @@ type Message struct {
 	Rows       int    `json:"rows"`
 	AgentID    string `json:"agent_id"`
 	UserID     string `json:"user_id"`
+}
+
+type RepositoryRequest struct {
+	ID  string `json:"id"`
+	Ref string `json:"ref"`
 }
 
 const (
