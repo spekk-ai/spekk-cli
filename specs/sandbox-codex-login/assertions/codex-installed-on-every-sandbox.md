@@ -3,7 +3,7 @@ id: codex-installed-on-every-sandbox
 parent: sandbox-codex-login
 created: 2026-10-19T00:00:00Z
 priority: 1
-status: done
+status: failed
 branch: sc1-codex-sandboxes
 ---
 
