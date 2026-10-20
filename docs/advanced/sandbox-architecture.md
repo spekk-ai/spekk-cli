@@ -299,3 +299,5 @@ The agent binary reads its configuration from `/etc/spekk/agent.env` on the sand
 The agent sets `SPEKK_CONVERSATION_SPOOL` for each invocation. It is not in `agent.env`.
 
 The same file carries the model credential, which the agent does not read. It passes its environment to the `claude` child process, and Claude Code reads the credential there. Which variables those are depends on the sandbox's auth mode. See [Agent runtime](../configuration.md#agent-runtime).
+
+Sandbox setup keeps the agent's existing Claude Code settings and sets `attribution.commit` and `attribution.pr` to empty strings. It installs `~agent/.local/bin/assisted-by` and sets Git's `trailer.assisted-by.ifExists` to `addIfDifferent`. An agent uses the `assisted-by` command to get a trailer for a commit. Codex 0.163.0 reads its commit and pull request attribution policy from the signed-in account. The account setting must be off to stop Codex from adding its own credit lines; Codex has no local setting for this policy.
