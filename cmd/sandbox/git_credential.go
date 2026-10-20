@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -32,13 +34,69 @@ func runGitCredential(args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	if req["protocol"] != "https" || req["host"] != "github.com" {
 		return 0
 	}
-	token, err := fetchGitToken()
+	selection := repositoryCredentialSelection()
+	var token string
+	var err error
+	if selection.SessionID != "" || selection.Request.ID != "" || selection.Request.Ref != "" {
+		token, err = fetchRepositoryGitToken(req, selection)
+	} else {
+		token, err = fetchGitToken()
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "spekk git credential helper: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "username=x-access-token\npassword=%s\n", token)
 	return 0
+}
+
+type repositorySelection struct {
+	SessionID string
+	Request   RepositoryRequest
+}
+
+func repositoryCredentialSelection() repositorySelection {
+	selection := repositorySelection{
+		SessionID: os.Getenv(repositorySessionEnv),
+		Request: RepositoryRequest{
+			ID:  os.Getenv(repositoryIDEnv),
+			Ref: os.Getenv(repositoryRefEnv),
+		},
+	}
+	if selection.SessionID != "" || selection.Request.ID != "" || selection.Request.Ref != "" {
+		return selection
+	}
+	selection.SessionID = gitLocalConfig(repositorySessionConfig)
+	selection.Request.ID = gitLocalConfig(repositoryIDConfig)
+	selection.Request.Ref = gitLocalConfig(repositoryRefConfig)
+	return selection
+}
+
+func gitLocalConfig(key string) string {
+	value, err := exec.Command("git", "config", "--local", "--get", key).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(value))
+}
+
+func fetchRepositoryGitToken(gitRequest map[string]string, selection repositorySelection) (string, error) {
+	env, err := readEnvFile(agentEnvFile)
+	if err != nil {
+		return "", fmt.Errorf("read agent settings failed")
+	}
+	cfg := Config{Host: env["SPEKK_HOST"], Token: env["SPEKK_AGENT_TOKEN"], AgentID: env["SPEKK_AGENT_ID"]}
+	if cfg.Host == "" || cfg.Token == "" || cfg.AgentID == "" {
+		return "", fmt.Errorf("agent settings are incomplete")
+	}
+	access, err := requestRepositoryAccess(context.Background(), cfg, selection.SessionID, selection.Request)
+	if err != nil {
+		return "", err
+	}
+	if gitRequest["path"] != access.Repository+".git" {
+		return "", fmt.Errorf("GitHub credential path is outside the approved repository")
+	}
+	return access.Token, nil
 }
 
 // readCredentialRequest reads the key=value lines that git writes to a

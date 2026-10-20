@@ -260,12 +260,14 @@ type Config struct {
 	Token     string
 	Host      string
 	Workspace string
+	AgentID   string
 }
 
 func loadConfig() Config {
 	token := os.Getenv("SPEKK_AGENT_TOKEN")
 	host := os.Getenv("SPEKK_HOST")
 	workspace := os.Getenv("WORKSPACE")
+	agentID := os.Getenv("SPEKK_AGENT_ID")
 
 	if token == "" || host == "" {
 		log.Fatal("SPEKK_AGENT_TOKEN and SPEKK_HOST must be set")
@@ -278,6 +280,7 @@ func loadConfig() Config {
 		Token:     token,
 		Host:      host,
 		Workspace: workspace,
+		AgentID:   agentID,
 	}
 }
 

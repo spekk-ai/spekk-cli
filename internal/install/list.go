@@ -20,7 +20,7 @@ const (
 	StatusNotInstalled InstallStatus = iota
 	// StatusLocal means <cwd>/.spekk/skills/<agent>/<skill>.md exists.
 	StatusLocal
-	// StatusGlobal means ~/.spekk/skills/<agent>/<skill>.md exists.
+	// StatusGlobal means ~/.config/spekk/skills/<agent>/<skill>.md exists.
 	StatusGlobal
 	// StatusBoth means the skill exists in both scopes.
 	StatusBoth
