@@ -3,7 +3,8 @@ id: codex-installed-on-every-sandbox
 parent: sandbox-codex-login
 created: 2026-10-19T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-cch2-1-1792538000
 branch: observer/provisioning-skips-codex-code-mode-host
 ---
 
