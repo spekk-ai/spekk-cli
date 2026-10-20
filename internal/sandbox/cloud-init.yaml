@@ -170,7 +170,7 @@ runcmd:
       trap 'rm -rf "$tmp"' EXIT
       chmod 755 "$tmp"
       # The pinned commit has both files before the pull request merges.
-      source=https://raw.githubusercontent.com/spekk-ai/spekk-cli/664727eec241470d090a7166061f43ae78401e4b/scripts
+      source=https://raw.githubusercontent.com/spekk-ai/spekk-cli/a267105b8d58e8b01090e74574172414aa9c5e45/scripts
       curl -fsSL "$source/configure-agent-attribution.py" -o "$tmp/configure.py"
       curl -fsSL "$source/assisted-by" -o "$tmp/assisted-by"
       chmod 644 "$tmp/configure.py" "$tmp/assisted-by"

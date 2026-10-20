@@ -12,6 +12,6 @@ Claude Code can add AI co-author text to commits and AI credit to pull request b
 
 ## Design
 
-Set Claude Code's commit and pull request attribution values to empty strings while keeping other settings. Install the shared `assisted-by` script for the agent and set Git to add a different Assisted-by trailer. Apply this setup in cloud-init and the setup for an existing machine.
+Set Claude Code's commit and pull request attribution values to empty strings while keeping other settings. Install the shared `assisted-by` script for the agent and set Git to add a different Assisted-by trailer. The trailer model must come from one known session record. Apply this setup in cloud-init and the setup for an existing machine.
 
 Codex 0.163.0 reads its attribution policy from the signed-in account. Its local configuration has no attribution switch. The account setting must be off for Codex to omit its own credit lines.
