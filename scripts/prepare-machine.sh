@@ -107,13 +107,14 @@ trap - EXIT
 
 echo "==> Codex CLI (pinned 0.163.0)"
 rm -f /opt/spekk/.provisioned
+case "$ARCH" in
+  amd64) CODEX_ARCH=x86_64; CODEX_HOST_SHA=8724d73ec190536233ab4628d24a071bfbcf27e5124f08fe35129f26fe48b916 ;;
+  arm64) CODEX_ARCH=aarch64; CODEX_HOST_SHA=255eccc8a5c1d267dc0acbc815cc83aaa1f50955bd99943b29f00cafcdcab771 ;;
+  *) echo "Codex requires amd64 or arm64" >&2; exit 1 ;;
+esac
 if [ "$(/usr/local/bin/codex --version 2>/dev/null || true)" != "codex-cli 0.163.0" ] ||
+   ! echo "$CODEX_HOST_SHA  /usr/local/bin/codex-code-mode-host" | sha256sum -c - >/dev/null 2>&1 ||
    ! /usr/local/bin/codex-code-mode-host --help >/dev/null 2>&1; then
-  case "$ARCH" in
-    amd64) CODEX_ARCH=x86_64 ;;
-    arm64) CODEX_ARCH=aarch64 ;;
-    *) echo "Codex requires amd64 or arm64" >&2; exit 1 ;;
-  esac
   CODEX_TMP=$(mktemp -d)
   trap 'rm -rf "$CODEX_TMP"' EXIT
   curl -fsSL "https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-${CODEX_ARCH}-unknown-linux-musl.tar.gz" -o "$CODEX_TMP/codex.tar.gz"
@@ -126,6 +127,7 @@ if [ "$(/usr/local/bin/codex --version 2>/dev/null || true)" != "codex-cli 0.163
   trap - EXIT
 fi
 [ "$(/usr/local/bin/codex --version)" = "codex-cli 0.163.0" ]
+echo "$CODEX_HOST_SHA  /usr/local/bin/codex-code-mode-host" | sha256sum -c - >/dev/null
 /usr/local/bin/codex-code-mode-host --help >/dev/null
 
 echo "==> spekk CLI"
