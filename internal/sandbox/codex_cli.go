@@ -6,7 +6,7 @@ import (
 )
 
 const codexVersion = "0.163.0"
-const codexHealthCommand = "/usr/local/bin/codex --version && test -x /usr/local/bin/codex-code-mode-host"
+const codexHealthCommand = "/usr/local/bin/codex --version && /usr/local/bin/codex-code-mode-host --help >/dev/null"
 
 // The GitHub release contains one binary per Linux architecture. Download to
 // a temporary path, then replace the installed binary only after it succeeds.
@@ -24,6 +24,7 @@ tar -xzf "$tmp/codex.tar.gz" -C "$tmp"
 tar -xzf "$tmp/codex-code-mode-host.tar.gz" -C "$tmp"
 install -m 0755 "$tmp/codex-${arch}-unknown-linux-musl" /usr/local/bin/codex
 install -m 0755 "$tmp/codex-code-mode-host-${arch}-unknown-linux-musl" /usr/local/bin/codex-code-mode-host
+/usr/local/bin/codex-code-mode-host --help >/dev/null
 /usr/local/bin/codex --version`
 
 func ensureCodexCLI(ip, keyPath, name, user string) error {

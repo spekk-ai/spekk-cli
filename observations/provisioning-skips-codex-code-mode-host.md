@@ -2,7 +2,7 @@
 slug: provisioning-skips-codex-code-mode-host
 type: code_spec_misalignment
 severity: medium
-status: open
+status: resolved
 created: 2026-10-20T12:00:00Z
 announced: 2026-10-20T19:01:34Z
 affected:
@@ -16,18 +16,18 @@ affected:
 # Provisioning paths install Codex without the code mode host
 
 ## Issue Description
-The `codex-installed-on-every-sandbox` assertion is `done` and says cloud-init and prepare-machine install "the same pinned Codex CLI and code mode host for amd64 and arm64". Only the deploy repair path (`ensureCodexCLI`) installs `codex-code-mode-host`. Cloud-init, the CloudFormation user data and `prepare-machine.sh` install the `codex` binary alone, so a freshly provisioned sandbox lacks the host until a deploy repairs it.
+At the time of the finding, the `codex-installed-on-every-sandbox` assertion was `done` and said cloud-init and prepare-machine install "the same pinned Codex CLI and code mode host for amd64 and arm64". Only the deploy repair path (`ensureCodexCLI`) installed `codex-code-mode-host`. Cloud-init, the CloudFormation user data and `prepare-machine.sh` installed the `codex` binary alone.
 
-## Evidence
+## Evidence at the time of the finding
 - `specs/sandbox-codex-login/assertions/codex-installed-on-every-sandbox.md`, first success criterion: both provisioning paths install the CLI and the code mode host.
 - `internal/sandbox/codex_cli.go:9`: the deploy health check requires `test -x /usr/local/bin/codex-code-mode-host`, and lines 22–26 download and install it.
 - `internal/sandbox/cloud-init.yaml:179-192`: downloads and installs only `codex-$arch-unknown-linux-musl`; no code mode host.
 - `internal/sandbox/aws-cloudformation.yaml:323-336`: same block, same omission.
 - `scripts/prepare-machine.sh:108-121`: installs only `codex`, and its idempotence check looks at `codex --version` alone.
-- `grep -rn code-mode internal scripts` finds hits only in `codex_cli.go`.
+- A source search found code mode host installation only in `codex_cli.go`.
 
 ## Impact
-A sandbox that is provisioned but not yet deployed does not match the spec. Deploy then fails its health check every time and has to download Codex again. Any Codex feature that needs the host fails on machines prepared only by `prepare-machine.sh`. The assertion's own verification (cloud-init generation and syntax gates) cannot catch this, which explains how it was marked done.
+Full cloud-init left a DigitalOcean or GCP machine without the host before deploy. Normal `spekk sandbox create` then ran deploy, which repaired the host before service restart. A machine prepared only with `prepare-machine.sh`, an AWS instance left at the CloudFormation user-data stage, or a template image builder before deploy exposed the missing host. Existing template images can still lack it until deploy repairs them. The original cloud-init generation and syntax checks did not exercise either binary.
 
-## Recommendation
-Re-queue the assertion (status flipped to `failed` in this branch). In all three provisioning scripts, the builder should install `codex-code-mode-host` from the same pinned release. `prepare-machine.sh` should also check for the host before it skips the install. A test that checks each provisioning script for both binaries would stop this from coming back.
+## Resolution
+Full cloud-init and its generated AWS user data install and check both pinned binaries. The final provisioning marker requires the completed Codex step. `prepare-machine.sh` repairs a missing or unusable host. Deploy repair remains for existing images. The assertion returned to `done` after isolated shell checks with real `linux/amd64` release archives, failure checks, and the project checks passed.

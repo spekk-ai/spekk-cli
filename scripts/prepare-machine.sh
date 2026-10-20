@@ -106,19 +106,27 @@ rm -rf "$ATTRIBUTION_TMP"
 trap - EXIT
 
 echo "==> Codex CLI (pinned 0.163.0)"
-if [ "$(/usr/local/bin/codex --version 2>/dev/null || true)" != "codex-cli 0.163.0" ]; then
+rm -f /opt/spekk/.provisioned
+if [ "$(/usr/local/bin/codex --version 2>/dev/null || true)" != "codex-cli 0.163.0" ] ||
+   ! /usr/local/bin/codex-code-mode-host --help >/dev/null 2>&1; then
   case "$ARCH" in
     amd64) CODEX_ARCH=x86_64 ;;
     arm64) CODEX_ARCH=aarch64 ;;
     *) echo "Codex requires amd64 or arm64" >&2; exit 1 ;;
   esac
   CODEX_TMP=$(mktemp -d)
+  trap 'rm -rf "$CODEX_TMP"' EXIT
   curl -fsSL "https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-${CODEX_ARCH}-unknown-linux-musl.tar.gz" -o "$CODEX_TMP/codex.tar.gz"
+  curl -fsSL "https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-code-mode-host-${CODEX_ARCH}-unknown-linux-musl.tar.gz" -o "$CODEX_TMP/codex-code-mode-host.tar.gz"
   tar -xzf "$CODEX_TMP/codex.tar.gz" -C "$CODEX_TMP"
+  tar -xzf "$CODEX_TMP/codex-code-mode-host.tar.gz" -C "$CODEX_TMP"
   install -m 0755 "$CODEX_TMP/codex-${CODEX_ARCH}-unknown-linux-musl" /usr/local/bin/codex
+  install -m 0755 "$CODEX_TMP/codex-code-mode-host-${CODEX_ARCH}-unknown-linux-musl" /usr/local/bin/codex-code-mode-host
   rm -rf "$CODEX_TMP"
+  trap - EXIT
 fi
 [ "$(/usr/local/bin/codex --version)" = "codex-cli 0.163.0" ]
+/usr/local/bin/codex-code-mode-host --help >/dev/null
 
 echo "==> spekk CLI"
 # Install as agent into a directory agent owns, so `spekk update` needs no sudo,
