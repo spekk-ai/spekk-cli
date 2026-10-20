@@ -33,7 +33,7 @@ func provisionSpool() (dir string, cleanup func(), err error) {
 // sessionID. Every file it considers is removed before drainSpool returns —
 // whether it produced a frame, failed to send, or was dropped as invalid —
 // so nothing is ever buffered for a later drain to re-consider.
-func drainSpool(ctx context.Context, spoolDir, sessionID string, send frameSender) {
+func drainSpool(ctx context.Context, spoolDir, sessionID string, supportsChannel func() bool, send frameSender) {
 	entries, err := os.ReadDir(spoolDir)
 	if err != nil {
 		log.Printf("conversation spool: read %s: %v", spoolDir, err)
@@ -51,13 +51,13 @@ func drainSpool(ctx context.Context, spoolDir, sessionID string, send frameSende
 		if !strings.HasSuffix(entry.Name(), conversation.RequestFileExt) {
 			continue
 		}
-		drainOne(ctx, filepath.Join(spoolDir, entry.Name()), sessionID, send)
+		drainOne(ctx, filepath.Join(spoolDir, entry.Name()), sessionID, supportsChannel, send)
 	}
 }
 
 // drainOne handles a single request file: decode, validate, build the frame,
 // send it, and unconditionally remove the file (fire-once).
-func drainOne(ctx context.Context, path, sessionID string, send frameSender) {
+func drainOne(ctx context.Context, path, sessionID string, supportsChannel func() bool, send frameSender) {
 	defer os.Remove(path)
 
 	data, err := os.ReadFile(path)
@@ -84,6 +84,13 @@ func drainOne(ctx context.Context, path, sessionID string, send frameSender) {
 	if err != nil {
 		log.Printf("conversation spool: dropping %s: %v", path, err)
 		return
+	}
+	if req.Channel != "" {
+		if !supportsChannel() {
+			log.Printf("conversation spool: dropping %s: control host does not support --channel; update the control host", path)
+			return
+		}
+		frame["channel"] = req.Channel
 	}
 
 	if err := send(ctx, frame); err != nil {

@@ -58,7 +58,9 @@ Version `1.1` is additive. It adds only the `terminal` field to the `result` fra
 
 Version `1.2` is additive. It adds only the `claude_signed_in` field to the `heartbeat` frame (see [Claude sign-in state](#claude-sign-in-state)).
 
-Version `1.3` is additive. It adds the frames of the [sign-in terminal](#sign-in-terminal). The `turn_keepalive` frame type is reserved for version `1.4`.
+Version `1.3` is additive. It adds the frames of the [sign-in terminal](#sign-in-terminal).
+
+Version `1.4` is additive. It adds optional channel routing to `conversation_open`. The control host advertises support with `conversation_open_channel` in the `welcome` capabilities.
 
 Version `1.5` is additive. It adds an optional `repository` object to a `message` frame. A frame without that object keeps the old chat path.
 
@@ -73,7 +75,7 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
   "system_prompt":    "optional system prompt",
   "session_id":       "resume-session-uuid",
   "agent_session_id": "routing-key",
-  "repository":     {"id": "repository-uuid", "ref": "main"},
+  "repository":       {"id": "repository-uuid", "ref": "main"},
   "attachments":      [{"id": "uuid", "filename": "spec.md", "mimetype": "text/markdown"}],
   "error":            "",
   "detail":           "",
@@ -87,7 +89,7 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 
 | Type | Purpose | Fields |
 |------|---------|--------|
-| `welcome` | Declare the control host's protocol version on connect | `protocol` |
+| `welcome` | Declare the control host's protocol version on connect | `protocol`, optional `capabilities` |
 | `message` | Start or continue a Claude session | `text`, `system_prompt`, `session_id`, `agent_session_id`, `attachments`, optional `repository` |
 | `cancel` | Stop the running Claude process of a session | `agent_session_id` |
 | `heartbeat_ack` | Reply to the agent's heartbeat | none |
@@ -105,7 +107,7 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 | `result` | Claude finished with exit code 0 | `session_id`, `agent_session_id`, `output`, `terminal` |
 | `error` | Something went wrong | `error`, `detail`, `agent_session_id` |
 | `heartbeat` | Keep-alive, every 30 seconds | `claude_signed_in` |
-| `conversation_open` | Ask for a conversation with a person (from the spool) | `session_id`, `title`, `body`, `severity` |
+| `conversation_open` | Ask for a conversation with a person (from the spool) | `session_id`, `title`, `body`, `severity`, optional `channel` |
 | `terminal_output` | Bytes from the terminal | `terminal_id`, `data` (base64) |
 | `terminal_exit` | The terminal ended | `terminal_id`, `exit_code` |
 
@@ -188,9 +190,9 @@ The person signs in from the browser, through a terminal that the control host r
 - The terminal ends when the login exits, on `terminal_close`, or after 10 minutes. The agent stops the whole process group of the login, sends a `heartbeat` at once, and then sends `terminal_exit`. Input for a terminal that ended goes nowhere.
 - The agent writes no terminal byte to its log or to a file. Its log has one line when a terminal opens and one when it closes, with the agent id, the user id, the terminal id, the duration, and the exit code.
 
-### `turn_keepalive` (reserved for version 1.4)
+### `turn_keepalive` (reserved)
 
-The agent heartbeat is connection-scoped and says nothing about a turn, so without a turn-scoped signal a long tool call is indistinguishable from a hang. A planned `turn_keepalive` frame will fill that gap. It will carry the `agent_session_id` of the turn, and the agent will send it only while a tool call of that turn is in flight. It comes with version `1.4`.
+The agent heartbeat is connection-scoped and says nothing about a turn, so without a turn-scoped signal a long tool call is indistinguishable from a hang. A planned `turn_keepalive` frame will fill that gap. It will carry the `agent_session_id` of the turn, and the agent will send it only while a tool call of that turn is in flight.
 
 The control host must accept and attribute `turn_keepalive` before any agent sends it. A control host that does not know a frame type logs it and replies with an `error` frame. This agent does not send `turn_keepalive`.
 
@@ -308,3 +310,5 @@ The agent binary reads its configuration from `/etc/spekk/agent.env` on the sand
 The agent sets `SPEKK_CONVERSATION_SPOOL` for each invocation. It is not in `agent.env`.
 
 The same file carries the model credential, which the agent does not read. It passes its environment to the `claude` child process, and Claude Code reads the credential there. Which variables those are depends on the sandbox's auth mode. See [Agent runtime](../configuration.md#agent-runtime).
+
+Sandbox setup keeps the agent's existing Claude Code settings and sets `attribution.commit` and `attribution.pr` to empty strings. It installs `~agent/.local/bin/assisted-by` and sets Git's `trailer.assisted-by.ifExists` to `addIfDifferent`. An agent uses the `assisted-by` command to get a trailer for a commit. Codex 0.163.0 reads its commit and pull request attribution policy from the signed-in account. The account setting must be off to stop Codex from adding its own credit lines; Codex has no local setting for this policy.

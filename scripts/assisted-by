@@ -1,0 +1,199 @@
+#!/bin/sh
+# Print the "Assisted-by" trailer for the AI agent session that runs this.
+#
+# Format:  Assisted-by: HARNESS:MODEL [TOOL ...]
+# Source:  https://docs.kernel.org/process/coding-assistants.html
+# Usage:   t=$(assisted-by); git commit ${t:+--trailer} ${t:+"$t"} -m "..."
+#          assisted-by --pr    # the same line for a PR/MR body, when the
+#                              # repository enables it: git config assisted-by.pr true
+#
+# Switches, read from git config at any scope:
+#   assisted-by.enabled   default true; false turns the trailer off everywhere
+#   assisted-by.pr        default false; true adds the trailer to a PR/MR body
+#
+# The two-expansion commit form above works in sh, bash, and zsh. zsh does not
+# split ${t:+--trailer "$t"} into two words, and git rejects an empty --trailer.
+#
+# The harness and the model come from the agent's own session record, not from
+# the model's self-report, because a model is not reliable about its version.
+# A specialized tool is listed only when the environment is configured for it.
+#
+# Reading a session record needs python3, and nothing else. The opencode branch
+# read the database with the sqlite3 command until 2026-09, and a machine without
+# that command reported "no model in the session record", which sent the reader to
+# the session record instead of to the missing command. python3 carries a sqlite3
+# module in its standard library, so the branch below has one dependency, and the
+# claude-code branch already needs the same one.
+#
+# Exit 1 with nothing on stdout when no agent session is detected, when python3 is
+# absent, or when the session record holds no model. Each case prints its own
+# reason on stderr. Nothing goes to stdout but the trailer, so a caller adds no
+# trailer and the commit still goes through: a missing trailer is better than a
+# wrong one, and better than a refused commit.
+
+set -eu
+
+pr=0
+for arg in "$@"; do
+    case "$arg" in
+        --pr) pr=1 ;;
+        *) echo "usage: assisted-by [--pr]" >&2; exit 2 ;;
+    esac
+done
+
+# Off everywhere when the repository says so. Unset means on.
+if [ "$(git config --get --type=bool assisted-by.enabled 2>/dev/null || echo true)" = "false" ]; then
+    exit 0
+fi
+
+# A PR/MR body carries the trailer only where the repository asks for it.
+# Unset means off, so the default is no attribution in a PR/MR body.
+if [ "$pr" = 1 ] && [ "$(git config --get --type=bool assisted-by.pr 2>/dev/null)" != "true" ]; then
+    exit 0
+fi
+
+# Each reader below parses a record with python3. Name the missing command here,
+# rather than let a branch report an empty result as an empty record.
+if [ -n "${CODEX_SESSION_ID:-}${CLAUDECODE:-}${OPENCODE_PID:-}${OPENCODE_CONFIG_DIR:-}" ] &&
+    ! command -v python3 >/dev/null 2>&1; then
+    echo "assisted-by: python3 is absent, so no session record can be read" >&2
+    exit 1
+fi
+
+harness=""
+model=""
+
+if [ -n "${CODEX_SESSION_ID:-}" ]; then
+    harness="codex"
+    codex_home="${CODEX_HOME:-$HOME/.codex}"
+    # Codex exports the root session ID to shell commands. Read only its
+    # rollout, so another Codex window cannot supply this commit's model.
+    model="$(python3 - "$codex_home" "$CODEX_SESSION_ID" <<'PY'
+import glob
+import json
+import os
+import sys
+
+codex_home, session_id = sys.argv[1:]
+paths = glob.glob(os.path.join(codex_home, "sessions", "**", f"rollout-*-{session_id}.jsonl"), recursive=True)
+if not paths:
+    print("assisted-by: no Codex rollout for session", file=sys.stderr)
+    sys.exit(1)
+if len(paths) > 1:
+    print("assisted-by: multiple Codex rollouts for session", file=sys.stderr)
+    sys.exit(1)
+found = ""
+with open(paths[0], encoding="utf-8") as record:
+    for line in record:
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        if item.get("type") == "turn_context":
+            model = item.get("payload", {}).get("model")
+            if model:
+                found = model
+print(found)
+PY
+)" || exit 1
+elif [ "${CLAUDECODE:-}" = "1" ]; then
+    harness="claude-code"
+    if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+        transcript="$(find "$HOME/.claude/projects" -name "${CLAUDE_CODE_SESSION_ID}.jsonl" -print -quit 2>/dev/null || true)"
+    else
+        # Claude Code gives no session ID here. Use a transcript only when the
+        # current project has one transcript.
+        project_dir="$(printf '%s' "$PWD" | sed 's|/|-|g')"
+        set -- "$HOME/.claude/projects/$project_dir"/*.jsonl
+        if [ "$#" -gt 1 ]; then
+            echo "assisted-by: multiple claude-code transcripts for this project" >&2
+            exit 1
+        fi
+        if [ -f "$1" ]; then
+            transcript="$1"
+        else
+            transcript=""
+        fi
+    fi
+    if [ -z "$transcript" ]; then
+        echo "assisted-by: no claude-code transcript found for this session" >&2
+        exit 1
+    fi
+    model="$(tail -n 400 "$transcript" | python3 -c '
+import sys, json
+found = ""
+for line in sys.stdin:
+    try:
+        d = json.loads(line)
+    except ValueError:
+        continue
+    if d.get("type") == "assistant":
+        found = d.get("message", {}).get("model") or found
+print(found)
+' 2>/dev/null || true)"
+elif [ -n "${OPENCODE_PID:-}${OPENCODE_CONFIG_DIR:-}" ]; then
+    harness="opencode"
+    db="${XDG_DATA_HOME:-$HOME/.local/share}/opencode/opencode.db"
+    # The harness must name the session. A query across sessions answers with
+    # whichever window wrote last, which misreported a commit in 2026-09.
+    # dotfiles/opencode/plugins/session-env.js sets this.
+    if [ -z "${OPENCODE_SESSION_ID:-}" ]; then
+        echo "assisted-by: OPENCODE_SESSION_ID is unset, so this session has no name" >&2
+        echo "assisted-by: restart opencode to load the session-env plugin" >&2
+        exit 1
+    fi
+    if [ ! -r "$db" ]; then
+        echo "assisted-by: cannot read the opencode database at $db" >&2
+        exit 1
+    fi
+    # Read-only, so a commit never writes to the database the editor is using.
+    # This session's newest assistant message, then its session row, so a
+    # mid-session model switch reports the model that did the work.
+    model="$(python3 -c '
+import json, sqlite3, sys
+con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+session = sys.argv[2]
+rows = con.execute(
+    "select data from message where session_id = ? order by time_created desc limit 40",
+    (session,),
+)
+for (data,) in rows:
+    try:
+        d = json.loads(data)
+    except ValueError:
+        continue
+    if d.get("role") == "assistant" and d.get("modelID"):
+        print(d["modelID"])
+        break
+else:
+    row = con.execute("select model from session where id = ?", (session,)).fetchone()
+    if row and row[0]:
+        try:
+            print(json.loads(row[0]).get("id", ""))
+        except ValueError:
+            pass
+' "$db" "$OPENCODE_SESSION_ID" 2>/dev/null || true)"
+fi
+
+if [ -z "$harness" ]; then
+    echo "assisted-by: no agent session detected" >&2
+    exit 1
+fi
+if [ -z "$model" ]; then
+    echo "assisted-by: no model in the $harness session record" >&2
+    exit 1
+fi
+
+# Reduce a routed model ID to the model name.
+# amazon-bedrock/us.anthropic.claude-opus-5 -> claude-opus-5
+model="${model##*/}"
+model="$(printf '%s' "$model" | sed -E 's/^(us|eu|apac)\.//; s/^(anthropic|openai|meta|mistral|amazon|google)\.//')"
+
+# Specialized tools, listed only when the environment is configured for them.
+# spekk: the binary is installed and the repository has a specs/ directory.
+tools=""
+if command -v spekk >/dev/null 2>&1 && [ -d "$(git rev-parse --show-toplevel 2>/dev/null)/specs" ]; then
+    tools="$tools spekk"
+fi
+
+printf 'Assisted-by: %s:%s%s\n' "$harness" "$model" "$tools"

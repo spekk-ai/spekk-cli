@@ -112,6 +112,48 @@ func TestExecConversationOpen_DefaultSeverity(t *testing.T) {
 	}
 }
 
+func TestExecConversationOpen_ChannelRequest(t *testing.T) {
+	spoolDir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := execConversationOpen(
+		[]string{"--title", "T", "--body", "B", "--channel", "#project-room"},
+		&stdout, &stderr, fakeEnv(map[string]string{conversation.SpoolEnvVar: spoolDir}),
+	)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	files := requestFiles(t, spoolDir)
+	if len(files) != 1 {
+		t.Fatalf("want one request, got %v", files)
+	}
+	data, err := os.ReadFile(filepath.Join(spoolDir, files[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req conversation.Request
+	if err := json.Unmarshal(data, &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.Channel != "#project-room" {
+		t.Fatalf("channel = %q", req.Channel)
+	}
+}
+
+func TestExecConversationOpen_EmptyChannelRejected(t *testing.T) {
+	spoolDir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := execConversationOpen(
+		[]string{"--title", "T", "--body", "B", "--channel", " "},
+		&stdout, &stderr, fakeEnv(map[string]string{conversation.SpoolEnvVar: spoolDir}),
+	)
+	if code == 0 || !strings.Contains(stderr.String(), "--channel") {
+		t.Fatalf("exit %d, stderr %q", code, stderr.String())
+	}
+	if len(requestFiles(t, spoolDir)) != 0 {
+		t.Fatal("invalid channel created a request")
+	}
+}
+
 // TestExecConversationOpen_TwoInvocationsDoNotCollide verifies two quick
 // back-to-back calls each produce their own file instead of one clobbering
 // the other's filename.

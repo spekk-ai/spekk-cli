@@ -11,6 +11,7 @@ type Message struct {
 	Detail         string             `json:"detail"`
 	Protocol       string             `json:"protocol"`
 	Repository     *RepositoryRequest `json:"repository,omitempty"`
+	Capabilities   []string           `json:"capabilities"`
 
 	// The sign-in terminal frames (terminal.go). No field names a program.
 	TerminalID string `json:"terminal_id"`
