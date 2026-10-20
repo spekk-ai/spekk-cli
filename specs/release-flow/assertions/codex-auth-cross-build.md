@@ -3,8 +3,7 @@ id: codex-auth-cross-build
 parent: release-flow
 created: 2026-10-20T16:05:00Z
 priority: 1
-status: in_progress
-locked-by: builder-spekk-tmp-rs1af2-1-1792512412
+status: done
 branch: fix/rel142-windows-build
 depends-on: cross-compile-binaries
 ---
