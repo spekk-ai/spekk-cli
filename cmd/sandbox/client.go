@@ -285,6 +285,9 @@ func loadConfig() Config {
 // server owns enforcement; the client only informs the operator, so a
 // mismatch warns and the connection continues.
 func (c *AgentClient) handleWelcome(msg Message) {
+	if c.conns != nil {
+		c.conns.setCapabilities(msg.Capabilities)
+	}
 	if protocolMajor(msg.Protocol) == protocolMajor(ProtocolVersion) {
 		log.Printf("Control host protocol %s (client %s)", msg.Protocol, ProtocolVersion)
 		return

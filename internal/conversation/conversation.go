@@ -62,6 +62,7 @@ type Request struct {
 	Title    string   `json:"title"`
 	Body     string   `json:"body"`
 	Severity Severity `json:"severity"`
+	Channel  string   `json:"channel,omitempty"`
 }
 
 // IsValidSeverity reports whether s is one of the three known severities.
