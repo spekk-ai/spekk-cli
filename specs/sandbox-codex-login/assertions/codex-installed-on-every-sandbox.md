@@ -3,7 +3,7 @@ id: codex-installed-on-every-sandbox
 parent: sandbox-codex-login
 created: 2026-10-19T00:00:00Z
 priority: 1
-status: done
+status: not_started
 branch: observer/provisioning-skips-codex-code-mode-host
 ---
 
@@ -12,9 +12,9 @@ branch: observer/provisioning-skips-codex-code-mode-host
 ## Success Criteria
 
 - Full cloud-init on DigitalOcean and GCP, generated AWS user data, and prepare-machine install the same pinned Codex CLI and code mode host for amd64 and arm64, alongside Claude Code. A newly built template image has both binaries from its full cloud-init build.
-- Deploy checks the installed version and code mode host and repairs a missing or different version before service restart.
-- A missing or unusable host makes prepare-machine repair the install. A failed binary download or extraction leaves no successful provisioning marker.
+- Prepare-machine and deploy accept an installed pair only when the CLI reports the pinned release and the runnable code mode host matches the pinned release. A runnable host from a different release, a missing host, or a damaged host makes each path install the pinned pair.
+- A failed repair returns an error. A failed binary download or extraction leaves no successful provisioning marker.
 
 ## Verification
 
-- The real shell paths install both binaries in an isolated filesystem. Missing-host repair, a complete install, failed host download, and corrupt archive have observed results. Cloud-init generation, syntax, build, vet, tests, and format gates pass.
+- The real pinned CLI and host run in an isolated filesystem. A real host from a different release, a missing host, a damaged host, and a complete pinned pair have observed results on prepare and deploy. A focused Go test proves that a failed host check invokes repair and that repair failure returns an error. Cloud-init generation, syntax, build, vet, tests, and format gates pass.
