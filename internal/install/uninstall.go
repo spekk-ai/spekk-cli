@@ -98,7 +98,7 @@ ARGUMENTS:
   <skill>   Name of the skill to remove
 
 OPTIONS:
-  --global    Remove from ~/.spekk/skills/<agent>/ (user-wide)
+  --global    Remove from ~/.config/spekk/skills/<agent>/ (user-wide)
   --local     Remove from <cwd>/.spekk/skills/<agent>/ (default)
   --help, -h  Show this help message
 

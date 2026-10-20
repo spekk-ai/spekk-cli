@@ -18,7 +18,7 @@ type Scope int
 const (
 	// ScopeLocal writes to <cwd>/.spekk/skills/<agent>/.
 	ScopeLocal Scope = iota
-	// ScopeGlobal writes to ~/.spekk/skills/<agent>/.
+	// ScopeGlobal writes to ~/.config/spekk/skills/<agent>/.
 	ScopeGlobal
 )
 
@@ -215,7 +215,7 @@ ARGUMENTS:
   <skill>   Name of the skill to install (omit when using --list)
 
 OPTIONS:
-  --global         Install to ~/.spekk/skills/<agent>/ (user-wide)
+  --global         Install to ~/.config/spekk/skills/<agent>/ (user-wide)
   --local          Install to <cwd>/.spekk/skills/<agent>/ (default)
   --source <URL>   Fetch the skill from an arbitrary http(s) URL
   --force          Overwrite an existing file at the destination
