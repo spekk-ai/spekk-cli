@@ -68,47 +68,52 @@ if [ -n "${CODEX_SESSION_ID:-}" ]; then
     codex_home="${CODEX_HOME:-$HOME/.codex}"
     # Codex exports the root session ID to shell commands. Read only its
     # rollout, so another Codex window cannot supply this commit's model.
-    model="$(python3 - "$codex_home" "$CODEX_SESSION_ID" 2>/dev/null <<'PY' || true
+    model="$(python3 - "$codex_home" "$CODEX_SESSION_ID" <<'PY'
 import glob
 import json
 import os
 import sys
-import tomllib
 
 codex_home, session_id = sys.argv[1:]
 paths = glob.glob(os.path.join(codex_home, "sessions", "**", f"rollout-*-{session_id}.jsonl"), recursive=True)
+if not paths:
+    print("assisted-by: no Codex rollout for session", file=sys.stderr)
+    sys.exit(1)
+if len(paths) > 1:
+    print("assisted-by: multiple Codex rollouts for session", file=sys.stderr)
+    sys.exit(1)
 found = ""
-if paths:
-    with open(max(paths, key=os.path.getmtime), encoding="utf-8") as record:
-        for line in record:
-            try:
-                item = json.loads(line)
-            except ValueError:
-                continue
-            if item.get("type") == "turn_context":
-                model = item.get("payload", {}).get("model")
-                if model:
-                    found = model
-    if found:
-        print(found)
-        sys.exit(0)
-
-config = os.path.join(codex_home, "config.toml")
-if os.path.isfile(config):
-    with open(config, "rb") as settings:
-        print(tomllib.load(settings).get("model", ""))
+with open(paths[0], encoding="utf-8") as record:
+    for line in record:
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        if item.get("type") == "turn_context":
+            model = item.get("payload", {}).get("model")
+            if model:
+                found = model
+print(found)
 PY
-)"
+)" || exit 1
 elif [ "${CLAUDECODE:-}" = "1" ]; then
     harness="claude-code"
     if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
         transcript="$(find "$HOME/.claude/projects" -name "${CLAUDE_CODE_SESSION_ID}.jsonl" -print -quit 2>/dev/null || true)"
     else
-        # Session ID not exported. Fall back to the newest transcript in the
-        # current project's directory. Two sessions in one project can cross here,
-        # and claude-code exports nothing that separates them.
+        # Claude Code gives no session ID here. Use a transcript only when the
+        # current project has one transcript.
         project_dir="$(printf '%s' "$PWD" | sed 's|/|-|g')"
-        transcript="$(ls -t "$HOME/.claude/projects/$project_dir"/*.jsonl 2>/dev/null | head -1 || true)"
+        set -- "$HOME/.claude/projects/$project_dir"/*.jsonl
+        if [ "$#" -gt 1 ]; then
+            echo "assisted-by: multiple claude-code transcripts for this project" >&2
+            exit 1
+        fi
+        if [ -f "$1" ]; then
+            transcript="$1"
+        else
+            transcript=""
+        fi
     fi
     if [ -z "$transcript" ]; then
         echo "assisted-by: no claude-code transcript found for this session" >&2
