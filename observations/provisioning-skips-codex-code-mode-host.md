@@ -4,6 +4,7 @@ type: code_spec_misalignment
 severity: medium
 status: open
 created: 2026-10-20T12:00:00Z
+announced: 2026-10-20T19:01:34Z
 affected:
   - specs/sandbox-codex-login/assertions/codex-installed-on-every-sandbox.md
   - internal/sandbox/cloud-init.yaml
