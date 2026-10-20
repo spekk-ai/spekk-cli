@@ -167,13 +167,13 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		// Drain after every line so a request written mid-session is
 		// emitted before the invocation returns, stamped with whatever
 		// session id is known so far.
-		drainSpool(ctx, spoolDir, sessionID, send)
+		drainSpool(ctx, spoolDir, sessionID, conns.supportsChannel, send)
 	}
 
 	waitErr := cmd.Wait()
 	// Final drain after process exit, regardless of exit status, so a
 	// request written just before the process exited is still emitted.
-	drainSpool(ctx, spoolDir, sessionID, send)
+	drainSpool(ctx, spoolDir, sessionID, conns.supportsChannel, send)
 
 	if waitErr != nil {
 		detail := stderrBuf.String()

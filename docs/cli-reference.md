@@ -1114,6 +1114,7 @@ spekk conversation open --title "Need a decision on the auth flow" --body "The s
 | `--title <text>` | Short summary (required) |
 | `--body <text>` | Full details (required) |
 | `--severity <level>` | `info` (default), `warning`, or `critical` |
+| `--channel <name\|id>` | Slack channel joined by the agent's bot; accepts a name, `#name`, or ID. Omit to use the home channel |
 
 The command writes one request file into the spool directory named by `SPEKK_CONVERSATION_SPOOL`, and exits. It does not wait for a reply. The agent client on the sandbox sets that variable for each Claude session, reads the file, and sends a `conversation_open` frame to the control host. Outside a sandbox session the variable is not set, and the command fails with a message that says so.
 
