@@ -9,12 +9,28 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"sync"
 	"syscall"
 
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
 )
 
 func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg Message) {
+	workspace := cfg.Workspace
+	if msg.Repository != nil {
+		lockValue, _ := repositoryLocks.LoadOrStore(msg.Repository.ID, &sync.Mutex{})
+		lock := lockValue.(*sync.Mutex)
+		lock.Lock()
+		defer lock.Unlock()
+		var err error
+		workspace, err = prepareRepository(ctx, cfg, msg.AgentSessionID, *msg.Repository)
+		if err != nil {
+			log.Printf("Repository preparation failed for agent session %s: %v", msg.AgentSessionID, err)
+			sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("Repository preparation failed: %v", err))
+			return
+		}
+	}
+
 	// A turn with no model credential would fail inside claude with no
 	// cause that the person can act on.
 	if !claudeSignedIn() {
@@ -53,7 +69,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	defer cleanupSpool()
 
 	cmd := exec.Command("claude", args...)
-	cmd.Dir = cfg.Workspace
+	cmd.Dir = workspace
 	// Per-process env, not os.Setenv: os.Setenv is process-global and would
 	// make concurrent sessions share (and clobber) one spool directory.
 	cmd.Env = append(os.Environ(), conversation.SpoolEnvVar+"="+spoolDir)
