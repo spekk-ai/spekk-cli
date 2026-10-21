@@ -7,11 +7,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+const unrelatedGitHubToken = "unrelated-environment-token"
 
 // validMachineInput is a create stdin with model credential mc, for a
 // control host at host.
@@ -20,13 +24,13 @@ func validMachineInput(host, mc string) string {
 		`", "github_token": "ghs-secret", "github_repository": "acme/widgets", "harness": "claude-code", "model_credential": ` + mc + `}`
 }
 
-func machineInputWithoutRepository(host, mc string) string {
-	return strings.Replace(validMachineInput(host, mc),
+func machineInputWithoutRepository(input string) string {
+	return strings.Replace(input,
 		`"github_token": "ghs-secret", "github_repository": "acme/widgets", `, "", 1)
 }
 
 func TestReadMachineInputWithoutRepository(t *testing.T) {
-	t.Setenv("GITHUB_TOKEN", "unrelated-environment-token")
+	t.Setenv("GITHUB_TOKEN", unrelatedGitHubToken)
 	cases := []struct {
 		credential string
 		auth       AuthMode
@@ -37,7 +41,7 @@ func TestReadMachineInputWithoutRepository(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.auth), func(t *testing.T) {
-			in, err := readMachineInput(strings.NewReader(machineInputWithoutRepository("spekk.example.com", tc.credential)))
+			in, err := readMachineInput(strings.NewReader(machineInputWithoutRepository(validMachineInput("spekk.example.com", tc.credential))))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -65,8 +69,6 @@ func TestReadMachineInput(t *testing.T) {
 		{"missing credential field", validMachineInput(host, `{"kind": "anthropic_api_key"}`), ""},
 		{"subscription token", validMachineInput(host, `{"kind": "subscription", "oauth_token": "x"}`), ""},
 		{"no model credential", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `, "model_credential": {"kind": "none"}`, ``, 1), ""},
-		{"repository without token", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"github_token": "ghs-secret", `, "", 1), ""},
-		{"token without repository", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"github_repository": "acme/widgets", `, "", 1), ""},
 		{"blank repository with token", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"acme/widgets"`, `" "`, 1), ""},
 		{"blank token with repository", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"ghs-secret"`, `" "`, 1), ""},
 		{"unknown harness", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"claude-code"`, `"other-harness"`, 1), ""},
@@ -239,6 +241,69 @@ func machineOptions() CreateOptions {
 		Labels: map[string]string{"spekk-launch": "abc123"}}
 }
 
+func TestPrepareMachineWorkspaceRefusesGit(t *testing.T) {
+	cases := []struct {
+		name, entry, kind, workspaceTarget string
+	}{
+		{"repository", "workspace/.git", "directory", ""},
+		{"worktree file", "workspace/.git", "file", ""},
+		{"dangling link", "workspace/.git", "link", ""},
+		{"parent repository", ".git", "directory", ""},
+		{"workspace link", "repository/.git", "directory", "repository/subdir"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			workspace := filepath.Join(root, "workspace")
+			if tc.workspaceTarget == "" {
+				if err := os.Mkdir(workspace, 0700); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				target := filepath.Join(root, tc.workspaceTarget)
+				if err := os.MkdirAll(target, 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(target, workspace); err != nil {
+					t.Fatal(err)
+				}
+			}
+			entry := filepath.Join(root, tc.entry)
+			contentPath := entry
+			const content = "Keep this file.\n"
+			switch tc.kind {
+			case "directory":
+				if err := os.Mkdir(entry, 0700); err != nil {
+					t.Fatal(err)
+				}
+				contentPath = filepath.Join(entry, "config")
+			case "link":
+				if err := os.Symlink("missing-target", entry); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.kind != "link" {
+				if err := os.WriteFile(contentPath, []byte(content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			script := strings.ReplaceAll(prepareMachineWorkspaceScript, "/opt/spekk/workspace", workspace)
+			out, err := exec.Command("sh", "-c", script).CombinedOutput()
+			if err == nil || !strings.Contains(string(out), "Cannot prepare a workspace without a repository") {
+				t.Fatalf("workspace setup = %v, %s", err, out)
+			}
+			if tc.kind == "link" {
+				target, err := os.Readlink(entry)
+				if err != nil || target != "missing-target" {
+					t.Fatalf("Git link changed: %q, %v", target, err)
+				}
+			} else if got, err := os.ReadFile(contentPath); err != nil || string(got) != content {
+				t.Fatalf("Git content changed: %q, %v", got, err)
+			}
+		})
+	}
+}
+
 func TestCreateMachine(t *testing.T) {
 	setUp := func(t *testing.T, registerStatus int, failOn string) (do *fakeDigitalOcean, regs *[]registration, argv, stdin *[]string, input string) {
 		isolateConfig(t)
@@ -256,65 +321,82 @@ func TestCreateMachine(t *testing.T) {
 	}
 	secrets := []string{"do-secret", "reg-secret", "ghs-secret", "sk-ant-secret"}
 
-	t.Run("online", func(t *testing.T) {
-		do, regs, argv, stdin, input := setUp(t, 201, "")
-		var stdout strings.Builder
-		stderr := captureStderr(t)
-		if err := CreateMachine(strings.NewReader(input), &stdout, machineOptions()); err != nil {
-			t.Fatal(err)
-		}
-		errOut := stderr()
-
-		lines := stageLines(t, stdout.String())
-		want := []stageLine{{Stage: "creating"}, {Stage: "provisioning", DropletID: 4242, IP: "203.0.113.10"}, {Stage: "registering"}, {Stage: "online", AgentID: "agent-77"}}
-		if fmt.Sprint(lines) != fmt.Sprint(want) {
-			t.Fatalf("stage lines = %+v, want %+v", lines, want)
-		}
-
-		for _, a := range do.auth {
-			if a != "Bearer do-secret" {
-				t.Errorf("a DigitalOcean request has Authorization %q, want the token from stdin", a)
+	for _, withRepository := range []bool{true, false} {
+		t.Run(fmt.Sprintf("online/repository=%t", withRepository), func(t *testing.T) {
+			do, regs, argv, stdin, input := setUp(t, 201, "")
+			t.Setenv("GITHUB_TOKEN", unrelatedGitHubToken)
+			if !withRepository {
+				input = machineInputWithoutRepository(input)
 			}
-		}
-		if got := strings.Join(do.createTags, " "); got != "spekk-sandbox spekk-launch:abc123" {
-			t.Errorf("droplet create tags = %s", got)
-		}
-		if got := strings.Join(do.tags, " "); got != "spekk-expires:2026-10-20 spekk-host:ops-laptop spekk-kind:one-off" {
-			t.Errorf("droplet tags after the create = %s", got)
-		}
+			var stdout strings.Builder
+			stderr := captureStderr(t)
+			if err := CreateMachine(strings.NewReader(input), &stdout, machineOptions()); err != nil {
+				t.Fatal(err)
+			}
+			errOut := stderr()
 
-		if len(*regs) != 1 {
-			t.Fatalf("got %d registrations, want 1", len(*regs))
-		}
-		reg := (*regs)[0]
-		agentToken := reg.body["token"]
-		if reg.auth != "Bearer reg-secret" || reg.body["name"] != "launch-1" || !strings.HasPrefix(reg.body["sandbox_id"], "spekk-launch-1-") || len(agentToken) < 32 || len(reg.body) != 3 {
-			t.Errorf("registration = %+v", reg)
-		}
+			lines := stageLines(t, stdout.String())
+			want := []stageLine{{Stage: "creating"}, {Stage: "provisioning", DropletID: 4242, IP: "203.0.113.10"}, {Stage: "registering"}, {Stage: "online", AgentID: "agent-77"}}
+			if fmt.Sprint(lines) != fmt.Sprint(want) {
+				t.Fatalf("stage lines = %+v, want %+v", lines, want)
+			}
 
-		sent := strings.Join(*stdin, "\n")
-		if !holdsSecret(sent, "SPEKK_AGENT_TOKEN="+agentToken+"\n") || !holdsSecret(sent, "SPEKK_AGENT_ID=agent-77\n") || !holdsSecret(sent, "ANTHROPIC_API_KEY=sk-ant-secret\n") {
-			t.Error("the env file on the machine does not have the agent token, the agent id, and the API key")
-		}
-		if !holdsSecret(sent, "ghs-secret") || !strings.Contains(sent, "'https://github.com/acme/widgets.git'") {
-			t.Error("the clone script did not reach the machine on stdin")
-		}
-		for _, secret := range append(secrets, agentToken) {
-			for _, a := range *argv {
-				if holdsSecret(a, secret) {
-					t.Errorf("an ssh argument list holds %s: %s", secret, a)
+			for _, a := range do.auth {
+				if a != "Bearer do-secret" {
+					t.Errorf("a DigitalOcean request has Authorization %q, want the token from stdin", a)
 				}
 			}
-			if strings.Contains(stdout.String(), secret) || strings.Contains(errOut, secret) {
-				t.Errorf("stdout or stderr holds %s", secret)
+			if got := strings.Join(do.createTags, " "); got != "spekk-sandbox spekk-launch:abc123" {
+				t.Errorf("droplet create tags = %s", got)
 			}
-		}
+			if got := strings.Join(do.tags, " "); got != "spekk-expires:2026-10-20 spekk-host:ops-laptop spekk-kind:one-off" {
+				t.Errorf("droplet tags after the create = %s", got)
+			}
 
-		got, _ := GetSandbox("launch-1")
-		if got == nil || got.Status != "active" || got.DropletID != 4242 || got.AgentID != "agent-77" || got.Auth != "api-key" || got.SSHKeyPath == "" {
-			t.Fatalf("record = %+v", got)
-		}
-	})
+			if len(*regs) != 1 {
+				t.Fatalf("got %d registrations, want 1", len(*regs))
+			}
+			reg := (*regs)[0]
+			agentToken := reg.body["token"]
+			if reg.auth != "Bearer reg-secret" || reg.body["name"] != "launch-1" || !strings.HasPrefix(reg.body["sandbox_id"], "spekk-launch-1-") || len(agentToken) < 32 || len(reg.body) != 3 {
+				t.Errorf("registration = %+v", reg)
+			}
+
+			sent := strings.Join(*stdin, "\n")
+			if !holdsSecret(sent, "SPEKK_AGENT_TOKEN="+agentToken+"\n") || !holdsSecret(sent, "SPEKK_AGENT_ID=agent-77\n") || !holdsSecret(sent, "ANTHROPIC_API_KEY=sk-ant-secret\n") {
+				t.Error("the env file on the machine does not have the agent token, the agent id, and the API key")
+			}
+			if withRepository {
+				if !holdsSecret(sent, "ghs-secret") || !strings.Contains(sent, "'https://github.com/acme/widgets.git'") {
+					t.Error("the clone script did not reach the machine on stdin")
+				}
+			} else {
+				if !strings.Contains(sent, "install -d -o agent -g agent /opt/spekk/workspace") {
+					t.Error("the workspace directory was not prepared")
+				}
+				for _, forbidden := range []string{" git ", "\ngit ", "github.com", "ghs-secret", "GITHUB_TOKEN=", unrelatedGitHubToken} {
+					if holdsSecret(sent, forbidden) {
+						t.Errorf("repository-free setup contains %q", forbidden)
+					}
+				}
+			}
+			for _, secret := range append(secrets, agentToken) {
+				for _, a := range *argv {
+					if holdsSecret(a, secret) {
+						t.Errorf("an ssh argument list holds %s: %s", secret, a)
+					}
+				}
+				if strings.Contains(stdout.String(), secret) || strings.Contains(errOut, secret) {
+					t.Errorf("stdout or stderr holds %s", secret)
+				}
+			}
+
+			got, _ := GetSandbox("launch-1")
+			if got == nil || got.Status != "active" || got.DropletID != 4242 || got.AgentID != "agent-77" || got.Auth != "api-key" || got.SSHKeyPath == "" {
+				t.Fatalf("record = %+v", got)
+			}
+		})
+	}
 
 	t.Run("the last stage line comes again while the create waits", func(t *testing.T) {
 		_, _, _, _, input := setUp(t, 201, "")
@@ -442,6 +524,36 @@ func TestCreateMachine(t *testing.T) {
 		}
 		if got, _ := GetSandbox("launch-1"); got == nil || got.DropletID != 4242 || got.AgentID != "agent-77" {
 			t.Fatalf("record = %+v, want the droplet and the agent", got)
+		}
+	})
+
+	t.Run("a failed workspace can be destroyed by the caller", func(t *testing.T) {
+		do, _, _, stdin, input := setUp(t, 201, "install -d -o agent -g agent /opt/spekk/workspace")
+		input = machineInputWithoutRepository(input)
+		var stdout strings.Builder
+		if err := CreateMachine(strings.NewReader(input), &stdout, machineOptions()); err == nil {
+			t.Fatal("create succeeded after workspace setup failed")
+		}
+		lines := stageLines(t, stdout.String())
+		last := lines[len(lines)-1]
+		if last.Stage != stageFailed || last.At != stageRegistering || !strings.Contains(last.Message, "preparing workspace") {
+			t.Fatalf("workspace failure = %+v", last)
+		}
+		if strings.Contains(strings.Join(*stdin, "\n"), "systemctl restart spekk-agent") {
+			t.Fatal("the agent started after workspace setup failed")
+		}
+		if got, _ := GetSandbox("launch-1"); got == nil || got.DropletID != 4242 || got.AgentID != "agent-77" {
+			t.Fatalf("failed workspace lost its cleanup record: %+v", got)
+		}
+		if err := DestroyMachine(strings.NewReader(`{"digitalocean_token": "do-secret"}`), "launch-1"); err != nil {
+			t.Fatal(err)
+		}
+		calls := strings.Join(do.calls(), "\n")
+		if !strings.Contains(calls, "DELETE /v2/droplets/4242") || !strings.Contains(calls, "DELETE /v2/account/keys/11") {
+			t.Fatalf("cleanup did not remove the cloud resources: %s", calls)
+		}
+		if got, _ := GetSandbox("launch-1"); got != nil {
+			t.Fatalf("cleanup kept the failed workspace record: %+v", got)
 		}
 	})
 

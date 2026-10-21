@@ -29,5 +29,5 @@ The worker gives each secret of a launch to the CLI on stdin, and on stdin only.
 
 ## Verification
 
-- One table test feeds stdin cases to the input reader: a valid object of each `model_credential` kind, a missing field, an unknown harness, an empty field, an unknown top-level field, an unknown `model_credential` field, a field of another type, an unknown type, trailing data, a bad repository, an omitted repository and token for each model credential kind, an incomplete GitHub field pair, and an `http` host that is not loopback. Each bad case is an error.
-- One test runs `create --machine` with a bad stdin against a fake DigitalOcean server and checks the `failed` line and that the server got no request.
+- One table test feeds stdin cases to the input reader: a valid object of each `model_credential` kind, a missing field, an unknown harness, an empty field, an unknown top-level field, an unknown `model_credential` field, a field of another type, an unknown type, trailing data, a bad repository, an omitted repository and token for each model credential kind, blank values in an incomplete GitHub field pair, and an `http` host that is not loopback. Each bad case is an error.
+- One table test runs `create --machine` with missing required input or either missing GitHub field against a fake DigitalOcean server and checks the `failed` line and that the server got no request.

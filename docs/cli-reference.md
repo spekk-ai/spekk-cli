@@ -1030,7 +1030,7 @@ spekk sandbox destroy <name> --machine --force < destroy.json
 }
 ```
 
-Omit both `github_repository` and `github_token` to start without a repository. Both fields can also be empty. If either field has a value, both must have a non-empty value, and `github_repository` must be `<owner>/<repository>`. The CLI uses no GitHub token from its environment.
+Omit both `github_repository` and `github_token` to start without a repository. Both fields can also be empty. If either field has a value, both must have a non-empty value, and `github_repository` must be `<owner>/<repository>`. The CLI uses no GitHub token from its environment. A launch without a repository refuses an existing `.git` file, directory, or symbolic link in the resolved workspace or any parent directory. It reports the entry and preserves all files. This also applies to template images.
 
 The object can also have `"image": "<name>"`, which is optional. It names a template image. The CLI finds the image by that name in the private images of the DigitalOcean account, because the worker has no `images.json`. Without the field, or when the region has no copy of the image, the droplet gets the full cloud-init. The stage lines are the same either way.
 
@@ -1057,9 +1057,9 @@ While the CLI waits (for the release download, the droplet, cloud-init, or an SS
 
 On an error, the last line is `{"stage":"failed","at":"<stage>","message":"<text>"}`, where `at` is the last stage that started, and the exit status is 1. The message holds no secret. A bad flag or a bad input fails at `creating`, before any call to DigitalOcean, the control host, or GitHub.
 
-**Steps.** `creating` checks the input and creates the droplet with the token from stdin. `provisioning` waits for cloud-init. `registering` makes the agent token, registers the agent with `POST /api/agents/register/` and `Authorization: Bearer <registration token>` (the body has `name`, `sandbox_id`, and `token`), writes the env file, clones the repository into `/opt/spekk/workspace`, configures git, and deploys the agent. Each script that holds a secret goes to the machine on the stdin of `ssh`.
+**Steps.** `creating` checks the input and creates the droplet with the token from stdin. `provisioning` waits for cloud-init. `registering` makes the agent token, registers the agent with `POST /api/agents/register/` and `Authorization: Bearer <registration token>` (the body has `name`, `sandbox_id`, and `token`), writes the env file, prepares `/opt/spekk/workspace`, and deploys the agent. With a repository, it clones into that workspace and configures git. Without a repository, it creates a plain directory owned by `agent` and sets no Git credential helper or remote. Each script that holds a secret goes to the machine on the stdin of `ssh`.
 
-**Git.** The installation token reaches `git clone` in the environment of the git process, and is not stored. Then `credential.https://github.com.helper` is `/opt/spekk/agent-client git-credential`. For each git request to `github.com`, the helper reads `/etc/spekk/agent.env` and asks the control host for a new installation token with `POST /api/agents/<agent id>/git-token/` and `Authorization: Bearer <agent token>`. The env file has no `GITHUB_TOKEN`, and `gh` is not signed in.
+**Git.** When a repository is supplied, the installation token reaches `git clone` in the environment of the git process, and is not stored. Then `credential.https://github.com.helper` is `/opt/spekk/agent-client git-credential`. For each git request to `github.com`, the helper reads `/etc/spekk/agent.env` and asks the control host for a new installation token with `POST /api/agents/<agent id>/git-token/` and `Authorization: Bearer <agent token>`. The env file has no `GITHUB_TOKEN`, and `gh` is not signed in.
 
 **Failure.** The CLI does not destroy the droplet and does not revoke the agent when a create fails. It keeps the record of a droplet that exists, so the caller can run `destroy --machine` with the same `HOME`, and revoke the agent itself.
 

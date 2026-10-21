@@ -154,7 +154,7 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 	return in, nil
 }
 
-// checkMachineRepository checks the optional repository and token pair.
+// checkMachineRepository requires a repository and token together.
 func checkMachineRepository(repository, token string) error {
 	if repository == "" && token == "" {
 		return nil
@@ -476,9 +476,8 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 // reach the steps around it without an SSH connection.
 var equipMachine = equipMachineSandbox
 
-// equipMachineSandbox runs the steps of equipSandbox for machine mode: the
-// env file comes from the input, and git reaches the one repository of the
-// input through the credential helper, not through a stored token.
+// equipMachineSandbox installs credentials, prepares the workspace, and deploys
+// the agent. A supplied repository uses the Git credential helper.
 func equipMachineSandbox(meta *SandboxMeta, name, agentToken string, in *machineInput, artifacts *releaseArtifacts) *stageError {
 	user := sshUser(meta)
 
@@ -491,9 +490,13 @@ func equipMachineSandbox(meta *SandboxMeta, name, agentToken string, in *machine
 		return &stageError{"injecting credentials", err}
 	}
 
-	fmt.Fprintf(os.Stderr, "Cloning %s...\n", in.repository)
-	if out, err := runSecretScript(meta.IP, meta.SSHKeyPath, name, user, buildCloneScript(in.githubToken, in.repository)); err != nil {
-		return &stageError{"cloning " + in.repository, fmt.Errorf("%w\n%s", err, strings.TrimSpace(out))}
+	script, operation := prepareMachineWorkspaceScript, "preparing workspace"
+	if in.repository != "" {
+		script, operation = buildCloneScript(in.githubToken, in.repository), "cloning "+in.repository
+	}
+	fmt.Fprintln(os.Stderr, "Preparing the workspace...")
+	if out, err := runSecretScript(meta.IP, meta.SSHKeyPath, name, user, script); err != nil {
+		return &stageError{operation, fmt.Errorf("%w\n%s", err, strings.TrimSpace(out))}
 	}
 
 	fmt.Fprintln(os.Stderr, "Deploying the agent and the spekk CLI...")
@@ -516,6 +519,19 @@ func buildMachineEnvContent(in *machineInput, name, agentToken, agentID string) 
 	)
 	return strings.Join(lines, "\n") + "\n"
 }
+
+// prepareMachineWorkspaceScript refuses Git metadata before it prepares the workspace.
+const prepareMachineWorkspaceScript = `set -e
+directory=$(realpath -m /opt/spekk/workspace)
+while :; do
+  if [ -e "$directory/.git" ] || [ -L "$directory/.git" ]; then
+    echo "Cannot prepare a workspace without a repository: $directory/.git exists." >&2
+    exit 1
+  fi
+  [ "$directory" != / ] || break
+  directory=$(dirname "$directory")
+done
+install -d -o agent -g agent /opt/spekk/workspace`
 
 // gitCredentialHelper is the git credential helper of a machine-mode
 // sandbox: the agent binary asks the control host for an installation token.

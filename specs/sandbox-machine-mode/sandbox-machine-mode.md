@@ -26,7 +26,7 @@ The CLI also has a defect in both modes: `injectCredentials`, `configureGitCrede
 - **Cloud.** DigitalOcean only, with the token from stdin: the token of the DigitalOcean connection of an organization, or of spekk's own account. The `Provider` interface does not change, so another cloud fits later.
 - **Harness and model credential.** `harness` is `claude-code`, the only harness now. The model credential is `none`, `anthropic_api_key`, or `bedrock`. Never a Claude subscription token: that token is for one person. With `none`, the person signs in to Claude Code on the box later, and the heartbeat of the agent says `claude_signed_in: false` until then.
 - **Registration.** `POST /api/agents/register/` with `Authorization: Bearer <registration token>`. The CLI makes the agent token and sends it in the body.
-- **Git.** The CLI clones the repository into the workspace, and installs a git credential helper that asks the control host for a new installation token when git needs one.
+- **Git.** With a repository, the CLI clones into the workspace and installs a git credential helper that asks the control host for a new installation token when git needs one. Without a repository, it prepares a plain workspace owned by `agent`, with no clone, Git remote, or Git credential setup.
 - **Secrets on SSH stdin.** Each script that holds a secret goes to the machine on the stdin of `ssh`, in both modes.
 - **State under `$HOME`.** The record and the SSH key stay under `$HOME/.config/spekk/`, as today. The worker gives each launch its own `HOME`, so a later destroy finds them.
 
