@@ -2,70 +2,42 @@
 slug: turn-keepalive-reserves-a-taken-protocol-version
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-10-21T00:00:00Z
 announced: 2026-10-21T19:02:38Z
 affected:
   - specs/turn-progress-reporting/assertions/turn-keepalive-frame-sent-during-tool-calls.md
   - specs/turn-progress-reporting/assertions/sandbox-docs-record-turn-progress-protocol.md
   - specs/sandbox-sign-in-terminal/assertions/agent-sign-in-terminal.md
+  - specs/turn-progress-reporting/assertions/sandbox-protocol-version-1-1.md
+  - specs/turn-progress-reporting/turn-progress-reporting.md
   - cmd/sandbox/protocol.go
   - cmd/sandbox/protocol_test.go
   - docs/advanced/sandbox-architecture.md
 ---
 
-# The Queued Keepalive Assertion Still Reserves Protocol `1.3`, Which Is Now Taken
+# The Keepalive Assertion Reserved a Protocol Version That Is Already in Use
 
 ## Issue Description
 
-The `turn-keepalive-frame-sent-during-tool-calls` assertion (`not_started`, so
-it is queued for the builder) says the keepalive frame "comes with protocol
-version `1.3`", and that `ProtocolVersion` and "the pinning test" read `"1.3"`.
-Neither holds any more. Since that assertion was written, three additive minor
-versions have shipped:
+The queued `turn-keepalive-frame-sent-during-tool-calls` assertion reserved protocol `1.3` and required a test that pinned that value. Protocol `1.3` already introduced the sign-in terminal. Protocol `1.4` added conversation channel routing, and `1.5` added the optional repository object. The code declares `1.5`. A builder that followed the old assertion could reduce the declared version and give one version two meanings.
 
-- `1.3`: the sign-in terminal frames (#289)
-- `1.4`: optional channel routing on `conversation_open` (df08e89)
-- `1.5`: the optional `repository` object on a `message` frame (#294)
-
-df08e89 also deleted `TestProtocolVersionPinned`, so there is no pinning test
-to update.
-
-The cause is that several specs state a literal `ProtocolVersion` value rather
-than a rule. Each additive bump makes one of them false. Two `done` assertions
-have the same problem:
-
-- `agent-sign-in-terminal` still requires "`ProtocolVersion` is `1.3`".
-- `sandbox-docs-record-turn-progress-protocol` requires the doc to say the
-  keepalive is "reserved for version `1.3`", and its done note says the
-  keepalive obligation "comes back with `1.3`".
+The parent spec and the completed `sandbox-protocol-version-1-1`, `sandbox-docs-record-turn-progress-protocol`, and `agent-sign-in-terminal` assertions also contained fixed current-version requirements or the old keepalive reservation.
 
 ## Evidence
 
-- `cmd/sandbox/protocol.go:17`: `const ProtocolVersion = "1.5"` (set by 8f602d8, #294).
-- `cmd/sandbox/protocol_test.go`: `TestProtocolVersionPinned` was removed in df08e89.
-- `docs/advanced/sandbox-architecture.md:61-65`: lists `1.3` as the sign-in
-  terminal, `1.4` as the conversation channel, and `1.5` as the repository object.
-- `specs/turn-progress-reporting/assertions/turn-keepalive-frame-sent-during-tool-calls.md:28`:
-  "The frame comes with protocol version `1.3`. `ProtocolVersion` … and the pinning test read `"1.3"`".
-- `specs/turn-progress-reporting/assertions/sandbox-docs-record-turn-progress-protocol.md:19,24,27`:
-  "reserved for version `1.3`" and "comes with `1.3`".
-- `specs/sandbox-sign-in-terminal/assertions/agent-sign-in-terminal.md:20`: "`ProtocolVersion` is `1.3`."
+- `cmd/sandbox/protocol.go` declares `ProtocolVersion = "1.5"` and states the additive minor-version rule.
+- `cmd/sandbox/protocol_test.go` checks the declared connection header and version compatibility. Commit df08e89 removed `TestProtocolVersionPinned`.
+- `docs/advanced/sandbox-architecture.md` records the `1.1` through `1.5` additions and reserves `turn_keepalive` for a future change.
+- The original queued assertion required `1.3` for the keepalive sender.
+- The original completed assertions required current versions `1.1` or `1.3`, although the declared version is `1.5`.
 
 ## Impact
 
-When the control host accepts `turn_keepalive`, a builder that follows the
-assertion as written would set `ProtocolVersion` back from `1.5` to `1.3` and
-restore a pinning test. `1.3` would then mean two different things on the
-wire, and a control host could not tell from the version whether an agent
-sends keepalives. That is exactly what the assertion's own reasoning says it
-wants to avoid. Until then, a reviewer checking the `done` assertions against
-the code finds two that the code no longer meets.
+A reused protocol version cannot identify which frame types and fields a client supports. Fixed current-version requirements also make completed assertions false after a valid additive update.
 
-## Recommendation
+## Resolution
 
-State the rule instead of a number. The keepalive takes the next minor
-version after the current `ProtocolVersion` when it ships. Assertions record
-which version a feature introduced, not what the constant "is". The remedy
-commit on this branch makes these edits to the three assertions. It does not
-change any code or status.
+The keepalive assertion now requires the next unused minor version at delivery. The parent spec uses the same rule. Completed assertions record the versions that introduced their features, and the documentation assertion requires the current declared version. The protocol tests check the actual declaration and compatibility.
+
+The runtime remains at `1.5`. The keepalive sender and its in-flight tracking dependency remain `not_started`. The control host must accept and attribute the frame before a client sends it. This correction changes only the specs and this observation.

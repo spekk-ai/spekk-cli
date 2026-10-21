@@ -84,7 +84,7 @@ The control host accepts an absent `terminal` as `true`, so that half is backwar
 
 The keepalive frame is not covered by that guarantee, and the order is not negotiable. The control host must accept and attribute a `turn_keepalive` frame **before** any client emits one. A new frame type sent to a host that does not know it is at best ignored and at worst an error, and this project has already taken one production outage — 2026-08-07, on the control host — from deploying one side of a contract change ahead of the other. The safe order is: control host accepts and attributes the frame, then the client emits it.
 
-Both changes are additive: one new frame type, one new optional field, and no change to the meaning of an existing frame. The protocol major stays at `1`. Each change gets its own minor, because they ship at different times: `1.1` adds the `terminal` field only, and `1.3` adds `turn_keepalive` (`1.2` went to the `claude_signed_in` heartbeat field of `sandbox-machine-mode`). One minor for both would give a client that sends the keepalive and a control host that does not accept it the same version. No breaking change is needed and none is proposed.
+Both changes are additive: one new frame type and one new optional field. Each existing frame keeps its meaning, and the protocol major stays at `1`. Each change gets its own minor because they ship at different times. Version `1.1` introduced only the `terminal` field. The keepalive takes the next unused minor version when it ships, as specified in `turn-keepalive-frame-sent-during-tool-calls`. Each version identifies a fixed set of frame types and fields.
 
 ## Rejected
 
