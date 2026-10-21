@@ -20,6 +20,34 @@ func validMachineInput(host, mc string) string {
 		`", "github_token": "ghs-secret", "github_repository": "acme/widgets", "harness": "claude-code", "model_credential": ` + mc + `}`
 }
 
+func machineInputWithoutRepository(host, mc string) string {
+	return strings.Replace(validMachineInput(host, mc),
+		`"github_token": "ghs-secret", "github_repository": "acme/widgets", `, "", 1)
+}
+
+func TestReadMachineInputWithoutRepository(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "unrelated-environment-token")
+	cases := []struct {
+		credential string
+		auth       AuthMode
+	}{
+		{`{"kind": "none"}`, AuthNone},
+		{`{"kind": "anthropic_api_key", "api_key": "sk-secret"}`, AuthAPIKey},
+		{`{"kind": "bedrock", "aws_access_key_id": "a", "aws_secret_access_key": "b", "aws_region": "us-east-1"}`, AuthBedrock},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.auth), func(t *testing.T) {
+			in, err := readMachineInput(strings.NewReader(machineInputWithoutRepository("spekk.example.com", tc.credential)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if in.repository != "" || in.githubToken != "" || in.auth != tc.auth {
+				t.Fatalf("repository-free input has repository %q, GitHub token %q, auth %q", in.repository, in.githubToken, in.auth)
+			}
+		})
+	}
+}
+
 func TestReadMachineInput(t *testing.T) {
 	const host = "spekk.example.com"
 	cases := []struct {
@@ -37,6 +65,10 @@ func TestReadMachineInput(t *testing.T) {
 		{"missing credential field", validMachineInput(host, `{"kind": "anthropic_api_key"}`), ""},
 		{"subscription token", validMachineInput(host, `{"kind": "subscription", "oauth_token": "x"}`), ""},
 		{"no model credential", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `, "model_credential": {"kind": "none"}`, ``, 1), ""},
+		{"repository without token", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"github_token": "ghs-secret", `, "", 1), ""},
+		{"token without repository", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"github_repository": "acme/widgets", `, "", 1), ""},
+		{"blank repository with token", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"acme/widgets"`, `" "`, 1), ""},
+		{"blank token with repository", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"ghs-secret"`, `" "`, 1), ""},
 		{"unknown harness", strings.Replace(validMachineInput(host, `{"kind": "none"}`), `"claude-code"`, `"other-harness"`, 1), ""},
 		{"trailing data", validMachineInput(host, `{"kind": "none"}`) + `{}`, ""},
 		{"bad repository", strings.Replace(validMachineInput(host, `{"kind": "none"}`), "acme/widgets", "acme/../x", 1), ""},
@@ -429,23 +461,31 @@ func TestCreateMachine(t *testing.T) {
 		}
 	})
 
-	t.Run("bad input stops before any call", func(t *testing.T) {
-		do, regs, _, _, _ := setUp(t, 201, "")
-		var stdout strings.Builder
-		err := CreateMachine(strings.NewReader(`{"digitalocean_token": "do-secret"}`), &stdout, machineOptions())
-		if err == nil {
-			t.Fatal("create accepted a bad input")
-		}
-		if lines := stageLines(t, stdout.String()); len(lines) != 1 || lines[0].Stage != "failed" || lines[0].At != "creating" {
-			t.Fatalf("stage lines = %+v", lines)
-		}
-		if len(do.calls()) != 0 || len(*regs) != 0 {
-			t.Errorf("a bad input reached DigitalOcean %v or the control host %v", do.calls(), *regs)
-		}
-		if got, _ := GetSandbox("launch-1"); got != nil {
-			t.Errorf("a bad input left a record: %+v", got)
-		}
-	})
+	for _, missing := range []string{"required fields", "github_token", "github_repository"} {
+		t.Run("bad input stops before any call/"+missing, func(t *testing.T) {
+			do, regs, _, _, valid := setUp(t, 201, "")
+			var stdout strings.Builder
+			input := `{"digitalocean_token": "do-secret"}`
+			if missing == "github_token" {
+				input = strings.Replace(valid, `"github_token": "ghs-secret", `, "", 1)
+			} else if missing == "github_repository" {
+				input = strings.Replace(valid, `"github_repository": "acme/widgets", `, "", 1)
+			}
+			err := CreateMachine(strings.NewReader(input), &stdout, machineOptions())
+			if err == nil {
+				t.Fatal("create accepted a bad input")
+			}
+			if lines := stageLines(t, stdout.String()); len(lines) != 1 || lines[0].Stage != "failed" || lines[0].At != "creating" {
+				t.Fatalf("stage lines = %+v", lines)
+			}
+			if len(do.calls()) != 0 || len(*regs) != 0 {
+				t.Errorf("a bad input reached DigitalOcean %v or the control host %v", do.calls(), *regs)
+			}
+			if got, _ := GetSandbox("launch-1"); got != nil {
+				t.Errorf("a bad input left a record: %+v", got)
+			}
+		})
+	}
 }
 
 func TestDestroyMachine(t *testing.T) {

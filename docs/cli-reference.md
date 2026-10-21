@@ -1016,7 +1016,7 @@ spekk sandbox create <name> --machine --size <size> --region <region> [--one-off
 spekk sandbox destroy <name> --machine --force < destroy.json
 ```
 
-**Create input.** One JSON object on stdin. Each field is required and must not be empty, except `image` (see below). A field that is not in this list, data after the object, or more than 64 KiB is an error:
+**Create input.** One JSON object on stdin. Each field is required and must not be empty, except the optional GitHub pair and `image` (see below). A field that is not in this list, data after the object, or more than 64 KiB is an error:
 
 ```json
 {
@@ -1029,6 +1029,8 @@ spekk sandbox destroy <name> --machine --force < destroy.json
   "model_credential": {"kind": "none"}
 }
 ```
+
+Omit both `github_repository` and `github_token` to start without a repository. Both fields can also be empty. If either field has a value, both must have a non-empty value, and `github_repository` must be `<owner>/<repository>`. The CLI uses no GitHub token from its environment.
 
 The object can also have `"image": "<name>"`, which is optional. It names a template image. The CLI finds the image by that name in the private images of the DigitalOcean account, because the worker has no `images.json`. Without the field, or when the region has no copy of the image, the droplet gets the full cloud-init. The stage lines are the same either way.
 

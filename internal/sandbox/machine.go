@@ -125,8 +125,6 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 		"digitalocean_token", raw.DigitalOceanToken,
 		"registration_token", raw.RegistrationToken,
 		"spekk_host", raw.SpekkHost,
-		"github_token", raw.GitHubToken,
-		"github_repository", raw.GitHubRepository,
 		"harness", raw.Harness,
 		"model_credential", string(raw.ModelCredential),
 	); err != nil {
@@ -135,9 +133,8 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 	if raw.Harness != "claude-code" {
 		return nil, fmt.Errorf("harness %q is not claude-code, the only harness that machine mode installs", raw.Harness)
 	}
-	owner, repo, _ := strings.Cut(raw.GitHubRepository, "/")
-	if !repositoryRe.MatchString(raw.GitHubRepository) || owner == "." || owner == ".." || repo == "." || repo == ".." {
-		return nil, fmt.Errorf("github_repository %q is not <owner>/<repository>", raw.GitHubRepository)
+	if err := checkMachineRepository(raw.GitHubRepository, raw.GitHubToken); err != nil {
+		return nil, err
 	}
 	base, err := controlHostBase(raw.SpekkHost)
 	if err != nil {
@@ -155,6 +152,21 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 		return nil, err
 	}
 	return in, nil
+}
+
+// checkMachineRepository checks the optional repository and token pair.
+func checkMachineRepository(repository, token string) error {
+	if repository == "" && token == "" {
+		return nil
+	}
+	if err := requireFields("github_token", token, "github_repository", repository); err != nil {
+		return err
+	}
+	owner, repo, _ := strings.Cut(repository, "/")
+	if !repositoryRe.MatchString(repository) || owner == "." || owner == ".." || repo == "." || repo == ".." {
+		return fmt.Errorf("github_repository %q is not <owner>/<repository>", repository)
+	}
+	return nil
 }
 
 // readModelCredential reads model_credential. Each kind has its own fields,
