@@ -3,7 +3,8 @@ id: machine-create-input
 parent: sandbox-machine-mode
 created: 2026-10-17T00:00:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-tmp-launch-cli-1-1792610993
 branch: feature/repository-free-machine-launch
 depends-on: secrets-on-ssh-stdin
 ---
