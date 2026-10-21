@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-10-21T00:00:00Z
+announced: 2026-10-21T19:02:38Z
 affected:
   - specs/turn-progress-reporting/assertions/turn-keepalive-frame-sent-during-tool-calls.md
   - specs/turn-progress-reporting/assertions/sandbox-docs-record-turn-progress-protocol.md
