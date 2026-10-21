@@ -6,30 +6,41 @@ import (
 	"testing"
 )
 
-func TestEnsureCodexCLIInstallsMissingCodeModeHost(t *testing.T) {
-	original := sshExec
-	t.Cleanup(func() { sshExec = original })
+func TestEnsureCodexCLIRepairsFailedHealthCheck(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		repairErr error
+		wantErr   string
+	}{
+		{name: "repair succeeds"},
+		{name: "repair fails", repairErr: errors.New("download failed"), wantErr: "installing Codex CLI: download failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			original := sshExec
+			t.Cleanup(func() { sshExec = original })
+			calls := 0
+			var commands []string
+			sshExec = func(args []string, _ string) ([]byte, error) {
+				calls++
+				commands = append(commands, args[len(args)-1])
+				if calls == 1 {
+					return nil, errors.New("host check failed")
+				}
+				return []byte("codex-cli " + codexVersion + "\n"), tc.repairErr
+			}
 
-	var calls []string
-	sshExec = func(args []string, stdin string) ([]byte, error) {
-		script := sentScript(args, stdin)
-		calls = append(calls, script)
-		if strings.Contains(script, "codex-code-mode-host.tar.gz") {
-			return []byte("codex-cli 0.163.0\n"), nil
-		}
-		return nil, errors.New("code mode host is missing")
-	}
-
-	if err := ensureCodexCLI("127.0.0.1", "", "sandbox", "root"); err != nil {
-		t.Fatal(err)
-	}
-	if len(calls) != 2 {
-		t.Fatalf("got %d remote calls, want health check and install", len(calls))
-	}
-	if !strings.Contains(calls[0], "test -x /usr/local/bin/codex-code-mode-host") {
-		t.Fatal("health check did not check the code mode host")
-	}
-	if !strings.Contains(calls[1], "install -m 0755 \"$tmp/codex-code-mode-host-") {
-		t.Fatal("install did not install the code mode host")
+			err := ensureCodexCLI("127.0.0.1", "", "test", "root")
+			if calls != 2 {
+				t.Errorf("SSH calls = %d, want health check and repair", calls)
+			} else if commands[0] != codexHealthCommand || commands[1] != codexInstallScript {
+				t.Error("SSH did not run the health check before repair")
+			}
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("repair: %v", err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("repair error = %v, want %q", err, tc.wantErr)
+			}
+		})
 	}
 }

@@ -16,7 +16,7 @@ The template is `internal/sandbox/aws-cloudformation.yaml` in the [spekk-cli rep
 | Security group | Inbound TCP 22 from the CIDR block you give, and all outbound traffic |
 | EC2 instance | Ubuntu 24.04 from the latest Canonical AMI, `t3.medium` by default, with a 50 GB gp3 root volume and a `Name` tag of `spekk-sandbox-<stack-name>` |
 
-The instance's UserData is the cloud-init content spekk gives a droplet. It installs Docker, Node.js, the GitHub CLI, and Claude Code, creates the `agent` user, enables UFW and fail2ban, and ends by writing `/opt/spekk/.provisioned`. That marker is what `spekk sandbox create` checks for before it injects credentials.
+The instance's UserData is the cloud-init content spekk gives a droplet. It installs Docker, Node.js, the GitHub CLI, Claude Code, and the pinned Codex CLI and code mode host, creates the `agent` user, enables UFW and fail2ban, and ends by writing `/opt/spekk/.provisioned`. That marker is what `spekk sandbox create` checks for before it injects credentials.
 
 ## Parameters
 
