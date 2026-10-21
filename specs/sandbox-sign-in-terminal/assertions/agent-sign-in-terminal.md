@@ -17,7 +17,7 @@ branch: feature/personal-sign-in-terminal
 - The terminal ends when the login exits, on `terminal_close`, after 10 minutes, or when a second `terminal_open` arrives (the second one then starts). An end stops the whole process group of the login. The agent then sends `{"type": "terminal_exit", "terminal_id": "...", "exit_code": N}` (`-1` when a signal stopped it).
 - The agent log has one line when a terminal opens (the agent id, the user id, the terminal id) and one when it closes (the same, plus the duration and the exit code). No log line holds `data`.
 - If `claude` is not on the `PATH`, the agent sends a short `terminal_output` that says so and a `terminal_exit` with code `127`.
-- `ProtocolVersion` is `1.3`.
+- The terminal frames came with `ProtocolVersion` `1.3`. A later additive bump does not change this assertion.
 
 **Tests:** cmd/sandbox/terminal_test.go, cmd/sandbox/claude_auth_test.go
 
