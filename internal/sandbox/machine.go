@@ -125,8 +125,6 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 		"digitalocean_token", raw.DigitalOceanToken,
 		"registration_token", raw.RegistrationToken,
 		"spekk_host", raw.SpekkHost,
-		"github_token", raw.GitHubToken,
-		"github_repository", raw.GitHubRepository,
 		"harness", raw.Harness,
 		"model_credential", string(raw.ModelCredential),
 	); err != nil {
@@ -135,9 +133,8 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 	if raw.Harness != "claude-code" {
 		return nil, fmt.Errorf("harness %q is not claude-code, the only harness that machine mode installs", raw.Harness)
 	}
-	owner, repo, _ := strings.Cut(raw.GitHubRepository, "/")
-	if !repositoryRe.MatchString(raw.GitHubRepository) || owner == "." || owner == ".." || repo == "." || repo == ".." {
-		return nil, fmt.Errorf("github_repository %q is not <owner>/<repository>", raw.GitHubRepository)
+	if err := checkMachineRepository(raw.GitHubRepository, raw.GitHubToken); err != nil {
+		return nil, err
 	}
 	base, err := controlHostBase(raw.SpekkHost)
 	if err != nil {
@@ -155,6 +152,21 @@ func readMachineInput(r io.Reader) (*machineInput, error) {
 		return nil, err
 	}
 	return in, nil
+}
+
+// checkMachineRepository requires a repository and token together.
+func checkMachineRepository(repository, token string) error {
+	if repository == "" && token == "" {
+		return nil
+	}
+	if err := requireFields("github_token", token, "github_repository", repository); err != nil {
+		return err
+	}
+	owner, repo, _ := strings.Cut(repository, "/")
+	if !repositoryRe.MatchString(repository) || owner == "." || owner == ".." || repo == "." || repo == ".." {
+		return fmt.Errorf("github_repository %q is not <owner>/<repository>", repository)
+	}
+	return nil
 }
 
 // readModelCredential reads model_credential. Each kind has its own fields,
@@ -464,9 +476,8 @@ func CreateMachine(stdin io.Reader, stdout io.Writer, opts CreateOptions) error 
 // reach the steps around it without an SSH connection.
 var equipMachine = equipMachineSandbox
 
-// equipMachineSandbox runs the steps of equipSandbox for machine mode: the
-// env file comes from the input, and git reaches the one repository of the
-// input through the credential helper, not through a stored token.
+// equipMachineSandbox installs credentials, prepares the workspace, and deploys
+// the agent. A supplied repository uses the Git credential helper.
 func equipMachineSandbox(meta *SandboxMeta, name, agentToken string, in *machineInput, artifacts *releaseArtifacts) *stageError {
 	user := sshUser(meta)
 
@@ -479,9 +490,13 @@ func equipMachineSandbox(meta *SandboxMeta, name, agentToken string, in *machine
 		return &stageError{"injecting credentials", err}
 	}
 
-	fmt.Fprintf(os.Stderr, "Cloning %s...\n", in.repository)
-	if out, err := runSecretScript(meta.IP, meta.SSHKeyPath, name, user, buildCloneScript(in.githubToken, in.repository)); err != nil {
-		return &stageError{"cloning " + in.repository, fmt.Errorf("%w\n%s", err, strings.TrimSpace(out))}
+	script, operation := prepareMachineWorkspaceScript, "preparing workspace"
+	if in.repository != "" {
+		script, operation = buildCloneScript(in.githubToken, in.repository), "cloning "+in.repository
+	}
+	fmt.Fprintln(os.Stderr, "Preparing the workspace...")
+	if out, err := runSecretScript(meta.IP, meta.SSHKeyPath, name, user, script); err != nil {
+		return &stageError{operation, fmt.Errorf("%w\n%s", err, strings.TrimSpace(out))}
 	}
 
 	fmt.Fprintln(os.Stderr, "Deploying the agent and the spekk CLI...")
@@ -504,6 +519,19 @@ func buildMachineEnvContent(in *machineInput, name, agentToken, agentID string) 
 	)
 	return strings.Join(lines, "\n") + "\n"
 }
+
+// prepareMachineWorkspaceScript refuses Git metadata before it prepares the workspace.
+const prepareMachineWorkspaceScript = `set -e
+directory=$(realpath -m /opt/spekk/workspace)
+while :; do
+  if [ -e "$directory/.git" ] || [ -L "$directory/.git" ]; then
+    echo "Cannot prepare a workspace without a repository: $directory/.git exists." >&2
+    exit 1
+  fi
+  [ "$directory" != / ] || break
+  directory=$(dirname "$directory")
+done
+install -d -o agent -g agent /opt/spekk/workspace`
 
 // gitCredentialHelper is the git credential helper of a machine-mode
 // sandbox: the agent binary asks the control host for an installation token.
