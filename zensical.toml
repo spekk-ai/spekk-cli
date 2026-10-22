@@ -63,6 +63,7 @@ nav = [
   { "Cutting a Release" = "releasing.md" },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.45.2 - Clean Repository Checkouts for Attachments" = "release-notes/RELEASE-NOTES-1.45.2.md" },
     { "1.45.1 - Safer Sandbox Attachment Downloads" = "release-notes/RELEASE-NOTES-1.45.1.md" },
     { "1.37.0 - Search Specs, Docs, and Source Documents From One Index" = "release-notes/RELEASE-NOTES-1.37.0.md" },
     { "1.33.0 - A Sandbox Registers Itself, and Sees Its Background Tasks End" = "release-notes/RELEASE-NOTES-1.33.0.md" },

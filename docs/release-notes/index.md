@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.45.2 -- Clean Repository Checkouts for Attachments](RELEASE-NOTES-1.45.2.md)
+
+The sandbox agent stores downloaded attachments in the configured workspace, outside prepared repository checkouts. Later turns can select a ref while user edits still cause refusal. File input remains off, and real-model file and image reads remain open for immediate post-deployment QA.
+
 ## [1.45.1 -- Safer Sandbox Attachment Downloads](RELEASE-NOTES-1.45.1.md)
 
 The sandbox agent validates and limits attachment downloads before a model turn starts. A failed batch stops the turn and removes its partial files. File input on the control host remains off pending separate approval.
