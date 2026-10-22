@@ -68,6 +68,14 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	}
 	defer cleanupSpool()
 
+	downloadConfig := cfg
+	downloadConfig.Workspace = workspace
+	attachmentPaths, err := downloadAttachments(ctx, downloadConfig, msg.Attachments)
+	if err != nil {
+		sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("Attachment input failed: %v", err))
+		return
+	}
+
 	cmd := exec.Command("claude", args...)
 	cmd.Dir = workspace
 	// Per-process env, not os.Setenv: os.Setenv is process-global and would
@@ -124,9 +132,9 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	if msg.SystemPrompt != "" {
 		text = msg.SystemPrompt + "\n\n---\n\nUser message:\n" + text
 	}
-	if paths := downloadAttachments(cfg, msg.Attachments); len(paths) > 0 {
+	if len(attachmentPaths) > 0 {
 		text += "\n\n[Attached files saved to workspace - use the Read tool to view them]\n"
-		for _, p := range paths {
+		for _, p := range attachmentPaths {
 			text += fmt.Sprintf("  - %s\n", p)
 		}
 	}

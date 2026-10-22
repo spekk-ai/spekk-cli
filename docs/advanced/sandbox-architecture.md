@@ -235,8 +235,10 @@ Valid severities: `info`, `warning`, `critical`. The default is `info`. The spoo
 When a `message` frame has `attachments`, the agent downloads each file from the control host before it passes the prompt to Claude:
 
 1. For each attachment, the agent sends `GET /api/agents/attachments/<id>/download/` with `Authorization: Bearer <token>`.
-2. It saves the file to `<workspace>/.attachments/<timestamp>/<index>-<filename>`.
+2. It saves the file to `<workspace>/.attachments/turn-<random>/<index>-<filename>` in a private directory with private files.
 3. It appends the saved paths to the prompt text, so Claude can read the files.
+
+The agent accepts at most 10 files, 20 MiB for one file, and 40 MiB for one turn. It rejects redirects, unsafe IDs and filenames, empty files, incomplete responses, and downloads that exceed the limit. A failed download removes the partial batch and reports a turn error before the model starts. Each turn downloads its own files into the workspace used for that turn.
 
 ## Control host requirements
 
