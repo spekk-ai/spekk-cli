@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.45.1 -- Safer Sandbox Attachment Downloads](RELEASE-NOTES-1.45.1.md)
+
+The sandbox agent validates and limits attachment downloads before a model turn starts. A failed batch stops the turn and removes its partial files. File input on the control host remains off pending separate approval.
+
 ## [1.37.0 -- Search Specs, Docs, and Source Documents From One Index](RELEASE-NOTES-1.37.0.md)
 
 New `spekk docs search|show|add|status`. One FTS5 index in `.spekk/index.db` now holds the bodies of specs and assertions, the docs in the repository, and source documents (`raw/`, with stubs in `formatted/`). A search returns the best passage of each document with its line range, in at most 4,000 bytes. `docs add` converts HTML, email, and XLSX in the binary, and PDF and DOCX with `pdftotext` and `pandoc`. `sources:` in a spec cites documents, and `spekk validate` checks the ids.
