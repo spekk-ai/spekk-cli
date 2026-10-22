@@ -4,7 +4,7 @@ parent: sandbox-attachment-downloads
 created: 2026-10-21T20:09:18Z
 branch: fix/chat-attachment-downloads
 priority: 1
-status: done
+status: failed
 ---
 
 # Required attachments are safe before the model starts
