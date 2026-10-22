@@ -10,7 +10,7 @@ priority: 1
 
 `spekk install` fetches a skill markdown file from an official GitHub registry (or any user-supplied URL) and writes it into one of the existing layered skill directories so the `SkillResolver` picks it up automatically. Companion commands (`spekk uninstall`, `spekk skills list`) round out the lifecycle.
 
-Today, skills are either shipped inside the binary (embedded) or hand-authored by users under `.spekk/skills/<agent>/` or `~/.spekk/skills/<agent>/`. There is no way to grab a community-maintained skill without copying the file manually. This spec adds first-class install/uninstall/list commands that target the same directories the resolver already reads from — so nothing about resolution needs to change.
+Skills come from the binary, the project directory `.spekk/skills/<agent>/`, or the user configuration directory `<global-config-dir>/skills/<agent>/`. Install, uninstall, and list use the same directories as the skill resolver.
 
 ## Command Surface
 
@@ -44,7 +44,9 @@ spekk install --list <agent>
 | Flag | Destination |
 |------|-------------|
 | *(none)* / `--local` | `<cwd>/.spekk/skills/<agent>/<skill>.md` |
-| `--global` | `~/.spekk/skills/<agent>/<skill>.md` |
+| `--global` | `<global-config-dir>/skills/<agent>/<skill>.md` |
+
+`<global-config-dir>` comes from `config.GlobalConfigDir()`: `$XDG_CONFIG_HOME/spekk` when `XDG_CONFIG_HOME` is nonempty, or `<home>/.config/spekk` otherwise. The same rule applies on Linux, macOS, and the published but untested Windows binary, with native path separators. The global installation assertion defines the full path resolution criteria.
 
 Local is the default because it matches `npm install` and the project-scoped precedence the resolver already gives to local files. If both `--local` and `--global` are passed, the command fails with an error (the user is asking for two things at once).
 
@@ -84,21 +86,21 @@ If the destination file already exists at the chosen scope, the install refuses 
 
 ## Uninstall
 
-`spekk uninstall <agent> <skill>` deletes `<scope>/.spekk/skills/<agent>/<skill>.md`. Scope flags work the same as install. If the file doesn't exist, the command exits non-zero with a "not installed" error so scripts can detect it.
+`spekk uninstall <agent> <skill>` deletes the file from the destination in the scope table. Scope flags work the same as install. If the file doesn't exist, the command exits non-zero with a "not installed" error so scripts can detect it.
 
 Uninstall never touches embedded skills or files outside the two on-disk scopes.
 
 ## Listing
 
-- **`spekk skills list <agent>`** — wraps the existing `SkillResolver.ListSkills(agent)` so users can see everything currently available (local, global, embedded), with each entry's source dir. This is purely a display wrapper around code that already exists.
-- **`spekk install --list <agent>`** — hits the registry contents API and prints the available remote skills, marking which are already installed locally or globally. Useful for discovery before committing to an install.
+- **`spekk skills list <agent>`** - wraps the existing `SkillResolver.ListSkills(agent)` so users can see everything currently available (local, global, embedded), with each entry's source dir. This is purely a display wrapper around code that already exists.
+- **`spekk install --list <agent>`** - hits the registry contents API and prints the available remote skills, marking which are already installed locally or globally. Useful for discovery before committing to an install.
 
 ## Non-Goals
 
 - **No versioning.** A skill is always the file at `main` (or whatever ref the env var override points at). Adding semver / locking is out of scope; users who need pinning can use `--source` with a commit-pinned raw URL.
 - **No dependency graph between skills.** Each skill is a self-contained markdown file.
 - **No mutation of embedded skills.** Install never touches the binary's embedded FS.
-- **No npm wrapper.** Decided against `npx spekk-install` — the skills are useless without the Go binary, so requiring the binary as the entry point is the honest design.
+- **No npm wrapper.** Decided against `npx spekk-install` - the skills are useless without the Go binary, so requiring the binary as the entry point is the honest design.
 
 ## Assertions
 
