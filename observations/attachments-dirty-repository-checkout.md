@@ -4,6 +4,7 @@ type: code_spec_misalignment
 severity: high
 status: open
 created: 2026-10-22T00:00:00Z
+announced: 2026-10-22T19:02:42Z
 affected:
   - cmd/sandbox/attachments.go
   - cmd/sandbox/invoke.go
