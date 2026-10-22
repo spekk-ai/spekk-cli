@@ -68,9 +68,8 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	}
 	defer cleanupSpool()
 
-	downloadConfig := cfg
-	downloadConfig.Workspace = workspace
-	attachmentPaths, err := downloadAttachments(ctx, downloadConfig, msg.Attachments)
+	// Keep attachments outside a selected checkout so later turns can prepare it.
+	attachmentPaths, err := downloadAttachments(ctx, cfg, msg.Attachments)
 	if err != nil {
 		sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("Attachment input failed: %v", err))
 		return
