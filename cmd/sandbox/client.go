@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/spekk-ai/spekk-cli/internal/agentconn"
 )
 
 const (
@@ -24,6 +25,9 @@ type AgentClient struct {
 	pool  *WorkerPool
 	conns *connHolder
 	terms terminals
+	// record is read and written only by Run's goroutine. The zero value
+	// keeps no record.
+	record connectionRecorder
 
 	// procCtx is the process lifetime, handed to Run by main. Workers get this
 	// context and never the per-connection one: a turn belongs to the process,
@@ -36,6 +40,7 @@ func NewAgentClient(cfg Config) *AgentClient {
 		cfg:     cfg,
 		pool:    NewWorkerPool(numWorkers),
 		conns:   newConnHolder(),
+		record:  newConnectionRecorder(cfg.ConnectionRecord),
 		procCtx: context.Background(),
 	}
 }
@@ -119,11 +124,16 @@ func reconnectDelay(last time.Duration, established bool) time.Duration {
 // every attempt, and an outdated sandbox dialed it twenty times a minute for
 // the length of the deploy gap.
 func (c *AgentClient) connect(ctx context.Context) (established bool, err error) {
-	conn, _, err := websocket.Dial(ctx, c.wsURL(), c.dialOptions())
+	conn, resp, err := websocket.Dial(ctx, c.wsURL(), c.dialOptions())
 	if err != nil {
+		// A dial that a shutdown stopped says nothing about the control host.
+		if ctx.Err() == nil {
+			c.record.failed(time.Now(), resp, err)
+		}
 		return false, fmt.Errorf("dial: %w", err)
 	}
 	opened := time.Now()
+	c.record.connected(opened)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	conn.SetReadLimit(wsMaxMessageSize)
 
@@ -261,6 +271,9 @@ type Config struct {
 	Host      string
 	Workspace string
 	AgentID   string
+	// ConnectionRecord is the file of the handshake record. Empty keeps no
+	// record.
+	ConnectionRecord string
 }
 
 func loadConfig() Config {
@@ -277,10 +290,11 @@ func loadConfig() Config {
 	}
 
 	return Config{
-		Token:     token,
-		Host:      host,
-		Workspace: workspace,
-		AgentID:   agentID,
+		Token:            token,
+		Host:             host,
+		Workspace:        workspace,
+		AgentID:          agentID,
+		ConnectionRecord: agentconn.Path,
 	}
 }
 

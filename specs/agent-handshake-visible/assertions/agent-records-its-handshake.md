@@ -3,7 +3,7 @@ id: agent-records-its-handshake
 parent: agent-handshake-visible
 created: 2026-10-23T06:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # The agent client records its last handshake and its last dial failure
