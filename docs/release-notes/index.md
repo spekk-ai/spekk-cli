@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.47.1 -- Clear Repository Clone Errors and Readable Agent Settings](RELEASE-NOTES-1.47.1.md)
+
+Failed repository Git steps now show a short, redacted stderr cause in the turn failure reason and agent log. The agent warns once at start if it cannot read `/etc/spekk/agent.env`. `setup-credentials.sh` now gives the file to `agent:agent` with mode 600. Existing hosts need the script to run again or a manual owner correction.
+
 ## [1.47.0 -- App-Managed Sandboxes From the CLI, and a Key for Secrets](RELEASE-NOTES-1.47.0.md)
 
 New `spekk app` commands launch app-managed sandboxes, send text tasks, and read results with a personal API key. The sandbox agent makes a recipient key for secrets, sends its public key in a new `secrets_hello` frame, and `spekk sandbox status` shows the key fingerprint, with new `--json` output. Secret delivery stays inactive until the app flag is on. `create`, `provision`, and `register` write `SPEKK_AGENT_ID` to the agent env file. An existing host gets it only from `spekk sandbox register` or a manual line.
