@@ -15,3 +15,4 @@ The app must first provide stable request IDs for launch and chat, as specified 
 - [managed-app-client](assertions/managed-app-client.md) provides one private and safe authenticated app client.
 - [managed-sandbox-commands](assertions/managed-sandbox-commands.md) gives a recoverable launch and task workflow.
 - [managed-client-guide](assertions/managed-client-guide.md) documents a cold-user setup and acceptance run.
+- [managed-commands-acceptance-run](assertions/managed-commands-acceptance-run.md) proves the workflow in a cold run against a local app with a fake cloud.
