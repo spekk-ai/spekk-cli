@@ -72,3 +72,29 @@ func TestGitCredentialHelper(t *testing.T) {
 		t.Errorf("a request that is not a GitHub get reached the control host: %q", requests)
 	}
 }
+
+// The service and the helper run as one user, so a file that the service
+// cannot read means that each repository chat fails. The start warning
+// tells the operator before a turn does.
+func TestAgentEnvWarning(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a file of any mode")
+	}
+	path := filepath.Join(t.TempDir(), "agent.env")
+	if err := os.WriteFile(path, []byte("SPEKK_HOST=h\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := agentEnvWarning(path); got != "" {
+		t.Errorf("a readable file gave a warning: %s", got)
+	}
+
+	if err := os.Chmod(path, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	got := agentEnvWarning(path)
+	for _, want := range []string{path, "permission denied", "Repository chat will fail"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("warning %q does not contain %q", got, want)
+		}
+	}
+}

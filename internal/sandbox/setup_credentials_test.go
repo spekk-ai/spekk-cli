@@ -23,6 +23,11 @@ func runScript(t *testing.T, env []string, snippet string) (string, error) {
 	return string(out), err
 }
 
+// stubChown replaces chown for a snippet that writes the env file. A test
+// runs as a user that cannot give a file to agent, and the stub prints its
+// arguments so a test can check them.
+const stubChown = "chown() { echo \"chown $*\"; }; "
+
 func TestSetupCredentialsRendersOneModesCredential(t *testing.T) {
 	shared := []string{
 		"SPEKK_AGENT_TOKEN=agenttok",
@@ -78,42 +83,6 @@ func TestSetupCredentialsRendersOneModesCredential(t *testing.T) {
 			if strings.Contains(got, unwanted) {
 				t.Errorf("%s mode: file still carries %q:\n%s", tt.mode, unwanted, got)
 			}
-		}
-	}
-}
-
-// A switch is only a switch if the previous mode's variables are gone. The file
-// is rewritten whole, so seeding it with a Bedrock block and rendering the
-// subscription mode over it must leave nothing behind.
-func TestSetupCredentialsSwitchDropsThePreviousMode(t *testing.T) {
-	envFile := filepath.Join(t.TempDir(), "agent.env")
-	seeded := "AWS_ACCESS_KEY_ID=old\nCLAUDE_CODE_USE_BEDROCK=1\nGITHUB_TOKEN=old\n"
-	if err := os.WriteFile(envFile, []byte(seeded), 0o600); err != nil {
-		t.Fatalf("seeding env file: %s", err)
-	}
-
-	env := []string{
-		"SPEKK_AUTH_MODE=subscription",
-		"CLAUDE_CODE_OAUTH_TOKEN=newtok",
-		"GITHUB_TOKEN=ghtok",
-		"SPEKK_HOST=host.example",
-		"SPEKK_AGENT_TOKEN=agenttok",
-	}
-	out, err := runScript(t, env, "source "+setupCredentialsScript+"; render_agent_env > "+envFile)
-	if err != nil {
-		t.Fatalf("rendering failed: %s\n%s", err, out)
-	}
-
-	got, err := os.ReadFile(envFile)
-	if err != nil {
-		t.Fatalf("reading env file: %s", err)
-	}
-	if !strings.Contains(string(got), "CLAUDE_CODE_OAUTH_TOKEN=newtok") {
-		t.Errorf("switched file is missing the subscription token:\n%s", got)
-	}
-	for _, unwanted := range []string{"AWS_ACCESS_KEY_ID", "CLAUDE_CODE_USE_BEDROCK"} {
-		if strings.Contains(string(got), unwanted) {
-			t.Errorf("switched file still carries %q:\n%s", unwanted, got)
 		}
 	}
 }
@@ -181,7 +150,7 @@ func TestSetupCredentialsSwitchCarriesForwardWhatItDoesNotDecide(t *testing.T) {
 	}
 	// Drive the whole write path, not just the pieces, so a version that
 	// forgets to read the file before replacing it fails here.
-	if out, err := runScript(t, env, "source "+setupCredentialsScript+"; write_agent_env"); err != nil {
+	if out, err := runScript(t, env, "source "+setupCredentialsScript+"; "+stubChown+"write_agent_env"); err != nil {
 		t.Fatalf("write failed: %s\n%s", err, out)
 	}
 	written, err := os.ReadFile(envFile)
@@ -206,6 +175,31 @@ func TestSetupCredentialsSwitchCarriesForwardWhatItDoesNotDecide(t *testing.T) {
 		if strings.Contains(out, unwanted) {
 			t.Errorf("switch kept %q from the old mode:\n%s", unwanted, out)
 		}
+	}
+}
+
+// The service runs as agent, and its git credential helper reads the env file
+// as agent. A file that root owns makes every repository chat fail.
+func TestSetupCredentialsGivesTheFileToTheServiceUser(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "agent.env")
+	if err := os.WriteFile(envFile, []byte("CLAUDE_CODE_OAUTH_TOKEN=tok\nGITHUB_TOKEN=gh\nSPEKK_HOST=h\nSPEKK_AGENT_TOKEN=at\n"), 0o644); err != nil {
+		t.Fatalf("seeding env file: %s", err)
+	}
+
+	env := []string{"SPEKK_AUTH_MODE=subscription", "AGENT_ENV_FILE=" + envFile}
+	out, err := runScript(t, env, "source "+setupCredentialsScript+"; "+stubChown+"write_agent_env")
+	if err != nil {
+		t.Fatalf("write failed: %s\n%s", err, out)
+	}
+	if !strings.Contains(out, "chown agent:agent "+envFile+"\n") {
+		t.Errorf("the env file was not given to agent:agent:\n%s", out)
+	}
+	info, err := os.Stat(envFile)
+	if err != nil {
+		t.Fatalf("stat env file: %s", err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Errorf("env file mode = %o, want 600", mode)
 	}
 }
 
@@ -243,7 +237,7 @@ func TestSetupCredentialsCarriesForwardUnknownVariables(t *testing.T) {
 		"CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-new",
 		"AGENT_ENV_FILE=" + envFile,
 	}
-	if out, err := runScript(t, env, "source "+setupCredentialsScript+"; write_agent_env"); err != nil {
+	if out, err := runScript(t, env, "source "+setupCredentialsScript+"; "+stubChown+"write_agent_env"); err != nil {
 		t.Fatalf("write failed: %s\n%s", err, out)
 	}
 	written, err := os.ReadFile(envFile)

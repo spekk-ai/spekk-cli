@@ -50,6 +50,10 @@ func main() {
 		log.Print("WARNING: Claude Code is not signed in. Every turn is refused until a person signs in on this sandbox.")
 	}
 
+	if warning := agentEnvWarning(agentEnvFile); warning != "" {
+		log.Print(warning)
+	}
+
 	if err := os.MkdirAll(cfg.Workspace, 0755); err != nil {
 		log.Fatalf("Failed to create workspace: %v", err)
 	}

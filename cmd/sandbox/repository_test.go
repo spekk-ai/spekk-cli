@@ -86,6 +86,11 @@ func TestRepositoryCredentialIsScopedToApprovedPath(t *testing.T) {
 			t.Fatalf("approved repository did not get credential: code=%d output=%q error=%q", code, out.String(), errOut.String())
 		}
 	}
+	agentEnvFile = filepath.Join(t.TempDir(), "agent.env")
+	var out, errOut strings.Builder
+	if code := runGitCredential([]string{"get"}, strings.NewReader("protocol=https\nhost=github.com\npath=acme/fiction.git\n\n"), &out, &errOut); code == 0 || !strings.Contains(errOut.String(), "read agent settings failed: open "+agentEnvFile+": no such file or directory") {
+		t.Fatalf("unreadable settings: code=%d error=%q", code, errOut.String())
+	}
 }
 
 func TestPrepareRepositoryClonesFetchesAndProtectsLocalChanges(t *testing.T) {
@@ -187,6 +192,27 @@ func TestPrepareRepositoryClonesFetchesAndProtectsLocalChanges(t *testing.T) {
 	data, err = os.ReadFile(filepath.Join(dir, "secret.txt"))
 	if err != nil || string(data) != "personal" {
 		t.Fatalf("ignored file was lost: %v, %q", err, data)
+	}
+}
+
+func TestRepositoryGitFailureKeepsRedactedCause(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	token := "ghs_" + strings.Repeat("a", 36)
+	missing := filepath.Join(t.TempDir(), token, "missing.git")
+	gitForRepositoryTest(t, home, "config", "--global", "url.file://"+missing+".insteadOf", "https://github.com/acme/fiction.git")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"repository":"acme/fiction","ref":"main","token":"secret-token"}`)
+	}))
+	defer server.Close()
+	cfg := Config{Host: strings.TrimPrefix(server.URL, "http://"), Token: "agent-secret", AgentID: "agent-1", Workspace: t.TempDir()}
+	_, err := prepareRepository(context.Background(), cfg, "session-1", RepositoryRequest{ID: testRepositoryID, Ref: "main"})
+	if err == nil || !strings.Contains(err.Error(), "exit status 128: ") || !strings.Contains(err.Error(), "<redacted>/missing.git' does not appear to be a git repository") || strings.Contains(err.Error(), token) {
+		t.Fatalf("failed clone error = %v", err)
+	}
+	stderr := strings.Repeat("x", 700) + "\nremote: Invalid username or token.\nfatal: Authentication failed for 'https://x-access-token:secret-token@github.com/acme/fiction.git/'\n> Authorization: Basic c2VjcmV0\n"
+	if got := gitErrorTail([]byte(stderr)); !strings.Contains(got, "Authentication failed for 'https://<redacted>@github.com/") || strings.Contains(got, "secret-token") || strings.Contains(got, "c2VjcmV0") || len(got) > 600 {
+		t.Fatalf("stderr tail = %q", got)
 	}
 }
 
