@@ -3,7 +3,7 @@ id: status-shows-the-key-fingerprint
 parent: sandbox-secret-recipient-key
 created: 2026-10-23T11:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: agent-keeps-a-recipient-key
 ---
 

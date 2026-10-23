@@ -54,3 +54,23 @@ func TestDescribe(t *testing.T) {
 		})
 	}
 }
+
+// TestDescribeSecretKey pins the fingerprint line of status. An admin
+// compares it with the Secrets section of spekk-app before accepting a key,
+// so a refused key or an old agent must never look like a fingerprint.
+func TestDescribeSecretKey(t *testing.T) {
+	tests := []struct{ name, answer, want string }{
+		{"a usable key", `{"last_connected_at":"2026-10-23T05:00:00.000Z","secret_key_fingerprint":"300c9c9603b92a4b"}`, "300c9c9603b92a4b"},
+		{"a refused key file", `{"secret_key_error":"/home/agent/.config/spekk-agent/secret-key has mode 0644"}`, "none (/home/agent/.config/spekk-agent/secret-key has mode 0644)"},
+		{"an agent older than the key", `{"last_connected_at":"2026-10-23T05:00:00.000Z"}`, "unknown (no fingerprint in the record; the agent-client may be older than this check)"},
+		{"no record on the machine", Missing, "unknown (no record; the agent-client may be older than this check)"},
+		{"SSH failed", Unknown, Unknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DescribeSecretKey(tt.answer); got != tt.want {
+				t.Errorf("DescribeSecretKey = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

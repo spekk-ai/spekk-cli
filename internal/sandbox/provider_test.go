@@ -522,7 +522,7 @@ func TestProviderFromMetaReturnsUntypedNilOnError(t *testing.T) {
 		t.Fatalf("provider must be nil, got a non-nil interface holding %T", p)
 	}
 	// The nil must survive the fallback path Status takes.
-	if err := Status(p, "anything"); err == nil {
+	if err := Status(p, "anything", false); err == nil {
 		t.Log("Status returned no error, which is fine; the point is that it did not panic")
 	}
 }
