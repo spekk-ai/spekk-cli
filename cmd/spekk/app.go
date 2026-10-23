@@ -135,8 +135,8 @@ func execAppSandbox(command string, args []string, stdout, stderr io.Writer) err
 		}
 		return appLaunch(ctx, client, config.Host, map[string]any{"organization": *org, "audience": *audience, "size": *size, "region": *region, "kind": *kind}, *repository, *requestID, stdout, *jsonMode)
 	case "status", "wait":
-		if *launchID == "" && *requestID == "" {
-			return errors.New("status or wait needs --launch or --request-id")
+		if (*launchID == "") == (*requestID == "") {
+			return errors.New("status or wait needs exactly one of --launch and --request-id")
 		}
 		return appLaunchStatus(ctx, client, *launchID, *requestID, *timeout, command == "wait", stdout, *jsonMode)
 	case "cancel", "destroy":
@@ -145,13 +145,13 @@ func execAppSandbox(command string, args []string, stdout, stderr io.Writer) err
 		}
 		return appCleanup(ctx, client, *launchID, command, stdout, *jsonMode)
 	case "send":
-		if (*launchID == "" && *agentID == "") || strings.TrimSpace(*text) == "" {
-			return errors.New("send needs --launch or --agent, and --text")
+		if (*launchID == "") == (*agentID == "") || strings.TrimSpace(*text) == "" {
+			return errors.New("send needs exactly one of --launch and --agent, and --text")
 		}
 		return appSend(ctx, client, config.Host, *launchID, *agentID, *text, *session, *requestID, stdout, *jsonMode)
 	case "result":
-		if *agentID == "" || (*messageID == "" && *requestID == "") {
-			return errors.New("result needs --agent and --message or --request-id")
+		if *agentID == "" || (*messageID == "") == (*requestID == "") {
+			return errors.New("result needs --agent and exactly one of --message and --request-id")
 		}
 		return appResult(ctx, client, *agentID, *messageID, *requestID, *timeout, stdout, *jsonMode)
 	default:
