@@ -85,9 +85,9 @@ func TestReleaseTag(t *testing.T) {
 	}
 }
 
-// downloadBinaries fetches the agent and the CLI for the target arch from the
-// anonymous release CDN (no token), and keeps the sha256 that the release
-// publishes for each, which the machine checks before it installs.
+// selectArch keeps the sha256 that the release publishes for the agent and
+// the CLI of the target arch, which the machine checks before it installs, and
+// downloadBinaries fetches those two from the anonymous release CDN (no token).
 func TestDownloadBinariesSelectsArchAssets(t *testing.T) {
 	orig, origDigests := githubHTTPClient, fetchDigests
 	defer func() { githubHTTPClient, fetchDigests = orig, origDigests }()
@@ -107,7 +107,13 @@ func TestDownloadBinariesSelectsArchAssets(t *testing.T) {
 	}
 
 	a := &releaseArtifacts{Version: "exp-x"}
-	if err := a.downloadBinaries("arm64"); err != nil {
+	if err := a.selectArch("arm64"); err != nil {
+		t.Fatalf("selectArch: %v", err)
+	}
+	if len(requested) != 0 {
+		t.Fatalf("selectArch must not download, hit %q", requested)
+	}
+	if err := a.downloadBinaries(); err != nil {
 		t.Fatalf("downloadBinaries: %v", err)
 	}
 	defer a.cleanup()
@@ -127,7 +133,7 @@ func TestDownloadBinariesSelectsArchAssets(t *testing.T) {
 
 // A release asset with no published sha256 cannot be checked, so nothing is
 // downloaded, and the error names the asset.
-func TestDownloadBinariesRefusesAnAssetWithNoDigest(t *testing.T) {
+func TestSelectArchRefusesAnAssetWithNoDigest(t *testing.T) {
 	origDigests := fetchDigests
 	defer func() { fetchDigests = origDigests }()
 	fetchDigests = func(tag string) (map[string]string, error) {
@@ -135,7 +141,7 @@ func TestDownloadBinariesRefusesAnAssetWithNoDigest(t *testing.T) {
 	}
 
 	a := &releaseArtifacts{Version: "v1.0.0"}
-	err := a.downloadBinaries("amd64")
+	err := a.selectArch("amd64")
 	if err == nil || !strings.Contains(err.Error(), `no sha256 for "spekk-linux-amd64"`) {
 		t.Fatalf("error = %v, want one that names the asset with no digest", err)
 	}
@@ -184,7 +190,10 @@ func TestDownloadBinariesMissingArch(t *testing.T) {
 	}
 
 	a := &releaseArtifacts{Version: "v1.0.0"}
-	err := a.downloadBinaries("arm64")
+	if err := a.selectArch("arm64"); err != nil {
+		t.Fatal(err)
+	}
+	err := a.downloadBinaries()
 	if err == nil {
 		t.Fatal("expected an error for an arch the release does not carry")
 	}
