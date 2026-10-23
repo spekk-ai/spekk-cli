@@ -915,7 +915,7 @@ Agent last handshake failure: 2026-10-23T05:10:00.123Z (HTTP 403)  WARNING: the 
 
 An agent binary older than this check writes no record, and the lines then say `unknown (no record; ...)`.
 
-The `Secret key fingerprint` line shows the fingerprint of the key that the agent uses to receive secrets from the control host: the first 16 hex characters of SHA-256 of its X25519 public key. The agent keeps the private key in `/home/agent/.config/spekk-agent/secret-key` (mode 0600) and never sends or logs it. The Secrets section of spekk-app shows the fingerprint of the key that the sandbox sent. An organization admin compares the two values before accepting the key. For example:
+The `Secret key fingerprint` line shows the fingerprint of the key that the agent uses to receive secrets from the control host: the first 16 hex characters of SHA-256 of its X25519 public key. The agent keeps the private key in `/home/agent/.config/spekk-agent/secret-key` (mode 0600) and never sends or logs it. The Secrets section of the control host shows the fingerprint of the key that the sandbox sent. An organization admin compares the two values before accepting the key. For example:
 
 ```
 Secret key fingerprint: 300c9c9603b92a4b
@@ -1002,7 +1002,7 @@ spekk sandbox image delete web-app
 
 The builder is destroyed on success, on each failure, and on Ctrl-C or SIGTERM, with its record, its key pair, and its known_hosts file, and the build prints what it removed. When the destroy fails, the build prints the `spekk sandbox destroy image-<name> --force` command that removes it. When the provider made the image but a later step failed (for example, a copy to a region), the record is still written with the regions that have the image, so `image delete` can remove it.
 
-**Image hygiene.** "Each home" is `/root`, each directory in `/home`, and the home of each user in `/etc/passwd`. The clean step removes what makes each machine its own, and the logs: the SSH host keys, the content of `/etc/machine-id`, `/opt/spekk/.provisioned`, the cloud-init state (`cloud-init clean --logs`), the content of the files in `/var/log`, and in each home the authorized keys, each `.*_history` file, `.viminfo`, and the Claude Code settings (`.claude`, `.claude.json`) when they hold no sign-in. The clean step does not remove credentials. The check fails the build, with one line for each finding, when the builder has:
+**Image hygiene.** "Each home" is `/root`, each directory in `/home`, and the home of each user in `/etc/passwd`. The clean step removes what makes each machine its own, and the logs: the SSH host keys, the content of `/etc/machine-id`, `/opt/spekk/.provisioned`, the cloud-init state (`cloud-init clean --logs`), the content of the files in `/var/log`, and in each home the authorized keys, each `.*_history` file, `.viminfo`, the recipient key directory of the agent client (`.config/spekk-agent`), and the Claude Code settings (`.claude`, `.claude.json`) when they hold no sign-in. The clean step does not remove credentials. The check fails the build, with one line for each finding, when the builder has:
 
 - `/etc/spekk/agent.env`
 - in a home: a file in `.ssh` (also when `.ssh` is a symlink) other than `known_hosts`, `config`, or a `*.pub` file; a Claude Code sign-in (`.claude/.credentials.json`) or `.claude.json`; `.netrc`, `.aws/credentials`, `.git-credentials`, `.config/git/credentials`, `.config/gcloud`, a DigitalOcean CLI login (`.config/doctl/config.yaml`), or a GitHub CLI login (`.config/gh/hosts.yml`)

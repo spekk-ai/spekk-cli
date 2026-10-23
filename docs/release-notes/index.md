@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.47.0 -- App-Managed Sandboxes From the CLI, and a Key for Secrets](RELEASE-NOTES-1.47.0.md)
+
+New `spekk app` commands launch app-managed sandboxes, send text tasks, and read results with a personal API key. The sandbox agent makes a recipient key for secrets, sends its public key in a new `secrets_hello` frame, and `spekk sandbox status` shows the key fingerprint, with new `--json` output. Secret delivery stays inactive until the app flag is on. `create`, `provision`, and `register` write `SPEKK_AGENT_ID` to the agent env file. An existing host gets it only from `spekk sandbox register` or a manual line.
+
 ## [1.46.0 -- Status Shows a Refused Agent, and a Cancel Stops the Session](RELEASE-NOTES-1.46.0.md)
 
 The sandbox agent records its last handshake and its last failed dial, and `spekk sandbox status` shows both, with a warning when the control host refuses the agent, for example with HTTP 403. A `cancel` frame now also removes the queued messages of the session and ends each of their turns with an `error` frame. A large `stream` frame no longer closes a healthy connection on a slow link.
