@@ -109,6 +109,12 @@ func main() {
 	case "sandbox":
 		launchSandbox(args[1:])
 
+	case "app":
+		if err := execApp(args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+
 	case "schedule":
 		runSchedule(args[1:])
 
@@ -2289,6 +2295,7 @@ COMMANDS:
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to find spec-code drift
   sandbox   Manage cloud sandbox environments (create, provision, register, list, status, ssh, destroy, deploy)
+  app       Use app-managed sandboxes with a personal API key
   schedule  Manage the scheduled tasks of a sandbox agent (list, create, update, delete, run)
   conversation  Request a conversation on the connected chat surface (open)
   install   Install a skill for an agent (coach/builder/observer)
