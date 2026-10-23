@@ -331,6 +331,24 @@ func TestSendFinalWaitsAndSendDrops(t *testing.T) {
 	}
 }
 
+// TestStreamWriteTimeoutScalesWithTheFrame covers the second fault of issue
+// #212. A flat 5-second deadline closed a healthy connection slower than
+// about 2 MB/s on each large tool result, and the next large line did it
+// again.
+func TestStreamWriteTimeoutScalesWithTheFrame(t *testing.T) {
+	if got := streamWriteTimeout(200); got > streamSendTimeout+time.Millisecond {
+		t.Errorf("a small frame gets %s, want about %s", got, streamSendTimeout)
+	}
+	const maxLine = 10 * 1024 * 1024 // the scanner's line limit in invoke
+	got := streamWriteTimeout(maxLine)
+	if atTwoMBps := maxLine * time.Second / (2 * 1024 * 1024); got <= atTwoMBps {
+		t.Errorf("a %d-byte frame gets %s, not more than the %s it needs at 2 MB/s", maxLine, got, atTwoMBps)
+	}
+	if got >= time.Minute {
+		t.Errorf("a %d-byte frame gets %s, want a bound under one minute", maxLine, got)
+	}
+}
+
 func waitForFile(t *testing.T, path string, within time.Duration, msg string) {
 	t.Helper()
 	waitUntil(t, within, msg, func() bool {

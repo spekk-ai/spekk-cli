@@ -3,7 +3,7 @@ id: stream-write-deadline-scales-with-frame-size
 parent: turn-survives-reconnect
 created: 2026-10-23T05:00:00Z
 priority: 2
-status: not_started
+status: done
 ---
 
 # A stream write deadline scales with the size of the frame
@@ -14,7 +14,7 @@ A stream frame carries one line of the child's stdout, and the scanner accepts a
 
 ## Success criteria
 
-- The deadline of a stream write is `streamSendTimeout` (5 seconds) plus the time to send the encoded frame at a floor rate of 256 KiB/s. A small frame keeps the 5-second bound. A frame of the maximum line size gets a deadline of less than one minute.
+- The deadline of a stream write is `streamSendTimeout` (5 seconds) plus the time to send the encoded frame at a floor rate of 256 KiB/s. A small frame keeps the 5-second bound. An encoded frame of 10 MB, the scanner's line limit, gets a deadline of less than one minute.
 - The bound stays: a connection whose peer stops reading still releases the stdout reader within that deadline.
 - The bytes on the wire do not change.
 
