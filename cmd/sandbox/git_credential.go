@@ -83,7 +83,7 @@ func gitLocalConfig(key string) string {
 func fetchRepositoryGitToken(gitRequest map[string]string, selection repositorySelection) (string, error) {
 	env, err := readEnvFile(agentEnvFile)
 	if err != nil {
-		return "", fmt.Errorf("read agent settings failed")
+		return "", fmt.Errorf("read agent settings failed: %w", err)
 	}
 	cfg := Config{Host: env["SPEKK_HOST"], Token: env["SPEKK_AGENT_TOKEN"], AgentID: env["SPEKK_AGENT_ID"]}
 	if cfg.Host == "" || cfg.Token == "" || cfg.AgentID == "" {

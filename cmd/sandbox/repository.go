@@ -217,9 +217,46 @@ func verifyRepository(ctx context.Context, dir, remote string, env []string) err
 func runRepositoryGit(ctx context.Context, dir string, env []string, args ...string) error {
 	options := []string{"-c", "credential.helper=", "-c", "credential.helper=" + repositoryCredentialHelper, "-c", "credential.https://github.com.useHttpPath=true"}
 	cmd := exec.CommandContext(ctx, "git", append(options, args...)...)
-	cmd.Dir, cmd.Env = dir, env
+	var stderr bytes.Buffer
+	cmd.Dir, cmd.Env, cmd.Stderr = dir, env, &stderr
 	if err := cmd.Run(); err != nil {
+		if tail := gitErrorTail(stderr.Bytes()); tail != "" {
+			return fmt.Errorf("git %s failed: %w: %s", args[0], err, tail)
+		}
 		return fmt.Errorf("git %s failed: %w", args[0], err)
 	}
 	return nil
+}
+
+var gitSecretPatterns = []struct {
+	pattern     *regexp.Regexp
+	replacement string
+}{
+	{regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@]+@`), "${1}<redacted>@"},
+	{regexp.MustCompile(`(?i)(authorization:\s*(?:\S+\s+)?)\S+`), "${1}<redacted>"},
+	{regexp.MustCompile(`\b(?:gh[opsur]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})`), "<redacted>"},
+}
+
+// gitErrorTail is the cause of a failed Git command for the turn failure
+// reason and the agent log: the last five non-empty lines of its stderr,
+// with each credential replaced, and at most 600 characters. Git gives
+// exit status 128 for many causes, so the status alone tells nothing.
+func gitErrorTail(stderr []byte) string {
+	var lines []string
+	for _, line := range strings.FieldsFunc(string(stderr), func(r rune) bool { return r == '\n' || r == '\r' }) {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) > 5 {
+		lines = lines[len(lines)-5:]
+	}
+	tail := strings.Join(lines, "; ")
+	for _, secret := range gitSecretPatterns {
+		tail = secret.pattern.ReplaceAllString(tail, secret.replacement)
+	}
+	if len(tail) > 600 {
+		tail = strings.ToValidUTF8(tail[len(tail)-600:], "")
+	}
+	return tail
 }
