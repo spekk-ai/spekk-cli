@@ -219,6 +219,9 @@ write_agent_env() {
     # switch a switch: the previous mode's variables are gone, not shadowed.
     echo "==> Writing ${AGENT_ENV_FILE}"
     render_agent_env > "$AGENT_ENV_FILE"
+    # The service runs as agent, and its git credential helper reads this
+    # file as agent. A root-owned file makes every repository chat fail.
+    chown agent:agent "$AGENT_ENV_FILE"
     chmod 600 "$AGENT_ENV_FILE"
     echo "    Done."
 }

@@ -294,7 +294,7 @@ The script restarts `spekk-agent` when it finishes.
 
 ### Agent runtime
 
-The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env`. `spekk sandbox create` and `spekk sandbox provision` write that file. You do not set them by hand.
+The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env`. `spekk sandbox create` and `spekk sandbox provision` write that file. You do not set them by hand. The file belongs to the `agent` user, with mode 600, because the Git credential helper reads it as `agent`. If the agent cannot read the file, it logs a warning at start, and repository chat fails.
 
 | Variable | Required | Description |
 |----------|----------|-------------|

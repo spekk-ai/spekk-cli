@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,6 +22,23 @@ import (
 // git runs the helper from each shell of agent, and only the service has
 // the variables in its environment.
 var agentEnvFile = "/etc/spekk/agent.env"
+
+// agentEnvWarning is the start warning when this process cannot read the
+// env file at path, or "" when it can. The helper runs as the same user as
+// the service, so the service can see the problem before a chat turn does.
+// The check opens the file and reads no value from it.
+func agentEnvWarning(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) {
+			err = pathErr.Err
+		}
+		return fmt.Sprintf("WARNING: cannot read %s: %v. Repository chat will fail, because the Git credential helper reads its settings from this file. Make the service user the owner of the file, with mode 600.", path, err)
+	}
+	f.Close()
+	return ""
+}
 
 // runGitCredential is `agent-client git-credential <action>`, the git
 // credential helper of a sandbox that a server launched. For a GitHub
