@@ -3,7 +3,7 @@ id: status-shows-the-handshake
 parent: agent-handshake-visible
 created: 2026-10-23T06:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: agent-records-its-handshake
 ---
 

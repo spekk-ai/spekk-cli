@@ -19,7 +19,7 @@ The agent client on a sandbox dials the control host, and it dials again with a 
 
 ## What this does not do
 
-- **No change to a token, an agent registration, or a specific sandbox.** This is the general check only. To repair a refused sandbox is a separate operation (`spekk sandbox register`).
+- **No change to a token, an agent registration, or a specific sandbox.** This is the general check only. The repair of a refused sandbox is a separate decision for each sandbox.
 - **No control-host change and no protocol change.** The record stays on the machine.
 - **No fleet check and no alert.** `spekk sandbox list` does not SSH to each machine, and an alert is a separate feature (issue #210).
 - **No new `--json` output for `spekk sandbox status`.** The command has no JSON output today. The record itself is JSON, at `/var/log/spekk/agent-connection.json`, for a script that needs it.

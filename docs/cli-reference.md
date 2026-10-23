@@ -884,7 +884,7 @@ spekk sandbox list --all-hosts           # Also the labeled sandboxes that other
 
 ### `spekk sandbox status <name>`
 
-Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and four SSH checks: the provisioned marker, the `spekk-agent` service, and the version of the spekk CLI and of the agent binary on the machine. The two version commands run as `agent`, which owns both binaries, and not as the login user.
+Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and five SSH checks: the provisioned marker, the `spekk-agent` service, the handshake record of the agent, and the version of the spekk CLI and of the agent binary on the machine. The two version commands run as `agent`, which owns both binaries, and not as the login user.
 
 ```bash
 spekk sandbox status my-sandbox
@@ -900,6 +900,15 @@ Agent client: v1.38.1
 ```
 
 Nothing updates a sandbox on its own. A sandbox runs real work, so the update is the one command, `deploy`.
+
+The service can be `active` while the control host refuses every dial of the agent, for example with HTTP 403 for a token that is not valid. The agent records its last successful handshake and its last failed dial in `/var/log/spekk/agent-connection.json`, and `status` shows both. When the last dial failed, or the agent never connected, the failure line gets a warning. For example:
+
+```
+Agent last connected: never
+Agent last handshake failure: 2026-10-23T05:10:00.123Z (HTTP 403)  WARNING: the agent is not connected to the control host
+```
+
+An agent binary older than this check writes no record, and the lines then say `unknown (no record; ...)`.
 
 ### `spekk sandbox ssh <name> [ssh-flags...]`
 
