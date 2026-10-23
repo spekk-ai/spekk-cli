@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.46.0 -- Status Shows a Refused Agent, and a Cancel Stops the Session](RELEASE-NOTES-1.46.0.md)
+
+The sandbox agent records its last handshake and its last failed dial, and `spekk sandbox status` shows both, with a warning when the control host refuses the agent, for example with HTTP 403. A `cancel` frame now also removes the queued messages of the session and ends each of their turns with an `error` frame. A large `stream` frame no longer closes a healthy connection on a slow link.
+
 ## [1.45.2 -- Clean Repository Checkouts for Attachments](RELEASE-NOTES-1.45.2.md)
 
 The sandbox agent stores downloaded attachments in the configured workspace, outside prepared repository checkouts. Later turns can select a ref while user edits still cause refusal. File input remains off, and real-model file and image reads remain open for immediate post-deployment QA.
