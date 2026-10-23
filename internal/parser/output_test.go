@@ -509,3 +509,91 @@ func TestMarshalJSON_NoHTMLEscape(t *testing.T) {
 		t.Errorf("expected unescaped HTML chars, got: %s", s)
 	}
 }
+
+func TestSortAssertions(t *testing.T) {
+	// Original (parser) order: b, a, c — priorities and titles chosen so each
+	// column produces a distinct ordering and ties exercise stability.
+	base := func() *ParseResult {
+		return &ParseResult{
+			Specs: []Spec{{ID: "s"}},
+			Assertions: []Assertion{
+				{ID: "b", Parent: "s", Priority: 2, Status: "done", Title: "Zebra"},
+				{ID: "a", Parent: "s", Priority: 1, Status: "done", Title: "Apple"},
+				{ID: "c", Parent: "s", Priority: 1, Status: "not_started", Title: "Mango"},
+			},
+		}
+	}
+
+	ids := func(r *ParseResult) []string {
+		out := make([]string, len(r.Assertions))
+		for i, a := range r.Assertions {
+			out[i] = a.ID
+		}
+		return out
+	}
+	eq := func(t *testing.T, got, want []string) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("length mismatch: got %v want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("order mismatch: got %v want %v", got, want)
+			}
+		}
+	}
+
+	t.Run("id alphabetical", func(t *testing.T) {
+		r, err := SortAssertions(base(), "id")
+		if err != nil {
+			t.Fatal(err)
+		}
+		eq(t, ids(r), []string{"a", "b", "c"})
+	})
+
+	t.Run("priority numeric ascending, stable ties", func(t *testing.T) {
+		// Priority 1 first; a and c both priority 1 keep parser order (a before c).
+		r, err := SortAssertions(base(), "priority")
+		if err != nil {
+			t.Fatal(err)
+		}
+		eq(t, ids(r), []string{"a", "c", "b"})
+	})
+
+	t.Run("status alphabetical, stable ties", func(t *testing.T) {
+		// b and a both "done" keep parser order (b before a).
+		r, err := SortAssertions(base(), "status")
+		if err != nil {
+			t.Fatal(err)
+		}
+		eq(t, ids(r), []string{"b", "a", "c"})
+	})
+
+	t.Run("title alphabetical", func(t *testing.T) {
+		r, err := SortAssertions(base(), "title")
+		if err != nil {
+			t.Fatal(err)
+		}
+		eq(t, ids(r), []string{"a", "c", "b"}) // Apple, Mango, Zebra
+	})
+
+	t.Run("does not mutate input", func(t *testing.T) {
+		in := base()
+		if _, err := SortAssertions(in, "id"); err != nil {
+			t.Fatal(err)
+		}
+		eq(t, ids(in), []string{"b", "a", "c"})
+	})
+
+	t.Run("invalid column errors and names valid columns", func(t *testing.T) {
+		_, err := SortAssertions(base(), "bogus")
+		if err == nil {
+			t.Fatal("expected error for unknown column")
+		}
+		for _, col := range []string{"id", "priority", "status", "title"} {
+			if !strings.Contains(err.Error(), col) {
+				t.Errorf("error %q should name valid column %q", err.Error(), col)
+			}
+		}
+	})
+}

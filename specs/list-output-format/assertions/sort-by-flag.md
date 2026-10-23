@@ -3,7 +3,7 @@ id: sort-by-flag
 parent: list-output-format
 created: 2026-07-13T01:00:00Z
 priority: 2
-status: not_started
+status: done
 depends-on: default-table-format
 ---
 
@@ -31,3 +31,5 @@ column in ascending order. Supported columns: `id`, `status`, `priority`,
 - An unsupported column name causes a non-zero exit with a message listing
   the valid column names.
 - The default output (no `--sort-by`) is unchanged (parser order).
+
+**Tests:** internal/parser/output_test.go, cmd/spekk/list_test.go
