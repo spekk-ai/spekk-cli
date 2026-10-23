@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -215,7 +216,7 @@ func appLaunch(ctx context.Context, client *appclient.Client, host string, body 
 		}
 		recovered, lookupErr := client.Do(ctx, "GET", launchRoute("", id), nil)
 		if lookupErr == nil {
-			return printApp(stdout, jsonMode, launchResult(recovered), "spekk app sandbox status --request-id "+id)
+			return printApp(stdout, jsonMode, withSignIn(launchResult(recovered), body), "spekk app sandbox status --request-id "+id)
 		}
 		if printErr := printApp(stdout, jsonMode, map[string]any{"request_id": id, "state": "uncertain", "error": err.Error()}, "spekk app sandbox status --request-id "+id); printErr != nil {
 			return printErr
@@ -226,7 +227,16 @@ func appLaunch(ctx context.Context, client *appclient.Client, host string, body 
 	if err := appclient.SaveOperation(op); err != nil {
 		return err
 	}
-	return printApp(stdout, jsonMode, launchResult(result), "spekk app sandbox wait --launch "+op.LaunchID+" --timeout 10m")
+	return printApp(stdout, jsonMode, withSignIn(launchResult(result), body), "spekk app sandbox wait --launch "+op.LaunchID+" --timeout 10m")
+}
+
+// withSignIn adds the remote sign-in step that a personal sandbox needs
+// before it can run a task.
+func withSignIn(out, body map[string]any) map[string]any {
+	if body["audience"] == "personal" {
+		out["sign_in"] = "A personal sandbox runs no task until you sign in. When it is online, open the agent in the app and complete \"Sign in to Claude\" in its terminal."
+	}
+	return out
 }
 
 func launchRoute(launchID, requestID string) string {
@@ -307,9 +317,11 @@ func appSend(ctx context.Context, client *appclient.Client, host, launchID, agen
 	id := requestID
 	if id == "" {
 		id, err = appclient.NewRequestID()
-		if err != nil {
-			return err
-		}
+	} else {
+		id, err = appclient.TaskRequestID(id)
+	}
+	if err != nil {
+		return err
 	}
 	op := appclient.Operation{Kind: "send", RequestID: id, Host: host, LaunchID: launchID, AgentID: agentID, PayloadHash: hash}
 	if err := appclient.SaveOperation(op); err != nil {
@@ -346,12 +358,28 @@ func appSend(ctx context.Context, client *appclient.Client, host, launchID, agen
 	route := "/api/agents/" + url.PathEscape(agentID) + "/chat/"
 	result, err := client.Do(ctx, "POST", route, body)
 	if err != nil {
+		lookup := route + "requests/" + url.PathEscape(id) + "/"
+		var apiErr *appclient.APIError
+		if errors.As(err, &apiErr) && apiErr.Status == http.StatusConflict {
+			// The app has this request ID already, or refuses the send. Show
+			// the saved status, if any, and never POST the task again.
+			if saved, lookupErr := client.Do(ctx, "GET", lookup, nil); lookupErr == nil {
+				op.MessageID = field(saved, "message_id")
+				if saveErr := appclient.SaveOperation(op); saveErr != nil {
+					return saveErr
+				}
+				if printErr := printApp(stdout, jsonMode, chatResult(saved, id, launchID, agentID), "spekk app sandbox result --agent "+agentID+" --request-id "+id); printErr != nil {
+					return printErr
+				}
+			}
+			return err
+		}
 		if definiteAPIError(err) {
 			return err
 		}
-		recovered, lookupErr := client.Do(ctx, "GET", route+"requests/"+url.PathEscape(id)+"/", nil)
+		recovered, lookupErr := client.Do(ctx, "GET", lookup, nil)
 		if lookupErr == nil {
-			return printApp(stdout, jsonMode, chatResult(recovered, launchID, agentID), "")
+			return printApp(stdout, jsonMode, chatResult(recovered, id, launchID, agentID), "")
 		}
 		if printErr := printApp(stdout, jsonMode, map[string]any{"request_id": id, "launch_id": launchID, "agent_id": agentID, "state": "uncertain", "error": err.Error()}, "spekk app sandbox result --agent "+agentID+" --request-id "+id); printErr != nil {
 			return printErr
@@ -362,7 +390,7 @@ func appSend(ctx context.Context, client *appclient.Client, host, launchID, agen
 	if err := appclient.SaveOperation(op); err != nil {
 		return err
 	}
-	return printApp(stdout, jsonMode, chatResult(result, launchID, agentID), "spekk app sandbox result --agent "+agentID+" --message "+op.MessageID)
+	return printApp(stdout, jsonMode, chatResult(result, id, launchID, agentID), "spekk app sandbox result --agent "+agentID+" --message "+op.MessageID)
 }
 
 func appResult(ctx context.Context, client *appclient.Client, agentID, messageID, requestID string, timeout time.Duration, stdout io.Writer, jsonMode bool) error {
@@ -376,6 +404,10 @@ func appResult(ctx context.Context, client *appclient.Client, agentID, messageID
 	}
 	route := "/api/agents/" + url.PathEscape(agentID) + "/chat/"
 	if requestID != "" {
+		var err error
+		if requestID, err = appclient.TaskRequestID(requestID); err != nil {
+			return err
+		}
 		route += "requests/" + url.PathEscape(requestID) + "/"
 	} else {
 		route += url.PathEscape(messageID) + "/"
@@ -385,14 +417,17 @@ func appResult(ctx context.Context, client *appclient.Client, agentID, messageID
 		if err != nil {
 			return err
 		}
-		out := chatResult(result, "", agentID)
+		out := chatResult(result, requestID, "", agentID)
+		if out["message_id"] == nil && messageID != "" {
+			out["message_id"] = messageID
+		}
 		if out["request_id"] == nil || out["launch_id"] == "" {
 			ops, err := appclient.ListOperations()
 			if err != nil {
 				return err
 			}
 			for _, op := range ops {
-				if op.AgentID == agentID && (op.MessageID == field(result, "message_id") || op.RequestID == requestID && requestID != "") {
+				if op.AgentID == agentID && (op.MessageID == out["message_id"] || op.RequestID == requestID && requestID != "") {
 					out["request_id"] = op.RequestID
 					out["launch_id"] = op.LaunchID
 					break
@@ -425,12 +460,18 @@ func launchResult(result map[string]any) map[string]any {
 	return out
 }
 
-func chatResult(result map[string]any, launchID, agentID string) map[string]any {
+// chatResult maps a chat response. A send response has no request ID, thus
+// a known requestID fills it.
+func chatResult(result map[string]any, requestID, launchID, agentID string) map[string]any {
 	state := field(result, "state")
 	if state == "" {
 		state = "pending"
 	}
-	return map[string]any{"request_id": result["request_id"], "launch_id": launchID, "agent_id": agentID, "message_id": result["message_id"], "agent_session_id": result["agent_session_id"], "session_id": result["session_id"], "state": state, "reply": result["reply"], "error": result["failure_reason"]}
+	saved := result["request_id"]
+	if requestID != "" {
+		saved = requestID
+	}
+	return map[string]any{"request_id": saved, "launch_id": launchID, "agent_id": agentID, "message_id": result["message_id"], "agent_session_id": result["agent_session_id"], "session_id": result["session_id"], "state": state, "reply": result["reply"], "error": result["failure_reason"]}
 }
 
 func field(result map[string]any, key string) string {

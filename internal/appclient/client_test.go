@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -61,8 +62,13 @@ func TestClientReportsStatusWithoutKey(t *testing.T) {
 	}
 }
 
-func TestCredentialFileIsPrivate(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+func TestCredentialFileIsPrivateInASharedConfigDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	// Other spekk commands make this directory with mode 0755.
+	if err := os.Mkdir(filepath.Join(home, "spekk"), 0755); err != nil {
+		t.Fatal(err)
+	}
 	if err := SaveConfig("https://app.example.test", "private-key\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -73,6 +79,9 @@ func TestCredentialFileIsPrivate(t *testing.T) {
 	config, err := LoadConfig()
 	if err != nil || config.Key != "private-key" {
 		t.Fatalf("could not read saved key: %v", err)
+	}
+	if err := SaveOperation(Operation{Kind: "send", RequestID: "request-1", Host: "https://app.example.test"}); err != nil {
+		t.Fatalf("could not save an operation record: %v", err)
 	}
 	if err := os.Chmod(path, 0644); err != nil {
 		t.Fatal(err)

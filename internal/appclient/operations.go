@@ -2,7 +2,6 @@ package appclient
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -26,20 +26,34 @@ type Operation struct {
 	Created     time.Time `json:"created"`
 }
 
+var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// NewRequestID returns a random UUID. The app chat routes accept only a UUID.
 func NewRequestID() (string, error) {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(raw[:]), nil
+	raw[6] = raw[6]&0x0f | 0x40
+	raw[8] = raw[8]&0x3f | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", raw[0:4], raw[4:6], raw[6:8], raw[8:10], raw[10:16]), nil
+}
+
+// TaskRequestID returns id in the lowercase UUID form that the app stores.
+func TaskRequestID(id string) (string, error) {
+	id = strings.ToLower(id)
+	if !uuidPattern.MatchString(id) {
+		return "", errors.New("a send request ID must be a UUID")
+	}
+	return id, nil
 }
 
 func operationsDir() (string, error) {
-	state, err := os.UserConfigDir()
+	dir, err := appDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(state, "spekk", "app-operations"), nil
+	return filepath.Join(dir, "operations"), nil
 }
 
 func SaveOperation(op Operation) error {

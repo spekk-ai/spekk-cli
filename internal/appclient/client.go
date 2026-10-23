@@ -61,12 +61,23 @@ func ValidateHost(raw string) (string, error) {
 	return "", errors.New("app host must use HTTPS, except for loopback development")
 }
 
-func ConfigPath() (string, error) {
+// appDir holds the key and the operation records. It is a private directory
+// of its own, because other spekk commands make the parent spekk directory
+// with mode 0755.
+func appDir() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "spekk", "app-auth.json"), nil
+	return filepath.Join(dir, "spekk", "app"), nil
+}
+
+func ConfigPath() (string, error) {
+	dir, err := appDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "auth.json"), nil
 }
 
 func SaveConfig(host, key string) error {
