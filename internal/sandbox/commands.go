@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spekk-ai/spekk-cli/internal/agentconn"
 	"github.com/spekk-ai/spekk-cli/internal/config"
 	"github.com/spekk-ai/spekk-cli/internal/version"
 )
@@ -629,6 +630,12 @@ func Status(p Provider, name string) error {
 
 	agentStatus := sshCheck(sandbox, name, "systemctl is-active spekk-agent 2>/dev/null || echo unknown")
 	fmt.Printf("Agent service: %s\n", agentStatus)
+
+	// The service is active while the control host refuses every dial, so
+	// the handshake record is what tells a refused agent from a healthy one.
+	connected, failure := agentconn.Describe(sshCheck(sandbox, name, "cat "+agentconn.Path+" 2>/dev/null || echo "+agentconn.Missing))
+	fmt.Printf("Agent last connected: %s\n", connected)
+	fmt.Printf("Agent last handshake failure: %s\n", failure)
 
 	printBinaryVersions(sandbox, name)
 	return nil
