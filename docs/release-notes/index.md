@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.47.2 -- Agent ID Kept on Script-Equipped Hosts](RELEASE-NOTES-1.47.2.md)
+
+`setup-credentials.sh` now writes and keeps `SPEKK_AGENT_ID` in `agent.env`, and exits with status 1 for a value that is not a UUID. The CLI refuses a registration response whose agent ID is not a UUID. An existing `agent.env` with a `SPEKK_AGENT_ID` that is not a UUID stops the script until you correct the line.
+
 ## [1.47.1 -- Clear Repository Clone Errors and Readable Agent Settings](RELEASE-NOTES-1.47.1.md)
 
 Failed repository Git steps now show a short, redacted stderr cause in the turn failure reason and agent log. The agent warns once at start if it cannot read `/etc/spekk/agent.env`. `setup-credentials.sh` now gives the file to `agent:agent` with mode 600. Existing hosts need the script to run again or a manual owner correction.
