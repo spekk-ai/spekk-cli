@@ -3,12 +3,12 @@ id: cancel-drains-queued-turns
 parent: cancel-stops-the-session
 created: 2026-10-23T05:00:00Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # A cancel removes the session's queued messages
 
-**Tests:** `cmd/sandbox/reconnect_test.go`
+**Tests:** `cmd/sandbox/cancel_test.go`
 
 ## Success criteria
 

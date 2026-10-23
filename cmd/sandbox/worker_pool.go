@@ -108,11 +108,14 @@ func (p *WorkerPool) releaseLocked(w *Worker) {
 	p.work <- struct{}{}
 }
 
-func (p *WorkerPool) Cancel(agentSessionID string) {
+// Cancel stops a session and returns the queued messages it removed. A
+// session with no worker has nothing to stop.
+func (p *WorkerPool) Cancel(agentSessionID string) []Message {
 	p.mu.Lock()
 	w, ok := p.sessions[agentSessionID]
 	p.mu.Unlock()
-	if ok {
-		w.Cancel()
+	if !ok {
+		return nil
 	}
+	return w.Cancel()
 }

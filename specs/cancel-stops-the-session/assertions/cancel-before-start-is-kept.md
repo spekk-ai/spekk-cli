@@ -3,13 +3,13 @@ id: cancel-before-start-is-kept
 parent: cancel-stops-the-session
 created: 2026-10-23T05:00:00Z
 priority: 1
-status: not_started
+status: done
 depends-on: cancel-drains-queued-turns
 ---
 
 # A cancel before the process starts stops the turn
 
-**Tests:** `cmd/sandbox/reconnect_test.go`
+**Tests:** `cmd/sandbox/cancel_test.go`
 
 ## Success criteria
 
@@ -19,4 +19,4 @@ depends-on: cancel-drains-queued-turns
 
 ## Test
 
-A real test through the real `AgentClient` dispatch path. A test hook in `invoke`, called just before the check, blocks the turn in the window. The test cancels the session while the hook blocks, then releases the hook. Assert that the fake `claude` never ran, and that the host received an `error` frame for the session. The test uses no sleep to find the window.
+A real test through the real `AgentClient` dispatch path. A test hook in `invoke`, called just before the check, blocks the turn in the window. The test cancels the session while the hook blocks, queues one more message on the same worker, then releases the hook. Assert that the host received an `error` frame for the cancelled turn and a `result` frame for the later message, and that the fake `claude` ran exactly once. The test uses no sleep to find the window.

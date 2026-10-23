@@ -118,6 +118,7 @@ type turnMarkers struct {
 	release    string // the test creates this to let the turn finish
 	finished   string // the turn ran to the end
 	terminated string // the turn received SIGTERM
+	runs       string // one line for each time the fake claude ran a turn
 }
 
 // fakeClaude puts an executable named claude on PATH for this test. The script
@@ -137,18 +138,20 @@ func fakeClaude(t *testing.T) turnMarkers {
 		release:    filepath.Join(dir, "release"),
 		finished:   filepath.Join(dir, "finished"),
 		terminated: filepath.Join(dir, "terminated"),
+		runs:       filepath.Join(dir, "runs"),
 	}
 
 	// The trap runs between sleeps, so the loop below is also the signal
 	// window. cat drains the message invoke writes to stdin.
 	script := "#!/bin/sh\n" + claudeVersionAnswer + fmt.Sprintf(`trap 'touch %q; exit 143' TERM
 cat > /dev/null
+echo run >> %q
 touch %q
 while [ ! -f %q ]; do sleep 0.05; done
 touch %q
 echo '{"type":"system","subtype":"init","session_id":"sess-1"}'
 echo '{"type":"result","session_id":"sess-1","result":"the turn finished"}'
-`, m.terminated, m.started, m.release, m.finished)
+`, m.terminated, m.runs, m.started, m.release, m.finished)
 
 	path := filepath.Join(dir, "claude")
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
@@ -330,9 +333,19 @@ func TestSendFinalWaitsAndSendDrops(t *testing.T) {
 
 func waitForFile(t *testing.T, path string, within time.Duration, msg string) {
 	t.Helper()
+	waitUntil(t, within, msg, func() bool {
+		_, err := os.Stat(path)
+		return err == nil
+	})
+}
+
+// waitUntil polls cond until it is true, and fails the test with msg when
+// within passes first.
+func waitUntil(t *testing.T, within time.Duration, msg string, cond func() bool) {
+	t.Helper()
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
+		if cond() {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)

@@ -262,8 +262,25 @@ func (c *AgentClient) handleMessage(ctx context.Context, msg Message) {
 	go w.Run(c.procCtx, c.cfg, c.conns, c.pool)
 }
 
+// cancelledBeforeStartDetail ends a turn that a cancel stopped before its
+// process started.
+const cancelledBeforeStartDetail = "Cancelled before the turn started."
+
+// handleCancel stops the session, and ends the turn of each queued message
+// it removed. The control host opened a turn for each dispatch and closes
+// one for each frame that ends a turn, so a message dropped in silence would
+// leave its turn open. The frames wait for a connection, so they go out on a
+// goroutine and the read loop does not wait for them.
 func (c *AgentClient) handleCancel(msg Message) {
-	c.pool.Cancel(msg.AgentSessionID)
+	removed := c.pool.Cancel(msg.AgentSessionID)
+	if len(removed) == 0 {
+		return
+	}
+	go func() {
+		for _, m := range removed {
+			sendError(c.procCtx, c.conns, m.AgentSessionID, cancelledBeforeStartDetail)
+		}
+	}()
 }
 
 type Config struct {
