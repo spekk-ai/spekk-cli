@@ -3,8 +3,8 @@ id: managed-client-guide
 parent: app-managed-sandbox-client
 created: 2026-10-22T00:00:00Z
 priority: 3
-status: not_started
-branch: feature/app-managed-sandbox-client
+status: done
+branch: docs/local-agent-cli-contract
 depends-on: managed-sandbox-commands
 ---
 

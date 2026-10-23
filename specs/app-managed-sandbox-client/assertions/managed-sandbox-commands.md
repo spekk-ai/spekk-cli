@@ -3,8 +3,8 @@ id: managed-sandbox-commands
 parent: app-managed-sandbox-client
 created: 2026-10-22T00:00:00Z
 priority: 3
-status: not_started
-branch: feature/app-managed-sandbox-client
+status: done
+branch: docs/local-agent-cli-contract
 depends-on: managed-app-client
 ---
 
@@ -17,3 +17,5 @@ depends-on: managed-app-client
 - `wait` has a bounded timeout and prints the current launch stage, failure stage, error, agent ID, and expiry. `send` returns the stable launch, agent, request, and message IDs promptly for long work. `result` reads the saved state and reply by message ID, can poll within a bounded timeout, and can continue with the returned Claude session ID only under server `may_resume`. Streaming is optional; after a disconnect the client reads saved status with the same message ID and does not send another POST. Two parallel tasks have separate request, message, and session IDs.
 - A machine-readable mode writes one JSON object per result with stable fields: `request_id`, `launch_id`, `agent_id`, `message_id`, `session_id`, `state`, `reply`, and `error` where applicable. Human output gives the same IDs and the next command. No output includes a secret. `request_id` applies to launch and send only. `cancel` applies to a launch before online; `destroy` applies to an online sandbox. The user chooses retain or destroy explicitly. Cleanup is complete only when stage is `failed` or `destroyed` and `finished` is set. A failed launch with `finished` null can still have a billable machine. The client warns the user while cleanup is incomplete. The app worker and orphan sweep own automatic cleanup, and the user monitors or escalates stalled cleanup. The app's expiry and cleanup rules continue after local exit.
 - A cold terminal run against a local app with a fake cloud covers launch, readiness, text send, saved result, continuation, stream loss, client restart, denied member team launch, denied repository push, offline agent, quota refusal, revoked key, and cleanup. It checks the app records for one launch and one message per request ID. It fails a launch after machine creation, leaves `finished` null after failed removal, and checks the warning. It then completes cleanup and checks that the ended stage with `finished` set clears the warning. It drops a cancel or destroy response and checks recovery by launch status without a request-ID lookup or an automatic second POST.
+
+**Tests:** `cmd/spekk/app_test.go`, `internal/appclient/client_test.go`

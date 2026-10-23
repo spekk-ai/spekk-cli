@@ -8,6 +8,8 @@ Every spekk command, its flags, and what it does. `spekk help` prints the comman
 
 `spekk` with no command runs `spekk next`.
 
+For app-managed sandbox commands and key setup, see [App-managed sandboxes](app-managed-sandboxes.md).
+
 Two rules hold for every command. A flag that takes a value takes it after a space, so `--flag=value` is an unknown argument and fails. A flag that takes a value is supplied once: a repeat fails rather than discard the value you typed. A flag that takes no value may repeat, because a repeat discards nothing.
 
 ## `spekk init`
