@@ -55,8 +55,10 @@ func loadRecipientKey(path string) (*ecdh.PrivateKey, error) {
 
 // readRecipientKey reads the key file. No error text holds the contents.
 func readRecipientKey(path string) (*ecdh.PrivateKey, error) {
-	// O_NOFOLLOW: a symbolic link is not the file of this agent.
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	// O_NOFOLLOW: a symbolic link is not the file of this agent. O_NONBLOCK:
+	// the open of a FIFO does not wait for a writer, so the check below can
+	// refuse it. The flag has no effect on a regular file.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if errors.Is(err, syscall.ELOOP) {
 		return nil, fmt.Errorf("%s is a symbolic link, not a regular file", path)
 	}
@@ -95,6 +97,9 @@ func createRecipientKey(path string) (*ecdh.PrivateKey, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+	if err := checkKeyDir(dir); err != nil {
+		return nil, fmt.Errorf("no new key at %s: %w", path, err)
+	}
 	key, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
@@ -118,6 +123,27 @@ func createRecipientKey(path string) (*ecdh.PrivateKey, error) {
 		return nil, err
 	}
 	return key, nil
+}
+
+// checkKeyDir refuses a key directory that another user can write to or
+// owns, because that user could replace the key file. It does not change the
+// mode of the directory: a person decides what to do with it.
+func checkKeyDir(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if perm := info.Mode().Perm(); perm&0o022 != 0 {
+		return fmt.Errorf("key directory %s has mode %04o, so other users can change it; it must have no group or other write permission", dir, perm)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("cannot read the owner of key directory %s", dir)
+	}
+	if int(st.Uid) != os.Geteuid() {
+		return fmt.Errorf("key directory %s has owner uid %d, not the agent user (uid %d)", dir, st.Uid, os.Geteuid())
+	}
+	return nil
 }
 
 // secretsHelloFrame announces the public key after each welcome. held is

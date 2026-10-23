@@ -7,12 +7,16 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -137,22 +141,48 @@ func TestUnsafeKeyFileIsRefusedAndKept(t *testing.T) {
 				t.Fatal(err)
 			}
 		}, "symbolic link"},
+		// A blocking open of a FIFO waits for a writer with no time limit.
+		{"fifo", func(t *testing.T, path string) {
+			if err := os.Rename(path, path+".real"); err != nil {
+				t.Fatal(err)
+			}
+			if err := syscall.Mkfifo(path, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}, "not a regular file"},
+		// No key file yet: the agent must not make a key that other users
+		// can replace.
+		{"world-writable directory", func(t *testing.T, path string) {
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(filepath.Dir(path), 0o777); err != nil {
+				t.Fatal(err)
+			}
+		}, "mode 0777"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := writeVectorKey(t)
 			tt.setup(t, path)
-			before, _ := os.ReadFile(path)
+			before := keyFileState(t, path)
 			record := filepath.Join(t.TempDir(), "agent-connection.json")
 			logs := captureLog(t)
 
-			client := NewAgentClient(Config{SecretKeyPath: path, ConnectionRecord: record})
+			loaded := make(chan *AgentClient, 1)
+			go func() { loaded <- NewAgentClient(Config{SecretKeyPath: path, ConnectionRecord: record}) }()
+			var client *AgentClient
+			select {
+			case client = <-loaded:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the agent did not finish the key load in 5 seconds")
+			}
 
 			if client.secretKey != nil {
 				t.Fatal("the agent used a key file that it must refuse")
 			}
-			if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
-				t.Error("the agent changed the refused key file")
+			if after := keyFileState(t, path); before != after {
+				t.Errorf("the agent changed the refused key file: %q, then %q", before, after)
 			}
 			got, raw := readRecord(t, record)
 			if got.SecretKeyFingerprint != "" || !strings.Contains(got.SecretKeyError, tt.reason) {
@@ -256,14 +286,38 @@ func TestSecretsHelloAndAnOldControlHost(t *testing.T) {
 	}
 }
 
+// keyFileState is the contents of a regular file, or else its type. It does
+// not open a FIFO, because that open waits for a writer.
+func keyFileState(t *testing.T, path string) string {
+	t.Helper()
+	info, err := os.Lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "no file"
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Mode().IsRegular() {
+		return info.Mode().Type().String()
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
 // assertNoPrivateKey fails when text holds the private key of the key file,
 // in base64 or in hex.
 func assertNoPrivateKey(t *testing.T, what, text, keyPath string) {
 	t.Helper()
+	if info, err := os.Lstat(keyPath); err == nil && !info.Mode().IsRegular() {
+		// A refused symbolic link or FIFO: the key is in the .real file.
+		keyPath += ".real"
+	}
 	data, err := os.ReadFile(keyPath)
-	if err != nil {
-		// A refused symbolic link: the key is in the file it points to.
-		data, err = os.ReadFile(keyPath + ".real")
+	if errors.Is(err, fs.ErrNotExist) {
+		return // no key file, so there is no key to leak
 	}
 	if err != nil {
 		t.Fatal(err)
