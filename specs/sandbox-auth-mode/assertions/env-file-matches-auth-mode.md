@@ -17,7 +17,7 @@ depends-on: auth-flag-selects-mode
 ## Success Criteria
 
 - `buildEnvContent` takes the auth mode as a parameter and keeps its existing signature otherwise.
-- Both modes write the shared lines exactly as today: `GITHUB_TOKEN`, `SPEKK_HOST` (still stripped of its scheme and trailing slash), `SPEKK_AGENT_TOKEN`, `WORKSPACE`, and `SPEKK_AGENT_NAME`.
+- Both modes write the shared lines exactly as today: `GITHUB_TOKEN`, `SPEKK_HOST` (still stripped of its scheme and trailing slash), `SPEKK_AGENT_TOKEN`, `SPEKK_AGENT_ID` (added by `every-host-knows-its-agent-id`), `WORKSPACE`, and `SPEKK_AGENT_NAME`.
 - `bedrock` mode additionally writes `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, and `CLAUDE_CODE_USE_BEDROCK=1` — the same set, with the same values, that the function writes before this change.
 - `subscription` mode additionally writes `CLAUDE_CODE_OAUTH_TOKEN` and nothing else.
 - In `subscription` mode the rendered file contains none of the strings `CLAUDE_CODE_USE_BEDROCK`, `ANTHROPIC_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_DEFAULT_REGION`.

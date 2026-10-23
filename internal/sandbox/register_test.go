@@ -358,7 +358,7 @@ func TestTokenScriptRestoresTheOldFile(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("no sh")
 	}
-	const old = "CLAUDE_CODE_OAUTH_TOKEN=keep-me\nSPEKK_AGENT_TOKEN=old-token\n"
+	const old = "CLAUDE_CODE_OAUTH_TOKEN=keep-me\nSPEKK_AGENT_TOKEN=old-token\nSPEKK_AGENT_ID=old-agent\n"
 	run := func(t *testing.T, restart int) (dir string, log string, err error) {
 		dir = t.TempDir()
 		bin := filepath.Join(dir, "bin")
@@ -374,7 +374,7 @@ func TestTokenScriptRestoresTheOldFile(t *testing.T) {
 		systemctl := fmt.Sprintf("#!/bin/sh\ngrep SPEKK_AGENT_TOKEN %s/etc/agent.env >> %s/log\nexit %d\n", dir, dir, restart)
 		os.WriteFile(filepath.Join(bin, "systemctl"), []byte(systemctl), 0o755)
 
-		script := strings.ReplaceAll(buildTokenScript("new-token"), "/etc/spekk", filepath.Join(dir, "etc"))
+		script := strings.ReplaceAll(buildTokenScript("new-token", "new-agent"), "/etc/spekk", filepath.Join(dir, "etc"))
 		cmd := exec.Command("sh", "-c", script)
 		cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 		_, err = cmd.CombinedOutput()
@@ -413,7 +413,7 @@ func TestTokenScriptRestoresTheOldFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		path := filepath.Join(dir, "etc", "agent.env")
-		if got := read(t, path); got != "CLAUDE_CODE_OAUTH_TOKEN=keep-me\nSPEKK_AGENT_TOKEN=new-token\n" {
+		if got := read(t, path); got != "CLAUDE_CODE_OAUTH_TOKEN=keep-me\nSPEKK_AGENT_TOKEN=new-token\nSPEKK_AGENT_ID=new-agent\n" {
 			t.Errorf("agent.env = %q", got)
 		}
 		if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
@@ -500,6 +500,13 @@ func TestProvisionAgentToken(t *testing.T) {
 
 	t.Run("an unregistered sandbox registers when it can", func(t *testing.T) {
 		host, tokens := setup(t, "")
+		// equip writes the agent ID of the record to the env file.
+		var equippedID string
+		stubbed := equip
+		equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, artifacts *releaseArtifacts) *stageError {
+			equippedID = meta.AgentID
+			return stubbed(meta, name, agentToken, mode, artifacts)
+		}
 		if err := Provision("box", ProvisionOptions{Force: true}); err != nil {
 			t.Fatal(err)
 		}
@@ -507,6 +514,9 @@ func TestProvisionAgentToken(t *testing.T) {
 		agent := host.agent(got.AgentID)
 		if agent == nil || !slices.Equal(*tokens, []string{agent.Token}) {
 			t.Errorf("record %+v and token %v do not match a registered agent", got, *tokens)
+		}
+		if equippedID != got.AgentID {
+			t.Errorf("equip got agent ID %q, want the registered agent %q", equippedID, got.AgentID)
 		}
 	})
 }

@@ -76,7 +76,7 @@ func testEnvVars() map[string]string {
 }
 
 func TestBuildEnvContentBedrockPinsTheDefaultFile(t *testing.T) {
-	got := buildEnvContent(AuthBedrock, testEnvVars(), "probe", "agenttok", "https://host.example/")
+	got := buildEnvContent(AuthBedrock, testEnvVars(), "probe", "agenttok", "agent-1", "https://host.example/")
 
 	want := strings.Join([]string{
 		"AWS_ACCESS_KEY_ID=akid",
@@ -86,6 +86,7 @@ func TestBuildEnvContentBedrockPinsTheDefaultFile(t *testing.T) {
 		"GITHUB_TOKEN=ghtok",
 		"SPEKK_HOST=host.example",
 		"SPEKK_AGENT_TOKEN=agenttok",
+		"SPEKK_AGENT_ID=agent-1",
 		"WORKSPACE=/opt/spekk/workspace",
 		"SPEKK_AGENT_NAME=spekk-probe",
 	}, "\n") + "\n"
@@ -101,7 +102,7 @@ func TestBuildEnvContentBedrockPinsTheDefaultFile(t *testing.T) {
 // subscription token and leaves CLAUDE_CODE_USE_BEDROCK behind can keep billing
 // through Bedrock, which is the failure the auth mode exists to prevent.
 func TestBuildEnvContentSubscriptionCarriesNoBedrockCredential(t *testing.T) {
-	got := buildEnvContent(AuthSubscription, testEnvVars(), "probe", "agenttok", "https://host.example/")
+	got := buildEnvContent(AuthSubscription, testEnvVars(), "probe", "agenttok", "agent-1", "https://host.example/")
 
 	if !strings.Contains(got, oauthTokenVar+"=oauthtok") {
 		t.Errorf("subscription file is missing the token:\n%s", got)

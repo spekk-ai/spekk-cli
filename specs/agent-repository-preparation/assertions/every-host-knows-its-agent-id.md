@@ -3,7 +3,7 @@ id: every-host-knows-its-agent-id
 parent: agent-repository-preparation
 created: 2026-10-23T15:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: fix/agent-id-in-env-file
 depends-on: agent-chat-repository-access
 ---
