@@ -14,7 +14,7 @@
 # command, inside the quotes, as above: an assignment on the local side applies
 # to ssh itself, and ssh does not forward it.
 #
-# Pass NON-SECRETS that way -- SPEKK_AUTH_MODE, SPEKK_HOST, AWS_DEFAULT_REGION.
+# Pass NON-SECRETS that way -- SPEKK_AUTH_MODE, SPEKK_HOST, SPEKK_AGENT_ID, AWS_DEFAULT_REGION.
 # A secret on a command line is in the local shell history and in both machines'
 # process lists, which is the exposure the non-echoing prompts exist to avoid.
 # For an unattended run, feed secrets through a root-only file on the droplet
@@ -90,6 +90,7 @@ render_agent_env() {
     echo "GITHUB_TOKEN=${GITHUB_TOKEN:-}"
     echo "SPEKK_HOST=${SPEKK_HOST:-}"
     echo "SPEKK_AGENT_TOKEN=${SPEKK_AGENT_TOKEN:-}"
+    [ -z "${SPEKK_AGENT_ID:-}" ] || echo "SPEKK_AGENT_ID=${SPEKK_AGENT_ID}"
     # These two are not credentials, but the Go path writes them and the file
     # is rewritten whole. Omitting them would make a switch quietly change the
     # agent's workspace and its git identity.
@@ -120,7 +121,7 @@ render_agent_env() {
 MODE_VARS="AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_MODEL"
 
 # KNOWN_VARS are the ones this script renders itself, in a fixed order.
-KNOWN_VARS="GITHUB_TOKEN SPEKK_HOST SPEKK_AGENT_TOKEN WORKSPACE SPEKK_AGENT_NAME"
+KNOWN_VARS="GITHUB_TOKEN SPEKK_HOST SPEKK_AGENT_TOKEN SPEKK_AGENT_ID WORKSPACE SPEKK_AGENT_NAME"
 
 # EXTRA_LINES holds every other line the existing file had.
 EXTRA_LINES=""
@@ -214,6 +215,11 @@ load_existing() {
 write_agent_env() {
     load_existing
     collect_credentials
+
+    if [ -n "${SPEKK_AGENT_ID:-}" ] && [[ ! "$SPEKK_AGENT_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+        echo "ERROR: SPEKK_AGENT_ID must be a UUID" >&2
+        return 1
+    fi
 
     # The file is rewritten whole, never appended to. That is what makes a mode
     # switch a switch: the previous mode's variables are gone, not shadowed.

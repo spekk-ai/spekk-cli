@@ -182,7 +182,7 @@ func useRegisterHost(t *testing.T, status int) (string, *[]registration) {
 		}
 		w.WriteHeader(status)
 		if status == 201 {
-			fmt.Fprint(w, `{"id": "agent-77"}`)
+			fmt.Fprint(w, `{"id": "11111111-1111-4111-8111-111111111177"}`)
 		} else {
 			fmt.Fprint(w, `{"detail": "Invalid or expired registration token."}`)
 		}
@@ -336,7 +336,7 @@ func TestCreateMachine(t *testing.T) {
 			errOut := stderr()
 
 			lines := stageLines(t, stdout.String())
-			want := []stageLine{{Stage: "creating"}, {Stage: "provisioning", DropletID: 4242, IP: "203.0.113.10"}, {Stage: "registering"}, {Stage: "online", AgentID: "agent-77"}}
+			want := []stageLine{{Stage: "creating"}, {Stage: "provisioning", DropletID: 4242, IP: "203.0.113.10"}, {Stage: "registering"}, {Stage: "online", AgentID: "11111111-1111-4111-8111-111111111177"}}
 			if fmt.Sprint(lines) != fmt.Sprint(want) {
 				t.Fatalf("stage lines = %+v, want %+v", lines, want)
 			}
@@ -363,7 +363,7 @@ func TestCreateMachine(t *testing.T) {
 			}
 
 			sent := strings.Join(*stdin, "\n")
-			if !holdsSecret(sent, "SPEKK_AGENT_TOKEN="+agentToken+"\n") || !holdsSecret(sent, "SPEKK_AGENT_ID=agent-77\n") || !holdsSecret(sent, "ANTHROPIC_API_KEY=sk-ant-secret\n") {
+			if !holdsSecret(sent, "SPEKK_AGENT_TOKEN="+agentToken+"\n") || !holdsSecret(sent, "SPEKK_AGENT_ID=11111111-1111-4111-8111-111111111177\n") || !holdsSecret(sent, "ANTHROPIC_API_KEY=sk-ant-secret\n") {
 				t.Error("the env file on the machine does not have the agent token, the agent id, and the API key")
 			}
 			if withRepository {
@@ -392,7 +392,7 @@ func TestCreateMachine(t *testing.T) {
 			}
 
 			got, _ := GetSandbox("launch-1")
-			if got == nil || got.Status != "active" || got.DropletID != 4242 || got.AgentID != "agent-77" || got.Auth != "api-key" || got.SSHKeyPath == "" {
+			if got == nil || got.Status != "active" || got.DropletID != 4242 || got.AgentID != "11111111-1111-4111-8111-111111111177" || got.Auth != "api-key" || got.SSHKeyPath == "" {
 				t.Fatalf("record = %+v", got)
 			}
 		})
@@ -426,7 +426,7 @@ func TestCreateMachine(t *testing.T) {
 			}
 			stages = append(stages, l)
 		}
-		want := []stageLine{{Stage: "creating"}, provisioning, {Stage: "registering"}, {Stage: "online", AgentID: "agent-77"}}
+		want := []stageLine{{Stage: "creating"}, provisioning, {Stage: "registering"}, {Stage: "online", AgentID: "11111111-1111-4111-8111-111111111177"}}
 		if fmt.Sprint(stages) != fmt.Sprint(want) || repeats == 0 {
 			t.Fatalf("stdout = %s, want the provisioning line again during the wait and online last", done)
 		}
@@ -522,7 +522,7 @@ func TestCreateMachine(t *testing.T) {
 				t.Errorf("the output holds %s", secret)
 			}
 		}
-		if got, _ := GetSandbox("launch-1"); got == nil || got.DropletID != 4242 || got.AgentID != "agent-77" {
+		if got, _ := GetSandbox("launch-1"); got == nil || got.DropletID != 4242 || got.AgentID != "11111111-1111-4111-8111-111111111177" {
 			t.Fatalf("record = %+v, want the droplet and the agent", got)
 		}
 	})
@@ -542,7 +542,7 @@ func TestCreateMachine(t *testing.T) {
 		if strings.Contains(strings.Join(*stdin, "\n"), "systemctl restart spekk-agent") {
 			t.Fatal("the agent started after workspace setup failed")
 		}
-		if got, _ := GetSandbox("launch-1"); got == nil || got.DropletID != 4242 || got.AgentID != "agent-77" {
+		if got, _ := GetSandbox("launch-1"); got == nil || got.DropletID != 4242 || got.AgentID != "11111111-1111-4111-8111-111111111177" {
 			t.Fatalf("failed workspace lost its cleanup record: %+v", got)
 		}
 		if err := DestroyMachine(strings.NewReader(`{"digitalocean_token": "do-secret"}`), "launch-1"); err != nil {
@@ -614,7 +614,7 @@ func TestDestroyMachine(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := SaveSandbox("launch-1", &SandboxMeta{Provider: "digitalocean", DropletID: 4242, SSHKeyID: 11, SSHKeyPath: key, IP: "203.0.113.10", AgentID: "agent-77"}); err != nil {
+	if err := SaveSandbox("launch-1", &SandboxMeta{Provider: "digitalocean", DropletID: 4242, SSHKeyID: 11, SSHKeyPath: key, IP: "203.0.113.10", AgentID: "11111111-1111-4111-8111-111111111177"}); err != nil {
 		t.Fatal(err)
 	}
 

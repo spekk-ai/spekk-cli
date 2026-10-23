@@ -209,6 +209,8 @@ Resources:
               content: |
                 # Required: Agent auth token for WebSocket connection to the control host
                 SPEKK_AGENT_TOKEN=
+                # The agent ID comes from agent registration on the control host.
+                #SPEKK_AGENT_ID=
                 # Required: Control host (e.g., your-control-host.example)
                 SPEKK_HOST=
                 # Required: GitHub PAT for the agent's GitHub identity

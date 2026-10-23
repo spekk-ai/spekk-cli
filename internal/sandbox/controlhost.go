@@ -227,8 +227,11 @@ func (c *controlHost) registerAgent(name, organization string) (*registeredAgent
 		}
 		return nil, err
 	}
-	if agent.ID == "" || agent.AuthToken == "" {
-		return nil, errors.New("POST /api/agents/: the response has no agent id or token")
+	if !uuidRe.MatchString(agent.ID) {
+		return nil, errors.New("POST /api/agents/: the response has an invalid agent id")
+	}
+	if agent.AuthToken == "" {
+		return nil, errors.New("POST /api/agents/: the response has no agent token")
 	}
 	return &agent, nil
 }
@@ -256,8 +259,8 @@ func (c *controlHost) registerWithToken(name, agentToken string) (string, error)
 	if err := c.do(http.MethodPost, "/api/agents/register/", body, &agent); err != nil {
 		return "", err
 	}
-	if agent.ID == "" {
-		return "", errors.New("POST /api/agents/register/: the response has no agent id")
+	if !uuidRe.MatchString(agent.ID) {
+		return "", errors.New("POST /api/agents/register/: the response has an invalid agent id")
 	}
 	return agent.ID, nil
 }
