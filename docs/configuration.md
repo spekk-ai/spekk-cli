@@ -285,11 +285,12 @@ ssh -t <user>@<ip> 'set -a; . /root/creds; set +a; SPEKK_AUTH_MODE=subscription 
 
 The script restarts `spekk-agent` when it finishes.
 
-**What a rewrite keeps, and what it drops.** The file is written whole, never appended to. Everything the auth mode does not own is carried over from the file already there — `GITHUB_TOKEN`, `SPEKK_HOST`, `WORKSPACE`, `SPEKK_AGENT_NAME`, and any variable the script does not recognize. Only the mode's own variables are replaced: the AWS keys and `CLAUDE_CODE_USE_BEDROCK` for `bedrock`, `CLAUDE_CODE_OAUTH_TOKEN` for `subscription`, and `ANTHROPIC_MODEL`.
+**What a rewrite keeps, and what it drops.** The file is written whole, never appended to. Everything the auth mode does not own is carried over from the file already there - `GITHUB_TOKEN`, `SPEKK_HOST`, `SPEKK_AGENT_ID`, `WORKSPACE`, `SPEKK_AGENT_NAME`, and any variable the script does not recognize. Only the mode's own variables are replaced: the AWS keys and `CLAUDE_CODE_USE_BEDROCK` for `bedrock`, `CLAUDE_CODE_OAUTH_TOKEN` for `subscription`, and `ANTHROPIC_MODEL`.
 
 - **Rotate one variable, same mode.** Re-run in the mode the machine is already in and supply only the value you are changing. `GITHUB_TOKEN=<new> bash /tmp/setup-credentials.sh` rotates the token and keeps everything else, the model credential included.
 - **Switch modes.** Run in the other mode. The previous mode's credentials are dropped, not shadowed, so nothing keeps billing through the old path. You supply the new mode's credentials; everything else carries over.
 - **The model pin does not cross a switch.** `ANTHROPIC_MODEL` names a model for the mode's API, and the names differ: a Bedrock inference profile such as `us.anthropic.claude-sonnet-5` means nothing to the subscription API. On a switch the old pin is reported and dropped. Supply a new `ANTHROPIC_MODEL` in the same run to set one for the new mode.
+- **Give the agent ID to a host that has none.** `SPEKK_AGENT_ID=<uuid> bash /tmp/setup-credentials.sh` writes the ID and keeps everything else. Read the ID from the `Agent:` line that `create` or `provision` prints, from the `Registered agent <id>.` line that `register` prints, or from the `agentId` field of the sandbox in `~/.config/spekk/sandboxes.json`. The script refuses a value that is not a UUID, and it also exits with status 1 when the file already has an `SPEKK_AGENT_ID` that is not a UUID. Correct the line, or supply a valid ID.
 - **`SPEKK_AGENT_TOKEN` is the one value you cannot lose.** The control host stores only its hash, so a blank token means re-registering the agent. The rewrite carries it forward; supply it only if the file has lost it.
 
 ### Agent runtime
@@ -299,7 +300,7 @@ The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `SPEKK_AGENT_TOKEN` | Yes | Bearer token for the WebSocket connection to the control host. With `SPEKK_API_TOKEN`, the control host makes it when `create`, `provision`, or `register` registers the agent. Without it, `create` and `provision` generate it and print it for you to register |
-| `SPEKK_AGENT_ID` | For repository chat | ID of the registered agent. The agent uses it to ask the control host for repository access and for a Git token. `create`, `provision`, and `register` write it. Without it, each chat turn that selects a repository fails with "agent or session ID is missing" |
+| `SPEKK_AGENT_ID` | For repository chat | ID of the registered agent. The agent uses it to ask the control host for repository access and for a Git token. `create`, `provision`, `register`, and `setup-credentials.sh` write it. Without it, each chat turn that selects a repository fails with "agent or session ID is missing" |
 | `SPEKK_HOST` | Yes | Control host the agent connects to |
 | `WORKSPACE` | No | Working directory for Claude sessions (default: `/opt/spekk/workspace`) |
 | `SPEKK_AGENT_NAME` | No | `spekk-<name>`. The agent binary does not read it; `setup-credentials.sh` uses it as the git author name |
