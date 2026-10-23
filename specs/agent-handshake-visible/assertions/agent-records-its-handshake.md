@@ -23,6 +23,8 @@ status: done
 - The write replaces the file in one step (a temporary file and a rename), so a reader never sees a part of the record.
 - A write that fails does not stop the agent. The agent logs the first write failure of the process with its cause, and not each later one, so that a dial loop does not fill the log.
 
+**Known limit.** A protocol reject (close 4004) comes after a completed WebSocket handshake, so the record shows that dial as a success. The agent logs the reject, and `spekk sandbox status` already warns about an agent binary that is not the current release, which is the cause of a reject.
+
 ## Test
 
 One test with the real `AgentClient.Run` against a test server that refuses the first dial with HTTP 403 and accepts the next one. Assert that the record shows the 403 failure, and then the success, with the failure still in it.
