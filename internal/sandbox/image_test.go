@@ -71,6 +71,8 @@ func builderOnDisk(t *testing.T) string {
 		"root/.ssh/authorized_keys":        "ssh-ed25519 AAAA builder\n",
 		"home/agent/.docker/config.json":   `{"credsStore": "desktop"}`,
 		"home/agent/.claude/settings.json": `{"autoUpdatesChannel": "stable"}`,
+		// The recipient key of an agent client that ran on the builder.
+		"home/agent/.config/spekk-agent/secret-key": "dwdtCnMYpX08FsFyUbJmRd9ML4frwJkqsXf7pR25LCo=\n",
 		// Not secrets: code that names a key header, a test key of an
 		// installed package, the key of the AWS documentation, a token
 		// prefix inside base64, and a test value with a token prefix.
@@ -183,7 +185,7 @@ func TestBuildImage(t *testing.T) {
 				img.OSVersion != "Ubuntu 24.04.3 LTS" || len(img.SetupSHA256) != 64 || img.CreatedAt == "" || img.SpekkVersion == "" {
 				t.Fatalf("image record = %+v", img)
 			}
-			for _, gone := range []string{"etc/ssh/ssh_host_ed25519_key", "home/agent/.ssh/authorized_keys", "home/agent/.bash_history", "opt/spekk/.provisioned", "home/agent/.claude", tc.plant} {
+			for _, gone := range []string{"etc/ssh/ssh_host_ed25519_key", "home/agent/.ssh/authorized_keys", "home/agent/.bash_history", "opt/spekk/.provisioned", "home/agent/.claude", "home/agent/.config/spekk-agent", tc.plant} {
 				if gone == "" {
 					continue
 				}

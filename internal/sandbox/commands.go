@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -580,9 +581,26 @@ func expiresCell(meta *SandboxMeta, now time.Time) string {
 
 // --- Status ---
 
+// statusOutput prints the fields of status. Text prints each line at once,
+// so a person sees each SSH check as it ends. JSON keeps each value and
+// prints one object at the end, with the same values as the text.
+type statusOutput struct {
+	json   bool
+	fields map[string]any
+}
+
+func (o *statusOutput) add(key, label string, value any) {
+	if o.json {
+		o.fields[key] = value
+		return
+	}
+	fmt.Printf("%s: %v\n", label, value)
+}
+
 // Status shows detailed info for a named sandbox, using the Provider
-// to fetch live VM state.
-func Status(p Provider, name string) error {
+// to fetch live VM state. jsonOut prints one JSON object in place of the
+// text lines. Warnings go to stderr in both forms.
+func Status(p Provider, name string, jsonOut bool) error {
 	sandbox, err := GetSandbox(name)
 	if err != nil {
 		return err
@@ -591,22 +609,23 @@ func Status(p Provider, name string) error {
 		return fmt.Errorf("sandbox %q not found", name)
 	}
 
-	fmt.Printf("Sandbox: %s\n", name)
-	fmt.Printf("Provider: %s\n", orUnknown(providerName(sandbox)))
+	out := &statusOutput{json: jsonOut, fields: map[string]any{}}
+	out.add("sandbox", "Sandbox", name)
+	out.add("provider", "Provider", orUnknown(providerName(sandbox)))
 	if sandbox.DropletID != 0 {
-		fmt.Printf("Droplet ID: %d\n", sandbox.DropletID)
+		out.add("droplet_id", "Droplet ID", sandbox.DropletID)
 	}
 	if sandbox.GCPInstance != "" {
-		fmt.Printf("VM: %s\n", sandbox.GCPInstance)
+		out.add("vm", "VM", sandbox.GCPInstance)
 	}
-	fmt.Printf("IP: %s\n", orUnknown(sandbox.IP))
-	fmt.Printf("Region: %s\n", orUnknown(sandbox.Region))
-	fmt.Printf("Size: %s\n", orUnknown(sandbox.Size))
-	fmt.Printf("Created: %s\n", orUnknown(sandbox.CreatedAt))
-	fmt.Printf("Kind: %s\n", sandbox.KindOf())
-	fmt.Printf("Purpose: %s\n", orDash(sandbox.Purpose))
-	fmt.Printf("Expires: %s\n", expiresCell(sandbox, time.Now()))
-	fmt.Printf("Created by: %s\n", orDash(sandbox.CreatedBy))
+	out.add("ip", "IP", orUnknown(sandbox.IP))
+	out.add("region", "Region", orUnknown(sandbox.Region))
+	out.add("size", "Size", orUnknown(sandbox.Size))
+	out.add("created", "Created", orUnknown(sandbox.CreatedAt))
+	out.add("kind", "Kind", sandbox.KindOf())
+	out.add("purpose", "Purpose", orDash(sandbox.Purpose))
+	out.add("expires", "Expires", expiresCell(sandbox, time.Now()))
+	out.add("created_by", "Created by", orDash(sandbox.CreatedBy))
 
 	// Fetch live status from the provider. A nil provider has two causes:
 	// no cloud owns this machine, which is normal and silent, or one could
@@ -622,22 +641,33 @@ func Status(p Provider, name string) error {
 	} else if live != "" {
 		vmStatus = live
 	}
-	fmt.Printf("VM status: %s\n", vmStatus)
+	out.add("vm_status", "VM status", vmStatus)
 
 	// SSH checks
 	provisioned := sshCheck(sandbox, name, "test -f /opt/spekk/.provisioned && echo yes || echo no")
-	fmt.Printf("Provisioned: %s\n", provisioned)
+	out.add("provisioned", "Provisioned", provisioned)
 
 	agentStatus := sshCheck(sandbox, name, "systemctl is-active spekk-agent 2>/dev/null || echo unknown")
-	fmt.Printf("Agent service: %s\n", agentStatus)
+	out.add("agent_service", "Agent service", agentStatus)
 
 	// The service is active while the control host refuses every dial, so
 	// the handshake record is what tells a refused agent from a healthy one.
-	connected, failure := agentconn.Describe(sshCheck(sandbox, name, "cat "+agentconn.Path+" 2>/dev/null || echo "+agentconn.Missing))
-	fmt.Printf("Agent last connected: %s\n", connected)
-	fmt.Printf("Agent last handshake failure: %s\n", failure)
+	record := sshCheck(sandbox, name, "cat "+agentconn.Path+" 2>/dev/null || echo "+agentconn.Missing)
+	connected, failure := agentconn.Describe(record)
+	out.add("agent_last_connected", "Agent last connected", connected)
+	out.add("agent_last_handshake_failure", "Agent last handshake failure", failure)
+	// An org admin compares this with the Secrets section of spekk-app
+	// before accepting the key of the sandbox.
+	out.add("secret_key_fingerprint", "Secret key fingerprint", agentconn.DescribeSecretKey(record))
 
-	printBinaryVersions(sandbox, name)
+	printBinaryVersions(out, sandbox, name)
+	if jsonOut {
+		data, err := json.MarshalIndent(out.fields, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+	}
 	return nil
 }
 
@@ -656,7 +686,7 @@ func versionCommand(user, run, filter string) string {
 // printBinaryVersions prints the version of each spekk binary on the
 // machine, with a warning when it is not the release that a deploy with no
 // --release installs.
-func printBinaryVersions(sandbox *SandboxMeta, name string) {
+func printBinaryVersions(out *statusOutput, sandbox *SandboxMeta, name string) {
 	want := releaseTag("")
 	wantName := want + ", the release of this spekk"
 	if want == "latest" {
@@ -669,16 +699,27 @@ func printBinaryVersions(sandbox *SandboxMeta, name string) {
 		}
 	}
 	user := sshUser(sandbox)
-	for _, b := range []struct{ label, command string }{
-		{"spekk CLI", versionCommand(user, "/opt/spekk/cli/spekk version", "")},
-		{"Agent client", versionCommand(user, "/opt/spekk/agent-client --version", ` | sed -n 's/^version: //p'`)},
+	for _, b := range []struct{ key, label, command string }{
+		{"spekk_cli", "spekk CLI", versionCommand(user, "/opt/spekk/cli/spekk version", "")},
+		{"agent_client", "Agent client", versionCommand(user, "/opt/spekk/agent-client --version", ` | sed -n 's/^version: //p'`)},
 	} {
 		got := sshCheck(sandbox, name, b.command)
-		line := fmt.Sprintf("%s: %s", b.label, got)
+		warning := ""
 		if reason := versionDrift(got, want, wantName); reason != "" {
-			line += fmt.Sprintf("  WARNING: %s; update with: spekk sandbox deploy %s", reason, name)
+			warning = fmt.Sprintf("%s; update with: spekk sandbox deploy %s", reason, name)
 		}
-		fmt.Println(line)
+		if out.json {
+			out.fields[b.key] = got
+			if warning != "" {
+				out.fields[b.key+"_warning"] = warning
+			}
+			continue
+		}
+		line := got
+		if warning != "" {
+			line += "  WARNING: " + warning
+		}
+		out.add(b.key, b.label, line)
 	}
 }
 

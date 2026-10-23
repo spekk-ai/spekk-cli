@@ -1127,7 +1127,7 @@ SUBCOMMANDS:
   provision   Finish a sandbox that create left at "provisioning"
   register    Register a sandbox on the control host with your API token
   list        List sandboxes, their kind and their expiry
-  status      Show status of a sandbox
+  status      Show status of a sandbox (--json for one JSON object)
   ssh         SSH into a sandbox
   destroy     Destroy a sandbox, or deregister a machine you own
   deploy      Deploy agent client to a sandbox
@@ -1258,12 +1258,19 @@ func launchSandbox(args []string) {
 	case "list":
 		listSandboxes(subArgs)
 	case "status":
-		if len(subArgs) == 0 {
-			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox status <name>")
+		if len(subArgs) == 0 || strings.HasPrefix(subArgs[0], "-") {
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox status <name> [--json]")
 			os.Exit(1)
 		}
 		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		statusFlags := cli.ParseFlags(subArgs[1:], cli.FlagSet{
+			"json": {Names: []string{"--json"}, Type: cli.BoolFlag},
+		})
+		if statusFlags.Err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", statusFlags.Err)
 			os.Exit(1)
 		}
 		// Status reads more than the provider knows, so a provider it
@@ -1276,7 +1283,7 @@ func launchSandbox(args []string) {
 		if err != nil && !errors.Is(err, sandbox.ErrSandboxNotFound) {
 			fmt.Fprintf(os.Stderr, "Warning: %s\n", err)
 		}
-		if err := sandbox.Status(p, subArgs[0]); err != nil {
+		if err := sandbox.Status(p, subArgs[0], statusFlags.Bool("json")); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}

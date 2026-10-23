@@ -882,13 +882,16 @@ spekk sandbox list --all-hosts           # Also the labeled sandboxes that other
 
 `--all-hosts` lists the DigitalOcean droplets with the `spekk-sandbox` tag, and the GCP VMs with a `spekk-kind` label in the default gcloud project. For each cloud that it cannot ask (no token, no `gcloud`, or an API error), it prints one line on stderr with the reason. Expiry is a reminder only: spekk never destroys a sandbox because it expired. See [Sandbox kinds](advanced/sandbox-architecture.md#sandbox-kinds).
 
-### `spekk sandbox status <name>`
+### `spekk sandbox status <name> [--json]`
 
 Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and five SSH checks: the provisioned marker, the `spekk-agent` service, the handshake record of the agent, and the version of the spekk CLI and of the agent binary on the machine. The two version commands run as `agent`, which owns both binaries, and not as the login user.
 
 ```bash
 spekk sandbox status my-sandbox
+spekk sandbox status my-sandbox --json
 ```
+
+`--json` prints one JSON object with the same values as the text lines, with snake_case keys (for example `agent_service` and `secret_key_fingerprint`). A version warning is in its own key, for example `agent_client_warning`. Warnings about the provider stay on stderr.
 
 When the cloud API cannot be reached, or the provider cannot be built because its token is missing, `status` prints a warning and shows the stored status marked `(stored)`. For a machine spekk did not create there is no live state, and the stored status is shown with no warning.
 
@@ -909,6 +912,14 @@ Agent last handshake failure: 2026-10-23T05:10:00.123Z (HTTP 403)  WARNING: the 
 ```
 
 An agent binary older than this check writes no record, and the lines then say `unknown (no record; ...)`.
+
+The `Secret key fingerprint` line shows the fingerprint of the key that the agent uses to receive secrets from the control host: the first 16 hex characters of SHA-256 of its X25519 public key. The agent keeps the private key in `/home/agent/.config/spekk-agent/secret-key` (mode 0600) and never sends or logs it. The Secrets section of spekk-app shows the fingerprint of the key that the sandbox sent. An organization admin compares the two values before accepting the key. For example:
+
+```
+Secret key fingerprint: 300c9c9603b92a4b
+```
+
+When the agent refused its key file (a file that other users can read, a symbolic link, or contents that are not a key), the line says `none (<reason>)`. The agent does not replace the file. Fix or remove it, then restart the agent: a new key needs a new accept in the Secrets section. An agent binary older than this check says `unknown (no fingerprint in the record; ...)`.
 
 ### `spekk sandbox ssh <name> [ssh-flags...]`
 

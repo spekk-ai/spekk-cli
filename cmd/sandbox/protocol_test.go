@@ -24,7 +24,7 @@ func TestDialOptionsSendBothHeaders(t *testing.T) {
 func TestWelcomeOlderMinorDoesNotWarn(t *testing.T) {
 	c := &AgentClient{}
 	buf := captureLog(t)
-	c.handleWelcome(Message{Type: MessageTypeWelcome, Protocol: "1.0"})
+	c.handleWelcome(t.Context(), Message{Type: MessageTypeWelcome, Protocol: "1.0"})
 	if out := buf.String(); strings.Contains(out, "WARNING") {
 		t.Fatalf("a 1.0 control host must not warn a %s client:\n%s", ProtocolVersion, out)
 	}
@@ -33,7 +33,7 @@ func TestWelcomeOlderMinorDoesNotWarn(t *testing.T) {
 func TestWelcomeMajorMismatchWarns(t *testing.T) {
 	c := &AgentClient{}
 	buf := captureLog(t)
-	c.handleWelcome(Message{Type: MessageTypeWelcome, Protocol: "2.0"})
+	c.handleWelcome(t.Context(), Message{Type: MessageTypeWelcome, Protocol: "2.0"})
 	out := buf.String()
 	if !strings.Contains(out, "WARNING") || !strings.Contains(out, "2.0") || !strings.Contains(out, ProtocolVersion) {
 		t.Fatalf("mismatch warning must name both versions:\n%s", out)
