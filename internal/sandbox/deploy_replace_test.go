@@ -330,3 +330,44 @@ func TestInstallCommandRefusesAWrongSHA256(t *testing.T) {
 		})
 	}
 }
+
+// The machine downloads both builds and keeps them only when each matches
+// the release sha256, so the install sees two checked files or none.
+func TestFetchCommandChecksTheDownloads(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the remote fetch script requires a Unix shell")
+	}
+	bin := t.TempDir()
+	// A stub curl that writes "bytes of <asset>" to the -o path.
+	curl := "#!/bin/sh\nwhile [ $# -gt 1 ]; do [ \"$1\" = -o ] && out=$2; shift; done\nprintf 'bytes of %s' \"${1##*/}\" > \"$out\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "curl"), []byte(curl), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	for name, tc := range map[string]struct {
+		cliSHA string
+		ok     bool
+	}{
+		"match":    {sha256Hex("bytes of spekk-linux-arm64"), true},
+		"mismatch": {sha256Hex("something else"), false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			a := &releaseArtifacts{Version: "v1.2.3", arch: "arm64", AgentSHA256: sha256Hex("bytes of sandbox-linux-arm64"), CLISHA256: tc.cliSHA}
+			output, err := exec.Command("bash", "-c", fetchCommand(a)).CombinedOutput()
+			if (err == nil) != tc.ok {
+				t.Fatalf("fetch: %v, output %q", err, output)
+			}
+			for _, f := range []string{stagedBinary, stagedCLI} {
+				if _, err := os.Stat(filepath.Join(home, f)); (err == nil) != tc.ok {
+					t.Errorf("%s staged = %v, want %v", f, err == nil, tc.ok)
+				}
+			}
+			if !tc.ok && !strings.Contains(string(output), "spekk-linux-arm64 does not match the release sha256") {
+				t.Errorf("output %q should name the asset that does not match", output)
+			}
+		})
+	}
+}
