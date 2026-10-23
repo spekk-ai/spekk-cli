@@ -32,6 +32,7 @@ func (w *Worker) Run(ctx context.Context, cfg Config, conns *connHolder, pool *W
 
 	for {
 		w.endDropped(ctx, conns)
+		afterEndDropped()
 		if msg, ok := w.next(); ok {
 			w.invoke(ctx, cfg, conns, msg)
 			continue
@@ -45,13 +46,23 @@ func (w *Worker) Run(ctx context.Context, cfg Config, conns *connHolder, pool *W
 	}
 }
 
+// afterEndDropped runs between endDropped and next. It does nothing, and a
+// test replaces it to hold the runner in the window where a cancel and a new
+// message can arrive between the two.
+var afterEndDropped = func() {}
+
 // next takes the next queued message, if there is one. It takes it under
 // mu, the mutex Cancel holds while it empties the queue, so each message
 // that was queued before a cancel is either removed by that cancel or is
-// the turn in flight that the cancel marks.
+// the turn in flight that the cancel marks. It takes no message while a
+// cancel's removed messages wait for their frames: a cancel can land after
+// endDropped released mu, and the loop must end those turns first.
 func (w *Worker) next() (Message, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if len(w.dropped) > 0 {
+		return Message{}, false
+	}
 	select {
 	case msg := <-w.msgs:
 		w.cancelled = false

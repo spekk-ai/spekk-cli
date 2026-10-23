@@ -26,4 +26,5 @@ status: done
 Real tests through the real `AgentClient` dispatch path, with the fake `claude` of `reconnect_test.go`:
 
 - Dispatch one turn, and queue two follow-ups while it runs. Send a `cancel` frame. Wait until the pool releases the worker. Assert that the fake `claude` ran exactly once, and that the host received three `error` frames for the session: first the frame of the signaled turn, then one "cancelled before it started" frame for each removed message.
+- Hold the runner after the first turn ends, between the send of the removed-message frames and the take of the next message. Send a cancel and then a new message in that window. Assert that the frames that end a turn come in this order: the first `result`, the two "cancelled before it started" frames, then the `result` of the new message.
 - With no cancel, dispatch one turn and two follow-ups. Assert that all three turns run and that the host receives three `result` frames.

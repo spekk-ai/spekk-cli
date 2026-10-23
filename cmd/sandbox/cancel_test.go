@@ -206,3 +206,70 @@ func TestCancelBeforeTheProcessStartsStopsTheTurn(t *testing.T) {
 		t.Errorf("the fake claude ran %d turns, want 1: only the message after the cancel", n)
 	}
 }
+
+// TestCancelBetweenTurnsEndsTheDroppedTurnsFirst holds the runner after the
+// first turn ended, between endDropped and next. A cancel and then a new
+// message arrive in that window. The runner must end the two removed turns
+// before the new message starts a turn: the control host ends the oldest open
+// turn for each frame, so a result that goes first ends the wrong turn.
+func TestCancelBetweenTurnsEndsTheDroppedTurnsFirst(t *testing.T) {
+	markers := fakeClaude(t)
+	inWindow := make(chan struct{})
+	proceed := make(chan struct{})
+	var calls atomic.Int32
+	afterEndDropped = func() {
+		// The first call is before the first turn. Hold the second one.
+		if calls.Add(1) == 2 {
+			close(inWindow)
+			<-proceed
+		}
+	}
+	t.Cleanup(func() { afterEndDropped = func() {} })
+
+	client, host, conn := startCancelClient(t)
+	dispatchTurn(t, conn)
+	waitForFile(t, markers.started, 20*time.Second, "the fake claude never started")
+	queueFollowUps(t, client, conn, 2)
+	if err := os.WriteFile(markers.release, nil, 0o644); err != nil {
+		t.Fatalf("release the turns: %v", err)
+	}
+
+	select {
+	case <-inWindow:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the runner never reached the window after the first turn")
+	}
+	if removed := client.pool.Cancel(cancelSession); removed != 2 {
+		t.Errorf("the cancel removed %d queued messages, want 2", removed)
+	}
+	queueFollowUps(t, client, conn, 1)
+	close(proceed)
+
+	var order []string
+	deadline := time.After(20 * time.Second)
+	for len(order) < 4 {
+		select {
+		case got := <-host.frames:
+			switch got.frame["type"] {
+			case MessageTypeResult:
+				order = append(order, "result")
+			case MessageTypeError:
+				detail, _ := got.frame["error"].(string)
+				order = append(order, "error: "+detail)
+			}
+		case <-deadline:
+			t.Fatalf("timed out, the frames that end a turn so far: %q", order)
+		}
+	}
+	dropped := "error: " + cancelledBeforeStartDetail
+	want := []string{"result", dropped, dropped, "result"}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Errorf("the frames that end a turn = %q, want %q", order, want)
+			break
+		}
+	}
+	// The release also orders the last read of the hook before the cleanup
+	// that restores it.
+	waitForRelease(t, client)
+}
