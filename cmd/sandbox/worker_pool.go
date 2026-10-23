@@ -70,8 +70,8 @@ func (p *WorkerPool) Dispatch(msg Message) (start *Worker, accepted bool) {
 	return w, true
 }
 
-// finish releases the worker's slot when its queue is empty, and reports
-// whether the worker is done.
+// finish releases the worker's slot when its queue is empty and no removed
+// message waits for its frame, and reports whether the worker is done.
 //
 // The emptiness test and the release share the mutex Dispatch holds, so a
 // message queued at the last moment is never stranded by a runner that has
@@ -81,7 +81,9 @@ func (p *WorkerPool) Dispatch(msg Message) (start *Worker, accepted bool) {
 func (p *WorkerPool) finish(w *Worker) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(w.msgs) > 0 {
+	// A cancel can remove a message after the runner found the queue
+	// empty. The runner must still end that message's turn.
+	if len(w.msgs) > 0 || w.hasDropped() {
 		return false
 	}
 	p.releaseLocked(w)
@@ -108,14 +110,14 @@ func (p *WorkerPool) releaseLocked(w *Worker) {
 	p.work <- struct{}{}
 }
 
-// Cancel stops a session and returns the queued messages it removed. A
-// session with no worker has nothing to stop.
-func (p *WorkerPool) Cancel(agentSessionID string) []Message {
+// Cancel stops a session and returns how many queued messages it removed.
+// A session with no worker has nothing to stop.
+func (p *WorkerPool) Cancel(agentSessionID string) int {
 	p.mu.Lock()
 	w, ok := p.sessions[agentSessionID]
 	p.mu.Unlock()
 	if !ok {
-		return nil
+		return 0
 	}
 	return w.Cancel()
 }

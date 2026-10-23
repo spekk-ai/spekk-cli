@@ -138,7 +138,7 @@ The agent runs a pool of five workers. Each worker handles one `agent_session_id
 
 - A message for an active `agent_session_id` joins that worker's queue, which holds 10 messages. One runner drains the queue. A follow-up starts no second runner. A full queue is refused, not waited on, because the enqueue happens under the pool lock, and a wait there would stall the dispatch of every other session.
 - When a worker finishes its queue, the slot is released for a new session. The emptiness check and the release share the pool lock, so a message that arrives at the last moment is never left on a worker nobody drains.
-- A `cancel` frame sends SIGTERM to the worker's running Claude process and removes every queued message of that session. The agent sends one `error` frame with `agent_session_id` for each removed message, because the control host opened a turn for each dispatch. A cancel that arrives before the turn's process starts is kept on the worker, and that turn ends with an `error` frame and starts no process. A message that arrives after the cancel runs as usual.
+- A `cancel` frame sends SIGTERM to the worker's running Claude process and removes every queued message of that session. The agent sends one `error` frame with `agent_session_id` for each removed message, because the control host opened a turn for each dispatch. These frames go after the terminal frame of the running turn, in the order the messages arrived, because the control host ends the oldest open turn of the session for each terminal frame. A cancel that arrives before the turn's process starts is kept on the worker, and that turn ends with an `error` frame and starts no process. A message that arrives after the cancel runs as usual.
 
 ## Claude invocation
 

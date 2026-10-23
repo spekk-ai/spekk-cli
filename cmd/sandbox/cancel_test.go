@@ -105,8 +105,18 @@ func TestCancelStopsTheQueuedTurns(t *testing.T) {
 		t.Fatalf("send cancel: %v", err)
 	}
 
-	// One frame for the signaled turn and one for each removed message.
-	awaitSessionErrors(t, host, 3)
+	// One frame for the signaled turn and one for each removed message. The
+	// control host ends the oldest open turn for each frame, so the signaled
+	// turn's frame must come first.
+	frames := awaitSessionErrors(t, host, 3)
+	if detail, _ := frames[0]["error"].(string); !strings.HasPrefix(detail, "claude exited") {
+		t.Errorf("first error = %q, want the signaled turn's frame", detail)
+	}
+	for i, f := range frames[1:] {
+		if f["error"] != cancelledBeforeStartDetail {
+			t.Errorf("error %d = %v, want %q", i+1, f["error"], cancelledBeforeStartDetail)
+		}
+	}
 	waitForRelease(t, client)
 
 	if n := runCount(t, markers); n != 1 {
@@ -178,8 +188,8 @@ func TestCancelBeforeTheProcessStartsStopsTheTurn(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		t.Fatal("the turn never reached the start of its process")
 	}
-	if removed := client.pool.Cancel(cancelSession); len(removed) != 0 {
-		t.Errorf("the cancel removed %d queued messages, want 0", len(removed))
+	if removed := client.pool.Cancel(cancelSession); removed != 0 {
+		t.Errorf("the cancel removed %d queued messages, want 0", removed)
 	}
 	queueFollowUps(t, client, conn, 1)
 	close(proceed)
