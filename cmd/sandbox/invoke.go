@@ -15,6 +15,11 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
 )
 
+// beforeTurnStart runs just before invoke checks for a cancel and starts the
+// process. It does nothing, and a test replaces it to hold a turn in the
+// window between the dispatch and the process start.
+var beforeTurnStart = func() {}
+
 func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg Message) {
 	workspace := cfg.Workspace
 	if msg.Repository != nil {
@@ -95,12 +100,21 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		return
 	}
 
+	// The cancel check, the start, and the publish of the process share one
+	// critical section with Cancel. A cancel before it stops the turn here,
+	// and a cancel after it finds the process and signals it.
+	beforeTurnStart()
+	w.mu.Lock()
+	if w.cancelled {
+		w.mu.Unlock()
+		sendError(ctx, conns, msg.AgentSessionID, cancelledBeforeStartDetail)
+		return
+	}
 	if err := cmd.Start(); err != nil {
+		w.mu.Unlock()
 		sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("start claude: %v", err))
 		return
 	}
-
-	w.mu.Lock()
 	w.current = cmd.Process
 	w.mu.Unlock()
 	defer func() {

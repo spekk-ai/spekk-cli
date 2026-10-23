@@ -262,6 +262,13 @@ func (c *AgentClient) handleMessage(ctx context.Context, msg Message) {
 	go w.Run(c.procCtx, c.cfg, c.conns, c.pool)
 }
 
+// cancelledBeforeStartDetail ends a turn that a cancel stopped before its
+// process started.
+const cancelledBeforeStartDetail = "Cancelled before the turn started."
+
+// handleCancel stops the session. The session's runner ends the turn of
+// each queued message that the cancel removed, so the read loop does not
+// wait for those frames.
 func (c *AgentClient) handleCancel(msg Message) {
 	c.pool.Cancel(msg.AgentSessionID)
 }

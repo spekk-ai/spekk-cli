@@ -91,7 +91,7 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 |------|---------|--------|
 | `welcome` | Declare the control host's protocol version on connect | `protocol`, optional `capabilities` |
 | `message` | Start or continue a Claude session | `text`, `system_prompt`, `session_id`, `agent_session_id`, `attachments`, optional `repository` |
-| `cancel` | Stop the running Claude process of a session | `agent_session_id` |
+| `cancel` | Stop a session: its running Claude process and its queued messages | `agent_session_id` |
 | `heartbeat_ack` | Reply to the agent's heartbeat | none |
 | `error` | Report an error, for example a rejected `conversation_open` | `error`, `detail` |
 | `terminal_open` | Start the Claude Code login in a terminal | `terminal_id`, `cols`, `rows`, `agent_id`, `user_id` |
@@ -138,7 +138,7 @@ The agent runs a pool of five workers. Each worker handles one `agent_session_id
 
 - A message for an active `agent_session_id` joins that worker's queue, which holds 10 messages. One runner drains the queue. A follow-up starts no second runner. A full queue is refused, not waited on, because the enqueue happens under the pool lock, and a wait there would stall the dispatch of every other session.
 - When a worker finishes its queue, the slot is released for a new session. The emptiness check and the release share the pool lock, so a message that arrives at the last moment is never left on a worker nobody drains.
-- A `cancel` frame sends SIGTERM to the worker's running Claude process. It does not clear that session's queue, so a queued follow-up still runs. Issue [#212](https://github.com/spekk-ai/spekk-cli/issues/212) tracks this.
+- A `cancel` frame sends SIGTERM to the worker's running Claude process and removes every queued message of that session. The agent sends one `error` frame with `agent_session_id` for each removed message, because the control host opened a turn for each dispatch. These frames go after the terminal frame of the running turn, in the order the messages arrived, because the control host ends the oldest open turn of the session for each terminal frame. A cancel that arrives before the turn's process starts is kept on the worker, and that turn ends with an `error` frame and starts no process. A message that arrives after the cancel runs as usual.
 
 ## Claude invocation
 
