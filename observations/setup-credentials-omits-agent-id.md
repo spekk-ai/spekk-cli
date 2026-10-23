@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-10-23T18:00:00Z
+announced: 2026-10-23T19:02:43Z
 affected:
   - infrastructure/sandbox/setup-credentials.sh
   - specs/agent-repository-preparation/assertions/every-host-knows-its-agent-id.md
