@@ -1,20 +1,20 @@
 package main
 
 type Message struct {
-	Type           string       `json:"type"`
-	Text           string       `json:"text"`
-	SystemPrompt   string       `json:"system_prompt"`
-	SessionID      string       `json:"session_id"`
-	AgentSessionID string       `json:"agent_session_id"`
-	Attachments    []Attachment `json:"attachments"`
-	Error          string       `json:"error"`
+	Type           string             `json:"type"`
+	Text           string             `json:"text"`
+	SystemPrompt   string             `json:"system_prompt"`
+	SessionID      string             `json:"session_id"`
+	AgentSessionID string             `json:"agent_session_id"`
+	Attachments    []Attachment       `json:"attachments"`
+	Error          string             `json:"error"`
+	Detail         string             `json:"detail"`
+	Protocol       string             `json:"protocol"`
+	Repository     *RepositoryRequest `json:"repository,omitempty"`
+	Capabilities   []string           `json:"capabilities"`
 	// Message is the text of an error frame in the older form, for example
 	// "Unknown message type: secrets_hello".
-	Message      string             `json:"message"`
-	Detail       string             `json:"detail"`
-	Protocol     string             `json:"protocol"`
-	Repository   *RepositoryRequest `json:"repository,omitempty"`
-	Capabilities []string           `json:"capabilities"`
+	Message string `json:"message"`
 
 	// The sign-in terminal frames (terminal.go). No field names a program.
 	TerminalID string `json:"terminal_id"`

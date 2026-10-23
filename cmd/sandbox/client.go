@@ -63,6 +63,9 @@ func NewAgentClient(cfg Config) *AgentClient {
 // continues to serve turns.
 func (c *AgentClient) loadSecretKey() {
 	if c.cfg.SecretKeyPath == "" {
+		// Clear a fingerprint that an earlier start left in the record:
+		// status must not show a key that this process does not send.
+		c.record.secretKey("", "no path for the recipient key")
 		return
 	}
 	key, err := loadRecipientKey(c.cfg.SecretKeyPath)
