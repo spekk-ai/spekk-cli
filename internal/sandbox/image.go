@@ -371,6 +371,9 @@ homes() {
 }
 while IFS= read -r H; do
   rm -f "$H/.ssh/authorized_keys" "$H"/.*_history "$H/.viminfo"
+  # The recipient key of the agent client makes the sandbox its own
+  # machine, as a host key does: each sandbox must make its own.
+  rm -rf "$H/.config/spekk-agent"
   # The Claude Code installer writes its settings. A sign-in in them is a
   # credential, so it stays, and the check below fails on it.
   if [ ! -e "$H/.claude/.credentials.json" ]; then rm -rf "$H/.claude" "$H/.claude.json"; fi

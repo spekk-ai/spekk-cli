@@ -106,6 +106,9 @@ var agentSecrets = []string{
 	// agent's login shell. Nothing writes it now, but a machine
 	// credentialed before then still carries it.
 	"/home/agent/.bashrc.d/spekk.sh",
+	// The recipient key of the secrets that the control host seals to this
+	// sandbox. A new agent on the machine makes its own key.
+	"/home/agent/.config/spekk-agent",
 }
 
 // stopAgentService stops the spekk-agent service on an unmanaged machine and

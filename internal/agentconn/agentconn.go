@@ -30,6 +30,11 @@ type Record struct {
 	// the dial got no HTTP response.
 	LastFailureStatus int    `json:"last_handshake_failure_status,omitempty"`
 	LastFailureError  string `json:"last_handshake_failure_error,omitempty"`
+	// SecretKeyFingerprint is the fingerprint of the recipient key of the
+	// secrets, and SecretKeyError is why the agent refused its key file
+	// (specs/sandbox-secret-recipient-key/). The record never holds a key.
+	SecretKeyFingerprint string `json:"secret_key_fingerprint,omitempty"`
+	SecretKeyError       string `json:"secret_key_error,omitempty"`
 }
 
 // Missing and Unknown are the SSH answers that are not a record: the file is
@@ -46,17 +51,9 @@ const notConnectedWarning = "  WARNING: the agent is not connected to the contro
 // Describe turns the SSH answer for the record into the two status values:
 // the last connection and the last handshake failure.
 func Describe(answer string) (connected, failure string) {
-	switch answer {
-	case Unknown:
-		return Unknown, Unknown
-	case Missing:
-		const none = "unknown (no record; the agent-client may be older than this check)"
-		return none, none
-	}
-	var r Record
-	if err := json.Unmarshal([]byte(answer), &r); err != nil {
-		const bad = "unknown (the record is not valid)"
-		return bad, bad
+	r, problem := parse(answer)
+	if problem != "" {
+		return problem, problem
 	}
 
 	connected = orNever(r.LastConnectedAt)
@@ -73,6 +70,37 @@ func Describe(answer string) (connected, failure string) {
 		failure += notConnectedWarning
 	}
 	return connected, failure
+}
+
+// DescribeSecretKey turns the SSH answer for the record into the status value
+// of the recipient key: its fingerprint, or "none" with the reason why the
+// agent refused its key file.
+func DescribeSecretKey(answer string) string {
+	r, problem := parse(answer)
+	switch {
+	case problem != "":
+		return problem
+	case r.SecretKeyFingerprint != "":
+		return r.SecretKeyFingerprint
+	case r.SecretKeyError != "":
+		return "none (" + r.SecretKeyError + ")"
+	}
+	return "unknown (no fingerprint in the record; the agent-client may be older than this check)"
+}
+
+// parse reads the SSH answer for the record. problem is the status value
+// when the answer is not a record.
+func parse(answer string) (r Record, problem string) {
+	switch answer {
+	case Unknown:
+		return r, Unknown
+	case Missing:
+		return r, "unknown (no record; the agent-client may be older than this check)"
+	}
+	if err := json.Unmarshal([]byte(answer), &r); err != nil {
+		return r, "unknown (the record is not valid)"
+	}
+	return r, ""
 }
 
 // failedLast reports whether the last dial of the record failed. A time that

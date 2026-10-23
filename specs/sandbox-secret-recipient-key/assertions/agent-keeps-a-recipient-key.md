@@ -3,8 +3,7 @@ id: agent-keeps-a-recipient-key
 parent: sandbox-secret-recipient-key
 created: 2026-10-23T11:00:00Z
 priority: 1
-status: in_progress
-locked-by: builder-spekk-tmp-chatctx-215287-1792751248
+status: done
 ---
 
 # The agent client keeps one X25519 key pair over restarts and refuses a key file that is not safe

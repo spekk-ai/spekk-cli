@@ -50,6 +50,14 @@ func (r *connectionRecorder) connected(at time.Time) {
 	r.write()
 }
 
+// secretKey records the result of the recipient key load: the fingerprint,
+// or the reason why the agent refused the key file. Neither is a secret.
+func (r *connectionRecorder) secretKey(fingerprint, reason string) {
+	r.record.SecretKeyFingerprint = fingerprint
+	r.record.SecretKeyError = reason
+	r.write()
+}
+
 // failed records a dial that did not complete the handshake. resp is the
 // HTTP response of the handshake, which is nil when the host did not answer.
 func (r *connectionRecorder) failed(at time.Time, resp *http.Response, err error) {

@@ -282,6 +282,8 @@ func TestAgentSecretsInventory(t *testing.T) {
 		// the agent's login shell. Nothing writes it now, but a machine
 		// credentialed before then still carries a live key there.
 		"/home/agent/.bashrc.d/spekk.sh",
+		// The agent client makes its recipient key for secrets here.
+		"/home/agent/.config/spekk-agent",
 	}
 	if !slices.Equal(agentSecrets, want) {
 		t.Errorf("agentSecrets = %v, want %v", agentSecrets, want)

@@ -96,7 +96,7 @@ func TestDrainSpoolChecksWelcomeCapability(t *testing.T) {
 				t.Fatal(err)
 			}
 			client := &AgentClient{conns: newConnHolder()}
-			client.handleWelcome(welcome)
+			client.handleWelcome(t.Context(), welcome)
 			dir := t.TempDir()
 			writeRequestFile(t, dir, "req.json", tc.request)
 			buf := captureLog(t)
