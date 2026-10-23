@@ -306,6 +306,7 @@ The agent binary reads its configuration from `/etc/spekk/agent.env` on the sand
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `SPEKK_AGENT_TOKEN` | Yes | Bearer token for the control host |
+| `SPEKK_AGENT_ID` | For repository chat | ID of the registered agent, for repository access and Git tokens |
 | `SPEKK_HOST` | Yes | Hostname of the control host, for example `api.example.com` |
 | `WORKSPACE` | No | Working directory for Claude sessions (default: `/opt/spekk/workspace`) |
 

@@ -136,7 +136,7 @@ func Register(name, organization string) error {
 	fmt.Fprintf(os.Stderr, "Registered agent %s. Writing its token to %s...\n", agent.ID, machineRef(sandbox))
 
 	user := sshUser(sandbox)
-	if out, err := runSecretScript(sandbox.IP, sandbox.SSHKeyPath, name, user, buildTokenScript(agent.AuthToken)); err != nil {
+	if out, err := runSecretScript(sandbox.IP, sandbox.SSHKeyPath, name, user, buildTokenScript(agent.AuthToken, agent.ID)); err != nil {
 		revokeAbandoned(agent.ID, name)
 		return fmt.Errorf("writing the agent token to %s: %w\n%s", machineRef(sandbox), err, strings.TrimSpace(out))
 	}
@@ -159,33 +159,35 @@ func Register(name, organization string) error {
 	return nil
 }
 
-// buildTokenScript replaces the SPEKK_AGENT_TOKEN line of the agent's env
-// file and restarts the agent. Every other line stays, because it holds the
-// credentials that only the user's machine had. The token travels
-// base64-encoded, so no character of it can change the script, and umask
-// keeps the new file private before chmod runs.
+// buildTokenScript replaces the SPEKK_AGENT_TOKEN and SPEKK_AGENT_ID lines
+// of the agent's env file and restarts the agent. Every other line stays,
+// because it holds the credentials that only the user's machine had. The
+// token and the ID travel base64-encoded, so no character of them can
+// change the script, and umask keeps the new file private before chmod runs.
 //
 // The old file is kept as agent.env.bak until the restart succeeds. If any
 // step fails, the trap puts it back and restarts the agent with the old
 // token. Register then revokes the new agent, so the machine and the record
 // both still name the old one.
-func buildTokenScript(token string) string {
-	encoded := base64.StdEncoding.EncodeToString([]byte(token))
+func buildTokenScript(token, agentID string) string {
+	encodedToken := base64.StdEncoding.EncodeToString([]byte(token))
+	encodedID := base64.StdEncoding.EncodeToString([]byte(agentID))
 	return fmt.Sprintf(`set -e
 umask 077
 f=/etc/spekk/agent.env
 token=$(echo '%s' | base64 -d)
+agent_id=$(echo '%s' | base64 -d)
 mkdir -p /etc/spekk
 touch "$f"
 cp -p "$f" "$f.bak"
 trap 'rc=$?; if [ "$rc" -ne 0 ]; then rm -f "$f.new"; mv -f "$f.bak" "$f"; systemctl restart spekk-agent || true; fi; exit "$rc"' EXIT
-grep -v '^SPEKK_AGENT_TOKEN=' "$f" > "$f.new" || true
-printf 'SPEKK_AGENT_TOKEN=%%s\n' "$token" >> "$f.new"
+grep -v -e '^SPEKK_AGENT_TOKEN=' -e '^SPEKK_AGENT_ID=' "$f" > "$f.new" || true
+printf 'SPEKK_AGENT_TOKEN=%%s\nSPEKK_AGENT_ID=%%s\n' "$token" "$agent_id" >> "$f.new"
 chown agent:agent "$f.new"
 chmod 600 "$f.new"
 mv -f "$f.new" "$f"
 systemctl restart spekk-agent
-rm -f "$f.bak"`, encoded)
+rm -f "$f.bak"`, encodedToken, encodedID)
 }
 
 // readAgentToken is the seam Provision reads the machine's current agent

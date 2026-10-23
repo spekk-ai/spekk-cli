@@ -321,7 +321,7 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	}
 
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, mode, markerContent(meta)); err != nil {
+	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, meta.AgentID, mode, markerContent(meta)); err != nil {
 		return &stageError{"injecting credentials", err}
 	}
 
@@ -480,17 +480,19 @@ func Provision(name string, opts ProvisionOptions) error {
 	} else if agentToken, agentID, err = newAgentToken(name, opts.Organization); err != nil {
 		return err
 	}
+	// equip writes the agent ID of the record to the env file, so the
+	// record names the new agent before equip runs.
+	registered := sandbox.AgentID == "" && agentID != ""
+	sandbox.AgentID = agentID
 	if err := equip(sandbox, name, agentToken, mode, artifacts); err != nil {
-		if sandbox.AgentID == "" && agentID != "" {
+		if registered {
 			revokeAbandoned(agentID, name)
 		}
 		return err
 	}
 
-	registered := sandbox.AgentID == "" && agentID != ""
 	sandbox.Auth = string(mode)
 	sandbox.Status = "active"
-	sandbox.AgentID = agentID
 	if err := SaveSandbox(name, sandbox); err != nil {
 		if registered {
 			// The machine runs the new agent, so revoking it would be
@@ -1570,7 +1572,7 @@ func sshCheck(sandbox *SandboxMeta, name, command string) string {
 // injectCredentials writes the env file from the credentials in the
 // environment of the CLI, and in the same command the sandbox marker, which
 // holds no secret.
-func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode, marker []byte) error {
+func injectCredentials(ip, keyPath, name, user, agentToken, agentID string, mode AuthMode, marker []byte) error {
 	envVars := map[string]string{
 		"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
 		"AWS_SECRET_ACCESS_KEY": os.Getenv("AWS_SECRET_ACCESS_KEY"),
@@ -1580,7 +1582,7 @@ func injectCredentials(ip, keyPath, name, user, agentToken string, mode AuthMode
 	}
 	spekkHost := os.Getenv("SPEKK_HOST")
 
-	if err := writeEnvFile(ip, keyPath, name, user, buildEnvContent(mode, envVars, name, agentToken, spekkHost), marker); err != nil {
+	if err := writeEnvFile(ip, keyPath, name, user, buildEnvContent(mode, envVars, name, agentToken, agentID, spekkHost), marker); err != nil {
 		return err
 	}
 	if mode == AuthSubscription && os.Getenv(codexAuthFileVar) != "" {
@@ -1604,12 +1606,14 @@ func writeEnvFile(ip, keyPath, name, user, envContent string, marker []byte) err
 
 // buildEnvContent constructs the env file content for credential injection.
 // The model credential comes from the auth mode; everything after it is the
-// same whatever the sandbox pays with. Exported for testing.
-func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken, spekkHost string) string {
+// same whatever the sandbox pays with. The agent client needs SPEKK_AGENT_ID
+// to ask for repository access. Exported for testing.
+func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken, agentID, spekkHost string) string {
 	envLines := append(authLines(mode, envVars),
 		"GITHUB_TOKEN="+envVars["GITHUB_TOKEN"],
 		"SPEKK_HOST="+bareHost(spekkHost),
 		"SPEKK_AGENT_TOKEN="+agentToken,
+		"SPEKK_AGENT_ID="+agentID,
 		"WORKSPACE=/opt/spekk/workspace",
 		"SPEKK_AGENT_NAME=spekk-"+name,
 	)

@@ -299,6 +299,7 @@ The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `SPEKK_AGENT_TOKEN` | Yes | Bearer token for the WebSocket connection to the control host. With `SPEKK_API_TOKEN`, the control host makes it when `create`, `provision`, or `register` registers the agent. Without it, `create` and `provision` generate it and print it for you to register |
+| `SPEKK_AGENT_ID` | For repository chat | ID of the registered agent. The agent uses it to ask the control host for repository access and for a Git token. `create`, `provision`, and `register` write it. Without it, each chat turn that selects a repository fails with "agent or session ID is missing" |
 | `SPEKK_HOST` | Yes | Control host the agent connects to |
 | `WORKSPACE` | No | Working directory for Claude sessions (default: `/opt/spekk/workspace`) |
 | `SPEKK_AGENT_NAME` | No | `spekk-<name>`. The agent binary does not read it; `setup-credentials.sh` uses it as the git author name |
@@ -309,4 +310,4 @@ The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env
 
 The file carries the variables of one mode only. Claude Code reads whichever of these it finds, so a file with both sets would leave the choice to chance. That is why a change of mode rewrites the file instead of adding to it.
 
-The agent passes its environment to the `claude` child process and reads only `SPEKK_AGENT_TOKEN`, `SPEKK_HOST`, and `WORKSPACE` itself. For the full agent architecture, see [Sandbox Architecture](./advanced/sandbox-architecture.md).
+The agent passes its environment to the `claude` child process and reads only `SPEKK_AGENT_TOKEN`, `SPEKK_AGENT_ID`, `SPEKK_HOST`, and `WORKSPACE` itself. For the full agent architecture, see [Sandbox Architecture](./advanced/sandbox-architecture.md).

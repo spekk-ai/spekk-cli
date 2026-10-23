@@ -861,7 +861,7 @@ spekk sandbox register my-sandbox --organization <id>
 |------|-------------|
 | `--organization <id>` | The control host organization to register the agent in. Needed only when you belong to more than one |
 
-`register` needs `SPEKK_API_TOKEN` and `SPEKK_HOST`. It registers a new agent, then, over SSH, replaces the `SPEKK_AGENT_TOKEN` line in `/etc/spekk/agent.env`, keeps every other line, and restarts `spekk-agent`. The script keeps a copy of the old file as `agent.env.bak` until the restart succeeds. If a step fails, it puts the old file back and restarts the agent with the old token. Then `register` revokes the new agent, and the record keeps the old agent id, so the machine and the record agree. On success, the record stores the new agent id. If the record named an agent before, `register` revokes that old agent, because its token is no longer on the machine.
+`register` needs `SPEKK_API_TOKEN` and `SPEKK_HOST`. It registers a new agent, then, over SSH, replaces the `SPEKK_AGENT_TOKEN` and `SPEKK_AGENT_ID` lines in `/etc/spekk/agent.env`, keeps every other line, and restarts `spekk-agent`. The script keeps a copy of the old file as `agent.env.bak` until the restart succeeds. If a step fails, it puts the old file back and restarts the agent with the old token. Then `register` revokes the new agent, and the record keeps the old agent id, so the machine and the record agree. On success, the record stores the new agent id. If the record named an agent before, `register` revokes that old agent, because its token is no longer on the machine.
 
 Use it for a sandbox that was created without `SPEKK_API_TOKEN`, or to replace the agent of a sandbox. A new agent starts with no schedules.
 
