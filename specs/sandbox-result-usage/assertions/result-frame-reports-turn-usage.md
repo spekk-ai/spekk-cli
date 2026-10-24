@@ -3,7 +3,8 @@ id: result-frame-reports-turn-usage
 parent: sandbox-result-usage
 created: 2026-10-24T02:14:00Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-spekk-tmp-pg4-319-1792809514
 branch: feature/result-usage
 ---
 
