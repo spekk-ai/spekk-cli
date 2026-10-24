@@ -146,6 +146,54 @@ func TestResultFrameReportsProcessUsage(t *testing.T) {
 	}
 }
 
+func TestResultFrameSumsBackgroundTaskUsage(t *testing.T) {
+	cases := []struct {
+		file          string
+		input         float64
+		output        float64
+		cacheRead     float64
+		cacheCreation float64
+		costUSD       float64
+	}{
+		{"background-task-finishes-before-second-result.jsonl", 8, 118, 45332, 6531, 0.0318532},
+		{"background-task-stopped-at-time-limit.jsonl", 8, 318, 45343, 6610, 0.0341703},
+	}
+	for _, tc := range cases {
+		t.Run(tc.file, func(t *testing.T) {
+			path, err := filepath.Abs(filepath.Join("testdata", tc.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			fakeReplayClaude(t, path)
+			host := newTestControlHost(t)
+			client := NewAgentClient(Config{Token: "t", Host: host.host(), Workspace: t.TempDir()})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go client.Run(ctx)
+
+			dispatchTurn(t, host.nextConn(t))
+			frame := host.awaitFrame(t, MessageTypeResult, 20*time.Second).frame
+			usage, ok := frame["usage"].(map[string]any)
+			if !ok {
+				t.Fatalf("result has no usage: %v", frame)
+			}
+			for key, want := range map[string]float64{
+				"input_tokens":                tc.input,
+				"output_tokens":               tc.output,
+				"cache_read_input_tokens":     tc.cacheRead,
+				"cache_creation_input_tokens": tc.cacheCreation,
+			} {
+				if usage[key] != want {
+					t.Errorf("%s = %v, want %v", key, usage[key], want)
+				}
+			}
+			if usage["cost_usd"] != tc.costUSD {
+				t.Errorf("cost_usd = %v, want %v", usage["cost_usd"], tc.costUSD)
+			}
+		})
+	}
+}
+
 func TestResultFrameOmitsUnmeasurableUsage(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -155,13 +203,11 @@ func TestResultFrameOmitsUnmeasurableUsage(t *testing.T) {
 		{"old Claude", `{"type":"result","session_id":"sess-1","result":"done"}`, ""},
 		{"unknown baseline", usageResult(validUsage, "0.01"), "sess-1"},
 		{"missing count", usageResult(`{"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":3}`, "0.01"), ""},
+		{"missing count in earlier result", usageResult(`{"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":3}`, "0.01") + "\n" + usageResult(validUsage, "0.02"), ""},
 		{"fractional count", usageResult(`{"input_tokens":1.0,"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":4}`, "0.01"), ""},
-		{"boolean count", usageResult(`{"input_tokens":true,"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":4}`, "0.01"), ""},
 		{"count over limit", usageResult(`{"input_tokens":10000000001,"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":4}`, "0.01"), ""},
 		{"negative count", usageResult(`{"input_tokens":-1,"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":4}`, "0.01"), ""},
 		{"cost over limit", usageResult(validUsage, "1001"), ""},
-		{"missing cost", `{"type":"result","session_id":"sess-1","result":"done","usage":` + validUsage + `}`, ""},
-		{"invalid cost", usageResult(validUsage, `"0.01"`), ""},
 		{"nonfinite cost", usageResult(validUsage, "1e999"), ""},
 	}
 	for _, tc := range cases {

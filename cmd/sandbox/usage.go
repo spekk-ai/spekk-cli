@@ -26,11 +26,12 @@ type usageTotals struct {
 
 // measure updates the baseline even if token counts are absent or malformed.
 // A later resumed turn can then use its own cost without counting this one.
-func (u *usageTotals) measure(sessionID, resumeID string, event map[string]any) (turnUsage, bool) {
-	if sessionID == "" || event == nil {
+func (u *usageTotals) measure(sessionID, resumeID string, events ...map[string]any) (turnUsage, bool) {
+	if sessionID == "" || len(events) == 0 || events[len(events)-1] == nil {
 		u.forget(resumeID)
 		return turnUsage{}, false
 	}
+	event := events[len(events)-1]
 	total, ok := usageNumber(event["total_cost_usd"])
 	if !ok || total < 0 {
 		u.forget(resumeID)
@@ -59,17 +60,19 @@ func (u *usageTotals) measure(sessionID, resumeID string, event map[string]any) 
 		return turnUsage{}, false
 	}
 
-	usage, ok := event["usage"].(map[string]any)
-	if !ok {
-		return turnUsage{}, false
-	}
 	counts := [4]int64{}
-	for i, key := range [...]string{"input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"} {
-		n, ok := usageCount(usage[key])
+	for _, result := range events {
+		usage, ok := result["usage"].(map[string]any)
 		if !ok {
 			return turnUsage{}, false
 		}
-		counts[i] = n
+		for i, key := range [...]string{"input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"} {
+			n, ok := usageCount(usage[key])
+			if !ok || n > maxTurnTokens-counts[i] {
+				return turnUsage{}, false
+			}
+			counts[i] += n
+		}
 	}
 	return turnUsage{counts[0], counts[1], counts[2], counts[3], cost}, true
 }
