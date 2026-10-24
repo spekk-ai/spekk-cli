@@ -295,9 +295,11 @@ main() {
     # Git reads the gh login on each request. Remove the old token file only
     # after the new helper is ready, so a failed setup leaves it available.
     echo "==> Configuring git credentials for agent user"
-    su - agent -c 'git config --global --replace-all credential.helper ""'
-    su - agent -c 'git config --global --replace-all credential.https://github.com.helper "!gh auth git-credential"'
-    test "$(su - agent -c 'git config --global --get credential.https://github.com.helper')" = '!gh auth git-credential'
+    su - agent -c 'git config --global --unset-all credential.helper' || true
+    su - agent -c 'git config --global --unset-all credential.https://github.com.helper' || true
+    su - agent -c 'git config --global --add credential.https://github.com.helper ""'
+    su - agent -c 'git config --global --add credential.https://github.com.helper "!gh auth git-credential"'
+    printf 'protocol=https\nhost=github.com\n\n' | su - agent -c 'GIT_TERMINAL_PROMPT=0 git credential fill' | grep -q '^password=.' || { echo 'spekk: GitHub credential helper did not return a password' >&2; exit 1; }
     rm -f /home/agent/.git-credentials
 
     # An older version of this script exported ANTHROPIC_API_KEY into the

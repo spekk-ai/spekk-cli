@@ -16,11 +16,11 @@ The terminal sandbox create and provision paths, and the credential setup script
 ## Success Criteria
 
 - Both credential setup paths configure Git to use `gh auth git-credential` for GitHub after the GitHub login succeeds. Clone, fetch, and push can request the credential without `credential.helper store` or a token in the Git remote URL.
-- Neither path writes `/home/agent/.git-credentials`. Each path removes a stale file only after the GitHub login and the new helper are in place, so a failed setup does not remove the working credential of an existing agent.
-- A regression test fails if either path restores `credential.helper store` or writes the Git credential file.
+- Neither path writes `/home/agent/.git-credentials`. Each path removes a stale file only after Git returns a GitHub credential through the new helper as `agent`. If the lookup fails, the path reports one `spekk:` error, exits with a failure, and keeps the stale file.
+- A regression test runs both setup paths with real Git in fresh, legacy store, existing GitHub CLI URL helper, and machine-mode URL helper config states. It fails if Git cannot get the new credential, if the stale file is removed before lookup, or if either path writes the Git credential file.
 - The machine-mode helper that asks the control host for installation tokens keeps its current behavior.
 
 ## Verification
 
 - Run the sandbox package tests, the shell parser and shellcheck on the setup script, and `spekk validate`.
-- Exercise Git credential lookup with a temporary home and a fake GitHub CLI. Check that Git receives a credential for GitHub and does not create `.git-credentials`.
+- Exercise Git credential lookup with a temporary home, a `su` shim, and a fake GitHub CLI. Check all four config states and the stale file removal order.
