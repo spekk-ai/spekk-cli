@@ -272,11 +272,11 @@ func TestAgentSecretsInventory(t *testing.T) {
 	want := []string{
 		// injectCredentials writes AWS keys, GITHUB_TOKEN, agent token.
 		"/etc/spekk/agent.env",
-		// configureGitCredentials writes the token twice: once here...
+		// Remove this legacy file from machines that survive destroy.
 		"/home/agent/.git-credentials",
 		// The ChatGPT login cache must also be removed from unmanaged machines.
 		"/home/agent/.codex/auth.json",
-		// ...and once here, through gh auth login --with-token.
+		// gh auth login --with-token writes the GitHub token here.
 		"/home/agent/.config/gh",
 		// An older setup-credentials.sh exported ANTHROPIC_API_KEY into
 		// the agent's login shell. Nothing writes it now, but a machine

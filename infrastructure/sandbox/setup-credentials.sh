@@ -270,10 +270,6 @@ main() {
 
     write_agent_env
 
-    # Configure git credentials for agent user
-    echo "==> Configuring git credentials for agent user"
-    su - agent -c "git config --global credential.helper store"
-
     # A git identity, so anything that commits on this box has an author.
     #
     # Without this, git falls back to <user>@<hostname>, which it will not accept
@@ -291,12 +287,20 @@ main() {
     echo "==> Setting git identity for agent user (${AGENT_GIT_NAME})"
     su - agent -c "git config --global user.name '${AGENT_GIT_NAME}'"
     su - agent -c "git config --global user.email '${AGENT_GIT_NAME}@spekk.local'"
-    su - agent -c "echo 'https://agent:${GITHUB_TOKEN}@github.com' > ~/.git-credentials"
-    su - agent -c "chmod 600 ~/.git-credentials"
-
     # Configure gh CLI for agent user
     echo "==> Configuring gh CLI"
-    su - agent -c "echo '${GITHUB_TOKEN}' | gh auth login --with-token" 2>/dev/null || true
+    printf '%s\n' "$GITHUB_TOKEN" | su - agent -c 'gh auth login --with-token'
+    su - agent -c 'gh auth status' >/dev/null 2>&1 || { echo 'ERROR: the agent user is not logged in to GitHub' >&2; exit 1; }
+
+    # Git reads the gh login on each request. Remove the old token file only
+    # after the new helper is ready, so a failed setup leaves it available.
+    echo "==> Configuring git credentials for agent user"
+    su - agent -c 'git config --global --unset-all credential.helper' || true
+    su - agent -c 'git config --global --unset-all credential.https://github.com.helper' || true
+    su - agent -c 'git config --global --add credential.https://github.com.helper ""'
+    su - agent -c 'git config --global --add credential.https://github.com.helper "!gh auth git-credential"'
+    printf 'protocol=https\nhost=github.com\n\n' | su - agent -c 'GIT_TERMINAL_PROMPT=0 git credential fill' | grep -q '^password=.' || { echo 'spekk: GitHub credential helper did not return a password' >&2; exit 1; }
+    rm -f /home/agent/.git-credentials
 
     # An older version of this script exported ANTHROPIC_API_KEY into the
     # agent's login shell. It stopped writing that file, but a droplet
