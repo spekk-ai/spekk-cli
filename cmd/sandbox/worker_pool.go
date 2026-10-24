@@ -8,6 +8,7 @@ const numWorkers = 5
 type WorkerPool struct {
 	work     chan struct{}
 	sessions map[string]*Worker
+	usage    usageTotals
 	mu       sync.Mutex
 }
 
@@ -63,6 +64,7 @@ func (p *WorkerPool) Dispatch(msg Message) (start *Worker, accepted bool) {
 
 	w := &Worker{
 		agentSessionID: msg.AgentSessionID,
+		usage:          &p.usage,
 		msgs:           make(chan Message, 10),
 	}
 	p.sessions[msg.AgentSessionID] = w

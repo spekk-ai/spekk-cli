@@ -9,6 +9,7 @@ import (
 
 type Worker struct {
 	agentSessionID string
+	usage          *usageTotals
 	msgs           chan Message
 	mu             sync.Mutex
 	current        *os.Process
