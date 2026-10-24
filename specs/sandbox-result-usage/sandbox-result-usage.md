@@ -13,7 +13,7 @@ The control host cannot show the model use of a sandbox turn because the client 
 
 ## Decision
 
-The client adds one optional `usage` object to a successful turn's result frame. It keeps the last valid cost total for each Claude session while the client runs. It omits usage if a resumed process has no known baseline. It does not keep a guessed cost across a client restart.
+The client adds one optional `usage` object to a successful turn's result frame. Token counts come from `modelUsage` on the last result, summed over all models, including subagent, background, and compaction calls, as a difference from the session baseline. It keeps the last valid cost total for each Claude session while the client runs. It omits usage if a resumed process has no known baseline. It does not keep a guessed cost across a client restart.
 
 ## Scope
 

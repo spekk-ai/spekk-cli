@@ -177,7 +177,7 @@ The `terminal` field needs no rollout order, because an absent field means `true
 
 ### `usage` on the result frame
 
-The optional `usage` object has `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, and `cost_usd`. Counts are JSON integers from 0 to 10,000,000,000. Cost is a finite JSON number from 0 to 1000. The client omits the whole object if any value is missing or invalid. An `error` frame has no usage.
+The optional `usage` object has `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, and `cost_usd`. Token counts come from `modelUsage` on the last result, summed over all models, including subagent, background, and compaction calls, as a difference from the session baseline. Counts are JSON integers from 0 to 10,000,000,000. Cost is a finite JSON number from 0 to 1000. The client omits the whole object if any value is missing or invalid. An `error` frame has no usage.
 
 Claude Code 2.1.308 reports a running session cost total on a resumed process. The client uses the difference from the preceding result for that session as the turn cost. If the client has no preceding total, or the difference is negative, it omits usage. The client keeps the totals in memory, so a restart makes the next resumed turn's usage unavailable. The field is additive in protocol version 1.6.
 

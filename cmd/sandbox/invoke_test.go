@@ -33,7 +33,7 @@ func fakeFailingClaude(t *testing.T) {
 	script := "#!/bin/sh\n" + claudeVersionAnswer + `cat > /dev/null
 echo '{"type":"system","subtype":"init","session_id":"sess-1"}'
 echo '{"type":"system","subtype":"api_retry","attempt":10,"max_retries":10,"error_status":503,"error":"overloaded"}'
-echo '{"type":"result","subtype":"success","is_error":true,"api_error_status":503,"session_id":"sess-1","result":"API Error: 503 Bedrock is unable to process your request.","usage":{"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":4},"total_cost_usd":0.01}'
+echo '{"type":"result","subtype":"success","is_error":true,"api_error_status":503,"session_id":"sess-1","result":"API Error: 503 Bedrock is unable to process your request.","modelUsage":{"m":{"inputTokens":1,"outputTokens":2,"cacheReadInputTokens":3,"cacheCreationInputTokens":4}},"total_cost_usd":0.01}'
 exit 1
 `
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
@@ -215,6 +215,7 @@ func TestResultFrameOmitsUnmeasurableUsage(t *testing.T) {
 		resumeID string
 	}{
 		{"old Claude", `{"type":"result","session_id":"sess-1","result":"done"}`, ""},
+		{"empty modelUsage", modelUsageResult("{}", "0.01"), ""},
 		{"unknown baseline", usageResult(validUsage, "0.01"), "sess-1"},
 		{"missing count", usageResult(`{"inputTokens":1,"outputTokens":2,"cacheReadInputTokens":3}`, "0.01"), ""},
 		{"fractional count", usageResult(`{"inputTokens":1.0,"outputTokens":2,"cacheReadInputTokens":3,"cacheCreationInputTokens":4}`, "0.01"), ""},
@@ -267,6 +268,11 @@ func TestUsageTotalFallsBackAfterNegativeDifference(t *testing.T) {
 	third, ok := totals.measure("sess-1", "sess-1", decode("1.5"))
 	if !ok || third.CostUSD != 0.5 {
 		t.Errorf("cost after reset = %v, %v, want 0.5", third.CostUSD, ok)
+	}
+	lowerTokens := decode("1.75")
+	lowerTokens["modelUsage"].(map[string]any)["claude-sonnet-5-5"].(map[string]any)["inputTokens"] = json.Number("1")
+	if _, ok := totals.measure("sess-1", "sess-1", lowerTokens); ok {
+		t.Fatal("negative token difference reported usage")
 	}
 	noTokens := decode("2")
 	noTokens["modelUsage"] = nil
