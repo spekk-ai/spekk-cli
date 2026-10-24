@@ -3,14 +3,15 @@ id: git-credentials-use-gh-helper
 parent: sandbox-auth-mode
 created: 2026-10-24T15:28:13Z
 priority: 1
-status: in_progress
-locked-by: builder-spekk-tmp-art-27905-1792855718
+status: done
 branch: fix/no-git-credential-store
 ---
 
 # Git Uses the Existing GitHub Login Without a Credential Store
 
 The terminal sandbox create and provision paths, and the credential setup script, already sign the agent in to GitHub CLI. Git must read that login when it needs a GitHub credential and must not keep a second plaintext token in the agent's Git credential file.
+
+**Tests:** internal/sandbox/git_credentials_test.go
 
 ## Success Criteria
 
