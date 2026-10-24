@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.48.1 -- No GitHub Token in ~/.git-credentials](RELEASE-NOTES-1.48.1.md)
+
+Sandbox credential setup, in `create`, `provision`, and `setup-credentials.sh`, no longer writes the GitHub token to `~/.git-credentials`. Git gets the token from the `gh auth git-credential` helper. After Git returns a credential through the helper, setup removes a legacy `~/.git-credentials` file. When the lookup fails, setup stops with an error and keeps the file. Run credential setup again on each existing sandbox, or replace it. There is no configuration change and no protocol change: the protocol stays `1.6`, and the major stays `1`.
+
 ## [1.48.0 -- Turn Usage in Sandbox Result Frames](RELEASE-NOTES-1.48.0.md)
 
 The `result` frame that ends a sandbox turn now carries an optional `usage` object with input, output, cache read, and cache creation tokens and `cost_usd`. The counts come from the Claude Code `modelUsage` totals for the turn, including subagent and background task calls. The cost is the Claude Code estimate at API list prices, not a bill. The client sends no `usage` when a value is missing or invalid. The field is additive: the protocol changes to `1.6`, the major stays `1`, and older spekk-app servers ignore it.
