@@ -258,7 +258,7 @@ A control host that works with the agent must provide:
 | **Authentication** | Validate the `Authorization: Bearer <token>` header |
 | **Protocol handshake** | Read the `X-Spekk-Protocol` header, send a `welcome` frame with its own version, and close with code `4004` on a major-version mismatch. A dial with no header is a legacy client |
 | **Inbound frames** | Handle `stream`, `result`, `error`, `heartbeat`, and `conversation_open` from the agent, and `terminal_output` and `terminal_exit` when it uses the sign-in terminal |
-| **Turn result** | Read `terminal` from the `result` frame. An absent field means `true` |
+| **Turn result** | Read `terminal` from the `result` frame. An absent field means `true`. Accept a `result` frame with or without the optional `usage` object |
 | **Outbound frames** | Send `welcome`, `message`, `cancel`, `heartbeat_ack`, and `error` to the agent |
 | **Attachments** | Serve `GET /api/agents/attachments/<id>/download/` with Bearer authentication, when attachments are used |
 | **Session routing** | Assign unique `agent_session_id` values and track which sessions are active |
