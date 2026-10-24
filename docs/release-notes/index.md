@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.48.0 -- Turn Usage in Sandbox Result Frames](RELEASE-NOTES-1.48.0.md)
+
+The `result` frame that ends a sandbox turn now carries an optional `usage` object with input, output, cache read, and cache creation tokens and `cost_usd`. The counts come from the Claude Code `modelUsage` totals for the turn, including subagent and background task calls. The cost is the Claude Code estimate at API list prices, not a bill. The client sends no `usage` when a value is missing or invalid. The field is additive: the protocol changes to `1.6`, the major stays `1`, and older spekk-app servers ignore it.
+
 ## [1.47.2 -- Agent ID Kept on Script-Equipped Hosts](RELEASE-NOTES-1.47.2.md)
 
 `setup-credentials.sh` now writes and keeps `SPEKK_AGENT_ID` in `agent.env`, and exits with status 1 for a value that is not a UUID. The CLI refuses a registration response whose agent ID is not a UUID. An existing `agent.env` with a `SPEKK_AGENT_ID` that is not a UUID stops the script until you correct the line.
