@@ -17,21 +17,26 @@ type turnUsage struct {
 	CostUSD                  float64 `json:"cost_usd"`
 }
 
-// usageTotals keeps the last reported cost for each Claude session. Workers
+// usageTotals keeps the last reported totals for each Claude session. Workers
 // can end between turns, so this state belongs to the client, not a worker.
 type usageTotals struct {
 	mu     sync.Mutex
-	totals map[string]float64
+	totals map[string]usageBaseline
 }
 
-// measure updates the baseline even if token counts are absent or malformed.
-// A later resumed turn can then use its own cost without counting this one.
-func (u *usageTotals) measure(sessionID, resumeID string, events ...map[string]any) (turnUsage, bool) {
-	if sessionID == "" || len(events) == 0 || events[len(events)-1] == nil {
+type usageBaseline struct {
+	cost   float64
+	counts [4]int64
+	valid  bool
+}
+
+// measure records cost even when token counts are absent or malformed. A
+// valid later result can establish a new token baseline for that session.
+func (u *usageTotals) measure(sessionID, resumeID string, event map[string]any) (turnUsage, bool) {
+	if sessionID == "" || event == nil {
 		u.forget(resumeID)
 		return turnUsage{}, false
 	}
-	event := events[len(events)-1]
 	total, ok := usageNumber(event["total_cost_usd"])
 	if !ok || total < 0 {
 		u.forget(resumeID)
@@ -40,13 +45,14 @@ func (u *usageTotals) measure(sessionID, resumeID string, events ...map[string]a
 	if resumeID != "" && resumeID != sessionID {
 		u.forget(resumeID)
 	}
+	counts, countsOK := modelUsageCounts(event["modelUsage"])
 
 	u.mu.Lock()
 	if u.totals == nil {
-		u.totals = make(map[string]float64)
+		u.totals = make(map[string]usageBaseline)
 	}
 	previous, known := u.totals[sessionID]
-	u.totals[sessionID] = total
+	u.totals[sessionID] = usageBaseline{total, counts, countsOK}
 	u.mu.Unlock()
 
 	cost := total
@@ -54,27 +60,45 @@ func (u *usageTotals) measure(sessionID, resumeID string, events ...map[string]a
 		if resumeID != sessionID || !known {
 			return turnUsage{}, false
 		}
-		cost -= previous
+		cost -= previous.cost
 	}
 	if cost < 0 || cost > 1000 || math.IsNaN(cost) || math.IsInf(cost, 0) {
 		return turnUsage{}, false
 	}
-
-	counts := [4]int64{}
-	for _, result := range events {
-		usage, ok := result["usage"].(map[string]any)
-		if !ok {
-			return turnUsage{}, false
-		}
-		for i, key := range [...]string{"input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"} {
-			n, ok := usageCount(usage[key])
-			if !ok || n > maxTurnTokens-counts[i] {
+	if !countsOK || (resumeID != "" && !previous.valid) {
+		return turnUsage{}, false
+	}
+	if resumeID != "" {
+		for i := range counts {
+			if counts[i] < previous.counts[i] {
 				return turnUsage{}, false
+			}
+			counts[i] -= previous.counts[i]
+		}
+	}
+	return turnUsage{counts[0], counts[1], counts[2], counts[3], cost}, true
+}
+
+func modelUsageCounts(value any) ([4]int64, bool) {
+	models, ok := value.(map[string]any)
+	if !ok || len(models) == 0 {
+		return [4]int64{}, false
+	}
+	counts := [4]int64{}
+	for _, value := range models {
+		model, ok := value.(map[string]any)
+		if !ok {
+			return [4]int64{}, false
+		}
+		for i, key := range [...]string{"inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens"} {
+			n, ok := usageCount(model[key])
+			if !ok || n > maxTurnTokens-counts[i] {
+				return [4]int64{}, false
 			}
 			counts[i] += n
 		}
 	}
-	return turnUsage{counts[0], counts[1], counts[2], counts[3], cost}, true
+	return counts, true
 }
 
 func (u *usageTotals) forget(sessionID string) {

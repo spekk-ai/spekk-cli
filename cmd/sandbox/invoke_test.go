@@ -104,13 +104,17 @@ cat %q/result-"$n"
 }
 
 func usageResult(usage, cost string) string {
-	return fmt.Sprintf(`{"type":"result","session_id":"sess-1","result":"done","usage":%s,"total_cost_usd":%s}`, usage, cost)
+	return modelUsageResult(fmt.Sprintf(`{"claude-sonnet-5-5":%s}`, usage), cost)
 }
 
-const validUsage = `{"input_tokens":2,"output_tokens":4,"cache_read_input_tokens":6,"cache_creation_input_tokens":8}`
+func modelUsageResult(models, cost string) string {
+	return fmt.Sprintf(`{"type":"result","session_id":"sess-1","result":"done","modelUsage":%s,"total_cost_usd":%s}`, models, cost)
+}
+
+const validUsage = `{"inputTokens":2,"outputTokens":4,"cacheReadInputTokens":6,"cacheCreationInputTokens":8}`
 
 func TestResultFrameReportsProcessUsage(t *testing.T) {
-	fakeUsageClaude(t, usageResult(validUsage, "0.0075909"), usageResult(validUsage, "0.0093454"))
+	fakeUsageClaude(t, usageResult(validUsage, "0.0075909"), usageResult(`{"inputTokens":5,"outputTokens":10,"cacheReadInputTokens":15,"cacheCreationInputTokens":20}`, "0.0093454"))
 	host := newTestControlHost(t)
 	client := NewAgentClient(Config{Token: "t", Host: host.host(), Workspace: t.TempDir()})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -134,7 +138,11 @@ func TestResultFrameReportsProcessUsage(t *testing.T) {
 		if len(usage) != 5 {
 			t.Errorf("turn %d usage fields = %v", i+1, usage)
 		}
-		for key, want := range map[string]float64{"input_tokens": 2, "output_tokens": 4, "cache_read_input_tokens": 6, "cache_creation_input_tokens": 8} {
+		wantCounts := []map[string]float64{
+			{"input_tokens": 2, "output_tokens": 4, "cache_read_input_tokens": 6, "cache_creation_input_tokens": 8},
+			{"input_tokens": 3, "output_tokens": 6, "cache_read_input_tokens": 9, "cache_creation_input_tokens": 12},
+		}[i]
+		for key, want := range wantCounts {
 			if usage[key] != want {
 				t.Errorf("turn %d %s = %v, want %v", i+1, key, usage[key], want)
 			}
@@ -149,22 +157,28 @@ func TestResultFrameReportsProcessUsage(t *testing.T) {
 func TestResultFrameSumsBackgroundTaskUsage(t *testing.T) {
 	cases := []struct {
 		file          string
+		result        string
 		input         float64
 		output        float64
 		cacheRead     float64
 		cacheCreation float64
 		costUSD       float64
 	}{
-		{"background-task-finishes-before-second-result.jsonl", 8, 118, 45332, 6531, 0.0318532},
-		{"background-task-stopped-at-time-limit.jsonl", 8, 318, 45343, 6610, 0.0341703},
+		{"background-task-finishes-before-second-result.jsonl", "", 8, 118, 45332, 6531, 0.0318532},
+		{"background-task-stopped-at-time-limit.jsonl", "", 8, 318, 45343, 6610, 0.0341703},
+		{"two models", modelUsageResult(`{"claude-opus-4-1":{"inputTokens":2,"outputTokens":4,"cacheReadInputTokens":6,"cacheCreationInputTokens":8},"claude-haiku-4-5":{"inputTokens":3,"outputTokens":5,"cacheReadInputTokens":7,"cacheCreationInputTokens":9}}`, "0.02"), 5, 9, 13, 17, 0.02},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
-			path, err := filepath.Abs(filepath.Join("testdata", tc.file))
-			if err != nil {
-				t.Fatal(err)
+			if tc.result != "" {
+				fakeUsageClaude(t, tc.result)
+			} else {
+				path, err := filepath.Abs(filepath.Join("testdata", tc.file))
+				if err != nil {
+					t.Fatal(err)
+				}
+				fakeReplayClaude(t, path)
 			}
-			fakeReplayClaude(t, path)
 			host := newTestControlHost(t)
 			client := NewAgentClient(Config{Token: "t", Host: host.host(), Workspace: t.TempDir()})
 			ctx, cancel := context.WithCancel(context.Background())
@@ -202,11 +216,11 @@ func TestResultFrameOmitsUnmeasurableUsage(t *testing.T) {
 	}{
 		{"old Claude", `{"type":"result","session_id":"sess-1","result":"done"}`, ""},
 		{"unknown baseline", usageResult(validUsage, "0.01"), "sess-1"},
-		{"missing count", usageResult(`{"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":3}`, "0.01"), ""},
-		{"missing count in earlier result", usageResult(`{"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":3}`, "0.01") + "\n" + usageResult(validUsage, "0.02"), ""},
-		{"fractional count", usageResult(`{"input_tokens":1.0,"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":4}`, "0.01"), ""},
-		{"count over limit", usageResult(`{"input_tokens":10000000001,"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":4}`, "0.01"), ""},
-		{"negative count", usageResult(`{"input_tokens":-1,"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":4}`, "0.01"), ""},
+		{"missing count", usageResult(`{"inputTokens":1,"outputTokens":2,"cacheReadInputTokens":3}`, "0.01"), ""},
+		{"fractional count", usageResult(`{"inputTokens":1.0,"outputTokens":2,"cacheReadInputTokens":3,"cacheCreationInputTokens":4}`, "0.01"), ""},
+		{"count over limit", usageResult(`{"inputTokens":10000000001,"outputTokens":2,"cacheReadInputTokens":3,"cacheCreationInputTokens":4}`, "0.01"), ""},
+		{"negative count", usageResult(`{"inputTokens":-1,"outputTokens":2,"cacheReadInputTokens":3,"cacheCreationInputTokens":4}`, "0.01"), ""},
+		{"missing cost", fmt.Sprintf(`{"type":"result","session_id":"sess-1","result":"done","modelUsage":{"claude-sonnet-5-5":%s}}`, validUsage), ""},
 		{"cost over limit", usageResult(validUsage, "1001"), ""},
 		{"nonfinite cost", usageResult(validUsage, "1e999"), ""},
 	}
@@ -255,13 +269,17 @@ func TestUsageTotalFallsBackAfterNegativeDifference(t *testing.T) {
 		t.Errorf("cost after reset = %v, %v, want 0.5", third.CostUSD, ok)
 	}
 	noTokens := decode("2")
-	noTokens["usage"] = nil
+	noTokens["modelUsage"] = nil
 	if _, ok := totals.measure("sess-1", "sess-1", noTokens); ok {
 		t.Fatal("missing tokens reported usage")
 	}
 	last, ok := totals.measure("sess-1", "sess-1", decode("2.25"))
-	if !ok || last.CostUSD != 0.25 {
-		t.Errorf("cost after missing tokens = %v, %v, want 0.25", last.CostUSD, ok)
+	if ok {
+		t.Errorf("usage after missing token baseline = %v, want none", last)
+	}
+	recovered, ok := totals.measure("sess-1", "sess-1", decode("2.5"))
+	if !ok || recovered.CostUSD != 0.25 {
+		t.Errorf("cost after restored token baseline = %v, %v, want 0.25", recovered.CostUSD, ok)
 	}
 }
 

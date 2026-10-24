@@ -172,7 +172,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	// Stream stdout line by line
 	var lastSessionID, lastResultText string
 	var lastResultIsError bool
-	var resultEvents []map[string]any
+	var lastResult map[string]any
 	var progress turnProgress
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 10*1024*1024), 10*1024*1024)
@@ -200,7 +200,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 				}
 			}
 			if event["type"] == "result" {
-				resultEvents = append(resultEvents, event)
+				lastResult = event
 				lastSessionID, _ = event["session_id"].(string)
 				lastResultText, _ = event["result"].(string)
 				lastResultIsError, _ = event["is_error"].(bool)
@@ -221,7 +221,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	if tracker == nil {
 		tracker = &usageTotals{}
 	}
-	usage, hasUsage := tracker.measure(lastSessionID, msg.SessionID, resultEvents...)
+	usage, hasUsage := tracker.measure(lastSessionID, msg.SessionID, lastResult)
 
 	if waitErr != nil {
 		detail := stderrBuf.String()
