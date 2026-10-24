@@ -3,7 +3,8 @@ id: git-credentials-use-gh-helper
 parent: sandbox-auth-mode
 created: 2026-10-24T15:28:13Z
 priority: 1
-status: not_started
+status: in_progress
+locked-by: builder-spekk-tmp-art-27905-1792855718
 branch: fix/no-git-credential-store
 ---
 
