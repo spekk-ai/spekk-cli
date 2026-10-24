@@ -6,9 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -170,6 +172,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	// Stream stdout line by line
 	var lastSessionID, lastResultText string
 	var lastResultIsError bool
+	var lastResult map[string]any
 	var progress turnProgress
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 10*1024*1024), 10*1024*1024)
@@ -187,7 +190,9 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		conns.send(ctx, map[string]any{"type": "stream", "data": line, "agent_session_id": msg.AgentSessionID})
 
 		var event map[string]any
-		if json.Unmarshal([]byte(line), &event) == nil {
+		decoder := json.NewDecoder(strings.NewReader(line))
+		decoder.UseNumber()
+		if decoder.Decode(&event) == nil && decoder.Decode(new(any)) == io.EOF {
 			progress.observe(event)
 			if sessionID == "" {
 				if sid, ok := event["session_id"].(string); ok && sid != "" {
@@ -195,6 +200,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 				}
 			}
 			if event["type"] == "result" {
+				lastResult = event
 				lastSessionID, _ = event["session_id"].(string)
 				lastResultText, _ = event["result"].(string)
 				lastResultIsError, _ = event["is_error"].(bool)
@@ -211,6 +217,11 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	// Final drain after process exit, regardless of exit status, so a
 	// request written just before the process exited is still emitted.
 	drainSpool(ctx, spoolDir, sessionID, conns.supportsChannel, send)
+	tracker := w.usage
+	if tracker == nil {
+		tracker = &usageTotals{}
+	}
+	usage, hasUsage := tracker.measure(lastSessionID, msg.SessionID, lastResult)
 
 	if waitErr != nil {
 		detail := stderrBuf.String()
@@ -230,13 +241,17 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 
 	// terminal is always sent, as a JSON boolean. The control host reads an
 	// absent field as true only for clients that predate it.
-	reportTurnEnd(ctx, conns, msg.AgentSessionID, map[string]any{
+	frame := map[string]any{
 		"type":             "result",
 		"session_id":       lastSessionID,
 		"agent_session_id": msg.AgentSessionID,
 		"output":           lastResultText,
 		"terminal":         progress.terminal(),
-	})
+	}
+	if hasUsage {
+		frame["usage"] = usage
+	}
+	reportTurnEnd(ctx, conns, msg.AgentSessionID, frame)
 	log.Printf("Claude finished: session=%s", lastSessionID)
 }
 
