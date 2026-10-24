@@ -1661,11 +1661,14 @@ func buildGitCredentialScript(ghToken string) string {
 	encodedToken := base64.StdEncoding.EncodeToString([]byte(ghToken))
 	return fmt.Sprintf(`set -e
 TOKEN=$(echo '%s' | base64 -d)
-su - agent -c 'git config --global credential.helper store'
-su - agent -c "cat > ~/.git-credentials" <<< "https://x-access-token:${TOKEN}@github.com"
-su - agent -c 'chmod 600 ~/.git-credentials'
 echo "${TOKEN}" | su - agent -c 'gh auth login --with-token'
-su - agent -c 'gh auth status' >/dev/null 2>&1 || { echo 'spekk: gh auth status fails: the agent user is not logged in to GitHub' >&2; exit 1; }`,
+su - agent -c 'gh auth status' >/dev/null 2>&1 || { echo 'spekk: gh auth status fails: the agent user is not logged in to GitHub' >&2; exit 1; }
+su - agent -c 'git config --global --unset-all credential.helper' || true
+su - agent -c 'git config --global --unset-all credential.https://github.com.helper' || true
+su - agent -c 'git config --global --add credential.https://github.com.helper ""'
+su - agent -c 'git config --global --add credential.https://github.com.helper "!gh auth git-credential"'
+printf 'protocol=https\nhost=github.com\n\n' | su - agent -c 'GIT_TERMINAL_PROMPT=0 git credential fill' | grep -q '^password=.' || { echo 'spekk: GitHub credential helper did not return a password' >&2; exit 1; }
+rm -f /home/agent/.git-credentials`,
 		encodedToken,
 	)
 }
