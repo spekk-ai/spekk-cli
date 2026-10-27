@@ -2,7 +2,7 @@
 slug: release-specs-predate-machine-download
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-10-27T18:00:00Z
 announced: 2026-10-27T19:03:41Z
 affected:
