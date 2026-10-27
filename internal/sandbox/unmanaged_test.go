@@ -84,7 +84,7 @@ func TestDestroyUnmanagedMachine(t *testing.T) {
 		save(t, key)
 		stubStopAgent(t, nil)
 
-		if err := Destroy(nil, "box", true); err != nil {
+		if err := Destroy(nil, "box", DestroyOptions{Force: true}); err != nil {
 			t.Fatal(err)
 		}
 		for _, p := range []string{key, key + ".pub"} {
@@ -116,7 +116,7 @@ func TestDestroyUnmanagedMachine(t *testing.T) {
 		if p != nil {
 			t.Fatalf("provider = %T, want nil", p)
 		}
-		if err := Destroy(p, "box", true); err != nil {
+		if err := Destroy(p, "box", DestroyOptions{Force: true}); err != nil {
 			t.Fatal(err)
 		}
 		if got, _ := GetSandbox("box"); got != nil {
@@ -131,7 +131,7 @@ func TestDestroyUnmanagedMachine(t *testing.T) {
 		stubStopAgent(t, errors.New("host unreachable"))
 
 		answerPrompt(t, "y\n")
-		if err := Destroy(nil, "box", false); err == nil {
+		if err := Destroy(nil, "box", DestroyOptions{}); err == nil {
 			t.Fatal("destroy must fail when the agent cannot be stopped")
 		}
 		if got, _ := GetSandbox("box"); got == nil {
@@ -185,9 +185,12 @@ func TestTeardownCommand(t *testing.T) {
 			}
 			secrets = append(secrets, path)
 		}
-		orig := agentSecrets
+		orig, origMarker := agentSecrets, sandboxMarker
 		agentSecrets = secrets
-		t.Cleanup(func() { agentSecrets = orig })
+		// The teardown also removes the marker. Point it away from the
+		// machine that runs the test.
+		sandboxMarker = filepath.Join(dir, "sandbox.json")
+		t.Cleanup(func() { agentSecrets, sandboxMarker = orig, origMarker })
 
 		bin := t.TempDir()
 		for name, body := range map[string]string{"systemctl": systemctl, "rm": rmBody} {
@@ -269,14 +272,18 @@ func TestAgentSecretsInventory(t *testing.T) {
 	want := []string{
 		// injectCredentials writes AWS keys, GITHUB_TOKEN, agent token.
 		"/etc/spekk/agent.env",
-		// configureGitCredentials writes the token twice: once here...
+		// Remove this legacy file from machines that survive destroy.
 		"/home/agent/.git-credentials",
-		// ...and once here, through gh auth login --with-token.
+		// The ChatGPT login cache must also be removed from unmanaged machines.
+		"/home/agent/.codex/auth.json",
+		// gh auth login --with-token writes the GitHub token here.
 		"/home/agent/.config/gh",
 		// An older setup-credentials.sh exported ANTHROPIC_API_KEY into
 		// the agent's login shell. Nothing writes it now, but a machine
 		// credentialed before then still carries a live key there.
 		"/home/agent/.bashrc.d/spekk.sh",
+		// The agent client makes its recipient key for secrets here.
+		"/home/agent/.config/spekk-agent",
 	}
 	if !slices.Equal(agentSecrets, want) {
 		t.Errorf("agentSecrets = %v, want %v", agentSecrets, want)

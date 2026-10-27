@@ -99,12 +99,16 @@ func checkProvisioned(meta *SandboxMeta, name string) error {
 var agentSecrets = []string{
 	"/etc/spekk/agent.env",
 	"/home/agent/.git-credentials",
+	"/home/agent/.codex/auth.json",
 	// gh auth login writes the same token here.
 	"/home/agent/.config/gh",
 	// An older setup-credentials.sh exported ANTHROPIC_API_KEY into the
 	// agent's login shell. Nothing writes it now, but a machine
 	// credentialed before then still carries it.
 	"/home/agent/.bashrc.d/spekk.sh",
+	// The recipient key of the secrets that the control host seals to this
+	// sandbox. A new agent on the machine makes its own key.
+	"/home/agent/.config/spekk-agent",
 }
 
 // stopAgentService stops the spekk-agent service on an unmanaged machine and
@@ -120,7 +124,7 @@ func stopAgentService(sandbox *SandboxMeta, name string) error {
 	// Teardown touches root-owned units and files, so a non-root user
 	// runs it under sudo.
 	args := append(sshBatchArgs(sandbox, name), privilegedScript(sshUser(sandbox), teardownCommand()))
-	if out, err := sshExec(args); err != nil {
+	if out, err := sshExec(args, ""); err != nil {
 		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
@@ -158,6 +162,9 @@ func teardownCommand() string {
 	for _, path := range agentSecrets {
 		steps = append(steps, fmt.Sprintf("test -e %s && rc=1", path))
 	}
+	// The marker holds no secret, so a marker that stays does not fail
+	// the teardown. It only says the machine is still a sandbox.
+	steps = append(steps, fmt.Sprintf("rm -f %s || true", sandboxMarker))
 	steps = append(steps,
 		// is-active exits 0 while the agent runs, which is a failure.
 		"systemctl is-active --quiet spekk-agent && rc=1",

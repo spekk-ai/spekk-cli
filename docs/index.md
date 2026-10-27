@@ -56,6 +56,7 @@ spekk builder     # Build it
 | `spekk validate` | Check the spec tree, exit 1 on a fault |
 | `spekk show` | Spec explorer in the browser |
 | `spekk sandbox` | Manage sandboxes for remote agents |
+| `spekk app sandbox` | Use app-managed sandboxes through the app API |
 
 ## The agents
 

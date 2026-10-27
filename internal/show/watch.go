@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/maphash"
+	"html"
 	"io/fs"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -115,6 +118,15 @@ func injectSSEClient(html string) string {
 		return html
 	}
 	return html[:idx] + sseClientScript + "\n" + html[idx:]
+}
+
+// errorPage is the watch-mode page for specs that do not parse. It shows the
+// error and carries the live-reload client, so it reloads when the specs
+// parse again.
+func errorPage(err error) string {
+	return injectSSEClient("<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Spec Explorer - error</title></head>\n" +
+		"<body><pre>" + html.EscapeString(err.Error()) + "</pre>\n" +
+		"<p>The page reloads when the specs parse again.</p>\n</body></html>\n")
 }
 
 // RunWatch starts the watch-mode HTTP server with SSE live reload.
@@ -296,7 +308,11 @@ func RunWatch(specsDir string, opts Options) error {
 		}
 		html, err := getHTML()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			// The error page keeps the live-reload client, so it reloads
+			// by itself when the user fixes the specs.
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(errorPage(err)))
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
@@ -388,7 +404,10 @@ func listenWithRetry(port, maxRetries int) (net.Listener, error) {
 	return nil, lastErr
 }
 
-// watchSpecs polls specsDir for .md file changes every 500ms.
+// specsPollInterval is the time between two scans of the specs directory.
+const specsPollInterval = 500 * time.Millisecond
+
+// watchSpecs polls specsDir for .md file changes every specsPollInterval.
 // Calls onChange when files are added, modified, or deleted.
 // Returns a stop function.
 func watchSpecs(specsDir string, onChange func()) func() {
@@ -396,7 +415,7 @@ func watchSpecs(specsDir string, onChange func()) func() {
 
 	done := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
+		ticker := time.NewTicker(specsPollInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -404,7 +423,7 @@ func watchSpecs(specsDir string, onChange func()) func() {
 				return
 			case <-ticker.C:
 				current := scanMdFiles(specsDir)
-				if snapshotChanged(snapshot, current) {
+				if !maps.Equal(snapshot, current) {
 					snapshot = current
 					onChange()
 				}
@@ -423,7 +442,7 @@ func watchSpecs(specsDir string, onChange func()) func() {
 // preview but leave the local working tree untouched.
 //
 // It reuses a 1s poll (relaxed from the .md watcher's 500ms because a ref scan
-// shells out to git, whereas the .md scan is a cheap stat walk) and does no
+// shells out to git, whereas the .md scan reads only local files) and does no
 // busy-looping: one git read per tick, gated on a ticker. All git access goes
 // through the crossbranch read-only chokepoint (for-each-ref / rev-parse), so
 // this stays strictly read-only — it never mutates the working tree, index, or
@@ -498,10 +517,17 @@ func scanRefs() (string, error) {
 	return refs + "\nHEAD " + head, nil
 }
 
+// scanSeed seeds the content hashes of scanMdFiles. A snapshot stays in this
+// process, so one random seed for each process is sufficient.
+var scanSeed = maphash.MakeSeed()
+
 // scanMdFiles recursively scans dir for .md files and returns a map of
-// relative path to modification time.
-func scanMdFiles(dir string) map[string]time.Time {
-	result := make(map[string]time.Time)
+// relative path to a hash of the file content. It hashes the content and does
+// not use the mtime: a filesystem records the mtime with a coarse clock, so two
+// saves inside one tick give the same mtime, and the watcher would not see the
+// second save.
+func scanMdFiles(dir string) map[string]uint64 {
+	result := make(map[string]uint64)
 	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // skip errors
@@ -516,26 +542,12 @@ func scanMdFiles(dir string) map[string]time.Time {
 		if err != nil {
 			return nil
 		}
-		info, err := d.Info()
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil
 		}
-		result[rel] = info.ModTime()
+		result[rel] = maphash.Bytes(scanSeed, data)
 		return nil
 	})
 	return result
-}
-
-// snapshotChanged compares two file snapshots for any differences.
-func snapshotChanged(prev, curr map[string]time.Time) bool {
-	if len(prev) != len(curr) {
-		return true
-	}
-	for path, mtime := range prev {
-		currMtime, ok := curr[path]
-		if !ok || !currMtime.Equal(mtime) {
-			return true
-		}
-	}
-	return false
 }

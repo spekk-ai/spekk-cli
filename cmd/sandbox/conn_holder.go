@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -27,6 +29,20 @@ const finalSendTimeout = 90 * time.Second
 // expires, which forces the reconnect this state already needs.
 const streamSendTimeout = 5 * time.Second
 
+// streamFloorRate is the slowest uplink, in bytes per second, on which a
+// large stream frame still gets through. A stream frame carries one line of
+// the child's stdout, and a line can be 10 MB. A flat deadline closed a
+// healthy connection that was slower than about 2 MB/s on each large tool
+// result.
+const streamFloorRate = 256 * 1024
+
+// streamWriteTimeout is the deadline for a stream write of size bytes: the
+// small-frame bound plus the time the frame needs at the floor rate. It is
+// still a bound, so a peer that stops reading releases the stdout reader.
+func streamWriteTimeout(size int) time.Duration {
+	return streamSendTimeout + time.Duration(size)*time.Second/streamFloorRate
+}
+
 // errNoConnection reports that a frame could not be sent because no connection
 // was live. It is not a protocol error: the connection drops several times a
 // day for reasons outside this program.
@@ -39,9 +55,10 @@ var errNoConnection = errors.New("no live connection to the control host")
 // began. A worker that held its own *websocket.Conn would still be holding the
 // closed one after a reconnect, and its result would go nowhere.
 type connHolder struct {
-	mu      sync.Mutex
-	conn    *websocket.Conn
-	changed chan struct{}
+	mu               sync.Mutex
+	conn             *websocket.Conn
+	channelSupported bool
+	changed          chan struct{}
 }
 
 func newConnHolder() *connHolder {
@@ -53,6 +70,7 @@ func (h *connHolder) set(conn *websocket.Conn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.conn = conn
+	h.channelSupported = false
 	close(h.changed)
 	h.changed = make(chan struct{})
 }
@@ -63,6 +81,24 @@ func (h *connHolder) clear() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.conn = nil
+	h.channelSupported = false
+}
+
+func (h *connHolder) setCapabilities(capabilities []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, capability := range capabilities {
+		if capability == "conversation_open_channel" {
+			h.channelSupported = true
+			return
+		}
+	}
+}
+
+func (h *connHolder) supportsChannel() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.channelSupported
 }
 
 // current returns the live connection, which may be nil, together with a
@@ -85,9 +121,15 @@ func (h *connHolder) send(ctx context.Context, frame any) error {
 	if conn == nil {
 		return errNoConnection
 	}
-	ctx, cancel := context.WithTimeout(ctx, streamSendTimeout)
+	// Encode first, so the deadline can scale with the size. An Encoder, as
+	// in wsjson.Write, so the bytes on the wire do not change.
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(frame); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, streamWriteTimeout(buf.Len()))
 	defer cancel()
-	return wsjson.Write(ctx, conn, frame)
+	return conn.Write(ctx, websocket.MessageText, buf.Bytes())
 }
 
 // sendFinal writes a frame that ends a turn, waiting up to finalSendTimeout

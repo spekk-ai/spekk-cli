@@ -17,6 +17,11 @@ var (
 )
 
 func main() {
+	// git runs the credential helper as "agent-client git-credential get".
+	if len(os.Args) > 1 && os.Args[1] == "git-credential" {
+		os.Exit(runGitCredential(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
+
 	showVersion := flag.Bool("version", false, "Print version information and exit")
 	flag.Parse()
 
@@ -32,6 +37,22 @@ func main() {
 
 	cfg := loadConfig()
 	log.Printf("Starting agent client (host=%s workspace=%s)", cfg.Host, cfg.Workspace)
+	switch status, check := checkClaudeCode(); check {
+	case claudeCodeCurrent:
+		log.Print(status)
+	case claudeCodeUnreadable:
+		log.Printf("WARNING: %s Turns run with no version check.", status)
+	case claudeCodeOld:
+		log.Printf("WARNING: %s Every turn is refused until then.", status)
+	}
+
+	if !claudeSignedIn() {
+		log.Print("WARNING: Claude Code is not signed in. Every turn is refused until a person signs in on this sandbox.")
+	}
+
+	if warning := agentEnvWarning(agentEnvFile); warning != "" {
+		log.Print(warning)
+	}
 
 	if err := os.MkdirAll(cfg.Workspace, 0755); err != nil {
 		log.Fatalf("Failed to create workspace: %v", err)

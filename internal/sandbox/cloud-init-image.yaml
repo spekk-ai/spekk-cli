@@ -1,0 +1,22 @@
+#cloud-config
+#
+# First-boot cloud-init for a sandbox made from a spekk template image
+# (spekk sandbox image build). The image has the packages, Docker, Node,
+# the GitHub CLI, Claude Code, and the spekk CLI, so this only does what
+# belongs to the new machine. Cloud-init makes new SSH host keys, because
+# the image has none, and systemd makes a new /etc/machine-id.
+#
+# No package upgrade: an image is rebuilt for updates, not upgraded at boot.
+
+users:
+  - name: agent
+    shell: /bin/bash
+    groups: [docker, sudo, systemd-journal]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAA... your-key-here
+
+runcmd:
+  # Mark provisioning complete. The image build removed the marker, so the
+  # check means the same as on a fresh machine: the first boot is done.
+  - touch /opt/spekk/.provisioned

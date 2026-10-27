@@ -8,6 +8,58 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.48.1 -- No GitHub Token in ~/.git-credentials](RELEASE-NOTES-1.48.1.md)
+
+Sandbox credential setup, in `create`, `provision`, and `setup-credentials.sh`, no longer writes the GitHub token to `~/.git-credentials`. Git gets the token from the `gh auth git-credential` helper. After Git returns a credential through the helper, setup removes a legacy `~/.git-credentials` file. When the lookup fails, setup stops with an error and keeps the file. Run credential setup again on each existing sandbox, or replace it. There is no configuration change and no protocol change: the protocol stays `1.6`, and the major stays `1`.
+
+## [1.48.0 -- Turn Usage in Sandbox Result Frames](RELEASE-NOTES-1.48.0.md)
+
+The `result` frame that ends a sandbox turn now carries an optional `usage` object with input, output, cache read, and cache creation tokens and `cost_usd`. The counts come from the Claude Code `modelUsage` totals for the turn, including subagent and background task calls. The cost is the Claude Code estimate at API list prices, not a bill. The client sends no `usage` when a value is missing or invalid. The field is additive: the protocol changes to `1.6`, the major stays `1`, and older spekk-app servers ignore it.
+
+## [1.47.2 -- Agent ID Kept on Script-Equipped Hosts](RELEASE-NOTES-1.47.2.md)
+
+`setup-credentials.sh` now writes and keeps `SPEKK_AGENT_ID` in `agent.env`, and exits with status 1 for a value that is not a UUID. The CLI refuses a registration response whose agent ID is not a UUID. An existing `agent.env` with a `SPEKK_AGENT_ID` that is not a UUID stops the script until you correct the line.
+
+## [1.47.1 -- Clear Repository Clone Errors and Readable Agent Settings](RELEASE-NOTES-1.47.1.md)
+
+Failed repository Git steps now show a short, redacted stderr cause in the turn failure reason and agent log. The agent warns once at start if it cannot read `/etc/spekk/agent.env`. `setup-credentials.sh` now gives the file to `agent:agent` with mode 600. Existing hosts need the script to run again or a manual owner correction.
+
+## [1.47.0 -- App-Managed Sandboxes From the CLI, and a Key for Secrets](RELEASE-NOTES-1.47.0.md)
+
+New `spekk app` commands launch app-managed sandboxes, send text tasks, and read results with a personal API key. The sandbox agent makes a recipient key for secrets, sends its public key in a new `secrets_hello` frame, and `spekk sandbox status` shows the key fingerprint, with new `--json` output. Secret delivery stays inactive until the app flag is on. `create`, `provision`, and `register` write `SPEKK_AGENT_ID` to the agent env file. An existing host gets it only from `spekk sandbox register` or a manual line.
+
+## [1.46.0 -- Status Shows a Refused Agent, and a Cancel Stops the Session](RELEASE-NOTES-1.46.0.md)
+
+The sandbox agent records its last handshake and its last failed dial, and `spekk sandbox status` shows both, with a warning when the control host refuses the agent, for example with HTTP 403. A `cancel` frame now also removes the queued messages of the session and ends each of their turns with an `error` frame. A large `stream` frame no longer closes a healthy connection on a slow link.
+
+## [1.45.2 -- Clean Repository Checkouts for Attachments](RELEASE-NOTES-1.45.2.md)
+
+The sandbox agent stores downloaded attachments in the configured workspace, outside prepared repository checkouts. Later turns can select a ref while user edits still cause refusal. File input remains off, and real-model file and image reads remain open for immediate post-deployment QA.
+
+## [1.45.1 -- Safer Sandbox Attachment Downloads](RELEASE-NOTES-1.45.1.md)
+
+The sandbox agent validates and limits attachment downloads before a model turn starts. A failed batch stops the turn and removes its partial files. File input on the control host remains off pending separate approval.
+
+## [1.37.0 -- Search Specs, Docs, and Source Documents From One Index](RELEASE-NOTES-1.37.0.md)
+
+New `spekk docs search|show|add|status`. One FTS5 index in `.spekk/index.db` now holds the bodies of specs and assertions, the docs in the repository, and source documents (`raw/`, with stubs in `formatted/`). A search returns the best passage of each document with its line range, in at most 4,000 bytes. `docs add` converts HTML, email, and XLSX in the binary, and PDF and DOCX with `pdftotext` and `pandoc`. `sources:` in a spec cites documents, and `spekk validate` checks the ids.
+
+## [1.33.0 -- A Sandbox Registers Itself, and Sees Its Background Tasks End](RELEASE-NOTES-1.33.0.md)
+
+With `SPEKK_API_TOKEN`, `spekk sandbox create` registers the agent on the control host, and `destroy` revokes it first (`--ignore-revoke-failure` continues after a failed revoke). New `spekk sandbox register`, `spekk schedule`, and `--organization`. Every sandbox runs Claude Code 2.1.292 or newer, which keeps a turn alive while its background task runs, and `spekk sandbox deploy` upgrades an older one. Protocol `1.1` adds `terminal` to the `result` frame, and works with a control host on `1.0`. `spekk observer --mcp-config` now gives its MCP servers to Claude Code.
+
+## [1.32.0 -- Each Stream Frame Names Its Session](RELEASE-NOTES-1.32.0.md)
+
+Each `stream` frame from the sandbox agent now carries the turn's `agent_session_id`, so a control host can attribute a line when several sessions stream at the same time.
+
+## [1.31.1 -- A Failed Turn Says Why](RELEASE-NOTES-1.31.1.md)
+
+When `claude` fails on a sandbox, the agent's error frame and its log line now carry the cause from the final `result` event, for example a model API 503, and not only `exit status 1`.
+
+## [1.31.0 -- A Sandbox on Google Cloud, and an Agent for arm64](RELEASE-NOTES-1.31.0.md)
+
+`spekk sandbox create --provider gcp` makes a Compute Engine VM that spekk provisions and destroys, with no service account and no project SSH keys. Each release now publishes the agent for arm64, and spekk deploys the build that matches the machine. `--release` and `spekk update --version` pin a release, and `scripts/prepare-machine.sh` prepares a machine you already have. A new droplet trusts only the key spekk generated for it, not every key on the account.
+
 ## [1.30.0 -- A Sandbox on AWS, and a Deploy That Replaces a Running Agent](RELEASE-NOTES-1.30.0.md)
 
 One CloudFormation stack now stands up a spekk sandbox on AWS: an isolated VPC, a prepared Ubuntu 24.04 instance, and the command that registers it. `spekk sandbox deploy` replaces an agent that is running, which it could not do before. Announce, dedup, and the digest now share one rule for which findings are still open, and `spekk observer scan-check` refuses a bad type or a stray argument instead of answering `clear`. New `spekk list --priority` filter. Three argument mistakes that used to run anyway now fail.

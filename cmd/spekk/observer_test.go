@@ -12,9 +12,14 @@ import (
 )
 
 // gitT runs a git command in dir, failing the test on error.
+//
+// Auto maintenance is off. "git commit" starts "git maintenance run
+// --auto --detach". Since git 2.54 that can start a repack even in a
+// tiny repo (two loose objects in objects/17), and the repack writes
+// into .git after commit returns, while TempDir removes the directory.
 func gitT(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", append([]string{"-c", "maintenance.auto=false"}, args...)...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

@@ -5,7 +5,7 @@ created: 2026-09-05T00:00:00Z
 priority: 1
 status: done
 depends-on: cli-provider-dispatch
-branch: fix/create-resumes-after-provisioning-timeout
+branch: fix/provisioned-marker-race
 ---
 
 # A Create That Stops Waiting Leaves a Sandbox That Can Be Finished
@@ -18,7 +18,7 @@ Two things follow. The wait has to be the operator's to set, and it has to say w
 
 - `spekk sandbox create --provision-timeout <duration>` sets how long create waits for the marker. No flag means 30 minutes. A value that is not a positive Go duration is refused before anything is created.
 - While it waits, create prints a progress line at most once a minute: how long it has waited, and the last line of `/var/log/cloud-init-output.log` on the droplet. One SSH round trip per poll reports the marker, `cloud-init status`, and that line together.
-- The wait stops early, with a message that says why and carries the last log line, when `cloud-init status` reports `error`, or reports `done` without the marker. The marker is the last `runcmd` step, so `done` without it means it is not coming.
+- The wait stops early, with a message that says why and carries the last log line, when cloud-init reports a failure. When cloud-init reports `done` without the marker, the wait polls for a short grace period before it stops (see `marker-wait-outlasts-cloud-init-done`): the marker is the last `runcmd` step, and it can arrive just after the status reads `done`.
 - `spekk sandbox provision <name>` finishes a record whose status is `provisioning`. It refuses any other status without `--force`, and with `--force` it provisions the record anyway.
 - `provision` validates the environment variables of the sandbox's auth mode with the same check create uses, and it fails before it touches the machine when one is missing. The record carries the auth mode create chose, so `provision` needs no flag to ask for the same credentials; `--auth` overrides it, and a record with no mode reads as bedrock.
 - `provision` checks the marker over SSH, then runs the steps create runs after its wait - inject credentials, configure git credentials, deploy the agent - in that order, through one function that create also calls, so the two cannot drift. It then sets the status to `active` and prints the same "Next: Register this agent on the control host" message create prints, with the token.

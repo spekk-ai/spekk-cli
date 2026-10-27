@@ -1,9 +1,13 @@
 package show
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -78,12 +82,6 @@ branch: feature/test
 	}
 	if data.Assertions[0].Branch != "feature/test" {
 		t.Errorf("expected branch feature/test, got %s", data.Assertions[0].Branch)
-	}
-}
-
-func TestTemplateContainsPlaceholder(t *testing.T) {
-	if !strings.Contains(templateHTML, "/*__SPEKK_DATA__*/") {
-		t.Error("template should contain the data placeholder")
 	}
 }
 
@@ -665,50 +663,266 @@ func TestCrossBranchOffUnchanged(t *testing.T) {
 	}
 }
 
-func TestRunWritesHTML(t *testing.T) {
+// TestWriteJSONMatchesHTML checks that --json prints the same data that Run
+// puts into the explorer HTML, that it writes nothing to .spekk/, and that a
+// tree with no specs gives empty arrays and no error.
+func TestWriteJSONMatchesHTML(t *testing.T) {
 	dir := t.TempDir()
 	specsDir := filepath.Join(dir, "specs")
+	writeFile(t, filepath.Join(specsDir, "test-spec", "test-spec.md"),
+		"---\nid: test-spec\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# Test Spec <b>&</b>\n")
+	writeFile(t, filepath.Join(specsDir, "test-spec", "assertions", "test-a.md"),
+		"---\nid: test-a\nparent: test-spec\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# Test Assertion\n")
 
-	writeFile(t, filepath.Join(specsDir, "test-spec", "test-spec.md"), `---
-id: test-spec
-created: 2026-01-01T00:00:00Z
-priority: 1
----
+	var out bytes.Buffer
+	if err := WriteJSON(&out, specsDir, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".spekk")); !os.IsNotExist(err) {
+		t.Errorf("WriteJSON created .spekk/ (stat error: %v)", err)
+	}
 
-# Test Spec`)
-
-	writeFile(t, filepath.Join(specsDir, "test-spec", "assertions", "test-a.md"), `---
-id: test-a
-parent: test-spec
-created: 2026-01-01T00:00:00Z
-priority: 1
----
-
-# Test Assertion`)
-
-	// Set CI to skip browser opening
-	os.Setenv("CI", "true")
-	defer os.Unsetenv("CI")
-
-	err := Run(specsDir, Options{})
+	if err := Run(specsDir, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	html, err := os.ReadFile(filepath.Join(dir, ".spekk", "index.html"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	before, after, _ := strings.Cut(templateHTML, "/*__SPEKK_DATA__*/")
+	embedded, ok := strings.CutPrefix(string(html), before)
+	if ok {
+		embedded, ok = strings.CutSuffix(embedded, after)
+	}
+	if !ok {
+		t.Fatal("cannot find the data in the explorer HTML")
+	}
+	if got := strings.TrimSuffix(out.String(), "\n"); got != embedded {
+		t.Errorf("--json output differs from the HTML data:\n json %s\n html %s", got, embedded)
+	}
+	var data showData
+	if err := json.Unmarshal(out.Bytes(), &data); err != nil {
+		t.Fatal(err)
+	}
+	if len(data.Specs) != 1 || len(data.Assertions) != 1 {
+		t.Errorf("got %d specs and %d assertions, want 1 and 1", len(data.Specs), len(data.Assertions))
+	}
 
-	outputPath := filepath.Join(dir, ".spekk", "index.html")
-	content, err := os.ReadFile(outputPath)
-	if err != nil {
+	empty := filepath.Join(t.TempDir(), "empty")
+	if err := os.MkdirAll(filepath.Join(empty, "specs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := WriteJSON(&out, filepath.Join(empty, "specs"), Options{}); err != nil {
+		t.Fatalf("empty tree: %v", err)
+	}
+	if want := `{"projectName":"empty","specs":[],"assertions":[]}` + "\n"; out.String() != want {
+		t.Errorf("empty tree: got %q, want %q", out.String(), want)
+	}
+}
+
+// TestWriteJSONCrossBranchSharedGitDir runs --json --cross-branch in the layout
+// of a server that reads a bare mirror it must not change: GIT_DIR has only
+// HEAD and a commondir file that names the bare repository, GIT_WORK_TREE holds
+// only specs/, and new objects go to a private GIT_OBJECT_DIRECTORY that has
+// the bare repository as an alternate. The bare repository is read-only, so
+// any write to it fails the run.
+func TestWriteJSONCrossBranchSharedGitDir(t *testing.T) {
+	src := t.TempDir()
+	git(t, src, "init", "-q", "-b", "main")
+	git(t, src, "config", "user.email", "test@example.com")
+	git(t, src, "config", "user.name", "Test")
+	git(t, src, "config", "commit.gpgsign", "false")
+	specMD := "---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n\n# demo\n"
+	writeFile(t, filepath.Join(src, "specs/demo/demo.md"), specMD)
+	writeFile(t, filepath.Join(src, "specs/demo/assertions/shared.md"), assertionMD("shared", "not_started", "base"))
+	git(t, src, "add", "-A")
+	git(t, src, "commit", "-qm", "base")
+
+	git(t, src, "checkout", "-q", "-b", "other")
+	writeFile(t, filepath.Join(src, "specs/demo/assertions/shared.md"), assertionMD("shared", "done", "other"))
+	writeFile(t, filepath.Join(src, "specs/demo/assertions/foreign.md"), assertionMD("foreign", "draft", "only here"))
+	git(t, src, "add", "-A")
+	git(t, src, "commit", "-qm", "other work")
+
+	git(t, src, "checkout", "-q", "main")
+	sharedOnMain := assertionMD("shared", "in_progress", "main")
+	writeFile(t, filepath.Join(src, "specs/demo/assertions/shared.md"), sharedOnMain)
+	git(t, src, "commit", "-qam", "main work")
+
+	tmp := t.TempDir()
+	bare := filepath.Join(tmp, "mirror.git")
+	git(t, tmp, "clone", "-q", "--bare", src, bare)
+	gitDir := filepath.Join(tmp, "gitdir")
+	writeFile(t, filepath.Join(gitDir, "commondir"), bare+"\n")
+	writeFile(t, filepath.Join(gitDir, "HEAD"), "ref: refs/heads/main\n")
+	wt := filepath.Join(tmp, "wt")
+	writeFile(t, filepath.Join(wt, "specs/demo/demo.md"), specMD)
+	writeFile(t, filepath.Join(wt, "specs/demo/assertions/shared.md"), sharedOnMain)
+	objects := filepath.Join(tmp, "objects")
+	if err := os.Mkdir(objects, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	html := string(content)
-	if !strings.Contains(html, "test-spec") {
-		t.Error("HTML should contain spec ID")
+	setReadOnly(t, bare)
+	t.Setenv("GIT_DIR", gitDir)
+	t.Setenv("GIT_WORK_TREE", wt)
+	t.Setenv("GIT_OBJECT_DIRECTORY", objects)
+	t.Setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", filepath.Join(bare, "objects"))
+	chdir(t, wt)
+
+	var out bytes.Buffer
+	if err := WriteJSON(&out, filepath.Join(wt, "specs"), Options{CrossBranch: true}); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(html, "Test Assertion") {
-		t.Error("HTML should contain assertion title")
+	var data showData
+	if err := json.Unmarshal(out.Bytes(), &data); err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(html, "/*__SPEKK_DATA__*/") {
-		t.Error("placeholder should be replaced with actual data")
+	if !data.CrossBranch || data.Degraded || strings.Join(data.Branches, ",") != "other" {
+		t.Errorf("crossBranch=%v degraded=%v branches=%v, want true false [other]", data.CrossBranch, data.Degraded, data.Branches)
 	}
+	states := map[string]string{}
+	for _, a := range data.Assertions {
+		for _, c := range a.CrossBranch {
+			states[a.ID] = c.State
+		}
+		if a.ID == "foreign" && !a.Foreign {
+			t.Error("foreign assertion is not marked foreign")
+		}
+	}
+	if states["shared"] != "conflict" || states["foreign"] != "incoming_add" {
+		t.Errorf("states = %v, want shared=conflict foreign=incoming_add", states)
+	}
+	if len(data.Specs) != 1 || data.Specs[0].CrossBranchSummary != "conflict" {
+		t.Errorf("specs = %+v, want one spec with summary conflict", data.Specs)
+	}
+}
+
+// setReadOnly removes the write permission from every file and directory
+// under dir, and gives it back at cleanup so t.TempDir can remove them.
+func setReadOnly(t *testing.T, dir string) {
+	t.Helper()
+	chmodAll := func(mask os.FileMode, set bool) error {
+		return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			mode := info.Mode().Perm() &^ mask
+			if set {
+				mode = info.Mode().Perm() | mask
+			}
+			return os.Chmod(path, mode)
+		})
+	}
+	if err := chmodAll(0o222, false); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = chmodAll(0o200, true) })
+}
+
+// TestShowOrderMatchesList checks that show lists specs and assertions in the
+// `spekk list` order (priority, then ID, then file), that foreign items from
+// cross-branch mode take their place in that order instead of map order, and
+// that an unparseable foreign item (priority 0) comes last.
+func TestShowOrderMatchesList(t *testing.T) {
+	dir := t.TempDir()
+	specsDir := filepath.Join(dir, "specs")
+	spec := func(id string, priority int) {
+		writeFile(t, filepath.Join(specsDir, id, id+".md"), fmt.Sprintf(
+			"---\nid: %s\ncreated: 2026-01-01T00:00:00Z\npriority: %d\n---\n\n# %s\n", id, priority, id))
+	}
+	assertion := func(parent, id string, priority int) {
+		writeFile(t, filepath.Join(specsDir, parent, "assertions", id+".md"), fmt.Sprintf(
+			"---\nid: %s\nparent: %s\ncreated: 2026-01-01T00:00:00Z\npriority: %d\nstatus: not_started\n---\n\n# %s\n",
+			id, parent, priority, id))
+	}
+	spec("zeta", 1)
+	spec("alpha", 1)
+	assertion("alpha", "a-b", 3)
+	assertion("alpha", "a-c", 1)
+	assertion("zeta", "z-b", 2)
+	assertion("zeta", "z-a", 1)
+	assertion("zeta", "a-c", 1) // same ID as alpha/a-c: the file path decides
+
+	// Foreign items that exist only on another branch.
+	foreign := map[string]int{
+		"specs/gamma/gamma.md":              2,
+		"specs/delta/delta.md":              1,
+		"specs/epsilon/epsilon.md":          1,
+		"specs/delta/assertions/d-1.md":     2,
+		"specs/gamma/assertions/g-1.md":     1,
+		"specs/epsilon/assertions/e-1.md":   1,
+		"specs/alpha/assertions/a-new.md":   1,
+		"specs/epsilon/assertions/e-0.md":   3,
+		"specs/gamma/assertions/g-0.md":     2,
+		"specs/delta/assertions/d-0.md":     1,
+		"specs/epsilon/assertions/e-2.md":   1,
+		"specs/gamma/assertions/g-2.md":     3,
+		"specs/delta/assertions/d-2.md":     2,
+		"specs/alpha/assertions/a-other.md": 2,
+	}
+	var states []crossbranch.FileState
+	for path, priority := range foreign {
+		states = append(states, crossbranch.FileState{
+			Path:   path,
+			Branch: "feat/x",
+			State:  crossbranch.StateIncomingAdd,
+			Meta:   &crossbranch.FileMeta{Status: "not_started", Priority: priority, Branch: "feat/x"},
+		})
+	}
+	// A foreign file that could not be parsed has no metadata, so priority 0.
+	// It must sort after every real item.
+	states = append(states, crossbranch.FileState{
+		Path: "specs/alpha/assertions/a-broken.md", Branch: "feat/x", State: crossbranch.StateIncomingAdd,
+	})
+	sort.Slice(states, func(i, j int) bool { return states[i].Path < states[j].Path })
+
+	render := func(crossBranch bool) showData {
+		result, err := parser.ParseAllSpecs(specsDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := buildShowData(specsDir, result)
+		if crossBranch {
+			foldCrossBranch(&data, states, true)
+		}
+		return data
+	}
+	files := func(data showData) (specs, assertions []string) {
+		for _, s := range data.Specs {
+			specs = append(specs, s.File)
+		}
+		for _, a := range data.Assertions {
+			assertions = append(assertions, a.File)
+		}
+		return specs, assertions
+	}
+	check := func(name string, got, want []string) {
+		t.Helper()
+		if strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Errorf("%s order:\n got  %v\n want %v", name, got, want)
+		}
+	}
+
+	_, gotAssertions := files(render(false))
+	check("default assertions", gotAssertions, []string{
+		"specs/alpha/assertions/a-c.md", "specs/zeta/assertions/a-c.md", "specs/zeta/assertions/z-a.md",
+		"specs/zeta/assertions/z-b.md", "specs/alpha/assertions/a-b.md",
+	})
+
+	gotSpecs, gotAssertions := files(render(true))
+	check("cross-branch specs", gotSpecs, []string{
+		"specs/alpha/alpha.md", "specs/delta/delta.md", "specs/epsilon/epsilon.md", "specs/zeta/zeta.md",
+		"specs/gamma/gamma.md",
+	})
+	check("cross-branch assertions", gotAssertions, []string{
+		"specs/alpha/assertions/a-c.md", "specs/zeta/assertions/a-c.md", "specs/alpha/assertions/a-new.md",
+		"specs/delta/assertions/d-0.md", "specs/epsilon/assertions/e-1.md", "specs/epsilon/assertions/e-2.md",
+		"specs/gamma/assertions/g-1.md", "specs/zeta/assertions/z-a.md",
+		"specs/alpha/assertions/a-other.md", "specs/delta/assertions/d-1.md", "specs/delta/assertions/d-2.md",
+		"specs/gamma/assertions/g-0.md", "specs/zeta/assertions/z-b.md",
+		"specs/alpha/assertions/a-b.md", "specs/epsilon/assertions/e-0.md", "specs/gamma/assertions/g-2.md",
+		"specs/alpha/assertions/a-broken.md",
+	})
 }

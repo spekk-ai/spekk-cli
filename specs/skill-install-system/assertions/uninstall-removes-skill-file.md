@@ -19,9 +19,9 @@ branch: feature/skill-install-system
 ## Success Criteria
 
 - `spekk uninstall coach meeting-notes` removes `<cwd>/.spekk/skills/coach/meeting-notes.md` (local is default)
-- `spekk uninstall coach meeting-notes --global` removes `~/.spekk/skills/coach/meeting-notes.md`
-- If the target file doesn't exist, the command exits non-zero with a "not installed: <path>" error
-- Uninstall never deletes files outside `<scope>/.spekk/skills/<agent>/`
+- `spekk uninstall coach meeting-notes --global` removes `<global-config-dir>/skills/coach/meeting-notes.md`, with `<global-config-dir>` from `config.GlobalConfigDir()`
+- If the target file does not exist, the command exits non-zero with a "not installed: <path>" error
+- Uninstall only deletes the selected skill file under `<cwd>/.spekk/skills/<agent>/` for local scope or `<global-config-dir>/skills/<agent>/` for global scope
 - Uninstall does not affect embedded skills (the binary's compiled-in skill files remain available to `SkillResolver`)
 - Passing an unknown agent is rejected with the same validation as install
 - Omitting `<skill>` exits non-zero with usage

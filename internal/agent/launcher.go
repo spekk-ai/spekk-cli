@@ -86,9 +86,11 @@ func BuildSkillMessage(installDir, agent, subcommand string, args []string) (str
 }
 
 // Launch spawns the `claude` CLI with the given message and inherited stdio.
-// It forwards SIGINT and preserves the exit code.
-func Launch(message string) error {
-	cmd := exec.Command("claude", "--dangerously-skip-permissions", message)
+// extraArgs go before the message. It forwards SIGINT and preserves the exit
+// code.
+func Launch(message string, extraArgs ...string) error {
+	args := append([]string{"--dangerously-skip-permissions"}, extraArgs...)
+	cmd := exec.Command("claude", append(args, message)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -140,6 +142,7 @@ var agentHelpExtras = map[string]struct {
 	},
 	"observer": {
 		Options: `  --quiet                Preference for minimal output (Claude agent decides)
+  --mcp-config <file>    Load the MCP servers in <file> for this run only
 `,
 		Examples: `  spekk observer                          # Scan recent change; file at most one observation
   spekk observer coverage-gap             # Launch observer with coverage-gap skill

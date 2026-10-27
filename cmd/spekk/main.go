@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	spekk "github.com/spekk-ai/spekk-cli"
 	"github.com/spekk-ai/spekk-cli/internal/agent"
@@ -67,6 +68,9 @@ func main() {
 	case "query":
 		runQuery(args[1:])
 
+	case "docs":
+		runDocs(args[1:])
+
 	case "next":
 		runParser(args[1:])
 
@@ -104,6 +108,15 @@ func main() {
 
 	case "sandbox":
 		launchSandbox(args[1:])
+
+	case "app":
+		if err := execApp(args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+
+	case "schedule":
+		runSchedule(args[1:])
 
 	case "conversation":
 		runConversation(args[1:])
@@ -208,6 +221,11 @@ func runParser(args []string) {
 	next := parser.FindNextAssertion(result.Assertions, result.Specs, opts)
 	if next == nil {
 		out, _ := parser.FormatComplete()
+		if opts.AssertionID == "" {
+			if reasons := parser.CountIneligible(result.Assertions, result.Specs, opts); len(reasons) > 0 {
+				out, _ = parser.FormatNoneEligible(reasons)
+			}
+		}
 		fmt.Println(string(out))
 		return
 	}
@@ -630,8 +648,9 @@ one plain-text failure line per violation (file + problem), sorted by file
 then message, when anything is invalid.
 
 Warnings go to stderr and never change the exit code: a branch value that
-matches no branch on an assertion that is not done, and a builder lock that is
-stale.
+matches no branch on an assertion that is not done, a builder lock that is
+stale, a "sources" id that names no document, and each source document in
+raw/ that is stale, has no summary, has no file, or has no stub.
 `
 
 // execValidate is the testable core of runValidate. It writes the report to
@@ -714,7 +733,10 @@ OPTIONS:
 Only SELECT (and WITH ... SELECT) statements are permitted; the database is
 opened read-only. Tables: specs(id, title, status, priority, branch, file),
 assertions(id, parent_id, title, status, priority, branch, file),
-depends_on(assertion_id, depends_on_id).
+depends_on(assertion_id, depends_on_id), documents(kind, id, path, text_path,
+title, type, created, summary, sha256, state), document_tags(kind, doc_id,
+tag), and the FTS5 table passages(heading, body, terms, kind, doc_id,
+start_line, end_line, is_header). For a ranked text search, use "spekk docs search".
 `
 
 // runIndex implements the `spekk index` subcommand.
@@ -724,7 +746,10 @@ func runIndex(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"specsDir": {Names: []string{"--specs-dir"}, Type: cli.StringFlag},
 		"force":    {Names: []string{"--force"}, Type: cli.BoolFlag},
-		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		// --background is the refresh that a query starts when many
+		// documents changed; it is not for people, so the usage omits it.
+		"background": {Names: []string{"--background"}, Type: cli.BoolFlag},
+		"help":       {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
 	if flags.Bool("help") {
@@ -741,6 +766,13 @@ func runIndex(args []string) {
 	repoRoot := filepath.Dir(specsDir)
 	dbPath := index.DBPath(repoRoot)
 
+	if flags.Bool("background") {
+		if err := index.RefreshInBackground(specsDir, dbPath); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+
 	stats, err := index.BuildIndex(specsDir, dbPath, flags.Bool("force"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
@@ -754,7 +786,7 @@ func runIndex(args []string) {
 		fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %s\n", err)
 	}
 
-	fmt.Printf("Indexed %d specs, %d assertions, %d observations.\n", stats.Specs, stats.Assertions, stats.Observations)
+	fmt.Printf("Indexed %d specs, %d assertions, %d observations, %d documents (%d passages).\n", stats.Specs, stats.Assertions, stats.Observations, stats.Documents, stats.Passages)
 }
 
 // runQuery implements the `spekk query "<sql>"` subcommand.
@@ -1003,35 +1035,87 @@ func showStatus() {
 	}
 }
 
+// showUsage is the help text for `spekk show`.
+const showUsage = `
+spekk show - Open the Spec Explorer in the browser
+
+USAGE:
+  spekk show [OPTIONS]
+
+OPTIONS:
+  --watch, -w              Watch specs and live-reload the explorer
+  --cross-branch           Merge-preview mode: show spec/assertion state across all branches
+  --branch-filter <glob>   In cross-branch mode, only include branches matching the glob (e.g. 'feat/*')
+  --json                   Print the explorer data as JSON to stdout; write no file and open no browser
+  --help, -h               Show this help message
+`
+
+// showRunners holds the functions that execShow calls to build the explorer.
+// A test replaces them to check that --help calls neither.
+type showRunners struct {
+	run   func(specsDir string, opts show.Options) error
+	watch func(specsDir string, opts show.Options) error
+	json  func(w io.Writer, specsDir string, opts show.Options) error
+}
+
 // showSpekk generates and displays the spec explorer web interface.
 // Supports --watch / -w for live reload and --cross-branch (with an optional
 // --branch-filter glob) for merge-preview mode.
 func showSpekk(args []string) {
-	specsDir := findSpecsDir()
+	code := execShow(args, os.Stdout, os.Stderr, showRunners{run: show.Run, watch: show.RunWatch, json: show.WriteJSON})
+	if code != 0 {
+		os.Exit(code)
+	}
+}
 
+// execShow implements `spekk show` and returns the exit code. --help prints
+// showUsage before it resolves the specs directory, so it never writes the
+// explorer or starts the watch server.
+func execShow(args []string, stdout, stderr io.Writer, runners showRunners) int {
 	flags := cli.ParseFlags(args, cli.FlagSet{
 		"watch":         {Names: []string{"--watch", "-w"}, Type: cli.BoolFlag},
 		"cross-branch":  {Names: []string{"--cross-branch"}, Type: cli.BoolFlag},
 		"branch-filter": {Names: []string{"--branch-filter"}, Type: cli.StringFlag},
+		"json":          {Names: []string{"--json"}, Type: cli.BoolFlag},
+		"help":          {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
+	if flags.Bool("help") {
+		fmt.Fprint(stdout, showUsage)
+		return 0
+	}
+	if flags.Err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", flags.Err)
+		return 1
+	}
+	if flags.Bool("json") && flags.Bool("watch") {
+		fmt.Fprintln(stderr, "Error: --json cannot be used with --watch")
+		return 1
+	}
+
+	specsDir := findSpecsDir()
 	opts := show.Options{
 		CrossBranch:  flags.Bool("cross-branch"),
 		BranchFilter: flags.String("branch-filter"),
 	}
 
-	if flags.Bool("watch") {
-		if err := show.RunWatch(specsDir, opts); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
+	if flags.Bool("json") {
+		if err := runners.json(stdout, specsDir, opts); err != nil {
+			fmt.Fprintf(stderr, "Error: %s\n", err)
+			return 1
 		}
-		return
+		return 0
 	}
 
-	if err := show.Run(specsDir, opts); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
+	run := runners.run
+	if flags.Bool("watch") {
+		run = runners.watch
 	}
+	if err := run(specsDir, opts); err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", err)
+		return 1
+	}
+	return 0
 }
 
 // launchServe starts the WebSocket server for the browser extension.
@@ -1089,11 +1173,13 @@ USAGE:
 SUBCOMMANDS:
   create      Create a sandbox, or register a machine you already have
   provision   Finish a sandbox that create left at "provisioning"
-  list        List all sandboxes
-  status      Show status of a sandbox
+  register    Register a sandbox on the control host with your API token
+  list        List sandboxes, their kind and their expiry
+  status      Show status of a sandbox (--json for one JSON object)
   ssh         SSH into a sandbox
   destroy     Destroy a sandbox, or deregister a machine you own
   deploy      Deploy agent client to a sandbox
+  image       Build, list, and delete template images
 
 OPTIONS:
   --help, -h  Show this help message
@@ -1109,21 +1195,94 @@ USAGE:
   spekk sandbox provision <name> [options]
 
 OPTIONS:
-  --auth <mode>  bedrock or subscription. Default: the mode the sandbox was
-                 created with
-  --force, -f    Provision a sandbox whose status is not "provisioning"
-  --help, -h     Show this help message
+  --auth <mode>    bedrock or subscription. Default: the mode the sandbox was
+                   created with
+  --release <tag>  Pull the agent and the spekk CLI from a specific spekk
+                   release, e.g. an exp-* prerelease. Default: the release of
+                   this spekk, or the latest release for a dev build
+  --force, -f      Provision a sandbox whose status is not "provisioning"
+  --organization <id>
+                   Control host organization, when provision registers a new
+                   agent and you belong to more than one
+  --help, -h       Show this help message
 
 When "spekk sandbox create" stops waiting for cloud-init, the machine keeps
 running and the record stays at "provisioning". Once /opt/spekk/.provisioned
 exists on the machine, this command injects the credentials, configures git
 for the agent, deploys the agent binary, and marks the sandbox active. It
-needs the same environment variables as create, and it prints a new agent
-token to register on the control host.
+needs the same environment variables as create.
+
+A registered sandbox keeps its agent: provision writes back the agent token
+that is already on the machine. A sandbox with no agent gets a new token,
+registered on the control host when SPEKK_API_TOKEN is set.
 `
 
+// sandboxRegisterHelpText is the help for `spekk sandbox register`.
+const sandboxRegisterHelpText = `
+spekk sandbox register - Register a sandbox on the control host
+
+USAGE:
+  spekk sandbox register <name> [--organization <id>]
+
+OPTIONS:
+  --organization <id>  Control host organization for the agent. Needed only
+                       when you belong to more than one
+  --help, -h           Show this help message
+
+Registers a new agent for the sandbox with your spekk API token
+(SPEKK_API_TOKEN) on the control host (SPEKK_HOST). Then it writes the new
+agent token to /etc/spekk/agent.env on the machine and restarts the agent.
+If the sandbox had an agent before, register revokes it. Use this for a
+sandbox that was created without SPEKK_API_TOKEN.
+`
+
+// sandboxListHelpText is the help for `spekk sandbox list`.
+const sandboxListHelpText = `
+spekk sandbox list - List sandboxes
+
+USAGE:
+  spekk sandbox list [options]
+
+OPTIONS:
+  --expired     Show only the sandboxes whose expiry is in the past
+  --all-hosts   Also ask DigitalOcean and GCP for the labeled sandboxes
+                that this machine did not create, shown as "remote"
+  --help, -h    Show this help message
+
+The table shows each sandbox's kind (one-off or persistent) and its
+expiry. An expired sandbox shows EXPIRED. Expiry is a reminder only:
+spekk never destroys a sandbox because it expired.
+
+With --all-hosts, a cloud that cannot be asked (no token, no gcloud, or
+an API error) gets one line on stderr that says why. DigitalOcean lists
+the droplets tagged spekk-sandbox. GCP lists the VMs with a spekk-kind
+label in the default gcloud project.
+`
+
+// listSandboxes runs `spekk sandbox list`.
+func listSandboxes(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"expired":   {Names: []string{"--expired"}, Type: cli.BoolFlag},
+		"all-hosts": {Names: []string{"--all-hosts"}, Type: cli.BoolFlag},
+		"help":      {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Print(sandboxListHelpText)
+		return
+	}
+	if flags.Err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", flags.Err)
+		os.Exit(1)
+	}
+	opts := sandbox.ListOptions{Expired: flags.Bool("expired"), AllHosts: flags.Bool("all-hosts")}
+	if err := sandbox.List(opts); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
 // launchSandbox manages cloud sandbox environments.
-// Subcommands: create, provision, list, status, ssh, destroy, deploy.
+// Subcommands: create, provision, register, list, status, ssh, destroy, deploy.
 func launchSandbox(args []string) {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
 		fmt.Print(sandboxHelpText)
@@ -1135,21 +1294,31 @@ func launchSandbox(args []string) {
 
 	switch subcommand {
 	case "create":
+		if isMachineMode(subArgs) {
+			createMachineSandbox(subArgs)
+			return
+		}
 		createSandbox(subArgs)
 	case "provision":
 		provisionSandbox(subArgs)
+	case "register":
+		registerSandbox(subArgs)
 	case "list":
-		if err := sandbox.List(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
-		}
+		listSandboxes(subArgs)
 	case "status":
-		if len(subArgs) == 0 {
-			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox status <name>")
+		if len(subArgs) == 0 || strings.HasPrefix(subArgs[0], "-") {
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox status <name> [--json]")
 			os.Exit(1)
 		}
 		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		statusFlags := cli.ParseFlags(subArgs[1:], cli.FlagSet{
+			"json": {Names: []string{"--json"}, Type: cli.BoolFlag},
+		})
+		if statusFlags.Err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", statusFlags.Err)
 			os.Exit(1)
 		}
 		// Status reads more than the provider knows, so a provider it
@@ -1162,7 +1331,7 @@ func launchSandbox(args []string) {
 		if err != nil && !errors.Is(err, sandbox.ErrSandboxNotFound) {
 			fmt.Fprintf(os.Stderr, "Warning: %s\n", err)
 		}
-		if err := sandbox.Status(p, subArgs[0]); err != nil {
+		if err := sandbox.Status(p, subArgs[0], statusFlags.Bool("json")); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1180,17 +1349,24 @@ func launchSandbox(args []string) {
 			os.Exit(1)
 		}
 	case "destroy":
+		if isMachineMode(subArgs) {
+			destroyMachineSandbox(subArgs)
+			return
+		}
 		name := ""
-		force := false
+		var opts sandbox.DestroyOptions
 		for _, a := range subArgs {
 			if a == "--force" || a == "-f" {
-				force = true
+				opts.Force = true
+			} else if a == "--ignore-revoke-failure" {
+				opts.IgnoreRevokeFailure = true
 			} else if !strings.HasPrefix(a, "-") && name == "" {
 				name = a
 			}
 		}
 		if name == "" {
-			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force]")
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox destroy <name> [--force] [--ignore-revoke-failure]")
+			fmt.Fprintln(os.Stderr, "       spekk sandbox destroy <name> --machine --force   (DigitalOcean token as JSON on stdin)")
 			os.Exit(1)
 		}
 		if err := sandbox.ValidateSandboxName(name); err != nil {
@@ -1202,20 +1378,34 @@ func launchSandbox(args []string) {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Destroy(p, name, force); err != nil {
+		if err := sandbox.Destroy(p, name, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
+	case "image":
+		imageSandbox(subArgs)
 	case "deploy":
-		if len(subArgs) == 0 {
-			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox deploy <name>")
+		flags := cli.ParseFlags(subArgs, cli.FlagSet{
+			"release": {Names: []string{"--release"}, Type: cli.StringFlag},
+			"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		})
+		if flags.Bool("help") {
+			fmt.Println("Usage: spekk sandbox deploy <name> [--release <tag>]")
+			fmt.Println("\nRedeploy the agent binary and the spekk CLI to a sandbox, from the release")
+			fmt.Println("of this spekk (the latest release for a dev build). --release pulls them")
+			fmt.Println("from a specific spekk release, e.g. an exp-* prerelease.")
+			return
+		}
+		name := sandboxPositional(subArgs, "--release")
+		if name == "" {
+			fmt.Fprintln(os.Stderr, "Usage: spekk sandbox deploy <name> [--release <tag>]")
 			os.Exit(1)
 		}
-		if err := sandbox.ValidateSandboxName(subArgs[0]); err != nil {
+		if err := sandbox.ValidateSandboxName(name); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
-		if err := sandbox.Deploy(subArgs[0]); err != nil {
+		if err := sandbox.Deploy(name, flags.String("release")); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -1226,19 +1416,128 @@ func launchSandbox(args []string) {
 	}
 }
 
+// sandboxImageHelpText is the help for `spekk sandbox image`.
+const sandboxImageHelpText = `
+spekk sandbox image - Build, list, and delete template images
+
+USAGE:
+  spekk sandbox image build --name <image> [options]
+  spekk sandbox image list
+  spekk sandbox image delete <image>
+
+BUILD OPTIONS:
+  --name <image>         Image name (required): lowercase letters, digits and
+                         hyphens, starting with a letter, at most 63 characters
+  --setup <script>       Run this script as root on the builder before the
+                         image is made, for example to install a browser
+  --provider <provider>  digitalocean (default) or gcp
+  --size <size>          Size of the builder (default: the provider default)
+  --regions <r1,r2>      DigitalOcean: the builder region, then the regions the
+                         snapshot is copied to (default: nyc1,nyc3).
+                         GCP: the zone of the builder; the image is global
+  --project <id>         GCP project (default: gcloud project)
+  --help, -h             Show this help message
+
+build creates a temporary builder sandbox "image-<image>" with the normal
+cloud-init, runs --setup, cleans the builder (SSH host keys, machine ID,
+authorized keys, shell history, logs, cloud-init state), and checks it for
+credentials. A credential file on the builder fails the build. Then the
+provider makes a private image, and the build records it in images.json.
+The builder is destroyed on success, on failure, and on Ctrl-C.
+
+Create a sandbox from the image with: spekk sandbox create --image <image>
+
+Rebuild an image for security updates (weekly) and with each spekk release.
+create warns when an image is older than 14 days.
+`
+
+// imageSandbox runs `spekk sandbox image <build|list|delete>`.
+func imageSandbox(args []string) {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
+		fmt.Print(sandboxImageHelpText)
+		return
+	}
+	fail := func(err error) {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "build":
+		flags := cli.ParseFlags(args[1:], cli.FlagSet{
+			"name":     {Names: []string{"--name"}, Type: cli.StringFlag},
+			"setup":    {Names: []string{"--setup"}, Type: cli.StringFlag},
+			"provider": {Names: []string{"--provider"}, Type: cli.StringFlag},
+			"size":     {Names: []string{"--size"}, Type: cli.StringFlag},
+			"regions":  {Names: []string{"--regions"}, Type: cli.StringFlag},
+			"project":  {Names: []string{"--project"}, Type: cli.StringFlag},
+			"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		})
+		if flags.Bool("help") {
+			fmt.Print(sandboxImageHelpText)
+			return
+		}
+		if flags.Err != nil {
+			fail(flags.Err)
+		}
+		if flags.String("name") == "" {
+			fail(fmt.Errorf("--name is required for sandbox image build"))
+		}
+		providerName := flags.String("provider")
+		if providerName == "" {
+			providerName = "digitalocean"
+		}
+		opts := sandbox.ImageBuildOptions{
+			Name:    flags.String("name"),
+			Setup:   flags.String("setup"),
+			Size:    flags.String("size"),
+			Project: flags.String("project"),
+		}
+		if r := flags.String("regions"); r != "" {
+			opts.Regions = strings.Split(r, ",")
+		} else if providerName == "digitalocean" {
+			opts.Regions = sandbox.DefaultImageRegions
+		}
+		if providerName == sandbox.ProviderNone {
+			fail(fmt.Errorf("an image needs a cloud provider: digitalocean or gcp"))
+		}
+		p, err := sandbox.ProviderByName(providerName)
+		if err != nil {
+			fail(err)
+		}
+		if err := sandbox.BuildImage(p, opts); err != nil {
+			fail(err)
+		}
+	case "list":
+		if err := sandbox.ListImages(os.Stdout, time.Now()); err != nil {
+			fail(err)
+		}
+	case "delete":
+		if len(args) != 2 || strings.HasPrefix(args[1], "-") {
+			fail(fmt.Errorf("usage: spekk sandbox image delete <image>"))
+		}
+		if err := sandbox.DeleteImage(args[1], sandbox.ProviderByName); err != nil {
+			fail(err)
+		}
+	default:
+		fail(fmt.Errorf("unknown image command %q: use build, list, or delete", args[0]))
+	}
+}
+
 // provisionSandbox parses arguments for `spekk sandbox provision <name>`.
 func provisionSandbox(args []string) {
 	flags := cli.ParseFlags(args, cli.FlagSet{
-		"auth":  {Names: []string{"--auth"}, Type: cli.StringFlag},
-		"force": {Names: []string{"--force", "-f"}, Type: cli.BoolFlag},
-		"help":  {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+		"auth":    {Names: []string{"--auth"}, Type: cli.StringFlag},
+		"release": {Names: []string{"--release"}, Type: cli.StringFlag},
+		"force":   {Names: []string{"--force", "-f"}, Type: cli.BoolFlag},
+		"org":     {Names: []string{"--organization"}, Type: cli.StringFlag},
+		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 	if flags.Bool("help") {
 		fmt.Print(sandboxProvisionHelpText)
 		return
 	}
 
-	name := sandboxPositional(args, "--auth")
+	name := sandboxPositional(args, "--auth", "--release", "--organization")
 	if name == "" {
 		fmt.Fprintln(os.Stderr, "Usage: spekk sandbox provision <name> [--auth <mode>] [--force]")
 		os.Exit(1)
@@ -1260,7 +1559,32 @@ func provisionSandbox(args []string) {
 		auth = mode
 	}
 
-	if err := sandbox.Provision(name, sandbox.ProvisionOptions{Auth: auth, Force: flags.Bool("force")}); err != nil {
+	if err := sandbox.Provision(name, sandbox.ProvisionOptions{Auth: auth, Force: flags.Bool("force"), Release: flags.String("release"), Organization: flags.String("org")}); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+// registerSandbox parses arguments for `spekk sandbox register <name>`.
+func registerSandbox(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"org":  {Names: []string{"--organization"}, Type: cli.StringFlag},
+		"help": {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Print(sandboxRegisterHelpText)
+		return
+	}
+	name := sandboxPositional(args, "--organization")
+	if name == "" {
+		fmt.Fprintln(os.Stderr, "Usage: spekk sandbox register <name> [--organization <id>]")
+		os.Exit(1)
+	}
+	if err := sandbox.ValidateSandboxName(name); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	if err := sandbox.Register(name, flags.String("org")); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -1283,24 +1607,8 @@ func sandboxPositional(args []string, valueFlags ...string) string {
 	return ""
 }
 
-func createSandbox(args []string) {
-	flags := cli.ParseFlags(args, cli.FlagSet{
-		"name":              {Names: []string{"--name"}, Type: cli.StringFlag},
-		"provider":          {Names: []string{"--provider"}, Type: cli.StringFlag},
-		"region":            {Names: []string{"--region"}, Type: cli.StringFlag},
-		"size":              {Names: []string{"--size"}, Type: cli.StringFlag},
-		"project":           {Names: []string{"--project"}, Type: cli.StringFlag},
-		"vpc":               {Names: []string{"--vpc"}, Type: cli.StringFlag},
-		"ip":                {Names: []string{"--ip"}, Type: cli.StringFlag},
-		"ssh-key":           {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
-		"ssh-user":          {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
-		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
-		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
-		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
-	})
-
-	if flags.Bool("help") {
-		fmt.Print(`
+// sandboxCreateHelpText is the help for `spekk sandbox create`.
+const sandboxCreateHelpText = `
 spekk sandbox create - Create a new sandbox
 
 USAGE:
@@ -1308,14 +1616,21 @@ USAGE:
 
 OPTIONS:
   --name <name>          Sandbox name (required)
-  --provider <provider>  digitalocean, or none for a machine you already
-                         have (inferred from --ip / --ssh-key)
+  --provider <provider>  digitalocean (default), gcp, or none for a machine
+                         you already have (inferred from --ip / --ssh-key)
 
   DigitalOcean options:
   --region <region>      DigitalOcean region (default: nyc1)
   --size <size>          Droplet size slug (default: s-2vcpu-4gb)
   --project <project>    Assign to a DigitalOcean project (name or UUID)
   --vpc <uuid>           Place droplet in a specific DigitalOcean VPC
+
+  Google Cloud options (uses the gcloud CLI and its credentials):
+  --region <zone>        Zone (default: gcloud compute/zone, else
+                         us-central1-a)
+  --size <type>          Machine type (default: e2-medium)
+  --project <id>         Project ID (default: gcloud project)
+  --vpc <network>        Network name; it must admit TCP 22 (default: default)
   --provision-timeout <duration>
                          How long to wait for cloud-init (default: 30m).
                          If it runs out, the machine keeps running; finish
@@ -1333,10 +1648,82 @@ OPTIONS:
                          (uses CLAUDE_CODE_OAUTH_TOKEN from your environment,
                          minted by "claude setup-token")
 
+  Template image (DigitalOcean and GCP):
+  --image <name>         Create the machine from an image that "spekk sandbox
+                         image build" made. Only the first-boot steps run.
+                         With no such image for the provider or region,
+                         create says so in one line and uses the full
+                         cloud-init. Warns when the image is older than 14 days
+
+  Release:
+  --release <tag>        Pull the agent binary and the spekk CLI from a specific
+                         spekk release, e.g. an exp-* prerelease. Default: the
+                         release of this spekk, or the latest release for a
+                         dev build
+
+  Sandbox kind:
+  --one-off              One task, then destroy. Expires 48h after create
+                         unless --expires says when. Default: persistent,
+                         with no expiry
+  --expires <when>       Expiry of a one-off sandbox: a duration (36h),
+                         days (3d), a date (2026-10-17, 00:00 UTC), or an
+                         RFC 3339 time. Needs --one-off
+  --purpose <text>       Why the sandbox exists, kept in its record. One
+                         line: no newline, tab or other control character
+
+  create records the kind, purpose, expiry and host in sandboxes.json and
+  in /opt/spekk/sandbox.json on the machine. On DigitalOcean and GCP it
+  also labels the machine (spekk-kind, spekk-expires, spekk-host), so
+  "spekk sandbox list --all-hosts" on a different machine finds it. A
+  failed label is a warning. Expiry is a reminder in "spekk sandbox list";
+  spekk never destroys a sandbox because it expired.
+
+  Control host registration:
+  --organization <id>    Control host organization for the agent. Needed only
+                         when you belong to more than one
+
+  With SPEKK_API_TOKEN set, create registers the agent on the control host
+  (SPEKK_HOST) before it creates the machine, and revokes it if a later step
+  fails. Without it, create prints the agent token to register by hand, or
+  register later with "spekk sandbox register <name>".
+
   spekk does not provision a machine it did not create. The machine must
   already carry /opt/spekk/.provisioned; spekk then injects credentials
   and deploys the agent onto it.
-`)
+
+  Machine mode (for a server worker, DigitalOcean only):
+  spekk sandbox create <name> --machine --size <size> --region <region>
+      [--one-off [--expires <when>]] [--label <key>=<value> ...]
+      [--release <tag>] [--provision-timeout <duration>]
+                         Reads one JSON object with every secret on stdin,
+                         and writes one JSON line for each stage on stdout.
+                         See "Machine mode" in docs/cli-reference.md
+`
+
+func createSandbox(args []string) {
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"name":              {Names: []string{"--name"}, Type: cli.StringFlag},
+		"provider":          {Names: []string{"--provider"}, Type: cli.StringFlag},
+		"region":            {Names: []string{"--region"}, Type: cli.StringFlag},
+		"size":              {Names: []string{"--size"}, Type: cli.StringFlag},
+		"project":           {Names: []string{"--project"}, Type: cli.StringFlag},
+		"vpc":               {Names: []string{"--vpc"}, Type: cli.StringFlag},
+		"ip":                {Names: []string{"--ip"}, Type: cli.StringFlag},
+		"ssh-key":           {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
+		"ssh-user":          {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
+		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
+		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
+		"release":           {Names: []string{"--release"}, Type: cli.StringFlag},
+		"organization":      {Names: []string{"--organization"}, Type: cli.StringFlag},
+		"one-off":           {Names: []string{"--one-off"}, Type: cli.BoolFlag},
+		"expires":           {Names: []string{"--expires"}, Type: cli.StringFlag},
+		"purpose":           {Names: []string{"--purpose"}, Type: cli.StringFlag},
+		"image":             {Names: []string{"--image"}, Type: cli.StringFlag},
+		"help":              {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+
+	if flags.Bool("help") {
+		fmt.Print(sandboxCreateHelpText)
 		return
 	}
 
@@ -1362,6 +1749,17 @@ OPTIONS:
 		os.Exit(1)
 	}
 
+	kind, expiresAt, err := sandbox.ResolveKind(flags.Bool("one-off"), flags.String("expires"), time.Now())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := sandbox.ValidatePurpose(flags.String("purpose")); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
 	setFlags := map[string]bool{
 		"--region":   flags.String("region") != "",
 		"--size":     flags.String("size") != "",
@@ -1370,6 +1768,7 @@ OPTIONS:
 		"--ip":       flags.String("ip") != "",
 		"--ssh-key":  flags.String("ssh-key") != "",
 		"--ssh-user": flags.String("ssh-user") != "",
+		"--image":    flags.String("image") != "",
 	}
 
 	// Naming an existing machine is what says there is nothing to create.
@@ -1400,8 +1799,16 @@ OPTIONS:
 		SSHKey:  flags.String("ssh-key"),
 		SSHUser: flags.String("ssh-user"),
 		Auth:    auth,
+		Release: flags.String("release"),
 
+		Organization:     flags.String("organization"),
 		ProvisionTimeout: provisionTimeout,
+
+		Kind:      kind,
+		ExpiresAt: expiresAt,
+		Purpose:   flags.String("purpose"),
+
+		ImageName: flags.String("image"),
 	}
 	if err := sandbox.Create(p, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -1540,27 +1947,28 @@ func runSkillsList(args []string) {
 
 // runUpdate performs a self-update check and optional install.
 func runUpdate(args []string) {
-	checkOnly := false
-	for _, a := range args {
-		if a == "--check" || a == "-c" {
-			checkOnly = true
-		}
-		if a == "--help" || a == "-h" {
-			fmt.Print(`
+	flags := cli.ParseFlags(args, cli.FlagSet{
+		"check":   {Names: []string{"--check", "-c"}, Type: cli.BoolFlag},
+		"version": {Names: []string{"--version"}, Type: cli.StringFlag},
+		"help":    {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Print(`
 spekk update - Self-update the spekk CLI binary
 
 USAGE:
   spekk update [OPTIONS]
 
 OPTIONS:
-  --check, -c   Check for available updates without installing
-  --help, -h    Show this help message
+  --check, -c        Check for available updates without installing
+  --version <tag>    Install a specific release tag instead of the latest,
+                     e.g. an exp-* prerelease (skips the newer-version check)
+  --help, -h         Show this help message
 `)
-			return
-		}
+		return
 	}
 
-	replaced, err := update.Run(checkOnly)
+	replaced, err := update.Run(flags.Bool("check"), flags.String("version"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
@@ -1920,14 +2328,17 @@ COMMANDS:
   list      List specs and assertions with optional --status filter and --assertions-only flat output
   index     Build .spekk/index.db SQLite index from specs/ (use --force to rebuild from scratch)
   query     Execute a SELECT query against .spekk/index.db (supports --json, --tsv, --csv)
-  show      Generate and display spec explorer web interface (-w to watch)
+  docs      Search specs, repository docs, and source documents (search, show, add, status)
+  show      Generate and display spec explorer web interface (-w to watch, --json for data)
   status    Show comprehensive overview of all specs and assertions
   validate  Check specs/ against a fixed set of invariants; exit non-zero on any violation
   serve     Start WebSocket server for browser extension (--port, --host)
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
   observer  Launch the Observer Agent to find spec-code drift
-  sandbox   Manage cloud sandbox environments (create, provision, list, status, ssh, destroy, deploy)
+  sandbox   Manage cloud sandbox environments (create, provision, register, list, status, ssh, destroy, deploy)
+  app       Use app-managed sandboxes with a personal API key
+  schedule  Manage the scheduled tasks of a sandbox agent (list, create, update, delete, run)
   conversation  Request a conversation on the connected chat surface (open)
   install   Install a skill for an agent (coach/builder/observer)
   uninstall Remove an installed skill from local or global scope
@@ -1946,6 +2357,7 @@ FLAGS for "show":
   --watch, -w              Watch specs and live-reload the explorer
   --cross-branch           Merge-preview mode: show spec/assertion state across all branches
   --branch-filter <glob>   In cross-branch mode, only include branches matching the glob (e.g. 'feat/*')
+  --json                   Print the explorer data as JSON to stdout; write no file and open no browser
 
 FLAGS for "next":
   --all             Show all assertions

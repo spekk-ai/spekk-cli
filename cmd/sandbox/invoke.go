@@ -6,15 +6,57 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
 )
 
+// beforeTurnStart runs just before invoke checks for a cancel and starts the
+// process. It does nothing, and a test replaces it to hold a turn in the
+// window between the dispatch and the process start.
+var beforeTurnStart = func() {}
+
 func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg Message) {
+	workspace := cfg.Workspace
+	if msg.Repository != nil {
+		lockValue, _ := repositoryLocks.LoadOrStore(msg.Repository.ID, &sync.Mutex{})
+		lock := lockValue.(*sync.Mutex)
+		lock.Lock()
+		defer lock.Unlock()
+		var err error
+		workspace, err = prepareRepository(ctx, cfg, msg.AgentSessionID, *msg.Repository)
+		if err != nil {
+			log.Printf("Repository preparation failed for agent session %s: %v", msg.AgentSessionID, err)
+			sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("Repository preparation failed: %v", err))
+			return
+		}
+	}
+
+	// A turn with no model credential would fail inside claude with no
+	// cause that the person can act on.
+	if !claudeSignedIn() {
+		log.Print("Refusing a turn: Claude Code is not signed in.")
+		sendError(ctx, conns, msg.AgentSessionID, signInRequiredDetail)
+		return
+	}
+
+	// Each turn reads the version again: a self-update or a deploy can change
+	// it while the client runs, and the read takes about 20 ms.
+	switch status, check := checkClaudeCode(); check {
+	case claudeCodeOld:
+		log.Printf("Refusing a turn: %s", status)
+		sendError(ctx, conns, msg.AgentSessionID, status)
+		return
+	case claudeCodeUnreadable:
+		log.Printf("WARNING: %s The turn runs with no version check.", status)
+	}
+
 	args := []string{
 		"-p", "-",
 		"--output-format", "stream-json",
@@ -33,8 +75,15 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	}
 	defer cleanupSpool()
 
+	// Keep attachments outside a selected checkout so later turns can prepare it.
+	attachmentPaths, err := downloadAttachments(ctx, cfg, msg.Attachments)
+	if err != nil {
+		sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("Attachment input failed: %v", err))
+		return
+	}
+
 	cmd := exec.Command("claude", args...)
-	cmd.Dir = cfg.Workspace
+	cmd.Dir = workspace
 	// Per-process env, not os.Setenv: os.Setenv is process-global and would
 	// make concurrent sessions share (and clobber) one spool directory.
 	cmd.Env = append(os.Environ(), conversation.SpoolEnvVar+"="+spoolDir)
@@ -53,12 +102,21 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		return
 	}
 
+	// The cancel check, the start, and the publish of the process share one
+	// critical section with Cancel. A cancel before it stops the turn here,
+	// and a cancel after it finds the process and signals it.
+	beforeTurnStart()
+	w.mu.Lock()
+	if w.cancelled {
+		w.mu.Unlock()
+		sendError(ctx, conns, msg.AgentSessionID, cancelledBeforeStartDetail)
+		return
+	}
 	if err := cmd.Start(); err != nil {
+		w.mu.Unlock()
 		sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("start claude: %v", err))
 		return
 	}
-
-	w.mu.Lock()
 	w.current = cmd.Process
 	w.mu.Unlock()
 	defer func() {
@@ -89,9 +147,9 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	if msg.SystemPrompt != "" {
 		text = msg.SystemPrompt + "\n\n---\n\nUser message:\n" + text
 	}
-	if paths := downloadAttachments(cfg, msg.Attachments); len(paths) > 0 {
+	if len(attachmentPaths) > 0 {
 		text += "\n\n[Attached files saved to workspace - use the Read tool to view them]\n"
-		for _, p := range paths {
+		for _, p := range attachmentPaths {
 			text += fmt.Sprintf("  - %s\n", p)
 		}
 	}
@@ -113,6 +171,9 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 
 	// Stream stdout line by line
 	var lastSessionID, lastResultText string
+	var lastResultIsError bool
+	var lastResult map[string]any
+	var progress turnProgress
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 10*1024*1024), 10*1024*1024)
 	for scanner.Scan() {
@@ -123,54 +184,95 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		// Dropped when no connection is live. A stream frame drives a live
 		// display, so a late one has no value, and waiting here would stall
 		// the read of the child's stdout.
-		conns.send(ctx, map[string]any{"type": "stream", "data": line})
+		// agent_session_id names the turn's session, so the control host can
+		// attribute the line when several sessions stream at once. The field is
+		// additive, and the protocol version does not change.
+		conns.send(ctx, map[string]any{"type": "stream", "data": line, "agent_session_id": msg.AgentSessionID})
 
 		var event map[string]any
-		if json.Unmarshal([]byte(line), &event) == nil {
+		decoder := json.NewDecoder(strings.NewReader(line))
+		decoder.UseNumber()
+		if decoder.Decode(&event) == nil && decoder.Decode(new(any)) == io.EOF {
+			progress.observe(event)
 			if sessionID == "" {
 				if sid, ok := event["session_id"].(string); ok && sid != "" {
 					sessionID = sid
 				}
 			}
 			if event["type"] == "result" {
+				lastResult = event
 				lastSessionID, _ = event["session_id"].(string)
 				lastResultText, _ = event["result"].(string)
+				lastResultIsError, _ = event["is_error"].(bool)
 			}
 		}
 
 		// Drain after every line so a request written mid-session is
 		// emitted before the invocation returns, stamped with whatever
 		// session id is known so far.
-		drainSpool(ctx, spoolDir, sessionID, send)
+		drainSpool(ctx, spoolDir, sessionID, conns.supportsChannel, send)
 	}
 
 	waitErr := cmd.Wait()
 	// Final drain after process exit, regardless of exit status, so a
 	// request written just before the process exited is still emitted.
-	drainSpool(ctx, spoolDir, sessionID, send)
+	drainSpool(ctx, spoolDir, sessionID, conns.supportsChannel, send)
+	tracker := w.usage
+	if tracker == nil {
+		tracker = &usageTotals{}
+	}
+	usage, hasUsage := tracker.measure(lastSessionID, msg.SessionID, lastResult)
 
 	if waitErr != nil {
 		detail := stderrBuf.String()
 		if len(detail) > 2000 {
 			detail = detail[:2000]
 		}
+		reason := failureReason(waitErr, lastResultText, lastResultIsError)
 		reportTurnEnd(ctx, conns, msg.AgentSessionID, map[string]any{
 			"type":             "error",
-			"error":            fmt.Sprintf("claude exited: %v", waitErr),
+			"error":            reason,
 			"detail":           detail,
 			"agent_session_id": msg.AgentSessionID,
 		})
-		log.Printf("Claude failed: %v", waitErr)
+		log.Printf("Claude failed: %s", reason)
 		return
 	}
 
-	reportTurnEnd(ctx, conns, msg.AgentSessionID, map[string]any{
+	// terminal is always sent, as a JSON boolean. The control host reads an
+	// absent field as true only for clients that predate it.
+	frame := map[string]any{
 		"type":             "result",
 		"session_id":       lastSessionID,
 		"agent_session_id": msg.AgentSessionID,
 		"output":           lastResultText,
-	})
+		"terminal":         progress.terminal(),
+	}
+	if hasUsage {
+		frame["usage"] = usage
+	}
+	reportTurnEnd(ctx, conns, msg.AgentSessionID, frame)
 	log.Printf("Claude finished: session=%s", lastSessionID)
+}
+
+// maxFailureCauseLen caps the cause that failureReason adds. An API error
+// result is one or two sentences, so the cap only stops a long result from
+// filling the control host's log line.
+const maxFailureCauseLen = 500
+
+// failureReason says why claude exited non-zero. When the model API fails,
+// claude writes the cause to the result event on stdout, with is_error set,
+// and writes nothing useful to stderr. Without that text the report is only
+// "exit status 1", which does not tell an API outage from any other failure.
+func failureReason(waitErr error, resultText string, resultIsError bool) string {
+	reason := fmt.Sprintf("claude exited: %v", waitErr)
+	if !resultIsError || resultText == "" {
+		return reason
+	}
+	if len(resultText) > maxFailureCauseLen {
+		resultText = resultText[:maxFailureCauseLen]
+	}
+	return reason + ": " + resultText
 }
 
 // sendError reports a turn that failed before claude produced anything. Every

@@ -193,7 +193,7 @@ There is no flag, environment variable, or prompt instruction that suppresses dr
 
 ### Sandbox provisioning
 
-`spekk sandbox create`, `spekk sandbox provision`, and `spekk sandbox deploy` read these variables on your machine.
+`spekk sandbox create`, `spekk sandbox provision`, `spekk sandbox register`, `spekk sandbox destroy`, `spekk sandbox deploy`, and `spekk schedule` read these variables on your machine.
 
 **Choose an auth mode first.** `spekk sandbox create --auth <mode>` decides how the sandbox authenticates Claude, and the mode decides which credentials you need:
 
@@ -202,15 +202,24 @@ There is no flag, environment variable, or prompt instruction that suppresses dr
 
 | Variable | Needed for | Description |
 |----------|------------|-------------|
-| `GITHUB_TOKEN` | every sandbox | Downloads the agent binary and the cloud-init template from the spekk release. On the sandbox, it gives the agent access to your repositories |
-| `SPEKK_HOST` | every sandbox | The control host the agent connects to. A scheme and a trailing slash are removed |
+| `GITHUB_TOKEN` | every sandbox | On the sandbox, gives the agent access to your repositories. The agent binary is pulled from the public release CDN, so provisioning itself needs no token |
+| `SPEKK_HOST` | every sandbox | The control host the agent connects to. A scheme and a trailing slash are removed. The CLI calls its API at `https://<host>`. Plain `http://` is accepted only for `localhost` and a loopback address |
+| `SPEKK_API_TOKEN` | registration, `spekk schedule` | Your spekk API token from the control host. With it, `create` and `provision` register the agent and `destroy` revokes it. `register` and `spekk schedule` need it. Without it, `create` keeps the manual registration step. See [The control host sees one credential of yours](#the-control-host-sees-one-credential-of-yours) |
 | `DO_API_TOKEN` | `--provider digitalocean` | DigitalOcean API token. `DIGITALOCEAN_TOKEN` is accepted too. Not needed for a machine you already have |
 | `AWS_ACCESS_KEY_ID` | `bedrock` | AWS credential for the Bedrock API |
 | `AWS_SECRET_ACCESS_KEY` | `bedrock` | AWS credential for the Bedrock API |
 | `AWS_DEFAULT_REGION` | `bedrock` | AWS region, for example `us-east-1` |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `subscription` | Claude subscription token. Mint it with `claude setup-token`, which needs a Claude subscription |
 
-`spekk sandbox create` refuses to start when a variable its mode needs is missing, and it names every missing variable at once, before it creates anything billable. `spekk sandbox provision` makes the same check, for the mode the sandbox was created with, before it touches the machine. `spekk sandbox destroy` for a DigitalOcean sandbox needs `DO_API_TOKEN`. `spekk sandbox status` prints the stored fields without it.
+`--provider gcp` needs no variable. It runs the `gcloud` CLI, which uses the account you signed in with `gcloud auth login`.
+
+`spekk sandbox create` refuses to start when a variable its mode needs is missing, and it names every missing variable at once, before it creates anything billable. `spekk sandbox provision` makes the same check, for the mode the sandbox was created with, before it touches the machine. `spekk sandbox destroy` for a DigitalOcean sandbox needs `DO_API_TOKEN`, and for a registered sandbox it needs `SPEKK_API_TOKEN`. `spekk sandbox status` prints the stored fields without them.
+
+#### The control host sees one credential of yours
+
+The control host receives only two credentials: your spekk API token, which authenticates each call from the CLI in an `Authorization: Token <key>` header, and the agent token, which the control host makes itself. Your DigitalOcean token, your AWS keys, your Google Cloud credentials, your Claude subscription token, and your GitHub token go from your machine to your own sandbox over SSH, and nowhere else. No flag or request body of the CLI sends them to the control host.
+
+The CLI does not write the API token, or an agent token that the control host returned, to stdout or to a file. `~/.config/spekk/sandboxes.json` stores the agent id of a registered sandbox, and no credential. The agent token lives only in `/etc/spekk/agent.env` on the machine.
 
 **A model pin belongs to its mode.** `ANTHROPIC_MODEL` names a model for the API the sandbox authenticates against, and the names differ. A Bedrock sandbox pins an inference profile such as `us.anthropic.claude-sonnet-5`, which a subscription rejects. When `infrastructure/sandbox/setup-credentials.sh` moves a sandbox between modes, it drops the pin, reports what it dropped, and writes a new pin only when you supply one for the new mode.
 
@@ -255,13 +264,43 @@ An assignment on the local side of an `ssh` command is not forwarded, and a secr
 
 > **A subscription's rate limit is shared, and it runs out for everyone at once.** Every session authenticated with the same subscription draws on one quota: each sandbox that uses the token, and the interactive sessions of the person whose subscription it is. Several busy sandboxes contend with each other, and when the quota is spent they all stall until the window resets. Bedrock bills per token and has no such ceiling. Weigh that before you move a sandbox whose work has to finish on demand, and remember that a subscription is one person's seat, not a team credential.
 
+#### Updating sandbox variables
+
+The agent reads its variables from `/etc/spekk/agent.env` on the machine. No `spekk sandbox` subcommand edits one variable in place; you rewrite the file, two ways.
+
+**From your machine, with `spekk sandbox provision`.** [`spekk sandbox provision <name> --auth <mode>`](cli-reference.md#spekk-sandbox-provision-name) re-runs the credential injection: it reads the variables the mode needs from your environment, writes a fresh `agent.env`, and keeps the agent token of a registered sandbox. Use it to switch a live sandbox between `bedrock` and `subscription`, or to push a rotated `GITHUB_TOKEN` or AWS key you have set locally. Pass `--force` for a sandbox that is already `active`.
+
+**On the machine, with `setup-credentials.sh`.** `infrastructure/sandbox/setup-credentials.sh` does the same rewrite from the machine itself, and prompts for whatever you do not supply. Copy it over and run it there:
+
+```bash
+scp infrastructure/sandbox/setup-credentials.sh <user>@<ip>:/tmp/
+ssh -t <user>@<ip> 'SPEKK_AUTH_MODE=subscription bash /tmp/setup-credentials.sh'
+```
+
+`SPEKK_AUTH_MODE` (`bedrock` or `subscription`) selects the mode. Any value the script would prompt for can come from the environment instead, which is how an unattended run avoids stopping for input: set it on the remote side of the `ssh` command, inside the quotes. Pass non-secrets that way. Feed secrets through a root-only file on the machine and source it there, so they stay off both machines' process lists:
+
+```bash
+ssh -t <user>@<ip> 'set -a; . /root/creds; set +a; SPEKK_AUTH_MODE=subscription bash /tmp/setup-credentials.sh; shred -u /root/creds'
+```
+
+The script restarts `spekk-agent` when it finishes.
+
+**What a rewrite keeps, and what it drops.** The file is written whole, never appended to. Everything the auth mode does not own is carried over from the file already there - `GITHUB_TOKEN`, `SPEKK_HOST`, `SPEKK_AGENT_ID`, `WORKSPACE`, `SPEKK_AGENT_NAME`, and any variable the script does not recognize. Only the mode's own variables are replaced: the AWS keys and `CLAUDE_CODE_USE_BEDROCK` for `bedrock`, `CLAUDE_CODE_OAUTH_TOKEN` for `subscription`, and `ANTHROPIC_MODEL`.
+
+- **Rotate one variable, same mode.** Re-run in the mode the machine is already in and supply only the value you are changing. `GITHUB_TOKEN=<new> bash /tmp/setup-credentials.sh` rotates the token and keeps everything else, the model credential included.
+- **Switch modes.** Run in the other mode. The previous mode's credentials are dropped, not shadowed, so nothing keeps billing through the old path. You supply the new mode's credentials; everything else carries over.
+- **The model pin does not cross a switch.** `ANTHROPIC_MODEL` names a model for the mode's API, and the names differ: a Bedrock inference profile such as `us.anthropic.claude-sonnet-5` means nothing to the subscription API. On a switch the old pin is reported and dropped. Supply a new `ANTHROPIC_MODEL` in the same run to set one for the new mode.
+- **Give the agent ID to a host that has none.** `SPEKK_AGENT_ID=<uuid> bash /tmp/setup-credentials.sh` writes the ID and keeps everything else. Read the ID from the `Agent:` line that `create` or `provision` prints, from the `Registered agent <id>.` line that `register` prints, or from the `agentId` field of the sandbox in `~/.config/spekk/sandboxes.json`. The script refuses a value that is not a UUID, and it also exits with status 1 when the file already has an `SPEKK_AGENT_ID` that is not a UUID. Correct the line, or supply a valid ID.
+- **`SPEKK_AGENT_TOKEN` is the one value you cannot lose.** The control host stores only its hash, so a blank token means re-registering the agent. The rewrite carries it forward; supply it only if the file has lost it.
+
 ### Agent runtime
 
-The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env`. `spekk sandbox create` and `spekk sandbox provision` write that file. You do not set them by hand.
+The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env`. `spekk sandbox create` and `spekk sandbox provision` write that file. You do not set them by hand. The file belongs to the `agent` user, with mode 600, because the Git credential helper reads it as `agent`. If the agent cannot read the file, it logs a warning at start, and repository chat fails.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `SPEKK_AGENT_TOKEN` | Yes | Bearer token for the WebSocket connection to the control host. `create` and `provision` generate it and print it for you to register |
+| `SPEKK_AGENT_TOKEN` | Yes | Bearer token for the WebSocket connection to the control host. With `SPEKK_API_TOKEN`, the control host makes it when `create`, `provision`, or `register` registers the agent. Without it, `create` and `provision` generate it and print it for you to register |
+| `SPEKK_AGENT_ID` | For repository chat | ID of the registered agent. The agent uses it to ask the control host for repository access and for a Git token. `create`, `provision`, `register`, and `setup-credentials.sh` write it. Without it, each chat turn that selects a repository fails with "agent or session ID is missing" |
 | `SPEKK_HOST` | Yes | Control host the agent connects to |
 | `WORKSPACE` | No | Working directory for Claude sessions (default: `/opt/spekk/workspace`) |
 | `SPEKK_AGENT_NAME` | No | `spekk-<name>`. The agent binary does not read it; `setup-credentials.sh` uses it as the git author name |
@@ -272,4 +311,4 @@ The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env
 
 The file carries the variables of one mode only. Claude Code reads whichever of these it finds, so a file with both sets would leave the choice to chance. That is why a change of mode rewrites the file instead of adding to it.
 
-The agent passes its environment to the `claude` child process and reads only `SPEKK_AGENT_TOKEN`, `SPEKK_HOST`, and `WORKSPACE` itself. For the full agent architecture, see [Sandbox Architecture](./advanced/sandbox-architecture.md).
+The agent passes its environment to the `claude` child process and reads only `SPEKK_AGENT_TOKEN`, `SPEKK_AGENT_ID`, `SPEKK_HOST`, and `WORKSPACE` itself. For the full agent architecture, see [Sandbox Architecture](./advanced/sandbox-architecture.md).

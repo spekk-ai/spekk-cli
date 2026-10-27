@@ -3,12 +3,14 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/spekk-ai/spekk-cli/internal/sandbox"
 )
 
 // TestSandboxHelpListsEverySubcommand pins the sandbox help to the
 // subcommands launchSandbox dispatches, so a new one cannot ship unlisted.
 func TestSandboxHelpListsEverySubcommand(t *testing.T) {
-	for _, cmd := range []string{"create", "provision", "list", "status", "ssh", "destroy", "deploy"} {
+	for _, cmd := range []string{"create", "provision", "register", "list", "status", "ssh", "destroy", "deploy"} {
 		if !strings.Contains(sandboxHelpText, "\n  "+cmd+" ") {
 			t.Errorf("sandboxHelpText missing subcommand %q:\n%s", cmd, sandboxHelpText)
 		}
@@ -20,6 +22,24 @@ func TestSandboxHelpListsEverySubcommand(t *testing.T) {
 		if !strings.Contains(sandboxProvisionHelpText, want) {
 			t.Errorf("sandboxProvisionHelpText missing %q", want)
 		}
+	}
+}
+
+// TestScheduleHelpListsEverySubcommand pins the schedule help to the
+// subcommands RunSchedule accepts, and to the API field names.
+func TestScheduleHelpListsEverySubcommand(t *testing.T) {
+	for _, cmd := range []string{"list", "create", "update", "delete", "run"} {
+		if !strings.Contains(scheduleHelpText, "\n  "+cmd+" ") {
+			t.Errorf("scheduleHelpText missing subcommand %q", cmd)
+		}
+	}
+	for _, field := range sandbox.ScheduleFields {
+		if !strings.Contains(scheduleHelpText, "--"+field+" ") {
+			t.Errorf("scheduleHelpText missing --%s", field)
+		}
+	}
+	if !strings.Contains(helpText, "\n  schedule ") {
+		t.Error("top-level helpText does not list schedule")
 	}
 }
 

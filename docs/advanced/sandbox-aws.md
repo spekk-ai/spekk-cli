@@ -16,7 +16,7 @@ The template is `internal/sandbox/aws-cloudformation.yaml` in the [spekk-cli rep
 | Security group | Inbound TCP 22 from the CIDR block you give, and all outbound traffic |
 | EC2 instance | Ubuntu 24.04 from the latest Canonical AMI, `t3.medium` by default, with a 50 GB gp3 root volume and a `Name` tag of `spekk-sandbox-<stack-name>` |
 
-The instance's UserData is the cloud-init content spekk gives a droplet. It installs Docker, Node.js, the GitHub CLI, and Claude Code, creates the `agent` user, enables UFW and fail2ban, and ends by writing `/opt/spekk/.provisioned`. That marker is what `spekk sandbox create` checks for before it injects credentials.
+The instance's UserData is the cloud-init content spekk gives a droplet. It installs Docker, Node.js, the GitHub CLI, Claude Code, and the pinned Codex CLI and code mode host, creates the `agent` user, enables UFW and fail2ban, and ends by writing `/opt/spekk/.provisioned`. That marker is what `spekk sandbox create` checks for before it injects credentials.
 
 ## Parameters
 
@@ -26,7 +26,7 @@ The instance's UserData is the cloud-init content spekk gives a droplet. It inst
 | `SshCidr` | none, required | The IPv4 CIDR block that may reach port 22. Use your own address with `/32`. |
 | `AgentPublicKey` | none, required | One OpenSSH public key line that the `agent` user accepts. Pass the public half of the key pair, so one private key reaches both users. |
 | `InstanceType` | `t3.medium` | The EC2 instance type. |
-| `UbuntuAmi` | Canonical's SSM parameter for Ubuntu 24.04 | Resolves to the latest AMI in the region. Keep the default. |
+| `UbuntuAmi` | Canonical's SSM parameter for Ubuntu 24.04 | Resolves to the latest AMI in the region. Keep the default, or see [Start from your own AMI](#start-from-your-own-ami). |
 
 ## Create the stack
 
@@ -53,6 +53,25 @@ The stack reports `CREATE_COMPLETE` when the instance is running, not when cloud
 ```bash
 ssh -i ~/.ssh/my-key.pem ubuntu@<PublicIP> cloud-init status --wait
 ```
+
+## Start from your own AMI
+
+spekk does not make AMIs, and it does not call AWS. To start the sandbox from an AMI that you prepared (for example, an image of an instance that already has your project's tools), give the template that AMI through the `UbuntuAmi` parameter. The parameter reads an SSM parameter, so put the AMI ID in one first:
+
+```bash
+aws ssm put-parameter --name /spekk/sandbox-ami --type String --data-type aws:ec2:image --value ami-0123456789abcdef0 --overwrite
+
+aws cloudformation create-stack \
+  --stack-name my-sandbox \
+  --template-body file://aws-cloudformation.yaml \
+  --parameters \
+    ParameterKey=KeyName,ParameterValue=my-key \
+    ParameterKey=SshCidr,ParameterValue="$(curl -fsS https://checkip.amazonaws.com)/32" \
+    ParameterKey=AgentPublicKey,ParameterValue="$(ssh-keygen -y -f ~/.ssh/my-key.pem)" \
+    ParameterKey=UbuntuAmi,ParameterValue=/spekk/sandbox-ami
+```
+
+The template's cloud-init still runs in full on the new instance. On an AMI that already has the packages, the package steps find little to do, so the boot is shorter, but it is not the short first boot of `spekk sandbox create --image`. Before you make the AMI, remove what `spekk sandbox image build` removes (see [Image hygiene](../cli-reference.md#spekk-sandbox-image)): credentials, SSH host keys, `/etc/machine-id`, authorized keys, shell history, and the cloud-init state.
 
 ## Read the outputs
 

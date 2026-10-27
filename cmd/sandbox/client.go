@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ecdh"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/spekk-ai/spekk-cli/internal/agentconn"
 )
 
 const (
@@ -23,6 +25,19 @@ type AgentClient struct {
 	cfg   Config
 	pool  *WorkerPool
 	conns *connHolder
+	terms terminals
+	// record is read and written only by Run's goroutine. The zero value
+	// keeps no record.
+	record connectionRecorder
+
+	// secretKey is the recipient key of the secrets, or nil when the agent
+	// has none: no path, or a key file that it refused. Nil sends no
+	// secrets_hello.
+	secretKey *ecdh.PrivateKey
+	// welcomeAgentID is the agent_id of the last welcome. Only the read loop
+	// uses it and secretsUnsupportedLogged.
+	welcomeAgentID           string
+	secretsUnsupportedLogged bool
 
 	// procCtx is the process lifetime, handed to Run by main. Workers get this
 	// context and never the per-connection one: a turn belongs to the process,
@@ -31,12 +46,46 @@ type AgentClient struct {
 }
 
 func NewAgentClient(cfg Config) *AgentClient {
-	return &AgentClient{
+	c := &AgentClient{
 		cfg:     cfg,
 		pool:    NewWorkerPool(numWorkers),
 		conns:   newConnHolder(),
+		record:  newConnectionRecorder(cfg.ConnectionRecord),
 		procCtx: context.Background(),
 	}
+	c.loadSecretKey()
+	return c
+}
+
+// loadSecretKey loads the recipient key at start and writes the result in
+// the connection record, where `spekk sandbox status` reads the fingerprint.
+// A refused key file turns secrets off for this process, and the agent
+// continues to serve turns.
+func (c *AgentClient) loadSecretKey() {
+	if c.cfg.SecretKeyPath == "" {
+		// Clear a fingerprint that an earlier start left in the record:
+		// status must not show a key that this process does not send.
+		c.record.secretKey("", "no path for the recipient key")
+		return
+	}
+	key, err := loadRecipientKey(c.cfg.SecretKeyPath)
+	if err != nil {
+		log.Printf("WARNING: secrets are off: %v. The agent does not replace the file. Fix or remove it, then restart the agent.", err)
+		c.record.secretKey("", err.Error())
+		return
+	}
+	c.secretKey = key
+	c.record.secretKey(keyFingerprint(key.PublicKey().Bytes()), "")
+}
+
+// secretAgentID is the agent id in the associated data of a sealed secret:
+// SPEKK_AGENT_ID when it is set, else the agent_id of the last welcome. A
+// terminal box from spekk sandbox create has no SPEKK_AGENT_ID.
+func (c *AgentClient) secretAgentID() string {
+	if c.cfg.AgentID != "" {
+		return c.cfg.AgentID
+	}
+	return c.welcomeAgentID
 }
 
 // wsURL builds the dial target. The token is deliberately absent: it travels
@@ -118,11 +167,16 @@ func reconnectDelay(last time.Duration, established bool) time.Duration {
 // every attempt, and an outdated sandbox dialed it twenty times a minute for
 // the length of the deploy gap.
 func (c *AgentClient) connect(ctx context.Context) (established bool, err error) {
-	conn, _, err := websocket.Dial(ctx, c.wsURL(), c.dialOptions())
+	conn, resp, err := websocket.Dial(ctx, c.wsURL(), c.dialOptions())
 	if err != nil {
+		// A dial that a shutdown stopped says nothing about the control host.
+		if ctx.Err() == nil {
+			c.record.failed(time.Now(), resp, err)
+		}
 		return false, fmt.Errorf("dial: %w", err)
 	}
 	opened := time.Now()
+	c.record.connected(opened)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	conn.SetReadLimit(wsMaxMessageSize)
 
@@ -151,7 +205,7 @@ func (c *AgentClient) heartbeat(ctx context.Context, conn *websocket.Conn) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			err := wsjson.Write(ctx, conn, map[string]string{"type": "heartbeat"})
+			err := wsjson.Write(ctx, conn, heartbeatFrame())
 			if err != nil {
 				return
 			}
@@ -186,9 +240,11 @@ func (c *AgentClient) handleInbound(ctx context.Context, msg Message) {
 	case MessageTypeHeartbeatAck:
 		// ignore
 	case MessageTypeError:
-		handleErrorFrame(msg)
+		c.handleError(msg)
 	case MessageTypeWelcome:
-		c.handleWelcome(msg)
+		c.handleWelcome(ctx, msg)
+	case MessageTypeTerminalOpen, MessageTypeTerminalInput, MessageTypeTerminalResize, MessageTypeTerminalClose:
+		c.handleTerminal(msg)
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
 	}
@@ -202,6 +258,23 @@ var conversationOpenErrorCodes = map[string]bool{
 	"conversation_open_invalid":    true,
 	"conversation_open_no_channel": true,
 	"conversation_open_failed":     true,
+}
+
+// secretsHelloUnknown is the answer of a control host that has no secrets.
+const secretsHelloUnknown = "Unknown message type: " + MessageTypeSecretsHello
+
+// handleError logs an inbound error frame. The answer of an old control host
+// to secrets_hello is logged one time for each process, because each
+// reconnect sends secrets_hello again.
+func (c *AgentClient) handleError(msg Message) {
+	if msg.Message == secretsHelloUnknown {
+		if !c.secretsUnsupportedLogged {
+			c.secretsUnsupportedLogged = true
+			log.Print("The control host does not support secrets (it does not know secrets_hello). The agent continues with no secrets.")
+		}
+		return
+	}
+	handleErrorFrame(msg)
 }
 
 // handleErrorFrame logs an inbound "error" frame legibly. It never tears
@@ -249,6 +322,13 @@ func (c *AgentClient) handleMessage(ctx context.Context, msg Message) {
 	go w.Run(c.procCtx, c.cfg, c.conns, c.pool)
 }
 
+// cancelledBeforeStartDetail ends a turn that a cancel stopped before its
+// process started.
+const cancelledBeforeStartDetail = "Cancelled before the turn started."
+
+// handleCancel stops the session. The session's runner ends the turn of
+// each queued message that the cancel removed, so the read loop does not
+// wait for those frames.
 func (c *AgentClient) handleCancel(msg Message) {
 	c.pool.Cancel(msg.AgentSessionID)
 }
@@ -257,12 +337,20 @@ type Config struct {
 	Token     string
 	Host      string
 	Workspace string
+	AgentID   string
+	// ConnectionRecord is the file of the handshake record. Empty keeps no
+	// record.
+	ConnectionRecord string
+	// SecretKeyPath is the file of the recipient key. Empty keeps no key and
+	// sends no secrets_hello.
+	SecretKeyPath string
 }
 
 func loadConfig() Config {
 	token := os.Getenv("SPEKK_AGENT_TOKEN")
 	host := os.Getenv("SPEKK_HOST")
 	workspace := os.Getenv("WORKSPACE")
+	agentID := os.Getenv("SPEKK_AGENT_ID")
 
 	if token == "" || host == "" {
 		log.Fatal("SPEKK_AGENT_TOKEN and SPEKK_HOST must be set")
@@ -271,17 +359,34 @@ func loadConfig() Config {
 		workspace = "/opt/spekk/workspace"
 	}
 
+	keyPath, err := secretKeyPath()
+	if err != nil {
+		log.Printf("WARNING: secrets are off: no config directory for the recipient key: %v", err)
+	}
+
 	return Config{
-		Token:     token,
-		Host:      host,
-		Workspace: workspace,
+		Token:            token,
+		Host:             host,
+		Workspace:        workspace,
+		AgentID:          agentID,
+		ConnectionRecord: agentconn.Path,
+		SecretKeyPath:    keyPath,
 	}
 }
 
 // handleWelcome checks the control host's advertised protocol version. The
 // server owns enforcement; the client only informs the operator, so a
-// mismatch warns and the connection continues.
-func (c *AgentClient) handleWelcome(msg Message) {
+// mismatch warns and the connection continues. Then it keeps the agent id and
+// sends the recipient key.
+func (c *AgentClient) handleWelcome(ctx context.Context, msg Message) {
+	if c.conns != nil {
+		c.conns.setCapabilities(msg.Capabilities)
+	}
+	if msg.AgentID != "" {
+		c.welcomeAgentID = msg.AgentID
+	}
+	c.sendSecretsHello(ctx)
+
 	if protocolMajor(msg.Protocol) == protocolMajor(ProtocolVersion) {
 		log.Printf("Control host protocol %s (client %s)", msg.Protocol, ProtocolVersion)
 		return
@@ -290,4 +395,18 @@ func (c *AgentClient) handleWelcome(msg Message) {
 		"WARNING: control host speaks protocol %s, this client speaks %s. Update this sandbox's agent-client.",
 		msg.Protocol, ProtocolVersion,
 	)
+}
+
+// sendSecretsHello sends the public key of the recipient key after a
+// welcome, and logs its fingerprint for the admin who accepts the key in the
+// Secrets section of spekk-app.
+func (c *AgentClient) sendSecretsHello(ctx context.Context) {
+	if c.secretKey == nil || c.conns == nil {
+		return
+	}
+	publicKey := c.secretKey.PublicKey().Bytes()
+	log.Printf("Secret recipient key fingerprint: %s. An organization admin compares it with the Secrets section of spekk-app before accepting the key.", keyFingerprint(publicKey))
+	if err := c.conns.send(ctx, secretsHelloFrame(publicKey)); err != nil {
+		log.Printf("Could not send secrets_hello: %v", err)
+	}
 }

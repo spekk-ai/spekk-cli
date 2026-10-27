@@ -32,12 +32,13 @@ spekk conversation open - Request that a conversation be opened on the
 connected chat surface
 
 USAGE:
-  spekk conversation open --title <text> --body <text> [--severity <level>]
+  spekk conversation open --title <text> --body <text> [--severity <level>] [--channel <name|id>]
 
 OPTIONS:
   --title <text>       Short summary of the request (required)
   --body <text>        Full details of the request (required)
   --severity <level>   One of: info, warning, critical (default: info)
+  --channel <name|id>  Slack channel for the agent's bot (default: home channel)
   --help, -h           Show this help message
 
 This command only works while running inside a sandbox session: it reads
@@ -89,12 +90,17 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 		"title":    {Names: []string{"--title"}, Type: cli.StringFlag},
 		"body":     {Names: []string{"--body"}, Type: cli.StringFlag},
 		"severity": {Names: []string{"--severity"}, Type: cli.StringFlag},
+		"channel":  {Names: []string{"--channel"}, Type: cli.StringFlag},
 		"help":     {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 	})
 
 	if flags.Bool("help") {
 		fmt.Fprint(stdout, conversationOpenUsage)
 		return 0
+	}
+	if flags.Err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", flags.Err)
+		return 1
 	}
 
 	title := flags.String("title")
@@ -113,6 +119,11 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 	}
 
 	severity := flags.String("severity")
+	channel := strings.TrimSpace(flags.String("channel"))
+	if flags.Count("channel") > 0 && channel == "" {
+		fmt.Fprintln(stderr, "Error: --channel requires a non-empty channel name or ID")
+		return 1
+	}
 	if severity == "" {
 		severity = string(conversation.DefaultSeverity)
 	} else if !conversation.IsValidSeverity(severity) {
@@ -131,6 +142,7 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 		Title:    title,
 		Body:     body,
 		Severity: conversation.Severity(severity),
+		Channel:  channel,
 	}
 	if err := conversation.WriteRequest(spoolDir, req); err != nil {
 		fmt.Fprintf(stderr, "Error: %s\n", err)

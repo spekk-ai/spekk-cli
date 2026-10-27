@@ -26,6 +26,7 @@ depends-on: sandbox-release-downloader
 - The service reload, enable, and restart commands run after the replacement succeeds.
 - Root runs the installation script directly. A non-root login uses the shared privilege helper.
 - Create and deploy download the versioned release binary. Create uses the embedded cloud-init template for provisioning.
+- The binary is downloaded after the machine is reachable and matched to its CPU architecture, so create, provision, and deploy each install the build the machine can run.
 - The sandbox source has no Python, uv, pip, or venv deployment steps.
 
 ## Verification

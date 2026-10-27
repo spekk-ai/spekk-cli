@@ -4,9 +4,11 @@ icon: lucide/square-terminal
 
 # CLI Reference
 
-Every spekk command, its flags, and what it does. `spekk help` prints the command list. `spekk <command> --help` prints the help for one command. `spekk next`, `spekk status`, and `spekk show` have no `--help` text of their own, so this page is their reference.
+Every spekk command, its flags, and what it does. `spekk help` prints the command list. `spekk <command> --help` prints the help for one command. `spekk next` and `spekk status` have no `--help` text of their own, so this page is their reference.
 
 `spekk` with no command runs `spekk next`.
+
+For app-managed sandbox commands and key setup, see [App-managed sandboxes](app-managed-sandboxes.md).
 
 Two rules hold for every command. A flag that takes a value takes it after a space, so `--flag=value` is an unknown argument and fails. A flag that takes a value is supplied once: a repeat fails rather than discard the value you typed. A flag that takes no value may repeat, because a repeat discards nothing.
 
@@ -77,7 +79,7 @@ An assertion is a JSON object with `type: "assertion"` and these fields:
 | `content` | The markdown body |
 | `spec` | The parent spec: `id`, `file`, `title` |
 
-When nothing is ready, the output has `type: "complete"`. When `specs/` has no specs, it has `status: "empty"`. A parse error that stops the whole tree prints `{"error": true, "message": ...}` and exits 1.
+When no assertion is open (all are `done`), the output has `type: "complete"`. When open assertions remain but none is ready, the output has `type: "none_eligible"`, with `remaining` (the number of open assertions), `reasons` (a count for each of `other_branch`, `blocked`, `locked` and `draft`), and a `message` that names them. An assertion with no `branch` field belongs to `main`, so on another branch it counts as `other_branch`: run `spekk next --all-branches` to see it. When `specs/` has no specs, it has `status: "empty"`. A parse error that stops the whole tree prints `{"error": true, "message": ...}` and exits 1.
 
 ## `spekk list`
 
@@ -234,6 +236,9 @@ The default output is a padded table. The index is refreshed first, so the resul
 | `frontmatter_fields` | `owner_type` (`spec`, `assertion`, or `observation`), `owner_id`, `key`, `value` |
 | `observations` | `slug`, `ref`, `type`, `severity`, `status`, `created`, `announced`, `pr`, `title`, `file`. One row per (slug, ref) |
 | `observation_files` | `slug`, `ref`, `path`. One row per `affected` path |
+| `documents` | `kind` (`spec`, `assertion`, `doc`, or `raw`), `id`, `path`, `text_path`, `title`, `type`, `created`, `summary`, `sha256`, `state`. See [`spekk docs`](#spekk-docs) |
+| `document_tags` | `kind`, `doc_id`, `tag` |
+| `passages` | FTS5 table: `heading`, `body`, `terms`, and unindexed `kind`, `doc_id`, `start_line`, `end_line`, `is_header` |
 
 `depends_on` holds assertion-level edges only. A spec-level relationship is prose in the spec body, not data.
 
@@ -284,6 +289,62 @@ spekk query "SELECT f.value AS workflow, COUNT(*) AS total, SUM(a.status = 'done
   GROUP BY f.value"
 ```
 
+## `spekk docs`
+
+Search the specs, the docs in the repository, and the source documents in `raw/`, from one full-text index. See [Search Specs, Docs, and Source Documents](source-documents.md).
+
+```bash
+spekk docs search "torque limit" --kind raw,doc
+spekk docs show pump-manual --lines 120:160
+spekk docs add ~/Downloads/pump-manual.pdf
+spekk docs add raw/pump-manual.pdf --summary "Acme P-200 pump manual: torque limits, valve sizes, and wiring."
+spekk docs status
+```
+
+### `spekk docs search "<words>"`
+
+Rank passages with BM25 and print the best passage of each document: kind, id, title, path, line range, summary, and the numbered lines of the passage that hold the most query words, so the answer is often in the search output. Up to three other matching passages of the same document are listed by line range. The output is at most 4,000 bytes, and results that do not fit are counted, not printed.
+
+| Flag | Description |
+|------|-------------|
+| `--kind <k1,k2>` | Only these kinds: `spec`, `assertion`, `doc`, `raw` |
+| `--type <type>` | Only documents with this frontmatter `type` |
+| `--tag <tag>` | Only documents with this tag |
+| `--since <YYYY-MM-DD>` | Only documents with a `created` date on or after this date |
+| `--limit <n>` | At most n documents (default 5, maximum 20) |
+| `--json` | One JSON object: `query`, `notice`, `results`, `omitted` |
+
+Each word matches as written, joined with OR. `snake_case`, `dotted.name`, and `kebab-case` match as exact phrases, and `"quoted words"` match as one phrase. No query text is read as FTS5 syntax. An unknown kind, a malformed date, or a bad limit exits 2.
+
+### `spekk docs show <id|path>`
+
+Print numbered lines of one document, at most 200 for each call. The output names the next range.
+
+| Flag | Description |
+|------|-------------|
+| `--lines <a:b>` | Lines a to b; `a:` prints from a |
+| `--kind <kind>` | Choose the kind when two documents share the id |
+
+Line numbers are those of the plaintext file: the document itself, or the derived text `formatted/<id>.txt` of a converted format. Text of kinds `doc` and `raw` is printed between markers that say it is untrusted data.
+
+### `spekk docs add <file|folder>...`
+
+Copy each file to `raw/` (a file already under `raw/` stays), convert it to text when it must, and write its stub in `formatted/`. Then rebuild the index.
+
+| Flag | Description |
+|------|-------------|
+| `--summary "<text>"` | The summary, 40 to 600 characters. One file only |
+| `--type <type>` | Document type, such as `manual`, `transcript`, `email` |
+| `--tags <a,b>` | Tags |
+| `--source <s>` | Where the document came from, such as a URL. The default is the path in the repository, or the file name for a file from outside |
+| `--allow-secrets` | Add a file that the secret scan refused, after a person checked it |
+
+Formats: `.md`, `.markdown`, `.txt`, `.html`, `.htm`, `.eml`, and `.xlsx` in the binary; `.pdf` with `pdftotext` and `.docx` with `pandoc` on `PATH`. A missing converter fails that file with the install command. Adding a document again with changed content updates the stub and clears the summary. A converted file larger than 5 MB is listed in `raw/.gitignore`. Exit 1 when any file failed.
+
+### `spekk docs status`
+
+List each source document that is not `ok` (`stale`, `no_summary`, `missing_raw`, `pointer`, `no_stub`) with the command to run. Exit 0.
+
 ## `spekk show`
 
 Open the spec explorer, a web page that shows the spec tree.
@@ -296,17 +357,22 @@ spekk show --watch                                  # Serve it and reload on cha
 spekk show --cross-branch                           # Merge preview
 spekk show --cross-branch --branch-filter 'feat/*'  # Only branches that match the glob
 spekk show -w --cross-branch                        # Merge preview with live reload
+spekk show --json | jq                              # Print the data of the page as JSON
 ```
 
 **Flags:**
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--watch` | `-w` | Serve the page on `127.0.0.1` and reload it when a spec file changes |
+| `--watch` | `-w` | Serve the page on `127.0.0.1` and reload it when the content of a spec file changes |
 | `--cross-branch` | | Read-only preview of what a merge of each other branch would do to the specs |
 | `--branch-filter <glob>` | | In cross-branch mode, only branches that match the glob (for example `'feat/*'`) |
+| `--json` | | Print the data of the page to stdout as one JSON object. Write no file and open no browser. Not with `--watch` |
+| `--help` | `-h` | Print the help for `spekk show` and exit |
 
-Without `--watch`, `spekk show` writes `.spekk/index.html` and opens it in your browser. With `--watch`, it serves the page from a local port and reloads it when a spec file changes. Set the `CI` environment variable to stop watch mode from opening a browser.
+Without `--watch`, `spekk show` writes `.spekk/index.html` and opens it in your browser. With `--watch`, it serves the page from a local port and reloads it when the content of a spec file changes. A save or `touch` that does not change the content does not reload the page. Set the `CI` environment variable to stop watch mode from opening a browser.
+
+The explorer lists specs and assertions in the same order as `spekk list`: priority first, then ID. An item with no priority (0) comes last. In cross-branch mode, the items from other branches take their place in that order.
 
 The page shows:
 
@@ -315,6 +381,23 @@ The page shows:
 - Drag to pan, click to open a spec or an assertion
 - Done specs hidden by default, with a toggle to show them
 - A search box that filters by name, status, or priority
+
+### JSON output
+
+`spekk show --json` prints the data that the page uses, as one JSON object, and stops. It writes nothing to `.spekk/` and opens no browser. Use it when a script or a server needs the spec tree.
+
+```json
+{"projectName":"my-project","specs":[{"id":"auth","title":"Auth","status":"in_progress","priority":1,"file":"specs/auth/auth.md","content":"...","branch":"main"}],"assertions":[{"id":"login-form","parent":"auth","title":"Login form","status":"done","priority":1,"file":"specs/auth/assertions/login-form.md","content":"...","branch":"main","created":"2026-01-01T00:00:00Z"}]}
+```
+
+- `projectName` is the name of the project directory.
+- `specs` and `assertions` are in the order of the page: priority, then ID, then file path.
+- A `specs/` directory with no specs gives empty arrays and exit code 0.
+- A parse error, for example a duplicate spec ID, gives exit code 1 and the error on stderr. Parser warnings also go to stderr, so stdout has only the JSON.
+- With `--cross-branch`, the object also has `crossBranch`, and it can have `degraded` and `branches`. Each item can have `foreign` and `crossBranch` (a list of `branch`, `state`, `degraded`, `oldStatus`, `newStatus`), and each spec can have `crossBranchSummary`. `--branch-filter` applies.
+- A cross-branch key with no value is absent from the output. An absent `degraded` or `foreign` means false, and an absent `branches` or `crossBranch` list means an empty list.
+
+`--json --cross-branch` also works on a read-only bare repository. Set `GIT_DIR` to a directory that holds `HEAD` and a `commondir` file with the path of the bare repository, `GIT_WORK_TREE` to a directory that holds `specs/`, and `GIT_OBJECT_DIRECTORY` to an empty directory of your own, with `GIT_ALTERNATE_OBJECT_DIRECTORIES` set to the `objects` directory of the bare repository. The conflict check writes its objects to your directory, not to the bare repository.
 
 ### Cross-branch mode
 
@@ -505,6 +588,7 @@ spekk observer uninstall-cron     # Remove the crontab entries
 | `--quiet` | Ask the agent for less output. The agent decides what that means |
 | `--headless` | Run Claude Code with `-p`, with no terminal. `install-cron` sets this |
 | `--claude-path <path>` | The `claude` binary to run. `install-cron` sets this, because cron has a short `PATH` |
+| `--mcp-config <file>` | Load the MCP servers in `<file>` for this run only, for example a browser that one skill needs. The observer gives `claude` the flag as `--mcp-config=<file>`. A missing value, or a path that is not a file, stops the run before `claude` starts |
 
 `--interval` is no longer a flag. Passing it is an error that names the replacement, `install-cron --loop-interval`.
 
@@ -635,9 +719,11 @@ Manage sandboxes: machines that run the spekk agent client. spekk can create the
 
 Every sandbox command reads its settings from environment variables. See [Sandbox provisioning](configuration.md#sandbox-provisioning) for the list, and for the `--auth` modes.
 
-!!! note "Register the token"
+!!! note "Registration on the control host"
 
-    After `create` or `provision` finishes, one manual step remains. Register the agent token that the command prints on the control host. Until you do, the agent tries to connect and fails authentication.
+    With `SPEKK_API_TOKEN` set, `create` registers the agent on the control host through its API, and `destroy` revokes it. Without it, one manual step remains after `create`: register the agent token that the command prints on the control host, or run [`spekk sandbox register`](#spekk-sandbox-register-name) later. Until the agent is registered, it tries to connect and fails authentication.
+
+    The control host receives only your spekk API token and the agent token that it makes itself. Your cloud and model credentials go from your machine to your sandbox, and nowhere else.
 
 ### `spekk sandbox create`
 
@@ -651,6 +737,9 @@ spekk sandbox create --name my-sandbox --provision-timeout 45m
 spekk sandbox create --name my-sandbox --auth subscription
 spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box
 spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --ssh-user ubuntu
+spekk sandbox create --name tmp-fix-login --one-off --purpose "fix the login test"
+spekk sandbox create --name tmp-migration --one-off --expires 3d
+spekk sandbox create --name my-sandbox --image base
 ```
 
 **Flags:**
@@ -658,24 +747,76 @@ spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --s
 | Flag | Description |
 |------|-------------|
 | `--name <name>` | Sandbox name (required). Lowercase letters, digits, and hyphens, starting with a letter or a digit |
-| `--provider <provider>` | `digitalocean` (default), or `none` for a machine you already have. `--ip`, `--ssh-key`, or `--ssh-user` implies `none` |
+| `--provider <provider>` | `digitalocean` (default), `gcp` for a Google Cloud VM, or `none` for a machine you already have. `--ip`, `--ssh-key`, or `--ssh-user` implies `none` |
 | `--auth <mode>` | How the agent authenticates Claude: `bedrock` (default) or `subscription` |
-| `--region <region>` | DigitalOcean region (default: `nyc1`) |
-| `--size <size>` | Droplet size slug (default: `s-2vcpu-4gb`) |
-| `--project <project>` | Assign the droplet to a DigitalOcean project, by name or UUID |
-| `--vpc <uuid>` | Place the droplet in a DigitalOcean VPC |
+| `--region <region>` | DigitalOcean region (default: `nyc1`). For `gcp`, the zone |
+| `--size <size>` | Droplet size slug (default: `s-2vcpu-4gb`). For `gcp`, the machine type |
+| `--project <project>` | Assign the droplet to a DigitalOcean project, by name or UUID. For `gcp`, the project ID |
+| `--vpc <uuid>` | Place the droplet in a DigitalOcean VPC. For `gcp`, the network name |
 | `--provision-timeout <duration>` | How long to wait for cloud-init, as a Go duration (default: `30m`) |
 | `--ip <address>` | Address of a machine you already have |
 | `--ssh-key <path>` | Private key that reaches that machine as the login user |
 | `--ssh-user <user>` | SSH login user for that machine (default: `root`). A non-root user must have passwordless sudo |
+| `--release <tag>` | Pull the agent binary from a specific spekk release instead of the latest, e.g. an `exp-*` prerelease. The cloud-init template always comes from the installed CLI |
+| `--organization <id>` | The control host organization to register the agent in. Needed only when you belong to more than one |
+| `--image <name>` | Create the machine from a template image that `spekk sandbox image build` made. DigitalOcean and GCP. See [`spekk sandbox image`](#spekk-sandbox-image) |
+| `--one-off` | Mark the sandbox one-off: one task, then destroy it. It expires 48 hours after `create` unless `--expires` says when. Without it, the sandbox is persistent and has no expiry |
+| `--expires <when>` | Expiry of a one-off sandbox: a Go duration (`36h`), days (`3d`), a date (`2026-10-17`, which means 00:00 UTC), or an RFC 3339 time. It must be in the future, and it needs `--one-off` |
+| `--purpose <text>` | Why the sandbox exists. It is kept in the record and in the marker on the machine. It is one line: `create` refuses a newline, a tab or any other control character |
 
-The DigitalOcean flags and the existing-machine flags exclude each other. `create` refuses a name that is already recorded: destroy the old sandbox first.
+The cloud flags and the existing-machine flags exclude each other. For the `gcp` defaults and what spekk creates in the project, see [A Sandbox on Google Cloud](advanced/sandbox-gcp.md). `create` refuses a name that is already recorded: destroy the old sandbox first.
 
-**A DigitalOcean sandbox.** `create` checks that the environment variables for the auth mode are set, downloads the agent binary and the cloud-init template from the latest spekk release, generates an SSH key pair under spekk's config directory, creates the droplet with cloud-init, and records it. It then waits for SSH and for cloud-init to write `/opt/spekk/.provisioned`. While it waits, it prints a progress line at most once a minute with the time waited and the last line of `/var/log/cloud-init-output.log`. When `cloud-init status` reports `error`, or `done` without the marker, the wait stops at once. When the marker appears, `create` injects the credentials, configures git for the agent, deploys the agent binary, marks the sandbox `active`, and prints the agent token.
+**A DigitalOcean sandbox.** `create` checks that the environment variables for the auth mode are set, generates an SSH key pair under spekk's config directory, creates the droplet with the cloud-init template that ships in the CLI, and records it. The template installs Claude Code as `agent` with the native installer, from the `stable` release. It also installs the pinned Codex CLI and code mode host. A `gcp` sandbox follows the same steps on a Compute Engine VM. It then waits for SSH and for cloud-init to write `/opt/spekk/.provisioned`. The marker requires a successful Codex install. While it waits, it prints a progress line at most once a minute with the time waited and the last line of `/var/log/cloud-init-output.log`. When `cloud-init status --long` reports `error`, or a list of errors that is not empty, the wait stops at once and prints that status. When cloud-init reports `done` without the marker, the wait polls for 30 more seconds, because the last `runcmd` step can write the marker just after cloud-init reports `done`. When the marker appears, `create` injects the credentials, configures git for the agent, downloads the agent binary and the spekk CLI for the machine's CPU architecture from the release of this spekk (see [`deploy`](#spekk-sandbox-deploy-name)) and deploys them, marks the sandbox `active`, and prints the result.
+
+**Registration.** With `SPEKK_API_TOKEN` set, `create` registers the agent on the control host (`POST /api/agents/`) after it fetches the release artifacts and before it asks the provider for a machine. A refused registration costs nothing. The token that the control host returns is the `SPEKK_AGENT_TOKEN` that `create` writes to the machine, and the record stores the agent id. When a later step fails, or when you press Ctrl-C (`SIGINT`) or the process gets `SIGTERM`, `create` revokes the agent again and says so. If that revoke also fails, the record keeps the agent id, so `destroy` can revoke it. On success, `create` prints the agent id and not the token. Without `SPEKK_API_TOKEN`, `create` makes the token itself, prints it to register by hand, and tells you how to run `spekk sandbox register` later. When you belong to more than one organization and give no `--organization`, the control host refuses the registration, and the error tells you to pass `--organization <id>`. The id is in the `organization` field of an agent you already have (`GET /api/agents/` on the control host), or an admin of the organization can give it to you.
 
 When the wait runs out, the droplet keeps running and the record stays at `provisioning`. Nothing is destroyed. Finish it with [`spekk sandbox provision`](#spekk-sandbox-provision-name) when cloud-init is done, or remove it with `destroy`.
 
 **A machine you already have.** spekk does not provision a machine it did not create. Prepare the machine yourself, so that it carries `/opt/spekk/.provisioned`, an `agent` user, and the directories the agent needs. `create` checks the marker over SSH, then runs the same three steps: inject the credentials, configure git, deploy the agent. With `--ssh-user`, the three steps and the later teardown run under `sudo`. Everything else runs as the login user.
+
+To prepare a Debian/Ubuntu machine (amd64 or arm64, including a Raspberry Pi), copy `prepare-machine.sh`, `configure-agent-attribution.py`, and `assisted-by` from the same checkout to it and run the setup as root:
+
+```bash
+scp scripts/prepare-machine.sh scripts/configure-agent-attribution.py scripts/assisted-by user@your-machine:
+ssh user@your-machine 'sudo bash prepare-machine.sh'
+```
+
+It installs the `agent` user, Docker, the Claude Code CLI (the native binary from the `stable` release, installed as `agent` and linked to `/usr/local/bin/claude`, no Node runtime), the pinned Codex CLI and code mode host, the spekk CLI, `git`/`gh`, and the spekk directories, then writes the marker - the same setup a droplet gets from cloud-init, minus the droplet-only hardening (a full package upgrade, a default-deny firewall, fail2ban) that could lock you out of a machine you already use. A later run repairs a missing, damaged, or different-release Codex host. It picks Docker's Debian or Ubuntu repository from the host, so it works on a Debian-based Raspberry Pi as well as an Ubuntu server. To provision by hand instead, its steps are the checklist to follow.
+
+The agent owns `/opt/spekk/workspace`, so on a machine you also use interactively your login user cannot edit what the agent writes. Pass `SPEKK_SHARE_USER=<login>` (e.g. `sudo SPEKK_SHARE_USER=pi bash prepare-machine.sh`) to grant that user read/write on the workspace with ACLs. ACLs, not group ownership: `deploy` re-runs `chown -R agent:agent /opt/spekk` on every deploy, which preserves ACLs but would wipe a group change, and the default ACL also covers the files the agent creates later.
+
+The agent binary spekk deploys matches the machine's CPU architecture, so an arm64 host (a Raspberry Pi, an arm64 droplet) is served an arm64 build. spekk pulls that build from the release of this spekk by default (the latest release for a dev build); a release only carries the architectures it published. To use a build that only exists in a prerelease, pin it with `--release <tag>` (e.g. `--release exp-arm64`).
+
+**Setup recipes.** Each recipe pairs a provider with an auth mode. Export the variables the mode needs first ([Sandbox provisioning](configuration.md#sandbox-provisioning) lists them all), then run one command.
+
+DigitalOcean droplet, Bedrock (both defaults):
+
+```bash
+export DO_API_TOKEN=... SPEKK_HOST=... GITHUB_TOKEN=...
+export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_DEFAULT_REGION=us-east-1
+spekk sandbox create --name my-sandbox
+```
+
+DigitalOcean droplet, Claude subscription:
+
+```bash
+export DO_API_TOKEN=... SPEKK_HOST=... GITHUB_TOKEN=...
+export CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/spekk/oauth-token)"
+export CODEX_AUTH_JSON_FILE="$HOME/.config/spekk/codex-auth.json"
+spekk sandbox create --name my-sandbox --auth subscription
+```
+
+Subscription mode requires the Claude token. `CODEX_AUTH_JSON_FILE` is optional. If set, it must be a regular file owned by the current user with no group or other access. Create it with `codex login` using `cli_auth_credentials_store = "file"`. The CLI checks for a ChatGPT refresh token, sends the cache over SSH stdin, and replaces `/home/agent/.codex/auth.json` as an agent-owned 0600 file. It refuses unsafe existing paths. One ChatGPT login supports one active Codex machine at a time. If a caller seeds several machines from one file, the second refresh invalidates the other copies. The CLI does not coordinate machines or copy rotated tokens back; callers must serialize use and copy back the latest cache.
+
+A machine you already have (`--provider none`), Bedrock:
+
+```bash
+export SPEKK_HOST=... GITHUB_TOKEN=...
+export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_DEFAULT_REGION=us-east-1
+spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --ssh-user ubuntu
+```
+
+`--ip` implies `--provider none`, so no DigitalOcean token is needed. For a subscription machine, swap in `--auth subscription` and export `CLAUDE_CODE_OAUTH_TOKEN` in place of the AWS keys. To change any of these after the sandbox exists, see [Updating sandbox variables](configuration.md#updating-sandbox-variables).
 
 ### `spekk sandbox provision <name>`
 
@@ -692,27 +833,95 @@ spekk sandbox provision my-sandbox --auth subscription  # Change the auth mode
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--auth <mode>` | | `bedrock` or `subscription`. Default: the mode the sandbox was created with |
+| `--release <tag>` | | Pull the agent binary from a specific spekk release instead of the latest, e.g. an `exp-*` prerelease |
 | `--force` | `-f` | Provision a sandbox whose status is not `provisioning` |
+| `--organization <id>` | | The control host organization, when `provision` registers a new agent |
 
-`provision` checks that the environment variables for the auth mode are set, checks that `/opt/spekk/.provisioned` exists on the machine, and then runs the same three steps `create` runs after its wait, in the same order and through the same code. It marks the sandbox `active` and prints a new agent token to register. A sandbox recorded before 1.28.0 has no auth mode on record, and reads as `bedrock`.
+`provision` checks that the environment variables for the auth mode are set, checks that `/opt/spekk/.provisioned` exists on the machine, and then runs the same three steps `create` runs after its wait, in the same order and through the same code. It marks the sandbox `active`. A sandbox recorded before 1.28.0 has no auth mode on record, and reads as `bedrock`.
+
+The agent token follows the record:
+
+- **A registered sandbox** (the record has an agent id) keeps its agent. `provision` reads `SPEKK_AGENT_TOKEN` from `/etc/spekk/agent.env` on the machine and writes the same token back, so the agent keeps its connection, its schedules, and its history. If it cannot read a token, it stops before it changes the machine, and tells you to run `spekk sandbox register`. The error shows the SSH failure, or says that the file has no token.
+- **A sandbox with no agent** gets a new token. With `SPEKK_API_TOKEN` set, `provision` registers it as `create` does. If the record cannot be saved after that, the error names the new agent id. Without it, `provision` prints the token to register by hand.
+
+`provision` is also how you change a live sandbox's credentials from your machine: re-run it with the variables set in your environment to switch auth mode, rotate a token, or push a new AWS key. See [Updating sandbox variables](configuration.md#updating-sandbox-variables) for that and for the on-machine alternative.
+
+### `spekk sandbox register <name>`
+
+Register a recorded sandbox on the control host with your API token.
+
+```bash
+spekk sandbox register my-sandbox
+spekk sandbox register my-sandbox --organization <id>
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--organization <id>` | The control host organization to register the agent in. Needed only when you belong to more than one |
+
+`register` needs `SPEKK_API_TOKEN` and `SPEKK_HOST`. It registers a new agent, then, over SSH, replaces the `SPEKK_AGENT_TOKEN` and `SPEKK_AGENT_ID` lines in `/etc/spekk/agent.env`, keeps every other line, and restarts `spekk-agent`. The script keeps a copy of the old file as `agent.env.bak` until the restart succeeds. If a step fails, it puts the old file back and restarts the agent with the old token. Then `register` revokes the new agent, and the record keeps the old agent id, so the machine and the record agree. On success, the record stores the new agent id. If the record named an agent before, `register` revokes that old agent, because its token is no longer on the machine.
+
+Use it for a sandbox that was created without `SPEKK_API_TOKEN`, or to replace the agent of a sandbox. A new agent starts with no schedules.
 
 ### `spekk sandbox list`
 
-Print every recorded sandbox: name, IP, region, status, and creation time.
+Print every recorded sandbox, sorted by name: name, kind, IP, region, status, creation time, and expiry. A sandbox whose expiry is in the past shows `EXPIRED`. A record that an older CLI wrote has no kind, and lists as `persistent`.
 
 ```bash
 spekk sandbox list
+spekk sandbox list --expired             # Only the expired sandboxes
+spekk sandbox list --all-hosts           # Also the labeled sandboxes that other machines created
 ```
 
-### `spekk sandbox status <name>`
+**Flags:**
 
-Print the stored fields of a sandbox, the live machine state, and two SSH checks: the provisioned marker, and the `spekk-agent` service.
+| Flag | Description |
+|------|-------------|
+| `--expired` | Show only the sandboxes whose expiry is in the past |
+| `--all-hosts` | Also ask DigitalOcean and GCP for the labeled machines that no local record names, and show them with the status `remote` |
+
+`--all-hosts` lists the DigitalOcean droplets with the `spekk-sandbox` tag, and the GCP VMs with a `spekk-kind` label in the default gcloud project. For each cloud that it cannot ask (no token, no `gcloud`, or an API error), it prints one line on stderr with the reason. Expiry is a reminder only: spekk never destroys a sandbox because it expired. See [Sandbox kinds](advanced/sandbox-architecture.md#sandbox-kinds).
+
+### `spekk sandbox status <name> [--json]`
+
+Print the stored fields of a sandbox (with its kind, purpose, expiry and the host that created it), the live machine state, and five SSH checks: the provisioned marker, the `spekk-agent` service, the handshake record of the agent, and the version of the spekk CLI and of the agent binary on the machine. The two version commands run as `agent`, which owns both binaries, and not as the login user.
 
 ```bash
 spekk sandbox status my-sandbox
+spekk sandbox status my-sandbox --json
 ```
 
+`--json` prints one JSON object with the same values as the text lines, with snake_case keys (for example `agent_service` and `secret_key_fingerprint`). A version warning is in its own key, for example `agent_client_warning`. Warnings about the provider stay on stderr.
+
 When the cloud API cannot be reached, or the provider cannot be built because its token is missing, `status` prints a warning and shows the stored status marked `(stored)`. For a machine spekk did not create there is no live state, and the stored status is shown with no warning.
+
+A version line gets `WARNING:` and the command that fixes it when the version is not the release that `spekk sandbox deploy <name>` installs (the release of this spekk, or the latest release for a dev build), when it is `dev` (a binary with no release stamp), or when it is `missing`. For example:
+
+```
+spekk CLI: v1.32.0  WARNING: not v1.38.1, the release of this spekk; update with: spekk sandbox deploy my-sandbox
+Agent client: v1.38.1
+```
+
+Nothing updates a sandbox on its own. A sandbox runs real work, so the update is the one command, `deploy`.
+
+The service can be `active` while the control host refuses every dial of the agent, for example with HTTP 403 for a token that is not valid. The agent records its last successful handshake and its last failed dial in `/var/log/spekk/agent-connection.json`, and `status` shows both. When the last dial failed, or the agent never connected, the failure line gets a warning. For example:
+
+```
+Agent last connected: never
+Agent last handshake failure: 2026-10-23T05:10:00.123Z (HTTP 403)  WARNING: the agent is not connected to the control host
+```
+
+An agent binary older than this check writes no record, and the lines then say `unknown (no record; ...)`.
+
+The `Secret key fingerprint` line shows the fingerprint of the key that the agent uses to receive secrets from the control host: the first 16 hex characters of SHA-256 of its X25519 public key. The agent keeps the private key in `/home/agent/.config/spekk-agent/secret-key` (mode 0600) and never sends or logs it. The Secrets section of the control host shows the fingerprint of the key that the sandbox sent. An organization admin compares the two values before accepting the key. For example:
+
+```
+Secret key fingerprint: 300c9c9603b92a4b
+```
+
+When the agent refused its key file (a file that other users can read, a symbolic link, or contents that are not a key), the line says `none (<reason>)`. The agent does not replace the file. Fix or remove it, then restart the agent: a new key needs a new accept in the Secrets section. An agent binary older than this check says `unknown (no fingerprint in the record; ...)`.
 
 ### `spekk sandbox ssh <name> [ssh-flags...]`
 
@@ -731,6 +940,7 @@ Tear down a sandbox and remove its local record.
 ```bash
 spekk sandbox destroy my-sandbox
 spekk sandbox destroy my-sandbox --force   # No confirmation prompt
+spekk sandbox destroy my-sandbox --ignore-revoke-failure   # Destroy even if the agent cannot be revoked
 ```
 
 **Flags:**
@@ -738,22 +948,180 @@ spekk sandbox destroy my-sandbox --force   # No confirmation prompt
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--force` | `-f` | Skip the confirmation prompt, and remove the record when the teardown cannot run |
+| `--ignore-revoke-failure` | | Destroy the sandbox when its agent cannot be revoked on the control host |
+
+When the record has an agent id, `destroy` first revokes the agent on the control host (`POST /api/agents/<id>/revoke/`), before it touches the machine. This needs `SPEKK_API_TOKEN` and `SPEKK_HOST`: without them, `destroy` stops before the confirmation prompt and says so. A failed revoke stops `destroy`, and the machine and the record stay. `--force` does not change this. With `--ignore-revoke-failure`, `destroy` prints a warning that names the agent id and continues; revoke that agent on the control host.
 
 For a DigitalOcean sandbox, `destroy` deletes the droplet and its SSH key on DigitalOcean, then removes the local record. When the record names no droplet, `destroy` refuses, because the droplet may still be running and billing. `--force` removes the record anyway.
 
-For a machine spekk did not create, `destroy` stops the `spekk-agent` service, removes the credential files spekk put on the machine, and removes the local record. It makes no cloud API call and needs no API token. When the teardown fails, `destroy` keeps the record, because removing it would leave an agent running with live credentials and nothing that points at it. `--force` removes the record anyway.
+For a machine spekk did not create, `destroy` stops the `spekk-agent` service, removes the credential files spekk put on the machine and the marker `/opt/spekk/sandbox.json`, and removes the local record. It makes no cloud API call and needs no API token. When the teardown fails, `destroy` keeps the record, because removing it would leave an agent running with live credentials and nothing that points at it. `--force` removes the record anyway.
 
 The local SSH key pair is deleted only when spekk generated it. The test is where the private key is: the recorded path, cleaned and made absolute, must be inside the `keys` directory under spekk's config directory, and so must the file it resolves to after symlinks are followed on both sides. A key anywhere else is kept, and `destroy` prints one line to stderr that names the path it kept.
 
 ### `spekk sandbox deploy <name>`
 
-Download the agent binary from the latest spekk release and install it on a sandbox.
+Download the agent binary and the spekk CLI of one release and install them on a sandbox.
 
 ```bash
 spekk sandbox deploy my-sandbox
+spekk sandbox deploy my-sandbox --release v1.38.1
 ```
 
-It copies the binary, writes the `spekk-agent` systemd unit, and restarts the service. Every login stages the upload in its home directory, then installs it beside the target and renames it into place, so a deploy replaces an agent that is running.
+Without `--release`, a CLI with the version `vX.Y.Z` installs the release `vX.Y.Z`, so the sandbox matches the CLI that manages it. Any other build (`dev`) installs the latest release, and says so. `create` and `provision` pick the release the same way.
+
+Before it downloads, `deploy` reads the SHA-256 that GitHub publishes for each release asset (`digest` in `GET /repos/spekk-ai/spekk-cli/releases/tags/<tag>`, an anonymous API call). An asset with no digest stops the deploy. It copies both files, and on the machine `sha256sum -c` checks each one before anything is replaced: a file that does not match stops the deploy with `spekk: <file> does not match the release sha256`, and the installed binaries and the running service stay as they were.
+
+The agent goes to `/opt/spekk/agent-client`. The CLI goes to `/opt/spekk/cli/spekk`, owned by `agent`, so `spekk update` as `agent` can replace it, and `/usr/local/bin/spekk` links to it. When `~agent/.local/bin/spekk` is there (an earlier install put a copy there), it becomes a link to the same file. `agent` owns `/opt/spekk` and its home, so `deploy` does not follow a link there: a link at `/opt/spekk/cli` is replaced with a directory, and when `~agent/.local` or `~agent/.local/bin` is a link, `deploy` does not change `spekk` in it and says so. Then `deploy` writes the `spekk-agent` systemd unit and restarts the service. Every login stages the uploads in its home directory, then installs each beside its target and renames it into place, so a deploy replaces an agent that is running.
+
+Before the restart, it reads the version of the `claude` that the service runs, with the service's user and `agent.env`. When the version is older than the minimum (`MinVersion` in `internal/claudecode`), or cannot be read, it installs the `stable` release as `agent` with the native installer, and reads the version again. When the version is still older, the deploy fails and does not restart the agent, because the new agent refuses every turn on an older Claude Code. When the version still cannot be read, the deploy prints a warning and continues. A `claude` process that runs keeps its own binary, so this step stops no turn. `create` and `provision` run the same step when they deploy the agent.
+
+### `spekk sandbox image`
+
+Build, list, and delete template images. A sandbox made from an image skips the package installation of cloud-init, so a create takes about a minute instead of about four.
+
+```bash
+spekk sandbox image build --name base
+spekk sandbox image build --name web-app --setup infrastructure/sandbox/image-setup.sh
+spekk sandbox image build --name base --provider gcp --regions us-east1-b
+spekk sandbox image list
+spekk sandbox image delete web-app
+```
+
+**`image build` flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--name <image>` | Image name (required): lowercase letters, digits, and hyphens, starting with a letter, at most 63 characters |
+| `--setup <script>` | A script that runs as root on the builder before the image is made. A project keeps its own script in its own repository |
+| `--provider <provider>` | `digitalocean` (default) or `gcp` |
+| `--size <size>` | Size of the builder (default: the provider default) |
+| `--regions <r1,r2>` | DigitalOcean: the builder region, then the regions that the snapshot is copied to (default: `nyc1,nyc3`). GCP: the zone of the builder. A GCP image is global |
+| `--project <id>` | GCP project (default: the gcloud project) |
+
+**Build steps.** The build creates a temporary builder sandbox, `image-<name>`, with the normal cloud-init, and records it in `sandboxes.json` with the status `building`. It registers no agent and injects no credential. It runs `--setup` as root, with its output on the terminal. Then one SSH session cleans the builder and checks it (see below). Then the provider makes a private image: a snapshot of the shut-down droplet, copied to each region of `--regions`, or a custom image of the boot disk of the stopped GCP VM. The build records the image in `images.json` beside `sandboxes.json`: name, provider, provider image ID, regions, GCP project, created date, spekk version, OS version, and the SHA-256 of the setup script.
+
+The builder is destroyed on success, on each failure, and on Ctrl-C or SIGTERM, with its record, its key pair, and its known_hosts file, and the build prints what it removed. When the destroy fails, the build prints the `spekk sandbox destroy image-<name> --force` command that removes it. When the provider made the image but a later step failed (for example, a copy to a region), the record is still written with the regions that have the image, so `image delete` can remove it.
+
+**Image hygiene.** "Each home" is `/root`, each directory in `/home`, and the home of each user in `/etc/passwd`. The clean step removes what makes each machine its own, and the logs: the SSH host keys, the content of `/etc/machine-id`, `/opt/spekk/.provisioned`, the cloud-init state (`cloud-init clean --logs`), the content of the files in `/var/log`, and in each home the authorized keys, each `.*_history` file, `.viminfo`, the recipient key directory of the agent client (`.config/spekk-agent`), and the Claude Code settings (`.claude`, `.claude.json`) when they hold no sign-in. The clean step does not remove credentials. The check fails the build, with one line for each finding, when the builder has:
+
+- `/etc/spekk/agent.env`
+- in a home: a file in `.ssh` (also when `.ssh` is a symlink) other than `known_hosts`, `config`, or a `*.pub` file; a Claude Code sign-in (`.claude/.credentials.json`) or `.claude.json`; `.netrc`, `.aws/credentials`, `.git-credentials`, `.config/git/credentials`, `.config/gcloud`, a DigitalOcean CLI login (`.config/doctl/config.yaml`), or a GitHub CLI login (`.config/gh/hosts.yml`)
+- in a text file in a home, `/opt`, `/srv`, or `/var/lib` (but not `/var/lib/docker` or `/var/lib/containerd`): a private key (a `-----BEGIN ... PRIVATE KEY-----` line, or the same header followed by `\n` in a JSON string). The directories `node_modules`, `site-packages`, `dist-packages`, and `archive-v0` (the unpacked wheels in the uv cache) are not searched for keys, because installed packages often ship test keys
+- in a text file in the same directories or in `/etc`: a token in a known format (GitHub, Anthropic, AWS, DigitalOcean, GitLab, or Slack), as a full word in its real length. A match inside a longer string (for example in base64) or a short test value such as `xoxb-test-token` is not a finding
+- a git config (a `*.git/config` file in the same directories, `.gitconfig` or `.config/git/config` in a home, or `/etc/gitconfig`) with a user or token in an `http(s)://` URL, or with an `extraheader` line
+- a Docker registry login, an npm token, or a line that sets a variable whose name has `TOKEN`, `SECRET`, `API_KEY`, `PASSWORD`, or `ACCESS_KEY`, in `/etc/environment`, `/etc/bash.bashrc`, `/etc/profile.d/`, a bash or zsh startup file in a home, a `.env` file in the same directories, or an `Environment=` line in `/etc/systemd/system`
+
+It also fails when a step of the clean step did not take effect. The check is best effort: it fails on known secret shapes and locations, but it cannot find every secret, and the author of the setup script stays responsible for what the image contains. A setup script that needs a credential must remove it before it ends. The setup script gets `/dev/null` as stdin, so a step that reads stdin does not skip the steps after it.
+
+**Create from an image.** `spekk sandbox create --image <name>` finds the image in `images.json`, or, when there is no record, by name in the provider's own image list. That list has only the images that `image build` made: on DigitalOcean, the snapshots named `spekk-image-<name>`, and on GCP, the images with the `spekk-image` label. The machine starts from the image with a short first-boot cloud-init: the `agent` user with the sandbox key, then `/opt/spekk/.provisioned`. Cloud-init makes new SSH host keys and systemd makes a new `/etc/machine-id`, so two sandboxes from one image do not share them. The marker check, the credential injection, and the agent deploy are the same as for a fresh machine. The deploy still upgrades a Claude Code that is older than the minimum, and the agent binary always comes from the release, never from the image. The sandbox record has `image: <name>`.
+
+When the provider has no image with that name, or a DigitalOcean image has no copy in the region of the create, `create` prints one line and uses the full cloud-init:
+
+```
+No image "web-app" for digitalocean in sfo3; creating from the stock image with the full cloud-init.
+```
+
+`--image` with a machine you already have (`--ip`, `--provider none`) is an error. When the image is older than 14 days, `create` prints a warning with the age and continues.
+
+**Rebuild, do not upgrade at boot.** Rebuild each image every week, for security updates, and with each spekk release: `image delete`, then `image build` with the same `--setup`. The first boot does not run `apt upgrade`, because that removes the time saving. Images are private to the account: a DigitalOcean snapshot and a GCP custom image are private by default, and the build does not share them.
+
+**`image list`** prints one row for each record: name, provider, image ID, regions, created date, age in days, spekk version, and OS version. **`image delete <name>`** deletes the provider image (on DigitalOcean, every regional copy), then removes the record. When the provider no longer has the image, it prints a warning and removes the record.
+
+**AWS.** spekk does not make AMIs. To start the CloudFormation sandbox from your own AMI, see [A Sandbox on AWS](advanced/sandbox-aws.md#start-from-your-own-ami).
+
+### Machine mode (`--machine`)
+
+Machine mode is the interface for a server worker that launches sandboxes for its users. A person at a terminal does not use it. The worker gives each secret to the CLI on stdin, and reads the progress from stdout. No secret is in a flag, in the environment of the CLI, or on stdout, and machine mode reads no credential from its environment. Machine mode is for DigitalOcean only.
+
+```bash
+spekk sandbox create <name> --machine --size <size> --region <region> [--one-off [--expires <when>]] [--label <key>=<value> ...] [--release <tag>] [--provision-timeout <duration>] < create.json
+spekk sandbox destroy <name> --machine --force < destroy.json
+```
+
+**Create input.** One JSON object on stdin. Each field is required and must not be empty, except the optional GitHub pair and `image` (see below). A field that is not in this list, data after the object, or more than 64 KiB is an error:
+
+```json
+{
+  "digitalocean_token": "<DigitalOcean token>",
+  "registration_token": "<one-time registration token>",
+  "spekk_host": "<control host>",
+  "github_token": "<GitHub App installation token>",
+  "github_repository": "<owner>/<repository>",
+  "harness": "claude-code",
+  "model_credential": {"kind": "none"}
+}
+```
+
+Omit both `github_repository` and `github_token` to start without a repository. Both fields can also be empty. If either field has a value, both must have a non-empty value, and `github_repository` must be `<owner>/<repository>`. The CLI uses no GitHub token from its environment. A launch without a repository refuses an existing `.git` file, directory, or symbolic link in the resolved workspace or any parent directory. It reports the entry and preserves all files. This also applies to template images.
+
+The object can also have `"image": "<name>"`, which is optional. It names a template image. The CLI finds the image by that name in the private images of the DigitalOcean account, because the worker has no `images.json`. Without the field, or when the region has no copy of the image, the droplet gets the full cloud-init. The stage lines are the same either way.
+
+`harness` must be `claude-code`. `model_credential` is one of these kinds. Each kind takes only its own fields. A Claude subscription token is not a choice in machine mode, because it belongs to one person:
+
+| `kind` | Fields | Env file on the machine |
+|------|--------|-------------------------|
+| `none` | none | No model credential. A person signs in to Claude Code on the machine later. Until then the heartbeat of the agent says `claude_signed_in: false` (see [Claude sign-in state](advanced/sandbox-architecture.md#claude-sign-in-state)) |
+| `anthropic_api_key` | `api_key` | `ANTHROPIC_API_KEY` |
+| `bedrock` | `aws_access_key_id`, `aws_secret_access_key`, `aws_region` | The AWS keys, `AWS_DEFAULT_REGION`, and `CLAUDE_CODE_USE_BEDROCK=1` |
+
+**Flags.** `--size` and `--region` are required. `--label <key>=<value>` can repeat. The key and the value are lowercase `[a-z0-9_-]`, 1 to 63 characters, and the label goes on the droplet as the tag `<key>:<value>`, next to the kind tags of a terminal create. The label tags are in the droplet create request, so a droplet that a killed or failed create leaves has them too. A key that spekk sets itself (`spekk-kind`, `spekk-expires`, `spekk-host`, `spekk-sandbox`) is refused. Any other flag is an error. Without `--release`, a CLI with the version `vX.Y.Z` deploys the agent of the release `vX.Y.Z`, so the CLI and the agent match. Any other build needs `--release <tag>`.
+
+**Stage lines.** Stdout has one JSON line for each stage, and nothing else. Human logs go to stderr:
+
+```json
+{"stage":"creating"}
+{"stage":"provisioning","droplet_id":123,"ip":"203.0.113.10"}
+{"stage":"registering"}
+{"stage":"online","agent_id":"<id>"}
+```
+
+While the CLI waits (for the release download, the droplet, cloud-init, or an SSH step), it writes the last stage line again, unchanged, every 30 seconds. A line comes at least every 30 seconds, and the final `online` or `failed` line is always the last line.
+
+On an error, the last line is `{"stage":"failed","at":"<stage>","message":"<text>"}`, where `at` is the last stage that started, and the exit status is 1. The message holds no secret. A bad flag or a bad input fails at `creating`, before any call to DigitalOcean, the control host, or GitHub.
+
+**Steps.** `creating` checks the input and creates the droplet with the token from stdin. `provisioning` waits for cloud-init. `registering` makes the agent token, registers the agent with `POST /api/agents/register/` and `Authorization: Bearer <registration token>` (the body has `name`, `sandbox_id`, and `token`), writes the env file, prepares `/opt/spekk/workspace`, and deploys the agent. With a repository, it clones into that workspace and configures git. Without a repository, it creates a plain directory owned by `agent` and sets no Git credential helper or remote. Each script that holds a secret goes to the machine on the stdin of `ssh`.
+
+**Git.** When a repository is supplied, the installation token reaches `git clone` in the environment of the git process, and is not stored. Then `credential.https://github.com.helper` is `/opt/spekk/agent-client git-credential`. For each git request to `github.com`, the helper reads `/etc/spekk/agent.env` and asks the control host for a new installation token with `POST /api/agents/<agent id>/git-token/` and `Authorization: Bearer <agent token>`. The env file has no `GITHUB_TOKEN`, and `gh` is not signed in.
+
+**Failure.** The CLI does not destroy the droplet and does not revoke the agent when a create fails. It keeps the record of a droplet that exists, so the caller can run `destroy --machine` with the same `HOME`, and revoke the agent itself.
+
+**State.** The record and the SSH key are under `$HOME/.config/spekk/` (or `$XDG_CONFIG_HOME/spekk/`), as for a terminal create. Give each launch its own `HOME`, and keep it until the destroy.
+
+**Destroy.** `destroy --machine --force` reads `{"digitalocean_token": "<token>"}` on stdin, with the same strict rules. It needs `--force`, because stdin cannot also answer the prompt. It does not revoke the agent. It deletes the droplet, its DigitalOcean SSH key, the local key pair, the `known_hosts` file, and the record. It writes nothing to stdout, and exits 0 when the record is gone.
+
+## `spekk schedule`
+
+Manage the scheduled tasks of a sandbox agent on the control host. Every subcommand needs `SPEKK_API_TOKEN` and `SPEKK_HOST`.
+
+```bash
+spekk schedule list my-sandbox
+spekk schedule create my-sandbox --slug nightly-scan --cron_expression "0 9 * * *" --task_text "Scan the specs for drift"
+spekk schedule update my-sandbox nightly-scan --timezone America/New_York --enabled false
+spekk schedule run my-sandbox nightly-scan
+spekk schedule delete my-sandbox nightly-scan
+```
+
+`<agent>` is the name of a recorded sandbox that has an agent id, or an agent id. `<schedule>` is a schedule id or its slug.
+
+| Subcommand | What it does |
+|------------|--------------|
+| `list <agent>` | Prints each schedule, from all pages: id, slug, cron expression, timezone, role, enabled, and next fire time |
+| `create <agent> [fields]` | Creates a schedule and prints it as JSON. `--slug`, `--cron_expression`, and `--task_text` are required by the control host |
+| `update <agent> <schedule> [fields]` | Changes only the given fields and prints the schedule as JSON |
+| `delete <agent> <schedule>` | Deletes the schedule |
+| `run <agent> <schedule>` | Runs the schedule now and prints the message id. When the agent is disabled or not connected, it prints the reason from the control host |
+
+**Fields.** The flag names are the control host API field names.
+
+| Flag | Description |
+|------|-------------|
+| `--slug <slug>` | Stable job name, unique for the agent |
+| `--cron_expression <expr>` | Five-field cron expression, for example `"0 9 * * *"` |
+| `--timezone <zone>` | IANA zone that the expression runs in (default: `UTC`) |
+| `--task_text <text>` | The message the agent receives |
+| `--custom_context <text>` | Context added to the session system prompt. `--custom_context ""` clears it |
+| `--role <role>` | Session role (default: `builder`) |
+| `--enabled true\|false` | A disabled schedule never fires |
 
 ## `spekk conversation open`
 
@@ -770,6 +1138,7 @@ spekk conversation open --title "Need a decision on the auth flow" --body "The s
 | `--title <text>` | Short summary (required) |
 | `--body <text>` | Full details (required) |
 | `--severity <level>` | `info` (default), `warning`, or `critical` |
+| `--channel <name\|id>` | Slack channel joined by the agent's bot; accepts a name, `#name`, or ID. Omit to use the home channel |
 
 The command writes one request file into the spool directory named by `SPEKK_CONVERSATION_SPOOL`, and exits. It does not wait for a reply. The agent client on the sandbox sets that variable for each Claude session, reads the file, and sends a `conversation_open` frame to the control host. Outside a sandbox session the variable is not set, and the command fails with a message that says so.
 
@@ -887,8 +1256,9 @@ Pass `--global` or `--local` to match where the skill is. `--local` is the defau
 Replace the running binary with the latest GitHub release.
 
 ```bash
-spekk update           # Install the latest release
-spekk update --check   # Print the current and latest version, install nothing
+spekk update                          # Install the latest release
+spekk update --check                  # Print the current and latest version, install nothing
+spekk update --version exp-arm64      # Install a specific tag, e.g. a prerelease
 ```
 
 **Flags:**
@@ -896,8 +1266,9 @@ spekk update --check   # Print the current and latest version, install nothing
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--check` | `-c` | Report whether an update exists, and install nothing |
+| `--version <tag>` | | Install a specific release tag instead of the latest. GitHub excludes prereleases from "latest", so this is how you get onto an `exp-*` build. It skips the newer-version check, so it can move to an older or a prerelease tag, and it works from a development build |
 
-The update writes to the install directory, so that directory must be writable. See [Install](install.md#updating). A development build (`spekk version` prints `dev`) cannot update. After the check or the install, `spekk update` scans the files `spekk install --target` wrote and reports each one that no longer matches the binary, with the command to run.
+The update writes to the install directory, so that directory must be writable. See [Install](install.md#updating). A development build (`spekk version` prints `dev`) cannot update to the latest, but `--version <tag>` still works from one. After the check or the install, `spekk update` scans the files `spekk install --target` wrote and reports each one that no longer matches the binary, with the command to run.
 
 ## `spekk version`
 

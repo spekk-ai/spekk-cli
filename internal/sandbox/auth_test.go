@@ -76,7 +76,7 @@ func testEnvVars() map[string]string {
 }
 
 func TestBuildEnvContentBedrockPinsTheDefaultFile(t *testing.T) {
-	got := buildEnvContent(AuthBedrock, testEnvVars(), "probe", "agenttok", "https://host.example/")
+	got := buildEnvContent(AuthBedrock, testEnvVars(), "probe", "agenttok", "agent-1", "https://host.example/")
 
 	want := strings.Join([]string{
 		"AWS_ACCESS_KEY_ID=akid",
@@ -86,6 +86,7 @@ func TestBuildEnvContentBedrockPinsTheDefaultFile(t *testing.T) {
 		"GITHUB_TOKEN=ghtok",
 		"SPEKK_HOST=host.example",
 		"SPEKK_AGENT_TOKEN=agenttok",
+		"SPEKK_AGENT_ID=agent-1",
 		"WORKSPACE=/opt/spekk/workspace",
 		"SPEKK_AGENT_NAME=spekk-probe",
 	}, "\n") + "\n"
@@ -101,7 +102,7 @@ func TestBuildEnvContentBedrockPinsTheDefaultFile(t *testing.T) {
 // subscription token and leaves CLAUDE_CODE_USE_BEDROCK behind can keep billing
 // through Bedrock, which is the failure the auth mode exists to prevent.
 func TestBuildEnvContentSubscriptionCarriesNoBedrockCredential(t *testing.T) {
-	got := buildEnvContent(AuthSubscription, testEnvVars(), "probe", "agenttok", "https://host.example/")
+	got := buildEnvContent(AuthSubscription, testEnvVars(), "probe", "agenttok", "agent-1", "https://host.example/")
 
 	if !strings.Contains(got, oauthTokenVar+"=oauthtok") {
 		t.Errorf("subscription file is missing the token:\n%s", got)
@@ -121,6 +122,27 @@ func TestBuildEnvContentSubscriptionCarriesNoBedrockCredential(t *testing.T) {
 	} {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("subscription file still carries %q:\n%s", unwanted, got)
+		}
+	}
+}
+
+// A machine-mode file is pinned whole for the two types that the terminal
+// path does not have, so a line of another type, or a GITHUB_TOKEN line with
+// a token that expires in 1 hour, fails here. The bedrock block is the one
+// the pinned bedrock file above already proves.
+func TestBuildMachineEnvContentPinsEachNewType(t *testing.T) {
+	shared := "SPEKK_HOST=host.example\nSPEKK_AGENT_TOKEN=agenttok\nSPEKK_AGENT_ID=agent-1\nWORKSPACE=/opt/spekk/workspace\nSPEKK_AGENT_NAME=spekk-probe\n"
+	for _, tc := range []struct {
+		auth AuthMode
+		env  map[string]string
+		want string
+	}{
+		{AuthNone, map[string]string{}, shared},
+		{AuthAPIKey, map[string]string{apiKeyVar: "sk-key"}, "ANTHROPIC_API_KEY=sk-key\n" + shared},
+	} {
+		in := &machineInput{auth: tc.auth, modelEnv: tc.env, controlHost: "https://host.example", githubToken: "ghtok"}
+		if got := buildMachineEnvContent(in, "probe", "agenttok", "agent-1"); got != tc.want {
+			t.Errorf("%s env file:\ngot:\n%s\nwant:\n%s", tc.auth, got, tc.want)
 		}
 	}
 }

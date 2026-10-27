@@ -114,7 +114,7 @@ func TestCreateRecordsTheLoginUser(t *testing.T) {
 func TestEveryPrivilegedStepEscalatesForANonRootLogin(t *testing.T) {
 	var sent []string
 	origExec := sshExec
-	sshExec = func(args []string) ([]byte, error) {
+	sshExec = func(args []string, stdin string) ([]byte, error) {
 		sent = append(sent, args[len(args)-1])
 		return nil, nil
 	}
@@ -122,7 +122,7 @@ func TestEveryPrivilegedStepEscalatesForANonRootLogin(t *testing.T) {
 
 	steps := map[string]func(user string) error{
 		"inject credentials": func(user string) error {
-			return injectCredentials("9.9.9.9", "", "sb", user, "agent-token", AuthBedrock)
+			return injectCredentials("9.9.9.9", "", "sb", user, "agent-token", "agent-1", AuthBedrock, nil)
 		},
 		"git credentials": func(user string) error {
 			return configureGitCredentials("9.9.9.9", "", "sb", user)
@@ -140,7 +140,7 @@ func TestEveryPrivilegedStepEscalatesForANonRootLogin(t *testing.T) {
 			if len(sent) != 1 {
 				t.Fatalf("%s sent %d commands, want 1", name, len(sent))
 			}
-			if !strings.Contains(sent[0], "| sudo bash") {
+			if !strings.Contains(sent[0], "sudo bash") {
 				t.Errorf("%s does not escalate for a non-root login: %q", name, sent[0])
 			}
 
@@ -164,9 +164,24 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 		scpArgs = append(scpArgs, args[len(args)-1])
 		return nil, nil
 	}
-	sshExec = func(args []string) ([]byte, error) {
+	// Every command reads a current Claude Code, so the deploy reads the
+	// version and installs the agent, and nothing else.
+	sshExec = func(args []string, stdin string) ([]byte, error) {
 		sshCommands = append(sshCommands, args[len(args)-1])
-		return nil, nil
+		cmd := sentScript(args, stdin)
+		if strings.Contains(cmd, "| sudo bash") {
+			start := strings.IndexByte(cmd, '\'')
+			end := strings.IndexByte(cmd[start+1:], '\'') + start + 1
+			decoded, err := base64.StdEncoding.DecodeString(cmd[start+1 : end])
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd = string(decoded)
+		}
+		if strings.Contains(cmd, "/usr/local/bin/codex --version") {
+			return []byte("codex-cli 0.163.0\n"), nil
+		}
+		return []byte("2.1.301 (Claude Code)\n"), nil
 	}
 	t.Cleanup(func() { scpExec, sshExec = origSCP, origSSH })
 
@@ -178,21 +193,19 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 			if err := deployAgent("9.9.9.9", "", "sb", user, artifacts); err != nil {
 				t.Fatalf("deploy: %v", err)
 			}
-			if len(scpArgs) != 1 || len(sshCommands) != 1 {
-				t.Fatalf("expected one upload and installation, got %v and %v", scpArgs, sshCommands)
+			if len(scpArgs) != 1 || len(sshCommands) != 3 {
+				t.Fatalf("expected one upload, two version reads and an installation, got %v and %v", scpArgs, sshCommands)
 			}
-			if want := user + "@9.9.9.9:" + stagedBinary; scpArgs[0] != want {
+			if want := user + "@9.9.9.9:"; scpArgs[0] != want {
 				t.Errorf("staged at %q, want %q", scpArgs[0], want)
 			}
-			_, uploadPath, _ := strings.Cut(scpArgs[0], ":")
-			if filepath.Base(uploadPath) != uploadPath {
-				t.Errorf("upload must use a file name in the login user's home: %q", uploadPath)
-			}
-			if got := strings.Contains(sshCommands[0], "| sudo bash"); got != (user != "root") {
-				t.Errorf("incorrect privilege level for %s: %s", user, sshCommands[0])
-			}
-			if user == "root" && strings.Contains(sshCommands[0], "sudo") {
-				t.Errorf("root installation must run without sudo: %s", sshCommands[0])
+			for _, cmd := range sshCommands {
+				if got := strings.Contains(cmd, "| sudo bash"); got != (user != "root") {
+					t.Errorf("incorrect privilege level for %s: %s", user, cmd)
+				}
+				if user == "root" && strings.Contains(cmd, "sudo") {
+					t.Errorf("root installation must run without sudo: %s", cmd)
+				}
 			}
 		})
 	}

@@ -3,8 +3,10 @@ package sandbox
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/spekk-ai/spekk-cli/internal/config"
@@ -19,28 +21,101 @@ import (
 // always had, so an old sandboxes.json stays readable and, more importantly,
 // stays destroyable.
 //
-// DropletID and SSHKeyID are DigitalOcean's. The generic layer never reads
-// them; only DOProvider does. Holding them as concrete fields rather than an
-// opaque blob is deliberate while there is one cloud provider: it keeps the
-// on-disk format unchanged and it keeps "no droplet" distinguishable from
-// "droplet id not loaded". A second cloud provider adds its own fields.
+// DropletID and SSHKeyID are DigitalOcean's, and GCPInstance is Google
+// Cloud's. Only their own provider acts on them. Holding them as concrete
+// fields rather than an opaque blob keeps the on-disk format legible, and it
+// keeps "no machine" distinguishable from "identifier not loaded". The GCP
+// provider also reads Project and Region, which hold the project ID and the
+// zone, because those two and the VM name are what locate the VM.
 type SandboxMeta struct {
-	Provider   string `json:"provider,omitempty"`
-	DropletID  int    `json:"dropletId,omitempty"`
-	IP         string `json:"ip"`
-	Region     string `json:"region"`
-	Size       string `json:"size"`
-	CreatedAt  string `json:"createdAt"`
-	Status     string `json:"status"`
-	Project    string `json:"project,omitempty"`
-	SSHKeyID   int    `json:"sshKeyId,omitempty"`
-	SSHKeyPath string `json:"sshKeyPath,omitempty"`
+	Provider  string `json:"provider,omitempty"`
+	DropletID int    `json:"dropletId,omitempty"`
+	// GCPInstance is the Compute Engine VM name.
+	GCPInstance string `json:"gcpInstance,omitempty"`
+	IP          string `json:"ip"`
+	Region      string `json:"region"`
+	Size        string `json:"size"`
+	CreatedAt   string `json:"createdAt"`
+	Status      string `json:"status"`
+	Project     string `json:"project,omitempty"`
+	SSHKeyID    int    `json:"sshKeyId,omitempty"`
+	SSHKeyPath  string `json:"sshKeyPath,omitempty"`
 	// SSHUser is the login user for an existing machine; empty means root.
 	SSHUser string `json:"sshUser,omitempty"`
 	// Auth is the mode the sandbox authenticates Claude with, so `provision`
 	// can finish a record with the credential `create` chose for it. Empty
 	// means bedrock, the mode every record had before the field existed.
 	Auth string `json:"auth,omitempty"`
+	// AgentID is the id of the agent the control host registered for this
+	// sandbox, so destroy can revoke it and schedule commands can find it.
+	// Empty means the sandbox is not registered through the API. The record
+	// holds no credential: the agent token lives on the machine only.
+	AgentID string `json:"agentId,omitempty"`
+	// Kind is KindOneOff or KindPersistent. Empty means persistent, the
+	// kind every record had before the field existed. Purpose, ExpiresAt
+	// (RFC 3339) and CreatedBy (the hostname that ran create) are empty on
+	// such a record too. See KindOf.
+	Kind      string `json:"kind,omitempty"`
+	Purpose   string `json:"purpose,omitempty"`
+	ExpiresAt string `json:"expiresAt,omitempty"`
+	CreatedBy string `json:"createdBy,omitempty"`
+	// Image is the template image the machine was created from. Empty
+	// means the stock image with the full cloud-init.
+	Image string `json:"image,omitempty"`
+
+	// unknown holds the fields of the record that this CLI does not know,
+	// for example ones that a newer CLI wrote, as a JSON object. A save
+	// writes them back, so an older CLI does not delete them. It is a
+	// string, not a map, so that SandboxMeta stays comparable.
+	unknown string
+}
+
+// knownKeys are the JSON names of the SandboxMeta fields, in lower case,
+// because encoding/json matches a key to a field without case.
+var knownKeys = func() map[string]bool {
+	keys := map[string]bool{}
+	t := reflect.TypeOf(SandboxMeta{})
+	for i := 0; i < t.NumField(); i++ {
+		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if name != "" && name != "-" {
+			keys[strings.ToLower(name)] = true
+		}
+	}
+	return keys
+}()
+
+// UnmarshalJSON decodes the known fields and keeps the others in unknown.
+func (m *SandboxMeta) UnmarshalJSON(data []byte) error {
+	type plain SandboxMeta
+	if err := json.Unmarshal(data, (*plain)(m)); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	maps.DeleteFunc(fields, func(k string, _ json.RawMessage) bool { return knownKeys[strings.ToLower(k)] })
+	m.unknown = ""
+	if len(fields) > 0 {
+		obj, err := json.Marshal(fields)
+		if err != nil {
+			return err
+		}
+		m.unknown = string(obj)
+	}
+	return nil
+}
+
+// MarshalJSON writes the known fields in their usual order, then the unknown
+// fields. A record with no unknown fields is written as before.
+func (m SandboxMeta) MarshalJSON() ([]byte, error) {
+	type plain SandboxMeta
+	data, err := json.Marshal(plain(m))
+	if err != nil || m.unknown == "" {
+		return data, err
+	}
+	// Both are JSON objects, and plain always has fields: join the members.
+	return append(append(data[:len(data)-1], ','), m.unknown[1:]...), nil
 }
 
 // sandboxesFile returns the path to the sandboxes metadata file.

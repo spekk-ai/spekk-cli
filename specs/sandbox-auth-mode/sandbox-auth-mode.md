@@ -61,3 +61,4 @@ Out of scope, deliberately:
 3. `create-requires-its-modes-credentials` — the pre-flight check asks for what the chosen mode actually uses
 4. `setup-credentials-switches-a-live-sandbox` — the script can move an existing droplet between modes, and its usage header describes an invocation that works
 5. `auth-modes-are-documented` — an operator can find out which variable to set without reading Go
+6. `git-credentials-use-gh-helper` - Git reads the GitHub token through `gh` and leaves no Git credential store on the sandbox

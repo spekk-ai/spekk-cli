@@ -65,6 +65,8 @@ write_files:
     content: |
       # Required: Agent auth token for WebSocket connection to the control host
       SPEKK_AGENT_TOKEN=
+      # The agent ID comes from agent registration on the control host.
+      #SPEKK_AGENT_ID=
       # Required: Control host (e.g., your-control-host.example)
       SPEKK_HOST=
       # Required: GitHub PAT for the agent's GitHub identity
@@ -157,8 +159,52 @@ runcmd:
   - apt-get update -y
   - apt-get install -y gh
 
-  # Claude Code CLI
-  - npm install -g @anthropic-ai/claude-code
+  # Claude Code CLI, the native binary. Install as agent, so agent owns it and
+  # it can update itself. The link puts it on the service's PATH, ahead of any
+  # npm copy in /usr/bin. `spekk sandbox deploy` upgrades it when it is older
+  # than the minimum in internal/claudecode. The link follows only a good install.
+  - su - agent -c 'curl -fsSL -o claude-install.sh https://claude.ai/install.sh && bash claude-install.sh stable && rm claude-install.sh' && ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
+
+  # Install the shared trailer script and turn off Claude Code's own credit.
+  - |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      chmod 755 "$tmp"
+      # The pinned commit has both files before the pull request merges.
+      source=https://raw.githubusercontent.com/spekk-ai/spekk-cli/a267105b8d58e8b01090e74574172414aa9c5e45/scripts
+      curl -fsSL "$source/configure-agent-attribution.py" -o "$tmp/configure.py"
+      curl -fsSL "$source/assisted-by" -o "$tmp/assisted-by"
+      chmod 644 "$tmp/configure.py" "$tmp/assisted-by"
+      su - agent -c "python3 '$tmp/configure.py' '$tmp/assisted-by'"
+
+  # Codex CLI, pinned beside Claude Code on every sandbox.
+  - |
+      set -e
+      rm -f /opt/spekk/.provisioned /run/spekk-codex-ready
+      case "$(dpkg --print-architecture)" in
+        amd64) arch=x86_64 ;;
+        arm64) arch=aarch64 ;;
+        *) echo 'Codex requires amd64 or arm64' >&2; exit 1 ;;
+      esac
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fsSL "https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-$arch-unknown-linux-musl.tar.gz" -o "$tmp/codex.tar.gz"
+      curl -fsSL "https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-code-mode-host-$arch-unknown-linux-musl.tar.gz" -o "$tmp/codex-code-mode-host.tar.gz"
+      tar -xzf "$tmp/codex.tar.gz" -C "$tmp"
+      tar -xzf "$tmp/codex-code-mode-host.tar.gz" -C "$tmp"
+      install -m 0755 "$tmp/codex-$arch-unknown-linux-musl" /usr/local/bin/codex
+      install -m 0755 "$tmp/codex-code-mode-host-$arch-unknown-linux-musl" /usr/local/bin/codex-code-mode-host
+      [ "$(/usr/local/bin/codex --version)" = "codex-cli 0.163.0" ]
+      /usr/local/bin/codex-code-mode-host --help > /dev/null
+      touch /run/spekk-codex-ready
+
+  # spekk CLI. Install as agent into a directory agent owns, so `spekk update`
+  # needs no sudo, and outside agent's home, which Ubuntu creates 0750, so the
+  # link on the system PATH works for every user, not only agent and root.
+  - install -d -o agent -g agent -m 0755 /opt/spekk/cli
+  - su - agent -c 'curl -fsSL https://raw.githubusercontent.com/spekk-ai/spekk-cli/main/install.sh | SPEKK_INSTALL_DIR=/opt/spekk/cli sh'
+  - ln -sf /opt/spekk/cli/spekk /usr/local/bin/spekk
 
   # Workspace
   - mkdir -p /workspace
@@ -174,4 +220,4 @@ runcmd:
   - su - agent -c 'git config --global init.defaultBranch main'
 
   # Mark provisioning complete
-  - touch /opt/spekk/.provisioned
+  - test -f /run/spekk-codex-ready && touch /opt/spekk/.provisioned

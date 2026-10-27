@@ -8,17 +8,21 @@ depends-on: install-fetches-from-official-registry
 branch: feature/skill-install-system
 ---
 
-# Install with --global Writes to Home Directory
+# Global Skills Use the User Configuration Directory
 
 ## Description
 
-`spekk install <agent> <skill> --global` writes to `~/.spekk/skills/<agent>/<skill>.md` so the skill is available across every project for the current user. This matches the global layer the `SkillResolver` already reads from.
+`spekk install <agent> <skill> --global` writes to `<global-config-dir>/skills/<agent>/<skill>.md`. The global configuration directory comes from `config.GlobalConfigDir()`. The skill is available to the current user in every project through the same directory that `SkillResolver` reads.
 
 ## Success Criteria
 
-- `spekk install builder my-skill --global` writes to `~/.spekk/skills/builder/my-skill.md` (resolved against `os.UserHomeDir()`)
-- The home-side `.spekk/skills/<agent>/` tree is created with mode 0755 if missing
-- A globally-installed skill is discoverable via `SkillResolver.ResolveSkill(agent, "my-skill")` without code changes to the resolver
-- The command prints the absolute path under the user's home dir on success
+- A nonempty `XDG_CONFIG_HOME` selects `filepath.Join(XDG_CONFIG_HOME, "spekk")` as the global configuration directory. The value is used as provided, including a relative value.
+- With `XDG_CONFIG_HOME` unset or empty, the global configuration directory is `filepath.Join(home, ".config", "spekk")`, where `home` comes from `os.UserHomeDir()`.
+- The same rule applies on Linux and macOS. The published Windows binary uses the same rule with native path separators. The home variable is `HOME` on Linux and macOS and `USERPROFILE` on Windows. Windows binaries are not tested.
+- If `os.UserHomeDir()` fails, the command reports the configuration error, including when `XDG_CONFIG_HOME` is set.
+- `spekk install builder my-skill --global` writes to `filepath.Join(globalConfigDir, "skills", "builder", "my-skill.md")`.
+- Missing parent directories are created with requested mode 0755. On Unix, the process umask applies.
+- `SkillResolver.ResolveSkill("builder", "my-skill")` can find the installed skill through the same global configuration directory.
+- The success message includes the resolved destination path. This path is absolute when the configuration base is absolute.
 
-**Tests:** internal/install/write_test.go (`TestPerformInstall_GlobalScopeWritesUnderHomeAndIsResolvable`)
+**Tests:** internal/install/write_test.go (`TestPerformInstall_GlobalScopeWritesUnderConfigDirAndIsResolvable`); internal/config/config_test.go (`TestResolveGlobalConfigDir_DefaultPath`, `TestResolveGlobalConfigDir_XDGOverride`).

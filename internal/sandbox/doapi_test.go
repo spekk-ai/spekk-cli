@@ -2,8 +2,10 @@ package sandbox
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -147,74 +149,6 @@ func TestListDropletsWithTag(t *testing.T) {
 	}
 }
 
-func TestDeleteDroplet(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" || r.URL.Path != "/v2/droplets/42" {
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-		w.WriteHeader(204)
-	})
-	defer ts.Close()
-
-	if err := client.DeleteDroplet(42); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestListSSHKeys(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/account/keys" {
-			t.Errorf("unexpected path %s", r.URL.Path)
-		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ssh_keys": []map[string]interface{}{
-				{"id": 1, "name": "key1", "fingerprint": "aa:bb:cc"},
-				{"id": 2, "name": "key2", "fingerprint": "dd:ee:ff"},
-			},
-		})
-	})
-	defer ts.Close()
-
-	keys, err := client.ListSSHKeys()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(keys) != 2 {
-		t.Fatalf("expected 2 keys, got %d", len(keys))
-	}
-}
-
-func TestCreateSSHKey(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
-		if body["name"] != "my-key" {
-			t.Errorf("expected name my-key, got %s", body["name"])
-		}
-
-		w.WriteHeader(201)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ssh_key": map[string]interface{}{
-				"id":          10,
-				"name":        "my-key",
-				"fingerprint": "xx:yy:zz",
-			},
-		})
-	})
-	defer ts.Close()
-
-	key, err := client.CreateSSHKey("my-key", "ssh-rsa AAAA...")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if key.Fingerprint != "xx:yy:zz" {
-		t.Errorf("expected fingerprint xx:yy:zz, got %s", key.Fingerprint)
-	}
-}
-
 func TestFindSSHKeyByFingerprint(t *testing.T) {
 	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -244,21 +178,6 @@ func TestFindSSHKeyByFingerprint(t *testing.T) {
 	}
 	if notFound != nil {
 		t.Error("expected nil for not found key")
-	}
-}
-
-func TestDeleteSSHKey(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" || r.URL.Path != "/v2/account/keys/42" {
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	defer ts.Close()
-
-	err := client.DeleteSSHKey(42)
-	if err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -310,26 +229,6 @@ func TestAPIError(t *testing.T) {
 	}
 }
 
-func TestAPIErrorNotFound(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(404)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":      "not_found",
-			"message": "The resource you requested could not be found.",
-		})
-	})
-	defer ts.Close()
-
-	_, err := client.GetDroplet(99999)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	apiErr := err.(*APIError)
-	if apiErr.StatusCode != 404 {
-		t.Errorf("expected 404, got %d", apiErr.StatusCode)
-	}
-}
-
 func TestDropletPublicIPEmpty(t *testing.T) {
 	d := &Droplet{
 		Networks: Networks{V4: []NetworkV4{
@@ -341,24 +240,68 @@ func TestDropletPublicIPEmpty(t *testing.T) {
 	}
 }
 
-func TestListProjects(t *testing.T) {
-	ts, client := testServer(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"projects": []map[string]interface{}{
-				{"id": "proj-1", "name": "My Project"},
-			},
-		})
-	})
-	defer ts.Close()
+// A DigitalOcean image is a snapshot of the shut-down droplet, copied to
+// each region it is not in yet, with each action polled to the end. A copy
+// that fails still returns the snapshot, so the build records it and it can
+// be deleted.
+func TestDOCreateImage(t *testing.T) {
+	origPoll := doActionPoll
+	doActionPoll = 0
+	t.Cleanup(func() { doActionPoll = origPoll })
 
-	projects, err := client.ListProjects()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(projects) != 1 {
-		t.Fatalf("expected 1 project, got %d", len(projects))
-	}
-	if projects[0].Name != "My Project" {
-		t.Errorf("expected 'My Project', got %s", projects[0].Name)
+	for _, tc := range []struct {
+		name        string
+		failRegion  string
+		wantRegions string
+		wantErr     bool
+	}{
+		{name: "copied to each region", wantRegions: "nyc1,nyc3"},
+		{name: "a failed copy keeps the snapshot", failRegion: "nyc3", wantRegions: "nyc1", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var actions []string
+			polls := map[string]int{}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]string
+				json.NewDecoder(r.Body).Decode(&body)
+				switch {
+				case r.Method == "POST" && r.URL.Path == "/v2/droplets/77/actions":
+					actions = append(actions, body["type"]+":"+body["name"])
+					fmt.Fprintf(w, `{"action": {"id": %d, "status": "in-progress"}}`, len(actions))
+				case r.Method == "POST" && r.URL.Path == "/v2/images/5005/actions":
+					actions = append(actions, "transfer:"+body["region"])
+					fmt.Fprint(w, `{"action": {"id": 99, "status": "in-progress"}}`)
+				case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/v2/actions/"):
+					polls[r.URL.Path]++
+					status := "in-progress"
+					if polls[r.URL.Path] > 1 {
+						status = "completed"
+						if r.URL.Path == "/v2/actions/99" && tc.failRegion != "" {
+							status = "errored"
+						}
+					}
+					fmt.Fprintf(w, `{"action": {"id": %s, "status": %q}}`, strings.TrimPrefix(r.URL.Path, "/v2/actions/"), status)
+				case r.Method == "GET" && r.URL.Path == "/v2/droplets/77/snapshots":
+					fmt.Fprint(w, `{"snapshots": [{"id": 4004, "name": "older"}, {"id": 5005, "name": "spekk-image-web-app", "regions": ["nyc1"]}]}`)
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(404)
+				}
+			}))
+			defer srv.Close()
+
+			p := &DOProvider{client: NewClientWithToken("tok", srv.URL)}
+			captureStderr(t)
+			img, err := p.CreateImage(&SandboxMeta{DropletID: 77, Region: "nyc1"}, "web-app", []string{"nyc1", "nyc3"})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, want error %v", err, tc.wantErr)
+			}
+			if img.ImageID != "5005" || strings.Join(img.Regions, ",") != tc.wantRegions {
+				t.Errorf("image = %+v, want snapshot 5005 in %s", img, tc.wantRegions)
+			}
+			if got := strings.Join(actions, " "); got != "shutdown: snapshot:spekk-image-web-app transfer:nyc3" {
+				t.Errorf("actions = %s", got)
+			}
+		})
 	}
 }

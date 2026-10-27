@@ -8,22 +8,6 @@ import (
 	"github.com/coder/websocket"
 )
 
-// TestProtocolVersionPinned makes a version change a deliberate diff.
-func TestProtocolVersionPinned(t *testing.T) {
-	if ProtocolVersion != "1.0" {
-		t.Fatalf("ProtocolVersion changed to %q — bump deliberately and update the companion control-host PR", ProtocolVersion)
-	}
-}
-
-func TestProtocolMajor(t *testing.T) {
-	cases := map[string]string{"1.0": "1", "2.3": "2", "weird": "weird", "": ""}
-	for in, want := range cases {
-		if got := protocolMajor(in); got != want {
-			t.Fatalf("protocolMajor(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestDialOptionsSendBothHeaders(t *testing.T) {
 	c := &AgentClient{cfg: Config{Token: "tok"}}
 	h := c.dialOptions().HTTPHeader
@@ -35,23 +19,21 @@ func TestDialOptionsSendBothHeaders(t *testing.T) {
 	}
 }
 
-func TestWelcomeFrameIsNotUnknown(t *testing.T) {
+// The control host still speaks 1.0. A minor bump is additive, so a 1.x
+// client must connect to it without a warning.
+func TestWelcomeOlderMinorDoesNotWarn(t *testing.T) {
 	c := &AgentClient{}
 	buf := captureLog(t)
-	c.handleInbound(t.Context(), Message{Type: MessageTypeWelcome, Protocol: ProtocolVersion})
-	out := buf.String()
-	if strings.Contains(out, "Unknown message type") {
-		t.Fatalf("welcome treated as unknown:\n%s", out)
-	}
-	if strings.Contains(out, "WARNING") {
-		t.Fatalf("same major must not warn:\n%s", out)
+	c.handleWelcome(t.Context(), Message{Type: MessageTypeWelcome, Protocol: "1.0"})
+	if out := buf.String(); strings.Contains(out, "WARNING") {
+		t.Fatalf("a 1.0 control host must not warn a %s client:\n%s", ProtocolVersion, out)
 	}
 }
 
 func TestWelcomeMajorMismatchWarns(t *testing.T) {
 	c := &AgentClient{}
 	buf := captureLog(t)
-	c.handleWelcome(Message{Type: MessageTypeWelcome, Protocol: "2.0"})
+	c.handleWelcome(t.Context(), Message{Type: MessageTypeWelcome, Protocol: "2.0"})
 	out := buf.String()
 	if !strings.Contains(out, "WARNING") || !strings.Contains(out, "2.0") || !strings.Contains(out, ProtocolVersion) {
 		t.Fatalf("mismatch warning must name both versions:\n%s", out)

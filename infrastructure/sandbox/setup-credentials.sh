@@ -14,7 +14,7 @@
 # command, inside the quotes, as above: an assignment on the local side applies
 # to ssh itself, and ssh does not forward it.
 #
-# Pass NON-SECRETS that way -- SPEKK_AUTH_MODE, SPEKK_HOST, AWS_DEFAULT_REGION.
+# Pass NON-SECRETS that way -- SPEKK_AUTH_MODE, SPEKK_HOST, SPEKK_AGENT_ID, AWS_DEFAULT_REGION.
 # A secret on a command line is in the local shell history and in both machines'
 # process lists, which is the exposure the non-echoing prompts exist to avoid.
 # For an unattended run, feed secrets through a root-only file on the droplet
@@ -90,6 +90,7 @@ render_agent_env() {
     echo "GITHUB_TOKEN=${GITHUB_TOKEN:-}"
     echo "SPEKK_HOST=${SPEKK_HOST:-}"
     echo "SPEKK_AGENT_TOKEN=${SPEKK_AGENT_TOKEN:-}"
+    [ -z "${SPEKK_AGENT_ID:-}" ] || echo "SPEKK_AGENT_ID=${SPEKK_AGENT_ID}"
     # These two are not credentials, but the Go path writes them and the file
     # is rewritten whole. Omitting them would make a switch quietly change the
     # agent's workspace and its git identity.
@@ -120,7 +121,7 @@ render_agent_env() {
 MODE_VARS="AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_MODEL"
 
 # KNOWN_VARS are the ones this script renders itself, in a fixed order.
-KNOWN_VARS="GITHUB_TOKEN SPEKK_HOST SPEKK_AGENT_TOKEN WORKSPACE SPEKK_AGENT_NAME"
+KNOWN_VARS="GITHUB_TOKEN SPEKK_HOST SPEKK_AGENT_TOKEN SPEKK_AGENT_ID WORKSPACE SPEKK_AGENT_NAME"
 
 # EXTRA_LINES holds every other line the existing file had.
 EXTRA_LINES=""
@@ -215,10 +216,18 @@ write_agent_env() {
     load_existing
     collect_credentials
 
+    if [ -n "${SPEKK_AGENT_ID:-}" ] && [[ ! "$SPEKK_AGENT_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+        echo "ERROR: SPEKK_AGENT_ID must be a UUID" >&2
+        return 1
+    fi
+
     # The file is rewritten whole, never appended to. That is what makes a mode
     # switch a switch: the previous mode's variables are gone, not shadowed.
     echo "==> Writing ${AGENT_ENV_FILE}"
     render_agent_env > "$AGENT_ENV_FILE"
+    # The service runs as agent, and its git credential helper reads this
+    # file as agent. A root-owned file makes every repository chat fail.
+    chown agent:agent "$AGENT_ENV_FILE"
     chmod 600 "$AGENT_ENV_FILE"
     echo "    Done."
 }
@@ -261,10 +270,6 @@ main() {
 
     write_agent_env
 
-    # Configure git credentials for agent user
-    echo "==> Configuring git credentials for agent user"
-    su - agent -c "git config --global credential.helper store"
-
     # A git identity, so anything that commits on this box has an author.
     #
     # Without this, git falls back to <user>@<hostname>, which it will not accept
@@ -282,12 +287,20 @@ main() {
     echo "==> Setting git identity for agent user (${AGENT_GIT_NAME})"
     su - agent -c "git config --global user.name '${AGENT_GIT_NAME}'"
     su - agent -c "git config --global user.email '${AGENT_GIT_NAME}@spekk.local'"
-    su - agent -c "echo 'https://agent:${GITHUB_TOKEN}@github.com' > ~/.git-credentials"
-    su - agent -c "chmod 600 ~/.git-credentials"
-
     # Configure gh CLI for agent user
     echo "==> Configuring gh CLI"
-    su - agent -c "echo '${GITHUB_TOKEN}' | gh auth login --with-token" 2>/dev/null || true
+    printf '%s\n' "$GITHUB_TOKEN" | su - agent -c 'gh auth login --with-token'
+    su - agent -c 'gh auth status' >/dev/null 2>&1 || { echo 'ERROR: the agent user is not logged in to GitHub' >&2; exit 1; }
+
+    # Git reads the gh login on each request. Remove the old token file only
+    # after the new helper is ready, so a failed setup leaves it available.
+    echo "==> Configuring git credentials for agent user"
+    su - agent -c 'git config --global --unset-all credential.helper' || true
+    su - agent -c 'git config --global --unset-all credential.https://github.com.helper' || true
+    su - agent -c 'git config --global --add credential.https://github.com.helper ""'
+    su - agent -c 'git config --global --add credential.https://github.com.helper "!gh auth git-credential"'
+    printf 'protocol=https\nhost=github.com\n\n' | su - agent -c 'GIT_TERMINAL_PROMPT=0 git credential fill' | grep -q '^password=.' || { echo 'spekk: GitHub credential helper did not return a password' >&2; exit 1; }
+    rm -f /home/agent/.git-credentials
 
     # An older version of this script exported ANTHROPIC_API_KEY into the
     # agent's login shell. It stopped writing that file, but a droplet

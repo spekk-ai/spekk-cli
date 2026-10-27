@@ -36,6 +36,9 @@ func stubCreateEnv(t *testing.T) {
 	for _, v := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "GITHUB_TOKEN", "SPEKK_HOST"} {
 		t.Setenv(v, "x")
 	}
+	// No API token unless a test asks for one, so no test registers an
+	// agent on whatever control host the developer's shell points at.
+	t.Setenv(apiTokenVar, "")
 	origArtifacts := fetchArtifacts
 	fetchArtifacts = func(tag string) (*releaseArtifacts, error) {
 		return &releaseArtifacts{Version: "test", CloudInit: []byte("#cloud-config")}, nil
@@ -43,7 +46,7 @@ func stubCreateEnv(t *testing.T) {
 	t.Cleanup(func() { fetchArtifacts = origArtifacts })
 
 	origWait := waitReady
-	waitReady = func(ip, keyPath, name string, timeout time.Duration) error { return fmt.Errorf("boom") }
+	waitReady = func(ip, keyPath, name, user string, timeout time.Duration) error { return fmt.Errorf("boom") }
 	t.Cleanup(func() { waitReady = origWait })
 }
 
@@ -105,7 +108,7 @@ func TestDestroyLegacyMetadataDeletesDroplet(t *testing.T) {
 	}
 
 	p := &DOProvider{client: NewClientWithToken("tok", ts.URL)}
-	if err := Destroy(p, "old-box", true); err != nil {
+	if err := Destroy(p, "old-box", DestroyOptions{Force: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !dropletDeleted {
@@ -185,7 +188,7 @@ func TestDestroyGuards(t *testing.T) {
 		}
 		p := &recordingProvider{destroyErr: fmt.Errorf("DO API is down")}
 		// Even --force must not clear a record whose machine may live.
-		if err := Destroy(p, "stuck", true); err == nil {
+		if err := Destroy(p, "stuck", DestroyOptions{Force: true}); err == nil {
 			t.Fatal("a failed teardown must fail the command")
 		}
 		if got, _ := GetSandbox("stuck"); got == nil {
@@ -200,7 +203,7 @@ func TestDestroyGuards(t *testing.T) {
 			t.Fatal(err)
 		}
 		p := &recordingProvider{destroyErr: fmt.Errorf("%w: gone", ErrNoMachineRecorded)}
-		if err := Destroy(p, "ghost", true); err != nil {
+		if err := Destroy(p, "ghost", DestroyOptions{Force: true}); err != nil {
 			t.Fatalf("--force must clear a record naming no machine: %v", err)
 		}
 		if got, _ := GetSandbox("ghost"); got != nil {
@@ -299,7 +302,7 @@ func TestDestroyRemovesOnlyGeneratedKeys(t *testing.T) {
 		}
 
 		stderr := captureStderr(t)
-		if err := Destroy(&recordingProvider{}, "box", true); err != nil {
+		if err := Destroy(&recordingProvider{}, "box", DestroyOptions{Force: true}); err != nil {
 			t.Fatal(err)
 		}
 		for _, p := range []string{key, key + ".pub"} {
@@ -324,7 +327,7 @@ func TestDestroyRemovesOnlyGeneratedKeys(t *testing.T) {
 		}
 
 		stderr := captureStderr(t)
-		if err := Destroy(&recordingProvider{}, "box", true); err != nil {
+		if err := Destroy(&recordingProvider{}, "box", DestroyOptions{Force: true}); err != nil {
 			t.Fatal(err)
 		}
 		for _, p := range []string{key, key + ".pub"} {
@@ -445,15 +448,16 @@ func TestDOProviderCreateFillsMetaWithResolvedValues(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"ssh_key": map[string]any{"id": 10, "name": "test", "fingerprint": "aa:bb"},
 			})
-		case r.Method == "GET" && r.URL.Path == "/v2/account/keys":
-			json.NewEncoder(w).Encode(map[string]any{
-				"ssh_keys": []map[string]any{{"id": 10, "name": "test"}},
-			})
 		case r.Method == "POST" && r.URL.Path == "/v2/droplets":
 			var req map[string]any
 			json.NewDecoder(r.Body).Decode(&req)
 			if req["region"] != "nyc1" || req["size"] != "s-2vcpu-4gb" {
 				t.Errorf("defaults not sent to the API: %v", req)
+			}
+			// Only the generated key: every other key on the account
+			// would get root on the droplet and read its credentials.
+			if keys := fmt.Sprint(req["ssh_keys"]); keys != "[10]" {
+				t.Errorf("droplet trusts keys %s, want only the generated key [10]", keys)
 			}
 			w.WriteHeader(201)
 			json.NewEncoder(w).Encode(map[string]any{
@@ -518,7 +522,7 @@ func TestProviderFromMetaReturnsUntypedNilOnError(t *testing.T) {
 		t.Fatalf("provider must be nil, got a non-nil interface holding %T", p)
 	}
 	// The nil must survive the fallback path Status takes.
-	if err := Status(p, "anything"); err == nil {
+	if err := Status(p, "anything", false); err == nil {
 		t.Log("Status returned no error, which is fine; the point is that it did not panic")
 	}
 }
