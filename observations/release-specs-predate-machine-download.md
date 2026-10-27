@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-10-27T18:00:00Z
+announced: 2026-10-27T19:03:41Z
 affected:
   - specs/sandbox-go-release/assertions/sandbox-release-downloader.md
   - specs/sandbox-go-release/assertions/agent-binary-matches-machine-arch.md
