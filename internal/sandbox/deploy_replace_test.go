@@ -337,6 +337,9 @@ func TestFetchCommandChecksTheDownloads(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the remote fetch script requires a Unix shell")
 	}
+	if _, err := exec.LookPath("sha256sum"); err != nil {
+		t.Skip("the remote fetch script requires sha256sum, which is not on PATH")
+	}
 	bin := t.TempDir()
 	// A stub curl that writes "bytes of <asset>" to the -o path.
 	curl := "#!/bin/sh\nwhile [ $# -gt 1 ]; do [ \"$1\" = -o ] && out=$2; shift; done\nprintf 'bytes of %s' \"${1##*/}\" > \"$out\"\n"
@@ -344,6 +347,11 @@ func TestFetchCommandChecksTheDownloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// A stalled download must fail, so that the deploy falls back to scp.
+	if cmd := fetchCommand(&releaseArtifacts{Version: "v1.2.3", arch: "arm64"}); !strings.Contains(cmd, "curl -fsSL --connect-timeout 10 --speed-limit 1024 --speed-time 30 --max-time 300 ") {
+		t.Errorf("fetch command %q has no stall or total time limit on curl", cmd)
+	}
 
 	for name, tc := range map[string]struct {
 		cliSHA string

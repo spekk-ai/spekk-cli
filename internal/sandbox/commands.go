@@ -1057,12 +1057,13 @@ func stageBinaries(ip, keyPath, name, user string, artifacts *releaseArtifacts) 
 // fetchCommand downloads both builds to their staged names in the login
 // home and checks each against the release sha256. It runs as the login
 // user. Any failure removes both files, so the install never sees a partial
-// download.
+// download. A download that stalls or runs too long fails, so the deploy
+// can fall back to the copy from this computer.
 func fetchCommand(a *releaseArtifacts) string {
 	return fmt.Sprintf(`get() {
   rm -f "$2"
-  if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 10 --retry 2 -o "$2" "$1"
-  elif command -v wget >/dev/null 2>&1; then wget -q -T 10 -O "$2" "$1"
+  if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 10 --speed-limit 1024 --speed-time 30 --max-time 300 --retry 2 -o "$2" "$1"
+  elif command -v wget >/dev/null 2>&1; then timeout 300 wget -q -T 10 --tries=2 -O "$2" "$1"
   else echo "neither curl nor wget is installed" >&2; false
   fi || return 1
   echo "$3  $2" | sha256sum -c --status || { echo "$(basename "$1") does not match the release sha256" >&2; return 1; }

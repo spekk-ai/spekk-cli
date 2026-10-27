@@ -18,6 +18,7 @@ The deploy step downloaded both binaries (about 40 MB) to the operator's compute
 
 - The deploy step first runs one command over SSH, as the login user, that downloads `sandbox-linux-<arch>` and `spekk-linux-<arch>` from `https://github.com/spekk-ai/spekk-cli/releases/download/<tag>/` into the staged paths in the login home, with `curl`, else `wget`. No binary crosses the operator's connection.
 - That command checks each file with `sha256sum -c` against the digest that the release publishes. A failed download or a mismatch removes both staged files and fails the command.
+- The download has a time limit: `curl` fails when the transfer is below 1024 bytes per second for 30 seconds or runs longer than 300 seconds (`--speed-limit 1024 --speed-time 30 --max-time 300`), and `wget` runs under `timeout 300` with `-T 10 --tries=2`. A stalled download thus fails the command, and the fallback below runs.
 - When the command fails (no `curl` or `wget`, no route to GitHub, a mismatch), the deploy prints `spekk: the machine could not download release <tag> (<cause>); copying it from this computer`, downloads the binaries to the operator, and copies them with `scp`, as before.
 - The operator downloads the binaries only for that fallback.
 - The install script checks the staged files against the release sha256 either way, as `release-binaries-sha256-checked` says.
