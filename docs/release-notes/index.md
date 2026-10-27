@@ -8,6 +8,18 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.48.1 -- No GitHub Token in ~/.git-credentials](RELEASE-NOTES-1.48.1.md)
+
+Sandbox credential setup, in `create`, `provision`, and `setup-credentials.sh`, no longer writes the GitHub token to `~/.git-credentials`. Git gets the token from the `gh auth git-credential` helper. After Git returns a credential through the helper, setup removes a legacy `~/.git-credentials` file. When the lookup fails, setup stops with an error and keeps the file. Run credential setup again on each existing sandbox, or replace it. There is no configuration change and no protocol change: the protocol stays `1.6`, and the major stays `1`.
+
+## [1.48.0 -- Turn Usage in Sandbox Result Frames](RELEASE-NOTES-1.48.0.md)
+
+The `result` frame that ends a sandbox turn now carries an optional `usage` object with input, output, cache read, and cache creation tokens and `cost_usd`. The counts come from the Claude Code `modelUsage` totals for the turn, including subagent and background task calls. The cost is the Claude Code estimate at API list prices, not a bill. The client sends no `usage` when a value is missing or invalid. The field is additive: the protocol changes to `1.6`, the major stays `1`, and older spekk-app servers ignore it.
+
+## [1.47.2 -- Agent ID Kept on Script-Equipped Hosts](RELEASE-NOTES-1.47.2.md)
+
+`setup-credentials.sh` now writes and keeps `SPEKK_AGENT_ID` in `agent.env`, and exits with status 1 for a value that is not a UUID. The CLI refuses a registration response whose agent ID is not a UUID. An existing `agent.env` with a `SPEKK_AGENT_ID` that is not a UUID stops the script until you correct the line.
+
 ## [1.47.1 -- Clear Repository Clone Errors and Readable Agent Settings](RELEASE-NOTES-1.47.1.md)
 
 Failed repository Git steps now show a short, redacted stderr cause in the turn failure reason and agent log. The agent warns once at start if it cannot read `/etc/spekk/agent.env`. `setup-credentials.sh` now gives the file to `agent:agent` with mode 600. Existing hosts need the script to run again or a manual owner correction.

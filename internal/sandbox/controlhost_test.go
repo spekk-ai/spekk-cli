@@ -363,3 +363,24 @@ func TestRegisterHintsAtOrganization(t *testing.T) {
 		})
 	}
 }
+
+func TestRegistrationRejectsInvalidAgentID(t *testing.T) {
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		io.WriteString(w, `{"id":"bad-id","auth_token":"agent-token"}`)
+	}))
+	t.Cleanup(host.Close)
+	t.Setenv("SPEKK_HOST", host.URL)
+	t.Setenv(apiTokenVar, testAPIToken)
+	c, err := newControlHost()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agent, err := c.registerAgent("box", ""); err == nil || agent != nil {
+		t.Errorf("registerAgent accepted invalid ID: agent=%v, err=%v", agent, err)
+	}
+	if id, err := newRegistrationHost(host.URL, "registration-token").registerWithToken("box", "agent-token"); err == nil || id != "" {
+		t.Errorf("registerWithToken accepted invalid ID: id=%q, err=%v", id, err)
+	}
+}

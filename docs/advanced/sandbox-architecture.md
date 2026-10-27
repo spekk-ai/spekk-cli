@@ -35,10 +35,10 @@ The token comes from the `SPEKK_AGENT_TOKEN` environment variable on the sandbox
 
 ## Protocol version
 
-The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. This agent declares `1.5`.
+The agent and the control host share one WebSocket contract: the message types, the frame fields, and the close codes. The two ship from separate repositories, so the contract carries a version number that both sides declare at connect time. This agent declares `1.6`.
 
-1. **The client declares.** Every dial sends an `X-Spekk-Protocol: 1.5` header next to the `Authorization` header.
-2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field. That version can be different from the agent's version. For example, a control host that speaks `1.0` replies to a `1.5` agent with:
+1. **The client declares.** Every dial sends an `X-Spekk-Protocol: 1.6` header next to the `Authorization` header.
+2. **The control host replies.** It sends a `welcome` frame that carries its own version in the `protocol` field. That version can be different from the agent's version. For example, a control host that speaks `1.0` replies to a `1.6` agent with:
 
 ```json
 {
@@ -63,6 +63,8 @@ Version `1.3` is additive. It adds the frames of the [sign-in terminal](#sign-in
 Version `1.4` is additive. It adds optional channel routing to `conversation_open`. The control host advertises support with `conversation_open_channel` in the `welcome` capabilities.
 
 Version `1.5` is additive. It adds an optional `repository` object to a `message` frame. A frame without that object keeps the old chat path.
+
+Version `1.6` is additive. It adds optional turn usage to the `result` frame. A frame without usage keeps its prior meaning.
 
 ## Message protocol
 
@@ -104,7 +106,7 @@ Every frame is a JSON object with a `type` field. The `Message` struct defines t
 | Type | Purpose | Fields |
 |------|---------|--------|
 | `stream` | One line of Claude's streaming JSON output | `data`, `agent_session_id` |
-| `result` | Claude finished with exit code 0 | `session_id`, `agent_session_id`, `output`, `terminal` |
+| `result` | Claude finished with exit code 0 | `session_id`, `agent_session_id`, `output`, `terminal`, optional `usage` |
 | `error` | Something went wrong | `error`, `detail`, `agent_session_id` |
 | `heartbeat` | Keep-alive, every 30 seconds | `claude_signed_in` |
 | `conversation_open` | Ask for a conversation with a person (from the spool) | `session_id`, `title`, `body`, `severity`, optional `channel` |
@@ -152,7 +154,7 @@ claude -p - --output-format stream-json --verbose --include-partial-messages --d
 - When the frame has a `session_id`, the agent appends `--resume <session_id>` to continue that Claude session.
 - The working directory is the configured workspace (default: `/opt/spekk/workspace`). For a repository turn, it is `<workspace>/repositories/<repository-id>` after access, fetch, and checkout succeed.
 - Each line of stdout goes back to the control host as a `stream` frame.
-- When Claude exits with code 0, the agent sends a `result` frame with the session id, the output text, and `terminal`.
+- When Claude exits with code 0, the agent sends a `result` frame with the session id, the output text, `terminal`, and valid turn usage when Claude reports it.
 - When Claude exits with an error, the agent sends an `error` frame with up to 2000 characters of stderr.
 
 ### Claude Code version
@@ -172,6 +174,12 @@ Two facts about a turn are visible only to the agent: whether the turn is still 
 The `result` frame always carries `terminal`, a JSON boolean. It is `false` when a background task that the turn started was still live at the last `result` event of the Claude process, and `true` otherwise. `false` means the turn yielded: the agent gave its last word while work that it started was still live, and no later result shows that it saw how that work ended. The agent always sends the field. A control host reads an absent field as `true`, which is what an agent older than `1.1` means.
 
 The `terminal` field needs no rollout order, because an absent field means `true`. Either side can update first.
+
+### `usage` on the result frame
+
+The optional `usage` object has `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, and `cost_usd`. Token counts come from `modelUsage` on the last result, summed over all models, including subagent, background, and compaction calls, as a difference from the session baseline. Counts are JSON integers from 0 to 10,000,000,000. Cost is a finite JSON number from 0 to 1000. The client omits the whole object if any value is missing or invalid. An `error` frame has no usage.
+
+Claude Code 2.1.308 reports a running session cost total on a resumed process. The client uses the difference from the preceding result for that session as the turn cost. If the client has no preceding total, or the difference is negative, it omits usage. The client keeps the totals in memory, so a restart makes the next resumed turn's usage unavailable. The field is additive in protocol version 1.6.
 
 ### Claude sign-in state
 
@@ -250,7 +258,7 @@ A control host that works with the agent must provide:
 | **Authentication** | Validate the `Authorization: Bearer <token>` header |
 | **Protocol handshake** | Read the `X-Spekk-Protocol` header, send a `welcome` frame with its own version, and close with code `4004` on a major-version mismatch. A dial with no header is a legacy client |
 | **Inbound frames** | Handle `stream`, `result`, `error`, `heartbeat`, and `conversation_open` from the agent, and `terminal_output` and `terminal_exit` when it uses the sign-in terminal |
-| **Turn result** | Read `terminal` from the `result` frame. An absent field means `true` |
+| **Turn result** | Read `terminal` from the `result` frame. An absent field means `true`. Accept a `result` frame with or without the optional `usage` object |
 | **Outbound frames** | Send `welcome`, `message`, `cancel`, `heartbeat_ack`, and `error` to the agent |
 | **Attachments** | Serve `GET /api/agents/attachments/<id>/download/` with Bearer authentication, when attachments are used |
 | **Session routing** | Assign unique `agent_session_id` values and track which sessions are active |

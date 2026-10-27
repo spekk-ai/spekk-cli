@@ -63,6 +63,9 @@ nav = [
   { "Cutting a Release" = "releasing.md" },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.48.1 - No GitHub Token in ~/.git-credentials" = "release-notes/RELEASE-NOTES-1.48.1.md" },
+    { "1.48.0 - Turn Usage in Sandbox Result Frames" = "release-notes/RELEASE-NOTES-1.48.0.md" },
+    { "1.47.2 - Agent ID Kept on Script-Equipped Hosts" = "release-notes/RELEASE-NOTES-1.47.2.md" },
     { "1.47.1 - Clear Repository Clone Errors and Readable Agent Settings" = "release-notes/RELEASE-NOTES-1.47.1.md" },
     { "1.47.0 - App-Managed Sandboxes From the CLI, and a Key for Secrets" = "release-notes/RELEASE-NOTES-1.47.0.md" },
     { "1.46.0 - Status Shows a Refused Agent, and a Cancel Stops the Session" = "release-notes/RELEASE-NOTES-1.46.0.md" },

@@ -28,6 +28,44 @@ func runScript(t *testing.T, env []string, snippet string) (string, error) {
 // arguments so a test can check them.
 const stubChown = "chown() { echo \"chown $*\"; }; "
 
+func TestSetupCredentialsWritesAndKeepsAgentID(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "agent.env")
+	const firstID = "11111111-1111-4111-8111-111111111111"
+	const nextID = "22222222-2222-4222-8222-222222222222"
+	baseEnv := []string{
+		"SPEKK_AUTH_MODE=subscription",
+		"AGENT_ENV_FILE=" + envFile,
+		"SPEKK_AGENT_TOKEN=agenttok",
+		"SPEKK_HOST=host.example",
+		"GITHUB_TOKEN=ghtok",
+		"CLAUDE_CODE_OAUTH_TOKEN=oauthtok",
+	}
+	write := func(id string) (string, error) {
+		env := append(append([]string{}, baseEnv...), "SPEKK_AGENT_ID="+id)
+		return runScript(t, env, "source "+setupCredentialsScript+"; "+stubChown+"write_agent_env")
+	}
+	check := func(want string) {
+		t.Helper()
+		data, err := os.ReadFile(envFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := string(data); strings.Count(got, "SPEKK_AGENT_ID=") != 1 || !strings.Contains(got, "SPEKK_AGENT_ID="+want+"\n") {
+			t.Errorf("agent ID after write = %q, want one %s", got, want)
+		}
+	}
+	for _, step := range []struct{ supplied, want string }{{firstID, firstID}, {"", firstID}, {nextID, nextID}} {
+		if out, err := write(step.supplied); err != nil {
+			t.Fatalf("write failed: %v\n%s", err, out)
+		}
+		check(step.want)
+	}
+	if out, err := write("bad-id"); err == nil || !strings.Contains(out, "SPEKK_AGENT_ID") {
+		t.Errorf("invalid ID was accepted or not named: err=%v, output=%q", err, out)
+	}
+	check(nextID)
+}
+
 func TestSetupCredentialsRendersOneModesCredential(t *testing.T) {
 	shared := []string{
 		"SPEKK_AGENT_TOKEN=agenttok",
