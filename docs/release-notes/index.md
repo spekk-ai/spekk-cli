@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.49.0 -- The Machine Downloads the Release Binaries](RELEASE-NOTES-1.49.0.md)
+
+On `create`, `provision`, and `deploy`, the machine now downloads the agent-client and the spekk CLI from the GitHub release itself, with `curl`, or `wget` when `curl` is not installed. The CLI reads each expected sha256 from the GitHub release API, and the machine checks each file before the install. The `curl` limits apply to each of 3 attempts, so a slow transfer can take approximately 15 minutes for each file. When the download on the machine fails, the CLI prints a message and uses the old download to your computer plus `scp`. This fixes the `copying binary` failure of the 40 MB `scp` on some operator networks. Update the CLI. There is no configuration change and no protocol change: the protocol stays `1.6`, and the major stays `1`.
+
 ## [1.48.1 -- No GitHub Token in ~/.git-credentials](RELEASE-NOTES-1.48.1.md)
 
 Sandbox credential setup, in `create`, `provision`, and `setup-credentials.sh`, no longer writes the GitHub token to `~/.git-credentials`. Git gets the token from the `gh auth git-credential` helper. After Git returns a credential through the helper, setup removes a legacy `~/.git-credentials` file. When the lookup fails, setup stops with an error and keeps the file. Run credential setup again on each existing sandbox, or replace it. There is no configuration change and no protocol change: the protocol stays `1.6`, and the major stays `1`.
