@@ -93,6 +93,7 @@ spekk list --status done --priority 1 # Combine status and priority filters
 spekk list --json                   # JSON object with an assertions array
 spekk list --tsv                    # Tab-separated, lowercase header
 spekk list --csv                    # RFC 4180 CSV with a header row
+spekk list --sort-by title          # Sort by one column instead
 spekk list --specs-dir ./my-specs   # Read a different specs directory
 spekk list --cross-branch --json    # Merge preview across branches
 ```
@@ -103,6 +104,7 @@ spekk list --cross-branch --json    # Merge preview across branches
 |------|-------|-------------|
 | `--status <value>` | | Keep only this status: `not_started`, `in_progress`, `done`, `draft`, or `failed` |
 | `--priority <N>` | | Keep only this priority. Requires a nonnegative integer and works with `--status` |
+| `--sort-by <column>` | | Sort ascending by `id`, `priority`, `status`, or `title`. Works with every format and filter flag |
 | `--long` | `-l` | Add the FILE column to the table, TSV, and CSV output |
 | `--json` | | JSON object with an `assertions` array |
 | `--tsv` | | Tab-separated values with a lowercase header |
@@ -112,7 +114,7 @@ spekk list --cross-branch --json    # Merge preview across branches
 | `--branch-filter <glob>` | | In cross-branch mode, only branches that match the glob |
 | `--assertions-only` | | Accepted for old scripts. It changes nothing: assertions are the default |
 
-Rows are sorted by priority, then by id, in every format. The JSON output also contains `branch` and `depends_on`, which the table, TSV, and CSV do not show. `--json`, `--tsv`, and `--csv` exclude each other. `--status`, `--priority`, and `--specs-dir` do not apply to `--cross-branch`.
+Rows are sorted by priority, then by id, in every format. `--sort-by` replaces that order with one column. The sort is stable, so ties keep the parser's order. `priority` sorts numerically, and the other columns sort alphabetically. An unknown column fails with an error on stderr that names the valid ones. The JSON output also contains `branch` and `depends_on`, which the table, TSV, and CSV do not show. `--json`, `--tsv`, and `--csv` exclude each other. `--status`, `--priority`, `--sort-by`, and `--specs-dir` do not apply to `--cross-branch`.
 
 A missing or empty value for `--priority` or `--status` fails. Priority accepts `0` and other nonnegative integers outside the stored range of 1 through 3. These values return no matching assertions.
 
