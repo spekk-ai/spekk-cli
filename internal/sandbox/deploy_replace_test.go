@@ -334,8 +334,8 @@ func TestInstallCommandRefusesAWrongSHA256(t *testing.T) {
 // The machine downloads both builds and keeps them only when each matches
 // the release sha256, so the install sees two checked files or none.
 func TestFetchCommandChecksTheDownloads(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the remote fetch script requires a Unix shell")
+	if runtime.GOOS != "linux" {
+		t.Skip("the remote fetch script runs on Linux machines; other sha256sum builds lack --status")
 	}
 	if _, err := exec.LookPath("sha256sum"); err != nil {
 		t.Skip("the remote fetch script requires sha256sum, which is not on PATH")
