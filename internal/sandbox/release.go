@@ -43,11 +43,12 @@ var githubHTTPClient = &http.Client{Timeout: 60 * time.Second}
 
 // releaseArtifacts are the files needed to provision and deploy a sandbox.
 // CloudInit stays in memory because it is sent straight to the DO API as
-// droplet user-data; only the binaries are written to disk so scp can copy
-// them.
+// droplet user-data. The machine downloads the binaries itself; they are
+// written to disk here only when it cannot, so scp can copy them.
 type releaseArtifacts struct {
 	Version   string // concrete tag the binaries are pulled from, e.g. "v1.30.0"
 	CloudInit []byte
+	arch      string // the machine's GOARCH, set by selectArch
 	// BinaryPath (the agent) and CLIPath (the spekk CLI) are set by
 	// downloadBinaries, in a temp directory that cleanup removes. Each
 	// file has its staged name, so one scp puts both in the login home.
@@ -73,8 +74,8 @@ var fetchArtifacts = fetchReleaseArtifacts
 
 // fetchReleaseArtifacts resolves tag to a concrete release and pairs it with the
 // cloud-init template. tag may be empty, "latest", or a specific tag. The agent
-// and CLI binaries are downloaded by downloadBinaries after the machine's
-// architecture is known.
+// and CLI builds are picked by selectArch after the machine's architecture is
+// known.
 func fetchReleaseArtifacts(tag string) (*releaseArtifacts, error) {
 	version, err := resolveReleaseTag(tag)
 	if err != nil {
@@ -118,10 +119,10 @@ func resolveReleaseTag(tag string) (string, error) {
 	return path.Base(loc), nil
 }
 
-// downloadBinaries fetches the agent and the CLI builds for arch from the
-// release into a temp directory, with the sha256 that the release publishes
-// for each. The caller runs cleanup when done.
-func (a *releaseArtifacts) downloadBinaries(arch string) (err error) {
+// selectArch picks the agent and the CLI builds for arch and reads the sha256
+// that the release publishes for each. Nothing is downloaded: the machine
+// downloads the builds itself, and downloadBinaries is only its fallback.
+func (a *releaseArtifacts) selectArch(arch string) error {
 	digests, err := fetchDigests(a.Version)
 	if err != nil {
 		return err
@@ -132,7 +133,22 @@ func (a *releaseArtifacts) downloadBinaries(arch string) (err error) {
 			return fmt.Errorf("release %q publishes no sha256 for %q, so spekk cannot check it; choose another release with --release", a.Version, name)
 		}
 	}
+	a.arch = arch
+	a.AgentSHA256, a.CLISHA256 = digests[agent], digests[cli]
+	return nil
+}
 
+// assetURL is the anonymous CDN URL of the release asset name.
+func (a *releaseArtifacts) assetURL(name string) string {
+	return fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", releaseRepo, a.Version, name)
+}
+
+// downloadBinaries fetches the builds that selectArch picked into a temp
+// directory, once. The caller runs cleanup when done.
+func (a *releaseArtifacts) downloadBinaries() (err error) {
+	if a.BinaryPath != "" {
+		return nil
+	}
 	dir, err := os.MkdirTemp("", "spekk-sandbox-*")
 	if err != nil {
 		return fmt.Errorf("creating temp dir for binaries: %w", err)
@@ -142,21 +158,19 @@ func (a *releaseArtifacts) downloadBinaries(arch string) (err error) {
 			os.RemoveAll(dir)
 		}
 	}()
-	for _, f := range []struct{ asset, file string }{{agent, stagedBinary}, {cli, stagedCLI}} {
+	for _, f := range []struct{ asset, file string }{{sandboxAssetName(a.arch), stagedBinary}, {cliAssetName(a.arch), stagedCLI}} {
 		if err := a.downloadAsset(f.asset, filepath.Join(dir, f.file)); err != nil {
 			return err
 		}
 	}
 
 	a.dir, a.BinaryPath, a.CLIPath = dir, filepath.Join(dir, stagedBinary), filepath.Join(dir, stagedCLI)
-	a.AgentSHA256, a.CLISHA256 = digests[agent], digests[cli]
 	return nil
 }
 
 // downloadAsset writes the release asset name to dest.
 func (a *releaseArtifacts) downloadAsset(name, dest string) error {
-	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", releaseRepo, a.Version, name)
-	binary, err := downloadReleaseAsset(url)
+	binary, err := downloadReleaseAsset(a.assetURL(name))
 	if err != nil {
 		// A release only carries the architectures it published; a 404 means this
 		// one has no build for arch, not a transient failure.
@@ -174,7 +188,7 @@ func (a *releaseArtifacts) downloadAsset(name, dest string) error {
 // releaseAPIURL is the GitHub API path of a release by tag.
 const releaseAPIURL = "https://api.github.com/repos/" + releaseRepo + "/releases/tags/"
 
-// fetchDigests is the seam downloadBinaries reads the digests through.
+// fetchDigests is the seam selectArch reads the digests through.
 var fetchDigests = releaseDigests
 
 var sha256Re = regexp.MustCompile(`^[0-9a-f]{64}$`)

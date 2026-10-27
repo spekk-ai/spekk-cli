@@ -3,6 +3,7 @@ package sandbox
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -156,9 +157,12 @@ func TestEveryPrivilegedStepEscalatesForANonRootLogin(t *testing.T) {
 	}
 }
 
-// Deployment stages uploads in the login user's home and then installs them.
+// Deployment stages the builds in the login user's home and then installs
+// them. The machine downloads them itself; only when it cannot does the
+// operator copy them with scp.
 func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 	var scpArgs, sshCommands []string
+	fetchFails := false
 	origSCP, origSSH := scpExec, sshExec
 	scpExec = func(args []string) ([]byte, error) {
 		scpArgs = append(scpArgs, args[len(args)-1])
@@ -169,6 +173,15 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 	sshExec = func(args []string, stdin string) ([]byte, error) {
 		sshCommands = append(sshCommands, args[len(args)-1])
 		cmd := sentScript(args, stdin)
+		if strings.Contains(cmd, "/releases/download/") {
+			if strings.Contains(cmd, "sudo") {
+				t.Errorf("the download runs as the login user: %s", cmd)
+			}
+			if fetchFails {
+				return []byte("curl: (6) Could not resolve host: github.com\n"), errors.New("exit status 1")
+			}
+			return nil, nil
+		}
 		if strings.Contains(cmd, "| sudo bash") {
 			start := strings.IndexByte(cmd, '\'')
 			end := strings.IndexByte(cmd[start+1:], '\'') + start + 1
@@ -185,34 +198,42 @@ func TestDeployStagesAndInstallsForEachLogin(t *testing.T) {
 	}
 	t.Cleanup(func() { scpExec, sshExec = origSCP, origSSH })
 
-	artifacts := &releaseArtifacts{BinaryPath: filepath.Join(t.TempDir(), "agent-client")}
+	// BinaryPath is set, so the fallback has its download already.
+	artifacts := &releaseArtifacts{Version: "v1.2.3", arch: "amd64", BinaryPath: filepath.Join(t.TempDir(), "agent-client")}
 
 	for _, user := range []string{"root", "ubuntu"} {
-		t.Run(user, func(t *testing.T) {
-			scpArgs, sshCommands = nil, nil
-			if err := deployAgent("9.9.9.9", "", "sb", user, artifacts); err != nil {
-				t.Fatalf("deploy: %v", err)
-			}
-			if len(scpArgs) != 1 || len(sshCommands) != 3 {
-				t.Fatalf("expected one upload, two version reads and an installation, got %v and %v", scpArgs, sshCommands)
-			}
-			if want := user + "@9.9.9.9:"; scpArgs[0] != want {
-				t.Errorf("staged at %q, want %q", scpArgs[0], want)
-			}
-			for _, cmd := range sshCommands {
-				if got := strings.Contains(cmd, "| sudo bash"); got != (user != "root") {
-					t.Errorf("incorrect privilege level for %s: %s", user, cmd)
+		for _, fails := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/fetch fails %v", user, fails), func(t *testing.T) {
+				scpArgs, sshCommands, fetchFails = nil, nil, fails
+				if err := deployAgent("9.9.9.9", "", "sb", user, artifacts); err != nil {
+					t.Fatalf("deploy: %v", err)
 				}
-				if user == "root" && strings.Contains(cmd, "sudo") {
-					t.Errorf("root installation must run without sudo: %s", cmd)
+				wantSCP := 0
+				if fails {
+					wantSCP = 1
 				}
-			}
-		})
+				if len(scpArgs) != wantSCP || len(sshCommands) != 4 {
+					t.Fatalf("expected a download, %d uploads, two version reads and an installation, got %v and %v", wantSCP, scpArgs, sshCommands)
+				}
+				if want := user + "@9.9.9.9:"; fails && scpArgs[0] != want {
+					t.Errorf("staged at %q, want %q", scpArgs[0], want)
+				}
+				for _, cmd := range sshCommands[1:] {
+					if got := strings.Contains(cmd, "| sudo bash"); got != (user != "root") {
+						t.Errorf("incorrect privilege level for %s: %s", user, cmd)
+					}
+					if user == "root" && strings.Contains(cmd, "sudo") {
+						t.Errorf("root installation must run without sudo: %s", cmd)
+					}
+				}
+			})
+		}
 	}
 
+	fetchFails = true
 	scpExec = func([]string) ([]byte, error) { return nil, errors.New("upload failed") }
 	sshCommands = nil
-	if err := deployAgent("9.9.9.9", "", "sb", "root", artifacts); err == nil || len(sshCommands) != 0 {
+	if err := deployAgent("9.9.9.9", "", "sb", "root", artifacts); err == nil || len(sshCommands) != 1 {
 		t.Fatalf("upload failure must stop installation: error %v, commands %v", err, sshCommands)
 	}
 }

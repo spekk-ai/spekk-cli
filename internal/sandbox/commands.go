@@ -348,7 +348,7 @@ func fetchAgentBinary(meta *SandboxMeta, name string, artifacts *releaseArtifact
 	if err != nil {
 		return err
 	}
-	return artifacts.downloadBinaries(arch)
+	return artifacts.selectArch(arch)
 }
 
 // detectArch reads `uname -m` from stdout only. ssh writes its own warnings
@@ -983,15 +983,8 @@ WantedBy=multi-user.target
 // than the minimum, installs the systemd unit, and (re)starts the service.
 // Shared by Create and Deploy.
 func deployAgent(ip, keyPath, name, user string, artifacts *releaseArtifacts) error {
-	// Upload into the login user's home so SCP cannot overwrite the running executable.
-	scp := sshHostKeyOpts(name)
-	scp = append(scp, "-o", "ConnectTimeout=10")
-	if keyPath != "" {
-		scp = append(scp, "-i", keyPath)
-	}
-	scp = append(scp, artifacts.BinaryPath, artifacts.CLIPath, scpTarget(user, ip))
-	if out, err := scpExec(scp); err != nil {
-		return fmt.Errorf("copying binary: %s\n%s", err, string(out))
+	if err := stageBinaries(ip, keyPath, name, user, artifacts); err != nil {
+		return err
 	}
 
 	// Before the restart: a new agent refuses every turn on an older Claude
@@ -1028,6 +1021,63 @@ systemctl restart spekk-agent`, spekkAgentUnit)
 		}
 	}
 	return nil
+}
+
+// stageBinaries puts both builds in the login user's home, where an upload
+// cannot overwrite the running executable. The machine downloads them from
+// the release itself, so only commands cross the operator's connection; a
+// network that corrupts large transfers drops an scp of 40 MB. When the
+// machine cannot download them, they are downloaded here and copied.
+func stageBinaries(ip, keyPath, name, user string, artifacts *releaseArtifacts) error {
+	out, err := runSSHCombined(ip, keyPath, name, user, fetchCommand(artifacts))
+	if err == nil {
+		return nil
+	}
+	cause := err.Error()
+	if line := lastLine(out); line != "" {
+		cause = line
+	}
+	fmt.Fprintf(os.Stderr, "spekk: the machine could not download release %s (%s); copying it from this computer\n", artifacts.Version, cause)
+
+	if err := artifacts.downloadBinaries(); err != nil {
+		return fmt.Errorf("fetching agent binary: %w", err)
+	}
+	scp := sshHostKeyOpts(name)
+	scp = append(scp, "-o", "ConnectTimeout=10")
+	if keyPath != "" {
+		scp = append(scp, "-i", keyPath)
+	}
+	scp = append(scp, artifacts.BinaryPath, artifacts.CLIPath, scpTarget(user, ip))
+	if out, err := scpExec(scp); err != nil {
+		return fmt.Errorf("copying binary: %s\n%s", err, string(out))
+	}
+	return nil
+}
+
+// fetchCommand downloads both builds to their staged names in the login
+// home and checks each against the release sha256. It runs as the login
+// user. Any failure removes both files, so the install never sees a partial
+// download. A download that stalls or runs too long fails, so the deploy
+// can fall back to the copy from this computer.
+func fetchCommand(a *releaseArtifacts) string {
+	return fmt.Sprintf(`get() {
+  rm -f "$2"
+  if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 10 --speed-limit 1024 --speed-time 30 --max-time 300 --retry 2 -o "$2" "$1"
+  elif command -v wget >/dev/null 2>&1; then timeout 300 wget -q -T 10 --tries=2 -O "$2" "$1"
+  else echo "neither curl nor wget is installed" >&2; false
+  fi || return 1
+  echo "$3  $2" | sha256sum -c --status || { echo "$(basename "$1") does not match the release sha256" >&2; return 1; }
+}
+cd "$HOME" && get %s %s %s && get %s %s %s || { rm -f %s %s; exit 1; }`,
+		shellQuote(a.assetURL(sandboxAssetName(a.arch))), stagedBinary, a.AgentSHA256,
+		shellQuote(a.assetURL(cliAssetName(a.arch))), stagedCLI, a.CLISHA256,
+		stagedBinary, stagedCLI)
+}
+
+// lastLine is the last line of out that is not blank.
+func lastLine(out string) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 // stagedBinary and stagedCLI are the upload paths relative to the SSH login

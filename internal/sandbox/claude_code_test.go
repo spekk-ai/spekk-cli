@@ -116,6 +116,8 @@ func TestDeployKeepsClaudeCodeAtTheMinimum(t *testing.T) {
 					if tc.installFail {
 						return []byte("curl: (22) The requested URL returned error: 503\n"), errors.New("exit status 22")
 					}
+				case strings.Contains(cmd, "/releases/download/"):
+					// The machine downloads the release builds.
 				case strings.Contains(cmd, "/usr/local/bin/codex --version"):
 					return []byte("codex-cli 0.163.0\n"), nil
 				case strings.Contains(cmd, "systemctl restart spekk-agent"):
