@@ -50,6 +50,10 @@ type CreateOptions struct {
 	SSHUser string // login user for an existing machine (default: root)
 	Auth    AuthMode
 
+	// Model is the value of --model. nil uses the rule of resolveModel; an
+	// empty value writes no model pin.
+	Model *string
+
 	// Organization is the control host organization the agent is registered
 	// in. Empty lets the control host choose, which works for a user who
 	// belongs to one organization.
@@ -280,7 +284,7 @@ func Create(p Provider, opts CreateOptions) (err error) {
 	}
 	fmt.Fprintln(os.Stderr, "Provisioning complete.")
 
-	if err := equip(meta, opts.Name, agentToken, opts.Auth, artifacts); err != nil {
+	if err := equip(meta, opts.Name, agentToken, opts.Auth, resolveModel(opts.Auth, opts.Model), artifacts); err != nil {
 		return fail(err.stage, err.err)
 	}
 
@@ -311,7 +315,7 @@ func (e *stageError) Unwrap() error { return e.err }
 // inject the credentials, configure git for the agent, deploy the agent
 // binary. Create runs it after the provisioning wait, and Provision runs it
 // on a record that wait left behind, so the two cannot drift apart.
-func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, artifacts *releaseArtifacts) *stageError {
+func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, model string, artifacts *releaseArtifacts) *stageError {
 	// The login user for every SSH step. root on a machine spekk created;
 	// whatever the operator gave for one they already had.
 	user := sshUser(meta)
@@ -321,7 +325,7 @@ func equipSandbox(meta *SandboxMeta, name, agentToken string, mode AuthMode, art
 	}
 
 	fmt.Fprintln(os.Stderr, "Injecting credentials...")
-	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, meta.AgentID, mode, markerContent(meta)); err != nil {
+	if err := injectCredentials(meta.IP, meta.SSHKeyPath, name, user, agentToken, meta.AgentID, mode, model, markerContent(meta)); err != nil {
 		return &stageError{"injecting credentials", err}
 	}
 
@@ -484,7 +488,7 @@ func Provision(name string, opts ProvisionOptions) error {
 	// record names the new agent before equip runs.
 	registered := sandbox.AgentID == "" && agentID != ""
 	sandbox.AgentID = agentID
-	if err := equip(sandbox, name, agentToken, mode, artifacts); err != nil {
+	if err := equip(sandbox, name, agentToken, mode, resolveModel(mode, nil), artifacts); err != nil {
 		if registered {
 			revokeAbandoned(agentID, name)
 		}
@@ -1620,9 +1624,9 @@ func sshCheck(sandbox *SandboxMeta, name, command string) string {
 }
 
 // injectCredentials writes the env file from the credentials in the
-// environment of the CLI, and in the same command the sandbox marker, which
-// holds no secret.
-func injectCredentials(ip, keyPath, name, user, agentToken, agentID string, mode AuthMode, marker []byte) error {
+// environment of the CLI and the model pin, and in the same command the
+// sandbox marker, which holds no secret.
+func injectCredentials(ip, keyPath, name, user, agentToken, agentID string, mode AuthMode, model string, marker []byte) error {
 	envVars := map[string]string{
 		"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
 		"AWS_SECRET_ACCESS_KEY": os.Getenv("AWS_SECRET_ACCESS_KEY"),
@@ -1632,7 +1636,12 @@ func injectCredentials(ip, keyPath, name, user, agentToken, agentID string, mode
 	}
 	spekkHost := os.Getenv("SPEKK_HOST")
 
-	if err := writeEnvFile(ip, keyPath, name, user, buildEnvContent(mode, envVars, name, agentToken, agentID, spekkHost), marker); err != nil {
+	if model == "" {
+		fmt.Fprintln(os.Stderr, "Model pin: none. Claude Code uses its default model.")
+	} else {
+		fmt.Fprintf(os.Stderr, "Model pin: %s=%s\n", modelVar, model)
+	}
+	if err := writeEnvFile(ip, keyPath, name, user, buildEnvContent(mode, envVars, model, name, agentToken, agentID, spekkHost), marker); err != nil {
 		return err
 	}
 	if mode == AuthSubscription && os.Getenv(codexAuthFileVar) != "" {
@@ -1655,11 +1664,13 @@ func writeEnvFile(ip, keyPath, name, user, envContent string, marker []byte) err
 }
 
 // buildEnvContent constructs the env file content for credential injection.
-// The model credential comes from the auth mode; everything after it is the
-// same whatever the sandbox pays with. The agent client needs SPEKK_AGENT_ID
-// to ask for repository access. Exported for testing.
-func buildEnvContent(mode AuthMode, envVars map[string]string, name, agentToken, agentID, spekkHost string) string {
-	envLines := append(authLines(mode, envVars),
+// The model credential comes from the auth mode, and the model pin follows
+// it; everything after them is the same whatever the sandbox pays with. The
+// agent client needs SPEKK_AGENT_ID to ask for repository access. Exported
+// for testing.
+func buildEnvContent(mode AuthMode, envVars map[string]string, model, name, agentToken, agentID, spekkHost string) string {
+	envLines := append(authLines(mode, envVars), modelLines(model)...)
+	envLines = append(envLines,
 		"GITHUB_TOKEN="+envVars["GITHUB_TOKEN"],
 		"SPEKK_HOST="+bareHost(spekkHost),
 		"SPEKK_AGENT_TOKEN="+agentToken,

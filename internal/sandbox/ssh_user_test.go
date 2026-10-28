@@ -123,7 +123,7 @@ func TestEveryPrivilegedStepEscalatesForANonRootLogin(t *testing.T) {
 
 	steps := map[string]func(user string) error{
 		"inject credentials": func(user string) error {
-			return injectCredentials("9.9.9.9", "", "sb", user, "agent-token", "agent-1", AuthBedrock, nil)
+			return injectCredentials("9.9.9.9", "", "sb", user, "agent-token", "agent-1", AuthBedrock, "", nil)
 		},
 		"git credentials": func(user string) error {
 			return configureGitCredentials("9.9.9.9", "", "sb", user)

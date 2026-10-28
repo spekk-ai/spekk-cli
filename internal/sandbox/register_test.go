@@ -20,7 +20,7 @@ func stubEquip(t *testing.T, err error) *[]string {
 	t.Helper()
 	var tokens []string
 	orig := equip
-	equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, artifacts *releaseArtifacts) *stageError {
+	equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, model string, artifacts *releaseArtifacts) *stageError {
 		tokens = append(tokens, agentToken)
 		if err != nil {
 			return &stageError{"deploying agent", err}
@@ -210,7 +210,7 @@ func TestCreateRevokesTheAgentOnInterrupt(t *testing.T) {
 	var callsAtExit []string
 	var recordAtExit *SandboxMeta
 	origEquip := equip
-	equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, artifacts *releaseArtifacts) *stageError {
+	equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, model string, artifacts *releaseArtifacts) *stageError {
 		if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
 			t.Fatal(err)
 		}
@@ -503,9 +503,9 @@ func TestProvisionAgentToken(t *testing.T) {
 		// equip writes the agent ID of the record to the env file.
 		var equippedID string
 		stubbed := equip
-		equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, artifacts *releaseArtifacts) *stageError {
+		equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, model string, artifacts *releaseArtifacts) *stageError {
 			equippedID = meta.AgentID
-			return stubbed(meta, name, agentToken, mode, artifacts)
+			return stubbed(meta, name, agentToken, mode, model, artifacts)
 		}
 		if err := Provision("box", ProvisionOptions{Force: true}); err != nil {
 			t.Fatal(err)
@@ -535,7 +535,7 @@ func TestProvisionNamesTheAgentWhenTheSaveFails(t *testing.T) {
 	checkReady = func(meta *SandboxMeta, name string) error { return nil }
 	t.Cleanup(func() { checkReady = origReady })
 	orig := equip
-	equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, artifacts *releaseArtifacts) *stageError {
+	equip = func(meta *SandboxMeta, name, agentToken string, mode AuthMode, model string, artifacts *releaseArtifacts) *stageError {
 		// The machine is equipped, then the record becomes unreadable.
 		if err := os.WriteFile(store, []byte("not json"), 0o600); err != nil {
 			t.Fatal(err)

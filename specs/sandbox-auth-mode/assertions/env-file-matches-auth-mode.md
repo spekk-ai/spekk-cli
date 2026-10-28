@@ -23,6 +23,7 @@ depends-on: auth-flag-selects-mode
 - In `subscription` mode the rendered file contains none of the strings `CLAUDE_CODE_USE_BEDROCK`, `ANTHROPIC_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_DEFAULT_REGION`.
 - In `bedrock` mode the rendered file contains neither `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY`.
 - `injectCredentials` reads `CLAUDE_CODE_OAUTH_TOKEN` from the process environment alongside the variables it already collects, and passes the mode through to `buildEnvContent`.
+- The file pins a default model in the form of its mode: `ANTHROPIC_MODEL=us.anthropic.claude-opus-5-5` for `bedrock` and `ANTHROPIC_MODEL=claude-opus-5-5` for `subscription`. The `--model` flag of `create` wins, then an `ANTHROPIC_MODEL` in the caller's environment (on `create` and `provision`), then the default. An empty override value writes no `ANTHROPIC_MODEL` line. Machine mode, which has no override, writes the same default for `bedrock`, `claude-opus-5-5` for `anthropic_api_key`, and no pin for `none`.
 - The file still ends with a single trailing newline, and `buildInjectScript` still base64-encodes it, so a credential containing a shell metacharacter cannot break out of the injection command.
 
 **Note:** absence is the assertion. A test that only checks the token is present would pass against an implementation that appends the token to the Bedrock block and leaves the sandbox billing through Bedrock — the exact failure this spec exists to prevent.

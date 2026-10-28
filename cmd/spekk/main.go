@@ -1605,6 +1605,12 @@ OPTIONS:
                          bills through the AWS Bedrock API) or subscription
                          (uses CLAUDE_CODE_OAUTH_TOKEN from your environment,
                          minted by "claude setup-token")
+  --model <name>         Model pin for ANTHROPIC_MODEL in the env file of the
+                         sandbox. Default: ANTHROPIC_MODEL from your
+                         environment, else Opus 5.5 in the form of the mode
+                         (us.anthropic.claude-opus-5-5 for bedrock,
+                         claude-opus-5-5 for subscription). An empty value
+                         ("") writes no pin
 
   Template image (DigitalOcean and GCP):
   --image <name>         Create the machine from an image that "spekk sandbox
@@ -1670,6 +1676,7 @@ func createSandbox(args []string) {
 		"ssh-key":           {Names: []string{"--ssh-key"}, Type: cli.StringFlag},
 		"ssh-user":          {Names: []string{"--ssh-user"}, Type: cli.StringFlag},
 		"auth":              {Names: []string{"--auth"}, Type: cli.StringFlag},
+		"model":             {Names: []string{"--model"}, Type: cli.StringFlag},
 		"provision-timeout": {Names: []string{"--provision-timeout"}, Type: cli.StringFlag},
 		"release":           {Names: []string{"--release"}, Type: cli.StringFlag},
 		"organization":      {Names: []string{"--organization"}, Type: cli.StringFlag},
@@ -1699,6 +1706,14 @@ func createSandbox(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
+	}
+
+	// The parser refuses an empty value, but `--model ""` is how an
+	// operator asks for no pin, so the flag counts when it is present.
+	var model *string
+	if flags.Count("model") > 0 {
+		m := flags.String("model")
+		model = &m
 	}
 
 	provisionTimeout, err := sandbox.ParseProvisionTimeout(flags.String("provision-timeout"))
@@ -1757,6 +1772,7 @@ func createSandbox(args []string) {
 		SSHKey:  flags.String("ssh-key"),
 		SSHUser: flags.String("ssh-user"),
 		Auth:    auth,
+		Model:   model,
 		Release: flags.String("release"),
 
 		Organization:     flags.String("organization"),

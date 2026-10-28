@@ -508,9 +508,11 @@ func equipMachineSandbox(meta *SandboxMeta, name, agentToken string, in *machine
 
 // buildMachineEnvContent is the env file of a machine-mode sandbox. It has
 // no GITHUB_TOKEN: the installation token lives 1 hour, and git gets a new
-// one through the credential helper, which reads SPEKK_AGENT_ID.
+// one through the credential helper, which reads SPEKK_AGENT_ID. The stdin
+// has no model, so the model pin is the default of the mode.
 func buildMachineEnvContent(in *machineInput, name, agentToken, agentID string) string {
-	lines := append(authLines(in.auth, in.modelEnv),
+	lines := append(authLines(in.auth, in.modelEnv), modelLines(defaultModel(in.auth))...)
+	lines = append(lines,
 		"SPEKK_HOST="+bareHost(in.controlHost),
 		"SPEKK_AGENT_TOKEN="+agentToken,
 		"SPEKK_AGENT_ID="+agentID,
