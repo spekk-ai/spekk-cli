@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -61,17 +62,29 @@ func gitStageSpecsAndCommit(message string) (bool, error) {
 	return true, nil
 }
 
+// formatLoopComplete reports the number of successful builds in this run.
+func formatLoopComplete(count int64) string {
+	noun := "assertions"
+	if count == 1 {
+		noun = "assertion"
+	}
+	return fmt.Sprintf("Builder loop complete. %d %s completed.", count, noun)
+}
+
 // RunBuilderLoop runs the continuous builder loop.
-func RunBuilderLoop(installDir string) {
+func RunBuilderLoop(installDir string, exitWhenDone bool) {
 	colorLog(colorCyan, "Starting Builder Loop...")
 	colorLog(colorBlue, "This will continuously get next assertions and implement them.")
 	colorLog(colorYellow, "Press Ctrl+C to exit gracefully.")
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	var completed atomic.Int64
 	go func() {
 		sig := <-sigCh
 		colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
+		colorLog(colorGreen, formatLoopComplete(completed.Load()))
 		os.Exit(0)
 	}()
 
@@ -94,6 +107,13 @@ func RunBuilderLoop(installDir string) {
 		}
 
 		if result.Type == "complete" {
+			if iteration == 1 && !exitWhenDone {
+				colorLog(colorGreen, formatLoopComplete(0))
+			}
+			if exitWhenDone {
+				colorLog(colorGreen, formatLoopComplete(completed.Load()))
+				return
+			}
 			colorLog(colorGreen, "All assertions completed. Waiting for new work...")
 			time.Sleep(5 * time.Second)
 			continue
@@ -141,6 +161,7 @@ func RunBuilderLoop(installDir string) {
 
 		if success {
 			colorLog(colorGreen, "Builder agent completed work")
+			completed.Add(1)
 		} else {
 			colorLog(colorRed, "Builder agent exited with error")
 		}

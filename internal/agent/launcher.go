@@ -136,7 +136,10 @@ var agentHelpExtras = map[string]struct {
 	Examples string
 }{
 	"builder": {
+		Options: `  --exit-when-done      Exit after the last assertion in continuous mode
+`,
 		Examples: `  spekk builder                           # Implement the ready assertions, one at a time
+  spekk builder --exit-when-done          # Exit after the last assertion
   spekk builder review                    # Review what was built, in a fresh session
 `,
 	},

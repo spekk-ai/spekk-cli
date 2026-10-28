@@ -995,7 +995,7 @@ func runLoop(args []string) {
 
 	switch args[0] {
 	case "builder":
-		runBuilderLoop(findInstallDir())
+		runBuilderLoop(args[1:], findInstallDir())
 	case "coach":
 		runCoachLoop(findInstallDir())
 	case "help", "--help", "-h":
@@ -1007,6 +1007,7 @@ USAGE:
 
 COMMANDS:
   builder   Run the automated builder loop (gets next assertion, implements, commits, repeats)
+            Use --exit-when-done to exit when no assertion remains
   coach     Run the interactive coach loop (create specs, commit, repeat)
   help      Show this help message`)
 	default:
@@ -1017,8 +1018,16 @@ COMMANDS:
 }
 
 // runBuilderLoop runs the automated builder loop.
-func runBuilderLoop(installDir string) {
-	agent.RunBuilderLoop(installDir)
+func runBuilderLoop(args []string, installDir string) {
+	exitWhenDone := false
+	for _, arg := range args {
+		if arg != "--exit-when-done" {
+			fmt.Fprintf(os.Stderr, "unknown loop builder option: %s\n", arg)
+			os.Exit(1)
+		}
+		exitWhenDone = true
+	}
+	agent.RunBuilderLoop(installDir, exitWhenDone)
 }
 
 // runCoachLoop runs the interactive coach loop.

@@ -16,6 +16,7 @@ The `spekk builder` command loops continuously through assertions by default (Ct
 |------|----------|
 | (none) | Loop through all assertions continuously (default) |
 | `--once` | Build one assertion then exit |
+| `--exit-when-done` | Exit when no open assertion remains in a continuous builder loop |
 | `--dry-run` | Preview what would be built, don't launch Claude |
 | `--spec <id>` | Work only on assertions in this spec |
 | `--assertion <id>` | Work only on this specific assertion |
@@ -26,6 +27,7 @@ The `spekk builder` command loops continuously through assertions by default (Ct
 
 - `--spec <id>` - Loop through all assertions in a spec
 - `--spec <id> --once` - Build next assertion in a spec then exit
+- `--spec <id> --exit-when-done` - Stop the continuous loop when the spec is complete
 - `--confirm` - Loop through everything with confirmation prompts
 - `--spec <id> --dry-run` - Preview assertions in a specific spec
 
