@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.50.0 -- A Default Model Pin for New Sandboxes](RELEASE-NOTES-1.50.0.md)
+
+`spekk sandbox create` now writes `ANTHROPIC_MODEL` to the sandbox env file from `--model`, or from the auth mode's default: `us.anthropic.claude-opus-5-5` for `bedrock` and `claude-opus-5-5` for `subscription`. `--model ""` writes no pin. The caller's `ANTHROPIC_MODEL` does not set it. Existing sandboxes keep their env file on CLI update or `deploy`; `provision --force` rewrites it with the mode's default. Update the CLI to use the new flag. The protocol stays `1.6`, and the major stays `1`.
+
 ## [1.49.0 -- The Machine Downloads the Release Binaries](RELEASE-NOTES-1.49.0.md)
 
 On `create`, `provision`, and `deploy`, the machine now downloads the agent-client and the spekk CLI from the GitHub release itself, with `curl`, or `wget` when `curl` is not installed. The CLI reads each expected sha256 from the GitHub release API, and the machine checks each file before the install. The `curl` limits apply to each of 3 attempts, so a slow transfer can take approximately 15 minutes for each file. When the download on the machine fails, the CLI prints a message and uses the old download to your computer plus `scp`. This fixes the `copying binary` failure of the 40 MB `scp` on some operator networks. Update the CLI. There is no configuration change and no protocol change: the protocol stays `1.6`, and the major stays `1`.
