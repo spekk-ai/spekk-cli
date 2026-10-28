@@ -63,6 +63,7 @@ nav = [
   { "Cutting a Release" = "releasing.md" },
   { "Release Notes" = [
     "release-notes/index.md",
+    { "1.50.0 - A Default Model Pin for New Sandboxes" = "release-notes/RELEASE-NOTES-1.50.0.md" },
     { "1.49.0 - The Machine Downloads the Release Binaries" = "release-notes/RELEASE-NOTES-1.49.0.md" },
     { "1.48.1 - No GitHub Token in ~/.git-credentials" = "release-notes/RELEASE-NOTES-1.48.1.md" },
     { "1.48.0 - Turn Usage in Sandbox Result Frames" = "release-notes/RELEASE-NOTES-1.48.0.md" },
