@@ -45,7 +45,7 @@ An observation is a markdown file under `observations/` with frontmatter:
 ```yaml
 ---
 slug: parser-drops-draft-status        # kebab-case, matches branch name
-type: code_spec_misalignment           # code_spec_misalignment | outdated_specs
+type: code_spec_misalignment           # one of the four closed lifecycle types
 severity: high                         # high | medium | low
 status: open                           # open | resolved | dismissed
 created: 2026-07-26T12:00:00Z
@@ -60,6 +60,8 @@ affected:                              # evidence — required, non-empty
 **No evidence, no observation** — an observation without at least one
 `affected` path is invalid.
 
+The lifecycle type set is closed: `code_spec_misalignment`, `outdated_specs`, `underspecified_spec`, and `missing_capability`. Other values are rejected. Use `code_spec_misalignment` for code that does not match a spec, `outdated_specs` for a spec that does not reflect current behavior, `underspecified_spec` when more than one implementation satisfies a spec, and `missing_capability` when the specs give no one a capability that users need.
+
 ### Birth: branches, not main
 
 The observer NEVER commits observations to main. Each finding is born on a
@@ -70,6 +72,7 @@ branch named `observer/<slug>` containing two SEPARATE commits:
    - spec-side drift (`outdated_specs`): the actual spec edit
    - code-side drift (`code_spec_misalignment`): only the assertion status
      flip `done` → `failed` — no code changes
+   - `underspecified_spec` or `missing_capability`: a spec edit that states the intended behavior or capability
 
 Separate commits let a reviewer take one without the other.
 

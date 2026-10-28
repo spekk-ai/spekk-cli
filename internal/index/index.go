@@ -206,12 +206,13 @@ func dropAllTables(db *sql.DB) error {
 // document manifest (doc_files) in place of one corpus fingerprint; 7 cuts
 // long sections into 20-line windows, not 40 (no column changes); 8 adds
 // the spec file manifest (spec_files) and the sha256 of spec and assertion
-// documents. Version
-// 4 changes no column — the bump is what makes an index that version 3 built
+// documents.
+// 9 indexes the underspecified_spec and missing_capability types (no column changes).
+// Version 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 8
+const schemaVersion = 9
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.

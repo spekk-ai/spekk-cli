@@ -382,10 +382,34 @@ func TestScanCheckRejectsUnsupportedTypeBeforeReadingGit(t *testing.T) {
 	if code == 0 || out.Len() != 0 {
 		t.Fatalf("unsupported type must fail without a result: exit %d, stdout %q", code, out.String())
 	}
-	for _, text := range []string{"--type", "unsupported_type", "code_spec_misalignment", "outdated_specs"} {
+	for _, text := range []string{"--type", "unsupported_type", "code_spec_misalignment", "outdated_specs", "underspecified_spec", "missing_capability"} {
 		if !strings.Contains(errOut.String(), text) {
 			t.Errorf("error must contain %q, got %q", text, errOut.String())
 		}
+	}
+}
+
+func TestScanCheckAcceptsNewTypes(t *testing.T) {
+	newObserverRepo(t)
+	for _, typ := range []string{"underspecified_spec", "missing_capability"} {
+		t.Run(typ, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			code := execObserverScanCheck([]string{
+				"--type", typ,
+				"--slug", "new-finding",
+				"--affected", "specs/example/example.md",
+			}, &out, &errOut, time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC))
+			if code != 0 {
+				t.Fatalf("exit %d: %s", code, errOut.String())
+			}
+			var res scanCheckResult
+			if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+				t.Fatalf("bad JSON: %v", err)
+			}
+			if res.Result != "clear" || res.Slug != "new-finding" {
+				t.Fatalf("unexpected result: %+v", res)
+			}
+		})
 	}
 }
 

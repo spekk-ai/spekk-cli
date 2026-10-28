@@ -633,7 +633,7 @@ spekk observer scan-check --type code_spec_misalignment --slug parser-skips-empt
 
 | Flag | Description |
 |------|-------------|
-| `--type <type>` | `code_spec_misalignment` or `outdated_specs` (required) |
+| `--type <type>` | One of the four closed lifecycle types below (required) |
 | `--slug <slug>` | The kebab-case slug the observation would get (required) |
 | `--affected <paths>` | Comma-separated evidence paths (required) |
 
@@ -645,7 +645,14 @@ The result is one JSON line:
 | `covered` | A live claim with the same type and slug already exists. File nothing |
 | `clear` | File the observation with the returned `slug`. When an observation on `main` already has the plain slug, the returned slug carries a `-YYYYMMDD` suffix |
 
-The command refuses a `--type` outside the two values above, and refuses a stray argument. Both fail before it answers, because a `clear` result followed by an observation the parser drops on read loses the finding with nothing reported. A path list written with spaces instead of commas is the common case.
+The lifecycle type set is closed:
+
+- `code_spec_misalignment`: code does not match a spec.
+- `outdated_specs`: a spec does not reflect current behavior.
+- `underspecified_spec`: more than one implementation satisfies the spec.
+- `missing_capability`: the specs give no one a capability that users need.
+
+The command rejects other types and stray arguments before it answers, because a `clear` result followed by an observation the parser drops on read loses the finding with nothing reported. A path list written with spaces instead of commas is the common case.
 
 A malformed `.spekk/dont-flag.yaml` fails the check with a message that names the entry. A broken suppression file is never read as empty. See [Suppressing observations](configuration.md#suppressing-observations) for the file format.
 

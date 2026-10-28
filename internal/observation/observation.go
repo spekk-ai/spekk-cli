@@ -51,6 +51,8 @@ const Dir = "observations"
 const (
 	TypeCodeSpecMisalignment = "code_spec_misalignment"
 	TypeOutdatedSpecs        = "outdated_specs"
+	TypeUnderspecifiedSpec   = "underspecified_spec"
+	TypeMissingCapability    = "missing_capability"
 )
 
 // The closed set of observation severities.
@@ -72,7 +74,7 @@ const (
 // it is the "not yet announced" marker, and no separate ledger exists.
 type Observation struct {
 	Slug      string   // kebab-case; matches the observer/<slug> branch name
-	Type      string   // code_spec_misalignment | outdated_specs
+	Type      string   // one of the closed observation types
 	Severity  string   // high | medium | low
 	Status    string   // open | resolved | dismissed
 	Created   string   // ISO 8601 timestamp
@@ -112,7 +114,7 @@ var (
 	slugPattern      = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 	timestampPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`)
 
-	validTypes      = map[string]bool{TypeCodeSpecMisalignment: true, TypeOutdatedSpecs: true}
+	allowedTypes    = []string{TypeCodeSpecMisalignment, TypeOutdatedSpecs, TypeUnderspecifiedSpec, TypeMissingCapability}
 	validSeverities = map[string]bool{SeverityHigh: true, SeverityMedium: true, SeverityLow: true}
 	validStatuses   = map[string]bool{StatusOpen: true, StatusResolved: true, StatusDismissed: true}
 )
@@ -125,12 +127,19 @@ func ValidSlug(s string) bool {
 	return slugPattern.MatchString(s)
 }
 
+// TypeChoices lists the allowed types for help text and errors.
+func TypeChoices() string {
+	return strings.Join(allowedTypes[:len(allowedTypes)-1], ", ") + ", or " + allowedTypes[len(allowedTypes)-1]
+}
+
 // ValidateType rejects types outside the observation file format.
 func ValidateType(typ string) error {
-	if !validTypes[typ] {
-		return fmt.Errorf("must be %s or %s, got %q", TypeCodeSpecMisalignment, TypeOutdatedSpecs, typ)
+	for _, allowed := range allowedTypes {
+		if typ == allowed {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("must be %s, got %q", TypeChoices(), typ)
 }
 
 // SeverityRank orders severities for ranking: high (0) before medium (1)
@@ -157,7 +166,7 @@ func SeverityRank(severity string) int {
 // Validation enforces:
 //
 //   - slug: required, kebab-case
-//   - type: one of code_spec_misalignment | outdated_specs
+//   - type: one of the closed observation types
 //   - severity: one of high | medium | low
 //   - status: one of open | resolved | dismissed
 //   - created: required ISO 8601 timestamp

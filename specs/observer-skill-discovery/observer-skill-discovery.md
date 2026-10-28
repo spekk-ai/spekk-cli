@@ -64,7 +64,8 @@ affected_files: []               # list of file paths, can be empty
 ---
 ```
 
-**Allowed `type` values (extensible per skill):**
+**Historical output-contract `type` values (former convention):** This list records the old convention for default scans and skill reports. The current top-level observation lifecycle has a separate closed set: `code_spec_misalignment`, `outdated_specs`, `underspecified_spec`, and `missing_capability`. The parser rejects other types for top-level observations. See `specs/observation-lifecycle/`.
+
 - `code_spec_misalignment` — default loop
 - `outdated_specs` — default loop
 - `compression_opportunity` — default loop

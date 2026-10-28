@@ -167,7 +167,7 @@ func printDigestJSON(w io.Writer, digest []*observation.Observation) {
 }
 
 // observerScanCheckUsage is the help text for `spekk observer scan-check --help`.
-const observerScanCheckUsage = `
+var observerScanCheckUsage = fmt.Sprintf(`
 spekk observer scan-check - Check drift against suppressions and the
 cross-branch observation union before creating an observation
 
@@ -175,7 +175,7 @@ USAGE:
   spekk observer scan-check --type <type> --slug <slug> --affected <paths>
 
 OPTIONS:
-  --type <type>       code_spec_misalignment or outdated_specs (required)
+  --type <type>       %s (required)
   --slug <slug>       The slug the observation would be given (required)
   --affected <paths>  Comma-separated evidence file paths (required)
   --help, -h          Show this help message
@@ -205,7 +205,7 @@ offending entry — a broken suppression file is never treated as empty.
 
 The check reads committed git state only. Run "git fetch" first so
 remote-tracking observer/* branches are current.
-`
+`, observation.TypeChoices())
 
 // scanCheckResult is the JSON shape scan-check prints.
 type scanCheckResult struct {

@@ -14,7 +14,7 @@ status: done
 
 ## Success Criteria
 
-- `code_spec_misalignment` and `outdated_specs` pass type validation and continue to suppression and duplicate checks.
+- Each type in the closed lifecycle set passes type validation and continues to suppression and duplicate checks.
 - An unsupported `--type` exits with a nonzero status before the command reads suppression files or observation branches.
 - The error identifies `--type`, its rejected value, and the accepted values. The command writes no successful JSON result.
 - The command and the file parser use one type-validation rule.
