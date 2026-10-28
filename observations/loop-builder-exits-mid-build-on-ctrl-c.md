@@ -4,6 +4,7 @@ type: code_spec_misalignment
 severity: medium
 status: open
 created: 2026-10-28T12:00:00Z
+announced: 2026-10-28T19:02:38Z
 affected:
   - internal/agent/loop.go
   - specs/builder-cli-flags/assertions/exit-when-done-flag.md
