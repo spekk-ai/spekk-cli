@@ -479,6 +479,7 @@ Launch the builder agent in Claude Code to implement assertions.
 ```bash
 spekk builder                        # Build assertions until you stop it
 spekk builder --once                 # Build one assertion, then exit
+spekk builder --exit-when-done       # Exit after the last assertion
 spekk builder --dry-run              # Print the next assertion, build nothing
 spekk builder --spec authentication  # Only this spec's assertions
 spekk builder --assertion login      # Build one assertion, whatever its status
@@ -494,6 +495,7 @@ spekk builder review                 # Review what was built, in a fresh session
 |------|-------|-------------|
 | *(none)* | | Build assertions in a loop until you press Ctrl+C |
 | `--once` | | Build one assertion, then exit |
+| `--exit-when-done` | | Exit with status 0 when no assertion remains, and report the count |
 | `--dry-run` | `-d` | Print the next assertion and exit. Claude Code does not start |
 | `--spec <id>` | `-s` | Only assertions of this spec |
 | `--assertion <id>` | | Build this assertion, whatever its status |
@@ -685,10 +687,13 @@ Run an agent in a loop that commits after each session.
 
 ```bash
 spekk loop builder    # Build, commit, repeat
+spekk loop builder --exit-when-done  # Exit after the last assertion
 spekk loop coach      # Coach session, commit specs, repeat
 ```
 
 `spekk loop builder` runs `spekk next`, launches the builder agent on the result, stages every change with `git add .`, commits it as `Complete <id>`, and repeats. When nothing is ready it waits five seconds and asks again. `spekk loop coach` launches the coach agent, and when the session ends it commits any change under `specs/` and starts a new session. Press Ctrl+C to stop either loop.
+
+With `--exit-when-done`, either builder loop exits with status 0 when no open assertion remains and reports the number of successful builds in the run. Without the flag, both loops continue to wait for new assertions. Assertions that are open but not eligible still make the loops wait.
 
 `spekk builder` on its own also loops. The difference is the commit: `spekk builder` leaves the commit to the agent, and `spekk loop builder` commits everything in the working tree after each session.
 

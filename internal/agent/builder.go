@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -50,36 +51,39 @@ func colorLog(color, message string) {
 
 // BuilderFlags defines the flag set for the builder CLI.
 var BuilderFlags = cli.FlagSet{
-	"once":        {Names: []string{"--once"}, Type: cli.BoolFlag},
-	"dryRun":      {Names: []string{"--dry-run", "-d"}, Type: cli.BoolFlag},
-	"confirm":     {Names: []string{"--confirm", "-c"}, Type: cli.BoolFlag},
-	"interactive": {Names: []string{"--interactive", "-i"}, Type: cli.BoolFlag},
-	"spec":        {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
-	"assertion":   {Names: []string{"--assertion"}, Type: cli.StringFlag},
-	"help":        {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	"once":         {Names: []string{"--once"}, Type: cli.BoolFlag},
+	"exitWhenDone": {Names: []string{"--exit-when-done"}, Type: cli.BoolFlag},
+	"dryRun":       {Names: []string{"--dry-run", "-d"}, Type: cli.BoolFlag},
+	"confirm":      {Names: []string{"--confirm", "-c"}, Type: cli.BoolFlag},
+	"interactive":  {Names: []string{"--interactive", "-i"}, Type: cli.BoolFlag},
+	"spec":         {Names: []string{"--spec", "-s"}, Type: cli.StringFlag},
+	"assertion":    {Names: []string{"--assertion"}, Type: cli.StringFlag},
+	"help":         {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
 }
 
 // BuilderConfig holds parsed builder options.
 type BuilderConfig struct {
-	Once        bool
-	DryRun      bool
-	Confirm     bool
-	Interactive bool
-	Spec        string
-	Assertion   string
-	InstallDir  string
+	Once         bool
+	ExitWhenDone bool
+	DryRun       bool
+	Confirm      bool
+	Interactive  bool
+	Spec         string
+	Assertion    string
+	InstallDir   string
 }
 
 // ParseBuilderFlags parses args into a BuilderConfig.
 func ParseBuilderFlags(args []string) BuilderConfig {
 	parsed := cli.ParseFlags(args, BuilderFlags)
 	return BuilderConfig{
-		Once:        parsed.Bool("once"),
-		DryRun:      parsed.Bool("dryRun"),
-		Confirm:     parsed.Bool("confirm"),
-		Interactive: parsed.Bool("interactive"),
-		Spec:        parsed.String("spec"),
-		Assertion:   parsed.String("assertion"),
+		Once:         parsed.Bool("once"),
+		ExitWhenDone: parsed.Bool("exitWhenDone"),
+		DryRun:       parsed.Bool("dryRun"),
+		Confirm:      parsed.Bool("confirm"),
+		Interactive:  parsed.Bool("interactive"),
+		Spec:         parsed.String("spec"),
+		Assertion:    parsed.String("assertion"),
 	}
 }
 
@@ -342,6 +346,7 @@ func RunBuilder(args []string, installDir string) {
 
 	// Non-interactive modes: manage SIGINT
 	active := &processHolder{}
+	var completed atomic.Int64
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT)
@@ -352,8 +357,11 @@ func RunBuilder(args []string, installDir string) {
 				active.signal(syscall.SIGINT)
 			} else {
 				colorLog(colorYellow, "\nReceived SIGINT. Exiting gracefully...")
-				os.Exit(0)
 			}
+			if !cfg.Once {
+				colorLog(colorGreen, formatLoopComplete(completed.Load()))
+			}
+			os.Exit(0)
 		}
 	}()
 
@@ -396,6 +404,13 @@ func RunBuilder(args []string, installDir string) {
 			if cfg.Once {
 				colorLog(colorGreen, "No assertions to work on.")
 				os.Exit(0)
+			}
+			if iteration == 1 && !cfg.ExitWhenDone {
+				colorLog(colorGreen, formatLoopComplete(0))
+			}
+			if cfg.ExitWhenDone {
+				colorLog(colorGreen, formatLoopComplete(completed.Load()))
+				return
 			}
 			colorLog(colorGreen, "All assertions completed. Waiting for new work...")
 			time.Sleep(5 * time.Second)
@@ -491,6 +506,9 @@ func RunBuilder(args []string, installDir string) {
 			colorLog(colorYellow, "Continuing to next assertion...")
 		} else if success {
 			colorLog(colorGreen, "Builder agent completed work")
+			if !cfg.Once {
+				completed.Add(1)
+			}
 		} else {
 			colorLog(colorYellow, "Build did not succeed.")
 		}
