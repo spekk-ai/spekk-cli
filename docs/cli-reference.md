@@ -114,7 +114,7 @@ spekk list --cross-branch --json    # Merge preview across branches
 | `--branch-filter <glob>` | | In cross-branch mode, only branches that match the glob |
 | `--assertions-only` | | Accepted for old scripts. It changes nothing: assertions are the default |
 
-Rows are sorted by priority, then by id, in every format. `--sort-by` replaces that order with one column. The sort is stable, so ties keep the parser's order. `priority` sorts numerically, and the other columns sort alphabetically. An unknown column fails with an error on stderr that names the valid ones. The JSON output also contains `branch` and `depends_on`, which the table, TSV, and CSV do not show. `--json`, `--tsv`, and `--csv` exclude each other. `--status`, `--priority`, `--sort-by`, and `--specs-dir` do not apply to `--cross-branch`.
+Rows are sorted by priority, then by id, in every format. `--sort-by` replaces that order with one column. The sort is stable, so ties keep the parser's order. `priority` sorts numerically, `title` sorts alphabetically and ignores case, and `id` and `status` sort alphabetically. An unknown column fails with an error on stderr that names the valid ones. The JSON output also contains `branch` and `depends_on`, which the table, TSV, and CSV do not show. `--json`, `--tsv`, and `--csv` exclude each other. `--status`, `--priority`, `--sort-by`, and `--specs-dir` do not apply to `--cross-branch`.
 
 A missing or empty value for `--priority` or `--status` fails. Priority accepts `0` and other nonnegative integers outside the stored range of 1 through 3. These values return no matching assertions.
 

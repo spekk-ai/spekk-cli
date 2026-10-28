@@ -577,6 +577,22 @@ func TestSortAssertions(t *testing.T) {
 		eq(t, ids(r), []string{"a", "c", "b"}) // Apple, Mango, Zebra
 	})
 
+	t.Run("title ignores case, stable ties", func(t *testing.T) {
+		// A byte compare puts all uppercase titles first. "apple" and "Apple"
+		// are equal without case, so they keep parser order (l before u).
+		in := &ParseResult{Assertions: []Assertion{
+			{ID: "b", Title: "banana"},
+			{ID: "l", Title: "apple"},
+			{ID: "u", Title: "Apple"},
+			{ID: "c", Title: "Cherry"},
+		}}
+		r, err := SortAssertions(in, "title")
+		if err != nil {
+			t.Fatal(err)
+		}
+		eq(t, ids(r), []string{"l", "u", "b", "c"})
+	})
+
 	t.Run("does not mutate input", func(t *testing.T) {
 		in := base()
 		if _, err := SortAssertions(in, "id"); err != nil {

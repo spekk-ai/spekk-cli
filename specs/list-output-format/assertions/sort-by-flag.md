@@ -24,12 +24,13 @@ column in ascending order. Supported columns: `id`, `status`, `priority`,
 - `spekk list --sort-by status` outputs assertions sorted alphabetically
   by status value.
 - `spekk list --sort-by title` outputs assertions sorted alphabetically
-  by title text.
+  by title text. The title sort ignores case ("apple" sorts before "Zebra").
 - Sort is stable: assertions with equal sort keys appear in their original
   (parser) order relative to each other.
 - `--sort-by` combines with `--status`, `--priority`, and all format flags.
 - An unsupported column name causes a non-zero exit with a message listing
   the valid column names.
-- The default output (no `--sort-by`) is unchanged (parser order).
+- The default output (no `--sort-by`) is unchanged: rows sorted by priority,
+  then by id.
 
 **Tests:** internal/parser/output_test.go, cmd/spekk/list_test.go

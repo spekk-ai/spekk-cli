@@ -448,12 +448,13 @@ func buildFlatAssertions(result *ParseResult) []FlatAssertion {
 var sortColumns = []string{"id", "priority", "status", "title"}
 
 // assertionLess maps a --sort-by column to its ascending comparison. Priority
-// compares numerically (priority 1 first); the rest compare their string value.
+// compares numerically (priority 1 first); title ignores case; id and status
+// compare their string value.
 var assertionLess = map[string]func(a, b Assertion) bool{
 	"id":       func(a, b Assertion) bool { return a.ID < b.ID },
 	"priority": func(a, b Assertion) bool { return a.Priority < b.Priority },
 	"status":   func(a, b Assertion) bool { return a.Status < b.Status },
-	"title":    func(a, b Assertion) bool { return a.Title < b.Title },
+	"title":    func(a, b Assertion) bool { return strings.ToLower(a.Title) < strings.ToLower(b.Title) },
 }
 
 // SortAssertions returns a copy of result whose assertions are sorted in
@@ -463,7 +464,7 @@ var assertionLess = map[string]func(a, b Assertion) bool{
 func SortAssertions(result *ParseResult, column string) (*ParseResult, error) {
 	less, ok := assertionLess[column]
 	if !ok {
-		return nil, fmt.Errorf("invalid sort column %q — valid values: %s", column, strings.Join(sortColumns, ", "))
+		return nil, fmt.Errorf("invalid sort column %q; valid values: %s", column, strings.Join(sortColumns, ", "))
 	}
 	sorted := make([]Assertion, len(result.Assertions))
 	copy(sorted, result.Assertions)
