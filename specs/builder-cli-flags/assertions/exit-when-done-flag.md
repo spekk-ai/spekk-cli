@@ -3,7 +3,7 @@ id: exit-when-done-flag
 parent: builder-cli-flags
 created: 2026-10-28T02:06:00Z
 priority: 1
-status: done
+status: not_started
 branch: feature/builder-exit-when-done
 ---
 
@@ -19,5 +19,6 @@ An operator can run `spekk builder --exit-when-done` or `spekk loop builder --ex
 - Without the flag, either command keeps polling after `complete`; `none_eligible` still waits with or without the flag.
 - Each continuous command reports one completion-count line on exit after completion, on Ctrl+C, and once if it starts with no work; the count includes successful builds in this run, not failed builds. The count is safe to read from the signal handler.
 - `spekk builder --once` keeps the message `No assertions to work on.` when no work exists.
+- During an active build, Ctrl+C reaches the child, and the parent waits for the child. An interrupted `--once` build that fails exits with status 1. A continuous builder loop keeps running after the child exits.
 
 **Tests:** cmd/spekk/builder_loop_exit_test.go
