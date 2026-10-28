@@ -3,7 +3,8 @@ id: observation-file-format
 parent: observation-lifecycle
 created: 2026-07-26T12:00:00Z
 priority: 1
-status: done
+status: not_started
+branch: ot203-observation-types
 ---
 
 # Observations Are Markdown Files With a Defined Frontmatter Schema
@@ -19,7 +20,7 @@ parent spec and in the observer prompt, and anything that parses observations
 
 - The documented observation frontmatter schema is exactly:
   - `slug` — kebab-case identifier; matches the `observer/<slug>` branch name
-  - `type` — one of `code_spec_misalignment` | `outdated_specs`
+  - `type` — one of `code_spec_misalignment` | `outdated_specs` | `underspecified_spec` | `missing_capability`; other values are rejected
   - `severity` — one of `high` | `medium` | `low`
   - `status` — one of `open` | `resolved` | `dismissed`
   - `created` — ISO 8601 timestamp
@@ -37,6 +38,8 @@ parent spec and in the observer prompt, and anything that parses observations
   ignored), so the format can grow without flag days.
 - `specs/observer-agent/observer.prompt.md` (or its successor) instructs the
   observer to emit observations in exactly this format.
+- The parser and `spekk observer scan-check --type` accept all four types from one closed list and reject other values with an error that names the accepted values.
+- The observer prompt and CLI documentation state when to use each type.
 
 **Note:** `announced` is a timestamp, not a boolean — its value records *when*
 the conversation opened, and its absence (not `announced: false`) encodes
