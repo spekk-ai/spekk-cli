@@ -3,7 +3,7 @@ id: exit-when-done-flag
 parent: builder-cli-flags
 created: 2026-10-28T02:06:00Z
 priority: 1
-status: done
+status: failed
 branch: feature/builder-exit-when-done
 ---
 
