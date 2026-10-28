@@ -462,3 +462,102 @@ func TestExecList_BranchFilterRequiresCrossBranch(t *testing.T) {
 		t.Errorf("expected --cross-branch error, got %q", stderr.String())
 	}
 }
+
+// TestExecList_SortBy verifies --sort-by orders assertions by the named column
+// across formats, combines with filters, and rejects an unknown column.
+func TestExecList_SortBy(t *testing.T) {
+	specsDir := makeTmpSpecs(t) // seeds my-assertion (priority 1, not_started)
+	// Add assertions whose id/title/status/priority orderings all differ from
+	// each other and from parser (filename) order.
+	extra := []struct {
+		id, status, title string
+		priority          int
+	}{
+		{"zulu", "done", "Alpha task", 2},
+		{"bravo", "failed", "Yankee task", 1},
+	}
+	for _, e := range extra {
+		content := fmt.Sprintf("---\nid: %s\nparent: my-spec\ncreated: 2026-01-01T00:00:00Z\npriority: %d\nstatus: %s\n---\n# %s\n", e.id, e.priority, e.status, e.title)
+		if err := os.WriteFile(filepath.Join(specsDir, "my-spec", "assertions", e.id+".md"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	jsonIDs := func(t *testing.T, args []string) []string {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		if code := execList(append(args, "--json"), &stdout, &stderr, specsDir); code != 0 {
+			t.Fatalf("exit non-zero: %s", stderr.String())
+		}
+		var out parser.AssertionsFlatOutput
+		if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+			t.Fatalf("bad json: %v: %s", err, stdout.String())
+		}
+		ids := make([]string, len(out.Assertions))
+		for i, a := range out.Assertions {
+			ids[i] = a.ID
+		}
+		return ids
+	}
+
+	// my-assertion title is "My Assertion"; the three titles order Alpha < My < Yankee.
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"by id", []string{"--sort-by", "id"}, []string{"bravo", "my-assertion", "zulu"}},
+		// bravo and my-assertion are both priority 1; parser (filename) order keeps
+		// bravo first. zulu (priority 2) comes last.
+		{"by priority (parser-order ties)", []string{"--sort-by", "priority"}, []string{"bravo", "my-assertion", "zulu"}},
+		{"by status", []string{"--sort-by", "status"}, []string{"zulu", "bravo", "my-assertion"}}, // done, failed, not_started
+		{"by title", []string{"--sort-by", "title"}, []string{"zulu", "my-assertion", "bravo"}},   // Alpha, My, Yankee
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := jsonIDs(t, tc.args)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v want %v", got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Fatalf("got %v want %v", got, tc.want)
+				}
+			}
+		})
+	}
+
+	t.Run("combines with filter", func(t *testing.T) {
+		// Two not-started assertions differ only if the filter keeps both; here
+		// only my-assertion is not_started, so verify the filter + sort agree.
+		got := jsonIDs(t, []string{"--sort-by", "id", "--status", "done"})
+		if len(got) != 1 || got[0] != "zulu" {
+			t.Fatalf("filter+sort got %v", got)
+		}
+	})
+
+	t.Run("combines with table format order", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		if code := execList([]string{"--sort-by", "id"}, &stdout, &stderr, specsDir); code != 0 {
+			t.Fatalf("exit non-zero: %s", stderr.String())
+		}
+		b := strings.Index(stdout.String(), "bravo")
+		m := strings.Index(stdout.String(), "my-assertion")
+		z := strings.Index(stdout.String(), "zulu")
+		if !(b >= 0 && b < m && m < z) {
+			t.Fatalf("table not id-ordered: %s", stdout.String())
+		}
+	})
+
+	t.Run("unknown column errors on stderr", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := execList([]string{"--sort-by", "bogus"}, &stdout, &stderr, specsDir)
+		if code == 0 {
+			t.Fatal("expected non-zero exit")
+		}
+		for _, col := range []string{"id", "priority", "status", "title"} {
+			if !strings.Contains(stderr.String(), col) {
+				t.Errorf("stderr %q should name valid column %q", stderr.String(), col)
+			}
+		}
+	})
+}
