@@ -38,7 +38,7 @@ Every observation is a markdown file at `observations/<slug>.md` with exactly th
 ```yaml
 ---
 slug: parser-drops-draft-status        # kebab-case, matches the branch name
-type: code_spec_misalignment           # code_spec_misalignment | outdated_specs
+type: code_spec_misalignment           # use one of the four lifecycle types listed below
 severity: high                         # high | medium | low
 status: open                           # open | resolved | dismissed
 created: 2026-07-26T12:00:00Z          # ISO 8601, UTC
@@ -66,6 +66,11 @@ Suggested next steps for human review.
 
 Rules:
 
+- The lifecycle type set is closed. Use only `code_spec_misalignment`, `outdated_specs`, `underspecified_spec`, or `missing_capability` for a top-level observation. The parser and `scan-check` reject every other type.
+- Use `code_spec_misalignment` when implementation does not match a spec declaration.
+- Use `outdated_specs` when a spec no longer reflects current behavior.
+- Use `underspecified_spec` when more than one implementation satisfies the spec and the intended result is unclear.
+- Use `missing_capability` when the specs give no one a capability that users need.
 - **No evidence, no observation.** An observation without at least one `affected` path is invalid; tooling rejects it.
 - **Each `affected` entry is one file, relative to the repository root.** Write `internal/parser/parser.go` — never a directory, never a glob, never a path outside the repository. Cite a line in the prose if it helps; the path itself carries no `:42` suffix.
 
@@ -83,6 +88,8 @@ Each finding is born on a branch named `observer/<slug>` (slug from `scan-check`
 2. **The proposed remedy:**
    - `outdated_specs` (spec-side drift): the actual spec edit under `specs/`
    - `code_spec_misalignment` (code-side drift): **only** the affected assertion's frontmatter status flip `done` → `failed` — no code changes. Flipping to `failed` re-queues the assertion for the builder; you never write implementation code.
+   - `underspecified_spec`: a spec edit that states the intended result.
+   - `missing_capability`: a spec edit that states the missing capability.
 
 Keep the commits separate so a reviewer can take the observation without the remedy (or vice versa) by cherry-picking one commit. Push the branch to origin, then open a PR for it using the PR body template below.
 
@@ -185,7 +192,7 @@ None of these is a failure, and none of them is a scan that found nothing — sa
 
 ### 2. Drift detection
 
-Within your areas, classify what you find into the two observation types.
+Within your areas, classify what you find into the four closed lifecycle types listed above.
 
 #### `code_spec_misalignment` — implementation does not match spec declarations
 
@@ -201,6 +208,16 @@ Within your areas, classify what you find into the two observation types.
 - Identify specs referencing removed/deprecated functionality
 - Detect specs with irrelevant or contradictory success criteria
 - Spec overlap, conflicts, and consolidation opportunities also land here: the remedy commit is the proposed spec edit
+
+#### `underspecified_spec` — more than one implementation satisfies the spec
+
+- Show two distinct implementations that meet the same stated criteria and explain the user-visible difference.
+- Propose a spec edit that identifies the intended result.
+
+#### `missing_capability` — the specs give no one a capability that users need
+
+- Show the user need and the absence of a matching capability in the specs.
+- Propose a spec edit that states the capability and who needs it.
 
 **Severity Guidelines:**
 - **High:** Critical functionality broken, major conflicts blocking work

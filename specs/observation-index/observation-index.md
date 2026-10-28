@@ -39,7 +39,7 @@ New tables (final shape is the builder's call; this is the intent):
 CREATE TABLE observations (
   slug      TEXT,
   ref       TEXT,     -- branch the row was read from (observer/<slug>, main)
-  type      TEXT,     -- code_spec_misalignment | outdated_specs
+  type      TEXT,     -- one of the four closed lifecycle types
   severity  TEXT,     -- high | medium | low
   status    TEXT,     -- open | resolved | dismissed
   created   TEXT,

@@ -63,9 +63,11 @@ func TestParseValidation(t *testing.T) {
 	}{
 		{"announced present valid", map[string]string{"announced": "2026-07-26T13:05:00Z"}, ""},
 		{"pr optional", map[string]string{"pr": "https://github.com/org/repo/pull/7"}, ""},
+		{"underspecified spec", map[string]string{"type": TypeUnderspecifiedSpec}, ""},
+		{"missing capability", map[string]string{"type": TypeMissingCapability}, ""},
 		{"missing slug", map[string]string{"slug": "@empty"}, "slug"},
 		{"bad slug", map[string]string{"slug": "Not_Kebab"}, "kebab-case"},
-		{"bad type", map[string]string{"type": "surprise"}, "type"},
+		{"bad type", map[string]string{"type": "surprise"}, TypeChoices()},
 		{"bad severity", map[string]string{"severity": "urgent"}, "severity"},
 		{"bad status", map[string]string{"status": "parked"}, "status"},
 		{"bad created", map[string]string{"created": "yesterday"}, "created"},
