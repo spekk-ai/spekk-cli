@@ -749,7 +749,7 @@ spekk sandbox create --name my-sandbox --image base
 | `--name <name>` | Sandbox name (required). Lowercase letters, digits, and hyphens, starting with a letter or a digit |
 | `--provider <provider>` | `digitalocean` (default), `gcp` for a Google Cloud VM, or `none` for a machine you already have. `--ip`, `--ssh-key`, or `--ssh-user` implies `none` |
 | `--auth <mode>` | How the agent authenticates Claude: `bedrock` (default) or `subscription` |
-| `--model <name>` | The model pin, `ANTHROPIC_MODEL` in the env file. Default: `ANTHROPIC_MODEL` from your environment, else Opus 5.5 in the form of the mode: `us.anthropic.claude-opus-5-5` for `bedrock`, `claude-opus-5-5` for `subscription`. `--model ""` writes no pin. See [A model pin belongs to its mode](configuration.md#the-control-host-sees-one-credential-of-yours) |
+| `--model <name>` | The model pin, `ANTHROPIC_MODEL` in the env file. Default: Opus 5.5 in the form of the mode: `us.anthropic.claude-opus-5-5` for `bedrock`, `claude-opus-5-5` for `subscription`. `--model ""` writes no pin. See [A model pin belongs to its mode](configuration.md#the-control-host-sees-one-credential-of-yours) |
 | `--region <region>` | DigitalOcean region (default: `nyc1`). For `gcp`, the zone |
 | `--size <size>` | Droplet size slug (default: `s-2vcpu-4gb`). For `gcp`, the machine type |
 | `--project <project>` | Assign the droplet to a DigitalOcean project, by name or UUID. For `gcp`, the project ID |
@@ -838,7 +838,7 @@ spekk sandbox provision my-sandbox --auth subscription  # Change the auth mode
 | `--force` | `-f` | Provision a sandbox whose status is not `provisioning` |
 | `--organization <id>` | | The control host organization, when `provision` registers a new agent |
 
-`provision` checks that the environment variables for the auth mode are set, checks that `/opt/spekk/.provisioned` exists on the machine, and then runs the same three steps `create` runs after its wait, in the same order and through the same code. It marks the sandbox `active`. A sandbox recorded before 1.28.0 has no auth mode on record, and reads as `bedrock`. The env file gets the model pin of `create`: `ANTHROPIC_MODEL` from your environment, else the default of the mode. `provision` has no `--model` flag.
+`provision` checks that the environment variables for the auth mode are set, checks that `/opt/spekk/.provisioned` exists on the machine, and then runs the same three steps `create` runs after its wait, in the same order and through the same code. It marks the sandbox `active`. A sandbox recorded before 1.28.0 has no auth mode on record, and reads as `bedrock`. The env file gets the default model pin of the mode. `provision` has no `--model` flag.
 
 The agent token follows the record:
 

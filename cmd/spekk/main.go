@@ -1606,8 +1606,7 @@ OPTIONS:
                          (uses CLAUDE_CODE_OAUTH_TOKEN from your environment,
                          minted by "claude setup-token")
   --model <name>         Model pin for ANTHROPIC_MODEL in the env file of the
-                         sandbox. Default: ANTHROPIC_MODEL from your
-                         environment, else Opus 5.5 in the form of the mode
+                         sandbox. Default: Opus 5.5 in the form of the mode
                          (us.anthropic.claude-opus-5-5 for bedrock,
                          claude-opus-5-5 for subscription). An empty value
                          ("") writes no pin

@@ -210,7 +210,6 @@ There is no flag, environment variable, or prompt instruction that suppresses dr
 | `AWS_SECRET_ACCESS_KEY` | `bedrock` | AWS credential for the Bedrock API |
 | `AWS_DEFAULT_REGION` | `bedrock` | AWS region, for example `us-east-1` |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `subscription` | Claude subscription token. Mint it with `claude setup-token`, which needs a Claude subscription |
-| `ANTHROPIC_MODEL` | optional | The model pin that `create` and `provision` write to the sandbox. It overrides the default pin, and an empty value writes no pin. The `--model` flag of `create` overrides it. See the pin rule below |
 
 `--provider gcp` needs no variable. It runs the `gcloud` CLI, which uses the account you signed in with `gcloud auth login`.
 
@@ -224,7 +223,7 @@ The CLI does not write the API token, or an agent token that the control host re
 
 **A model pin belongs to its mode.** `ANTHROPIC_MODEL` names a model for the API the sandbox authenticates against, and the names differ. A Bedrock sandbox pins an inference profile such as `us.anthropic.claude-sonnet-5`, which a subscription rejects. When `infrastructure/sandbox/setup-credentials.sh` moves a sandbox between modes, it drops the pin, reports what it dropped, and writes a new pin only when you supply one for the new mode.
 
-**A new sandbox gets a default pin.** `spekk sandbox create` and `spekk sandbox provision` write `ANTHROPIC_MODEL` in the form of the mode: `us.anthropic.claude-opus-5-5` for `bedrock` and `claude-opus-5-5` for `subscription`. The `--model` flag of `create` wins, then `ANTHROPIC_MODEL` in your environment, then the default. An empty value from the flag or the environment writes no pin, and Claude Code then uses its own default. `create` prints the pin that it writes. The Bedrock default is a `us.` inference profile, so for an AWS region outside the US, supply a pin for your region. A `provision` rewrite replaces a pin that you set by hand on the machine, unless you supply that pin again.
+**A new sandbox gets a default pin.** `spekk sandbox create` and `spekk sandbox provision` write `ANTHROPIC_MODEL` in the form of the mode: `us.anthropic.claude-opus-5-5` for `bedrock` and `claude-opus-5-5` for `subscription`. The `--model` flag of `create` overrides the default. An empty flag value writes no pin, and Claude Code then uses its own default. A caller's `ANTHROPIC_MODEL` does not change the sandbox pin. `create` prints the pin that it writes. The Bedrock default is a `us.` inference profile, so for an AWS region outside the US, supply a pin for your region. A `provision` rewrite replaces a pin that you set by hand on the machine.
 
 #### Minting a subscription token
 

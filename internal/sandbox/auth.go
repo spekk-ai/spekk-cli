@@ -2,7 +2,6 @@ package sandbox
 
 import (
 	"fmt"
-	"os"
 )
 
 // AuthMode names the credential a sandbox authenticates Claude with.
@@ -99,15 +98,11 @@ func defaultModel(mode AuthMode) string {
 }
 
 // resolveModel is the model pin that Create and Provision write: the
-// --model flag of create, else ANTHROPIC_MODEL from the environment, else
-// the default of the mode. An empty value from the flag or the environment
+// --model flag of create, else the default of the mode. An empty flag value
 // writes no pin.
 func resolveModel(mode AuthMode, flag *string) string {
 	if flag != nil {
 		return *flag
-	}
-	if model, ok := os.LookupEnv(modelVar); ok {
-		return model
 	}
 	return defaultModel(mode)
 }

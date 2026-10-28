@@ -1,7 +1,6 @@
 package sandbox
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
@@ -154,28 +153,22 @@ func TestBuildMachineEnvContentPinsEachNewType(t *testing.T) {
 // mode fails every turn, so each mode has its own default, and an override
 // wins even when it is empty, which is how an operator asks for no pin.
 func TestResolveModel(t *testing.T) {
-	empty, opus := "", "claude-opus-5-5"
+	empty, opus, sonnet := "", "claude-opus-5-5", "claude-sonnet-5"
 	for _, tc := range []struct {
 		name string
 		mode AuthMode
 		flag *string
-		env  *string // nil: ANTHROPIC_MODEL is not set
+		env  string
 		want string
 	}{
-		{"bedrock default", AuthBedrock, nil, nil, "us.anthropic.claude-opus-5-5"},
-		{"subscription default", AuthSubscription, nil, nil, "claude-opus-5-5"},
-		{"env wins over the default", AuthBedrock, nil, &opus, "claude-opus-5-5"},
-		{"empty env writes no pin", AuthBedrock, nil, &empty, ""},
-		{"flag wins over env", AuthSubscription, &opus, &empty, "claude-opus-5-5"},
-		{"empty flag writes no pin", AuthSubscription, &empty, &opus, ""},
+		{"bedrock default", AuthBedrock, nil, "", "us.anthropic.claude-opus-5-5"},
+		{"subscription default", AuthSubscription, nil, "", "claude-opus-5-5"},
+		{"caller environment does not override bedrock", AuthBedrock, nil, opus, "us.anthropic.claude-opus-5-5"},
+		{"flag overrides default", AuthSubscription, &sonnet, "", "claude-sonnet-5"},
+		{"empty flag writes no pin", AuthSubscription, &empty, "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(modelVar, "")
-			if tc.env == nil {
-				os.Unsetenv(modelVar)
-			} else {
-				t.Setenv(modelVar, *tc.env)
-			}
+			t.Setenv(modelVar, tc.env)
 			if got := resolveModel(tc.mode, tc.flag); got != tc.want {
 				t.Errorf("resolveModel = %q, want %q", got, tc.want)
 			}
