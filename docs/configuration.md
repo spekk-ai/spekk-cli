@@ -223,6 +223,8 @@ The CLI does not write the API token, or an agent token that the control host re
 
 **A model pin belongs to its mode.** `ANTHROPIC_MODEL` names a model for the API the sandbox authenticates against, and the names differ. A Bedrock sandbox pins an inference profile such as `us.anthropic.claude-sonnet-5`, which a subscription rejects. When `infrastructure/sandbox/setup-credentials.sh` moves a sandbox between modes, it drops the pin, reports what it dropped, and writes a new pin only when you supply one for the new mode.
 
+**A new sandbox gets a default pin.** `spekk sandbox create` and `spekk sandbox provision` write `ANTHROPIC_MODEL` in the form of the mode: `us.anthropic.claude-opus-5-5` for `bedrock` and `claude-opus-5-5` for `subscription`. The `--model` flag of `create` overrides the default. An empty flag value writes no pin, and Claude Code then uses its own default. A caller's `ANTHROPIC_MODEL` does not change the sandbox pin. `create` prints the pin that it writes. The Bedrock default is a `us.` inference profile, so for an AWS region outside the US, supply a pin for your region. A `provision` rewrite replaces a pin that you set by hand on the machine.
+
 #### Minting a subscription token
 
 `claude setup-token` mints the long-lived token. It needs a Claude subscription. It runs on any machine with the Claude Code CLI. The sandbox is not involved, and the token is the only thing that reaches it.
@@ -308,6 +310,7 @@ The agent binary on the sandbox reads these variables from `/etc/spekk/agent.env
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` | `bedrock` sandboxes | AWS credentials Claude Code uses to reach the Bedrock API |
 | `CLAUDE_CODE_USE_BEDROCK` | `bedrock` sandboxes | Set to `1`, which routes Claude Code to Bedrock |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `subscription` sandboxes | Claude subscription token |
+| `ANTHROPIC_MODEL` | No | The model that Claude Code uses, in the form of the mode. `create` and `provision` write a default pin. See [A model pin belongs to its mode](#the-control-host-sees-one-credential-of-yours) |
 
 The file carries the variables of one mode only. Claude Code reads whichever of these it finds, so a file with both sets would leave the choice to chance. That is why a change of mode rewrites the file instead of adding to it.
 

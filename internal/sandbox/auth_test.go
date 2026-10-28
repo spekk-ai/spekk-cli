@@ -76,13 +76,14 @@ func testEnvVars() map[string]string {
 }
 
 func TestBuildEnvContentBedrockPinsTheDefaultFile(t *testing.T) {
-	got := buildEnvContent(AuthBedrock, testEnvVars(), "probe", "agenttok", "agent-1", "https://host.example/")
+	got := buildEnvContent(AuthBedrock, testEnvVars(), "us.anthropic.claude-opus-5-5", "probe", "agenttok", "agent-1", "https://host.example/")
 
 	want := strings.Join([]string{
 		"AWS_ACCESS_KEY_ID=akid",
 		"AWS_SECRET_ACCESS_KEY=secret",
 		"AWS_DEFAULT_REGION=us-east-1",
 		"CLAUDE_CODE_USE_BEDROCK=1",
+		"ANTHROPIC_MODEL=us.anthropic.claude-opus-5-5",
 		"GITHUB_TOKEN=ghtok",
 		"SPEKK_HOST=host.example",
 		"SPEKK_AGENT_TOKEN=agenttok",
@@ -102,7 +103,7 @@ func TestBuildEnvContentBedrockPinsTheDefaultFile(t *testing.T) {
 // subscription token and leaves CLAUDE_CODE_USE_BEDROCK behind can keep billing
 // through Bedrock, which is the failure the auth mode exists to prevent.
 func TestBuildEnvContentSubscriptionCarriesNoBedrockCredential(t *testing.T) {
-	got := buildEnvContent(AuthSubscription, testEnvVars(), "probe", "agenttok", "agent-1", "https://host.example/")
+	got := buildEnvContent(AuthSubscription, testEnvVars(), "", "probe", "agenttok", "agent-1", "https://host.example/")
 
 	if !strings.Contains(got, oauthTokenVar+"=oauthtok") {
 		t.Errorf("subscription file is missing the token:\n%s", got)
@@ -129,7 +130,8 @@ func TestBuildEnvContentSubscriptionCarriesNoBedrockCredential(t *testing.T) {
 // A machine-mode file is pinned whole for the two types that the terminal
 // path does not have, so a line of another type, or a GITHUB_TOKEN line with
 // a token that expires in 1 hour, fails here. The bedrock block is the one
-// the pinned bedrock file above already proves.
+// the pinned bedrock file above already proves. The stdin has no model, so
+// each file has the default pin of its type, and none has no pin.
 func TestBuildMachineEnvContentPinsEachNewType(t *testing.T) {
 	shared := "SPEKK_HOST=host.example\nSPEKK_AGENT_TOKEN=agenttok\nSPEKK_AGENT_ID=agent-1\nWORKSPACE=/opt/spekk/workspace\nSPEKK_AGENT_NAME=spekk-probe\n"
 	for _, tc := range []struct {
@@ -138,12 +140,39 @@ func TestBuildMachineEnvContentPinsEachNewType(t *testing.T) {
 		want string
 	}{
 		{AuthNone, map[string]string{}, shared},
-		{AuthAPIKey, map[string]string{apiKeyVar: "sk-key"}, "ANTHROPIC_API_KEY=sk-key\n" + shared},
+		{AuthAPIKey, map[string]string{apiKeyVar: "sk-key"}, "ANTHROPIC_API_KEY=sk-key\nANTHROPIC_MODEL=claude-opus-5-5\n" + shared},
 	} {
 		in := &machineInput{auth: tc.auth, modelEnv: tc.env, controlHost: "https://host.example", githubToken: "ghtok"}
 		if got := buildMachineEnvContent(in, "probe", "agenttok", "agent-1"); got != tc.want {
 			t.Errorf("%s env file:\ngot:\n%s\nwant:\n%s", tc.auth, got, tc.want)
 		}
+	}
+}
+
+// The model pin of create and provision. A pin in the form of the other
+// mode fails every turn, so each mode has its own default, and an override
+// wins even when it is empty, which is how an operator asks for no pin.
+func TestResolveModel(t *testing.T) {
+	empty, opus, sonnet := "", "claude-opus-5-5", "claude-sonnet-5"
+	for _, tc := range []struct {
+		name string
+		mode AuthMode
+		flag *string
+		env  string
+		want string
+	}{
+		{"bedrock default", AuthBedrock, nil, "", "us.anthropic.claude-opus-5-5"},
+		{"subscription default", AuthSubscription, nil, "", "claude-opus-5-5"},
+		{"caller environment does not override bedrock", AuthBedrock, nil, opus, "us.anthropic.claude-opus-5-5"},
+		{"flag overrides default", AuthSubscription, &sonnet, "", "claude-sonnet-5"},
+		{"empty flag writes no pin", AuthSubscription, &empty, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(modelVar, tc.env)
+			if got := resolveModel(tc.mode, tc.flag); got != tc.want {
+				t.Errorf("resolveModel = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -1,6 +1,8 @@
 package sandbox
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // AuthMode names the credential a sandbox authenticates Claude with.
 type AuthMode string
@@ -76,4 +78,40 @@ func authLines(mode AuthMode, envVars map[string]string) []string {
 		"AWS_DEFAULT_REGION=" + envVars["AWS_DEFAULT_REGION"],
 		"CLAUDE_CODE_USE_BEDROCK=1",
 	}
+}
+
+// modelVar pins the model Claude Code uses. Its value is a name in the API
+// of the auth mode, so a pin of one mode is not valid in another.
+const modelVar = "ANTHROPIC_MODEL"
+
+// defaultModel is the model pin of a new sandbox: Opus 5.5, in the form that
+// the API of the mode needs. Bedrock needs an inference profile. AuthNone has
+// no pin, because the API is not known until the person signs in.
+func defaultModel(mode AuthMode) string {
+	switch mode {
+	case AuthBedrock:
+		return "us.anthropic.claude-opus-5-5"
+	case AuthSubscription, AuthAPIKey:
+		return "claude-opus-5-5"
+	}
+	return ""
+}
+
+// resolveModel is the model pin that Create and Provision write: the
+// --model flag of create, else the default of the mode. An empty flag value
+// writes no pin.
+func resolveModel(mode AuthMode, flag *string) string {
+	if flag != nil {
+		return *flag
+	}
+	return defaultModel(mode)
+}
+
+// modelLines is the model pin line of the env file, or no line when there
+// is no pin.
+func modelLines(model string) []string {
+	if model == "" {
+		return nil
+	}
+	return []string{modelVar + "=" + model}
 }

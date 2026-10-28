@@ -749,6 +749,7 @@ spekk sandbox create --name my-sandbox --image base
 | `--name <name>` | Sandbox name (required). Lowercase letters, digits, and hyphens, starting with a letter or a digit |
 | `--provider <provider>` | `digitalocean` (default), `gcp` for a Google Cloud VM, or `none` for a machine you already have. `--ip`, `--ssh-key`, or `--ssh-user` implies `none` |
 | `--auth <mode>` | How the agent authenticates Claude: `bedrock` (default) or `subscription` |
+| `--model <name>` | The model pin, `ANTHROPIC_MODEL` in the env file. Default: Opus 5.5 in the form of the mode: `us.anthropic.claude-opus-5-5` for `bedrock`, `claude-opus-5-5` for `subscription`. `--model ""` writes no pin. See [A model pin belongs to its mode](configuration.md#the-control-host-sees-one-credential-of-yours) |
 | `--region <region>` | DigitalOcean region (default: `nyc1`). For `gcp`, the zone |
 | `--size <size>` | Droplet size slug (default: `s-2vcpu-4gb`). For `gcp`, the machine type |
 | `--project <project>` | Assign the droplet to a DigitalOcean project, by name or UUID. For `gcp`, the project ID |
@@ -837,7 +838,7 @@ spekk sandbox provision my-sandbox --auth subscription  # Change the auth mode
 | `--force` | `-f` | Provision a sandbox whose status is not `provisioning` |
 | `--organization <id>` | | The control host organization, when `provision` registers a new agent |
 
-`provision` checks that the environment variables for the auth mode are set, checks that `/opt/spekk/.provisioned` exists on the machine, and then runs the same three steps `create` runs after its wait, in the same order and through the same code. It marks the sandbox `active`. A sandbox recorded before 1.28.0 has no auth mode on record, and reads as `bedrock`.
+`provision` checks that the environment variables for the auth mode are set, checks that `/opt/spekk/.provisioned` exists on the machine, and then runs the same three steps `create` runs after its wait, in the same order and through the same code. It marks the sandbox `active`. A sandbox recorded before 1.28.0 has no auth mode on record, and reads as `bedrock`. The env file gets the default model pin of the mode. `provision` has no `--model` flag.
 
 The agent token follows the record:
 
@@ -1064,9 +1065,11 @@ The object can also have `"image": "<name>"`, which is optional. It names a temp
 
 | `kind` | Fields | Env file on the machine |
 |------|--------|-------------------------|
-| `none` | none | No model credential. A person signs in to Claude Code on the machine later. Until then the heartbeat of the agent says `claude_signed_in: false` (see [Claude sign-in state](advanced/sandbox-architecture.md#claude-sign-in-state)) |
-| `anthropic_api_key` | `api_key` | `ANTHROPIC_API_KEY` |
-| `bedrock` | `aws_access_key_id`, `aws_secret_access_key`, `aws_region` | The AWS keys, `AWS_DEFAULT_REGION`, and `CLAUDE_CODE_USE_BEDROCK=1` |
+| `none` | none | No model credential and no model pin. A person signs in to Claude Code on the machine later. Until then the heartbeat of the agent says `claude_signed_in: false` (see [Claude sign-in state](advanced/sandbox-architecture.md#claude-sign-in-state)) |
+| `anthropic_api_key` | `api_key` | `ANTHROPIC_API_KEY`, and the model pin `ANTHROPIC_MODEL=claude-opus-5-5` |
+| `bedrock` | `aws_access_key_id`, `aws_secret_access_key`, `aws_region` | The AWS keys, `AWS_DEFAULT_REGION`, `CLAUDE_CODE_USE_BEDROCK=1`, and the model pin `ANTHROPIC_MODEL=us.anthropic.claude-opus-5-5` |
+
+The input has no model field, so the pin is always the default of the kind.
 
 **Flags.** `--size` and `--region` are required. `--label <key>=<value>` can repeat. The key and the value are lowercase `[a-z0-9_-]`, 1 to 63 characters, and the label goes on the droplet as the tag `<key>:<value>`, next to the kind tags of a terminal create. The label tags are in the droplet create request, so a droplet that a killed or failed create leaves has them too. A key that spekk sets itself (`spekk-kind`, `spekk-expires`, `spekk-host`, `spekk-sandbox`) is refused. Any other flag is an error. Without `--release`, a CLI with the version `vX.Y.Z` deploys the agent of the release `vX.Y.Z`, so the CLI and the agent match. Any other build needs `--release <tag>`.
 

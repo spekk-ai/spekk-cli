@@ -135,7 +135,7 @@ func TestNoSecretInTheSSHArgumentList(t *testing.T) {
 
 	for _, user := range []string{"root", "ubuntu"} {
 		for _, mode := range []AuthMode{AuthBedrock, AuthSubscription} {
-			if err := injectCredentials("9.9.9.9", "", "box", user, secrets["agent token"], "agent-1", mode, nil); err != nil {
+			if err := injectCredentials("9.9.9.9", "", "box", user, secrets["agent token"], "agent-1", mode, "", nil); err != nil {
 				t.Fatal(err)
 			}
 		}
