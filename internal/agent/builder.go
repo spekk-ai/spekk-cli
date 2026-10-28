@@ -357,11 +357,11 @@ func RunBuilder(args []string, installDir string) {
 				active.signal(syscall.SIGINT)
 			} else {
 				colorLog(colorYellow, "\nReceived SIGINT. Exiting gracefully...")
+				if !cfg.Once {
+					colorLog(colorGreen, formatLoopComplete(completed.Load()))
+				}
+				os.Exit(0)
 			}
-			if !cfg.Once {
-				colorLog(colorGreen, formatLoopComplete(completed.Load()))
-			}
-			os.Exit(0)
 		}
 	}()
 

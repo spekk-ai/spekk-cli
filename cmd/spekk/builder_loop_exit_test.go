@@ -84,6 +84,62 @@ func TestBuilderLoopExitWhenDone(t *testing.T) {
 	if err != nil || !strings.Contains(out, "No assertions to work on.") || strings.Contains(out, "Builder loop complete.") {
 		t.Fatalf("--once message changed: %v\n%s", err, out)
 	}
+
+	t.Run("once waits for interrupted child", func(t *testing.T) {
+		dir := builderLoopFixture(t, true)
+		fakeDir := t.TempDir()
+		fake := "#!/bin/sh\ntrap 'sleep 0.6; printf done > \"$DONE_FILE\"; exit 130' INT\nprintf started > \"$STARTED_FILE\"\nwhile :; do sleep 0.1; done\n"
+		if err := os.WriteFile(filepath.Join(fakeDir, "claude"), []byte(fake), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		startedFile := filepath.Join(fakeDir, "started")
+		doneFile := filepath.Join(fakeDir, "done")
+		outputFile, err := os.Create(filepath.Join(fakeDir, "output"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer outputFile.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, bin, "builder", "--once")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "PATH="+fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"), "STARTED_FILE="+startedFile, "DONE_FILE="+doneFile)
+		cmd.Stdout = outputFile
+		cmd.Stderr = outputFile
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		finished := make(chan error, 1)
+		go func() { finished <- cmd.Wait() }()
+		tick := time.NewTicker(10 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			if _, err := os.Stat(startedFile); err == nil {
+				break
+			}
+			select {
+			case err := <-finished:
+				t.Fatalf("parent exited before child started: %v", err)
+			case <-ctx.Done():
+				t.Fatal("child did not start")
+			case <-tick.C:
+			}
+		}
+		if err := cmd.Process.Signal(os.Interrupt); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case err := <-finished:
+			if _, statErr := os.Stat(doneFile); statErr != nil {
+				t.Fatalf("parent exited before child finished: %v", statErr)
+			}
+			if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 1 {
+				t.Fatalf("interrupted build must exit 1: %v", err)
+			}
+		case <-ctx.Done():
+			t.Fatal("parent did not exit after child")
+		}
+	})
 }
 
 func interruptWaitingBuilderLoop(bin, dir string, args []string, waitText, path string) (string, error) {
