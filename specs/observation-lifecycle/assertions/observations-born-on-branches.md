@@ -28,6 +28,8 @@ that branch.
   - `outdated_specs` (spec-side drift): the actual spec edit under `specs/`
   - `code_spec_misalignment` (code-side drift): **only** the affected
     assertion's frontmatter status flip `done` → `failed` — no code changes
+  - `underspecified_spec`: a spec edit that states the intended result
+  - `missing_capability`: a spec edit that states the missing capability
 - No observer code path or prompt instruction commits an observation file
   directly to main. On main, observations appear only via merges of observer
   branches.
