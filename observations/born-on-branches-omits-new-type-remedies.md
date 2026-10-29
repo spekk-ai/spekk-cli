@@ -2,7 +2,7 @@
 slug: born-on-branches-omits-new-type-remedies
 type: outdated_specs
 severity: low
-status: open
+status: resolved
 created: 2026-10-29T12:00:00Z
 affected:
   - specs/observation-lifecycle/assertions/observations-born-on-branches.md
