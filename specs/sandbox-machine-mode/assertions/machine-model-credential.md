@@ -16,9 +16,10 @@ As in `specs/sandbox-auth-mode/`, absence is the requirement: a variable of anot
 
 ## Success Criteria
 
-- `bedrock` writes `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (from `aws_region`), and `CLAUDE_CODE_USE_BEDROCK=1`, as the terminal `bedrock` mode does.
-- `anthropic_api_key` writes `ANTHROPIC_API_KEY` only.
-- `none` writes no model credential line.
+- `bedrock` writes `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (from `aws_region`), and `CLAUDE_CODE_USE_BEDROCK=1`, as the terminal `bedrock` mode does, plus the model pin `ANTHROPIC_MODEL=us.anthropic.claude-opus-5-5`.
+- `anthropic_api_key` writes `ANTHROPIC_API_KEY` and the model pin `ANTHROPIC_MODEL=claude-opus-5-5`, and no other model line.
+- `none` writes no model credential line and no model pin.
+- The model pin is not a credential. Its values follow `specs/sandbox-auth-mode/assertions/env-file-matches-auth-mode.md`, and the machine input has no field that changes it.
 - In each kind, the file has none of `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `CLAUDE_CODE_USE_BEDROCK`, or an AWS variable, except the lines that the kind itself writes.
 - The shared lines in machine mode: `SPEKK_HOST`, `SPEKK_AGENT_TOKEN`, `SPEKK_AGENT_ID`, `WORKSPACE`, and `SPEKK_AGENT_NAME`. There is no `GITHUB_TOKEN` line: the installation token lives 1 hour, and git gets a new one from the helper of `machine-git-access`.
 - The record stores the kind as `auth` (`none`, `api-key`, or `bedrock`), and no credential.
