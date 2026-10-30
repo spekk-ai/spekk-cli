@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-10-30T12:00:00Z
+announced: 2026-10-30T19:02:34Z
 affected:
   - specs/sandbox-machine-mode/assertions/machine-model-credential.md
   - internal/sandbox/machine.go
