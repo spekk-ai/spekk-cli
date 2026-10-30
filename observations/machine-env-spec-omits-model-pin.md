@@ -2,7 +2,7 @@
 slug: machine-env-spec-omits-model-pin
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-10-30T12:00:00Z
 announced: 2026-10-30T19:02:34Z
 affected:
