@@ -3,7 +3,8 @@ id: property-sections-are-indexed
 parent: property-format
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: not_started
+status: done
+branch: feat/v2-property-format
 ---
 
 # The Terms, Decisions and Rationale of a Property Are in the Index
@@ -20,3 +21,5 @@ The terms, decisions and rationale hold the intent that is not in the code. An a
 - An assertion with none of these sections has no rows. This is the usual case for a v1 assertion.
 - A parent spec file never adds rows. The sections belong to properties only.
 - `spekk query "SELECT text FROM property_sections WHERE assertion_id = 'x' AND section = 'decisions'"` returns the decisions of `x`.
+
+**Tests:** `internal/parser/property_format_test.go`, `internal/index/property_format_test.go`.

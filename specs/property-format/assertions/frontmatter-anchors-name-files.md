@@ -3,7 +3,8 @@ id: frontmatter-anchors-name-files
 parent: property-format
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: not_started
+status: done
+branch: feat/v2-property-format
 ---
 
 # Each Front-Matter Anchor Names a File That Exists
@@ -19,3 +20,5 @@ A property with no checks can list the files that hold its code in an `anchors` 
 - `spekk validate` fails, with one line that names the assertion file and the anchor, for each anchor that is an absolute path, contains a `..` segment, names a directory, or names no file in the working tree.
 - After `spekk index`, the `anchors` table has one row for each front-matter anchor: `(assertion_id, path, line, source)` with `source = 'frontmatter'` and `line` NULL. `comment-anchors` adds the rows with `source = 'comment'` to the same table.
 - An assertion with no `anchors` key has no front-matter rows, and validates as in v1.
+
+**Tests:** `internal/parser/property_format_test.go`, `internal/validate/property_format_test.go`, `internal/index/property_format_test.go`.

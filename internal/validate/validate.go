@@ -171,6 +171,10 @@ func Run(specsDir string) (*Result, error) {
 			assertions = append(assertions, *assertion)
 
 			checkLockState(*assertion, result)
+			if assertion.RawKind != "" && !parser.IsPropertyKind(assertion.RawKind) {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("%s: unknown kind %q; read as example", relAPath, assertion.RawKind))
+			}
+			checkAnchors(*assertion, filepath.Dir(filepath.Clean(specsDir)), result)
 		}
 
 		// The parser skips a whole spec directory that holds assertion files
@@ -217,6 +221,27 @@ func Run(specsDir string) (*Result, error) {
 	})
 
 	return result, nil
+}
+
+func checkAnchors(a parser.Assertion, root string, result *Result) {
+	for _, anchor := range a.Anchors {
+		if filepath.IsAbs(anchor) {
+			result.addFailure(a.File, fmt.Sprintf("anchor %q is an absolute path", anchor))
+			continue
+		}
+		for _, segment := range strings.Split(filepath.ToSlash(anchor), "/") {
+			if segment == ".." {
+				result.addFailure(a.File, fmt.Sprintf("anchor %q contains a .. segment", anchor))
+				goto nextAnchor
+			}
+		}
+		if info, err := os.Stat(filepath.Join(root, anchor)); err != nil {
+			result.addFailure(a.File, fmt.Sprintf("anchor %q does not name a file: %v", anchor, err))
+		} else if !info.Mode().IsRegular() {
+			result.addFailure(a.File, fmt.Sprintf("anchor %q does not name a file", anchor))
+		}
+	nextAnchor:
+	}
 }
 
 func (r *Result) addFailure(file, message string) {

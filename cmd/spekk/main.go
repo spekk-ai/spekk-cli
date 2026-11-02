@@ -641,7 +641,8 @@ malformed spec or assertion file is a failure here, unlike "spekk next"),
 parent resolution, depends-on validity (kebab-case, exists, no self-reference,
 no cycles), no duplicate spec or assertion ids, lock state (only in_progress
 may carry a locked-by, and it need not carry one), and parent specs carrying
-no rolled-up status field (absent, or the literal value "draft").
+no rolled-up status field (absent, or the literal value "draft"). Each
+front-matter anchor must name a file in the project.
 
 Exit 0 and a one-line summary on stdout when everything is valid. Exit 1 and
 one plain-text failure line per violation (file + problem), sorted by file
@@ -650,7 +651,8 @@ then message, when anything is invalid.
 Warnings go to stderr and never change the exit code: a branch value that
 matches no branch on an assertion that is not done, a builder lock that is
 stale, a "sources" id that names no document, and each source document in
-raw/ that is stale, has no summary, has no file, or has no stub.
+raw/ that is stale, has no summary, has no file, or has no stub. An unknown
+property kind also warns and reads as example.
 `
 
 // execValidate is the testable core of runValidate. It writes the report to

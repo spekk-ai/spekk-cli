@@ -41,12 +41,24 @@ CREATE TABLE IF NOT EXISTS specs (
 );
 CREATE TABLE IF NOT EXISTS assertions (
   id        TEXT PRIMARY KEY,
+  kind      TEXT NOT NULL,
   parent_id TEXT REFERENCES specs(id),
   title     TEXT,
   status    TEXT,
   priority  INTEGER,
   branch    TEXT,
   file      TEXT
+);
+CREATE TABLE IF NOT EXISTS anchors (
+  assertion_id TEXT,
+  path         TEXT,
+  line         INTEGER,
+  source       TEXT
+);
+CREATE TABLE IF NOT EXISTS property_sections (
+  assertion_id TEXT,
+  section      TEXT,
+  text         TEXT
 );
 CREATE TABLE IF NOT EXISTS depends_on (
   assertion_id  TEXT REFERENCES assertions(id),
@@ -208,11 +220,12 @@ func dropAllTables(db *sql.DB) error {
 // the spec file manifest (spec_files) and the sha256 of spec and assertion
 // documents.
 // 9 indexes the underspecified_spec and missing_capability types (no column changes).
+// 10 adds assertion kinds, front-matter anchors, and property sections.
 // Version 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 9
+const schemaVersion = 10
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
@@ -311,6 +324,17 @@ func FormatError(err error) string {
 // from the visible git refs (observations), and from the document corpus. If
 // force is true all tables are dropped and recreated from scratch.
 func BuildIndex(specsDir, dbPath string, force bool) (Stats, error) {
+	if !force {
+		if _, err := os.Stat(dbPath); err == nil {
+			version, err := readSchemaVersion(dbPath)
+			if err != nil {
+				return Stats{}, err
+			}
+			force = version != schemaVersion
+		} else if !os.IsNotExist(err) {
+			return Stats{}, err
+		}
+	}
 	start := time.Now()
 	stats, _, err := build(specsDir, dbPath, force, true, true, false, start)
 	if err != nil {
@@ -396,7 +420,7 @@ func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bo
 	var clear []string
 	if specsPart {
 		clear = append(clear,
-			"DELETE FROM depends_on", "DELETE FROM frontmatter_fields", "DELETE FROM assertions", "DELETE FROM specs",
+			"DELETE FROM depends_on", "DELETE FROM anchors", "DELETE FROM property_sections", "DELETE FROM frontmatter_fields", "DELETE FROM assertions", "DELETE FROM specs",
 			"DELETE FROM observation_files", "DELETE FROM observations",
 			"DELETE FROM index_meta WHERE key = '"+observationRefsKey+"'")
 	}
@@ -471,10 +495,20 @@ func insertSpecs(tx *sql.Tx, result *parser.ParseResult) error {
 
 	for _, a := range result.Assertions {
 		if _, err := tx.Exec(
-			`INSERT INTO assertions (id, parent_id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			a.ID, a.Parent, a.Title, a.Status, a.Priority, a.Branch, a.File,
+			`INSERT INTO assertions (id, kind, parent_id, title, status, priority, branch, file) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			a.ID, a.Kind, a.Parent, a.Title, a.Status, a.Priority, a.Branch, a.File,
 		); err != nil {
 			return fmt.Errorf("cannot insert assertion %q: %w", a.ID, err)
+		}
+		for _, path := range a.Anchors {
+			if _, err := tx.Exec(`INSERT INTO anchors (assertion_id, path, line, source) VALUES (?, ?, NULL, 'frontmatter')`, a.ID, path); err != nil {
+				return fmt.Errorf("cannot insert anchor for %q: %w", a.ID, err)
+			}
+		}
+		for _, section := range a.Sections {
+			if _, err := tx.Exec(`INSERT INTO property_sections (assertion_id, section, text) VALUES (?, ?, ?)`, a.ID, section.Name, section.Text); err != nil {
+				return fmt.Errorf("cannot insert property section for %q: %w", a.ID, err)
+			}
 		}
 
 		if a.DependsOn != "" {

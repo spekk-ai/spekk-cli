@@ -16,6 +16,10 @@ import (
 // Assertion represents a parsed spec assertion with its frontmatter and content.
 type Assertion struct {
 	ID        string
+	Kind      string
+	RawKind   string
+	Anchors   []string
+	Sections  []PropertySection
 	Parent    string
 	Created   string
 	Priority  int
@@ -31,6 +35,70 @@ type Assertion struct {
 	// spelling (flow sequence, comma scalar, block list) arrives in the
 	// same shape. nil when the file has none.
 	Fields map[string][]string
+}
+
+// PropertySection is one named section in an assertion body.
+type PropertySection struct {
+	Name string
+	Text string
+}
+
+var propertyKinds = map[string]bool{
+	"invariant":     true,
+	"ordering":      true,
+	"response":      true,
+	"authorization": true,
+	"example":       true,
+}
+
+// PropertyKind returns the known kind, or example for a v1 or unknown value.
+func PropertyKind(value string) string {
+	if propertyKinds[value] {
+		return value
+	}
+	return "example"
+}
+
+// IsPropertyKind reports whether a front-matter value names a known kind.
+func IsPropertyKind(value string) bool {
+	return propertyKinds[value]
+}
+
+func propertySections(body string) []PropertySection {
+	var sections []PropertySection
+	var name string
+	var lines []string
+	flush := func() {
+		if name != "" {
+			start, end := 0, len(lines)
+			for start < end && strings.TrimSpace(lines[start]) == "" {
+				start++
+			}
+			for end > start && strings.TrimSpace(lines[end-1]) == "" {
+				end--
+			}
+			sections = append(sections, PropertySection{Name: name, Text: strings.Join(lines[start:end], "\n")})
+		}
+	}
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "# ") || strings.HasPrefix(line, "## ") {
+			flush()
+			name = ""
+			lines = nil
+			if strings.HasPrefix(line, "## ") {
+				switch strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "## "))) {
+				case "terms", "decisions", "rationale":
+					name = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "## ")))
+				}
+			}
+			continue
+		}
+		if name != "" {
+			lines = append(lines, line)
+		}
+	}
+	flush()
+	return sections
 }
 
 // Spec represents a parsed spec group with its frontmatter and content.
@@ -663,8 +731,13 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		return nil, err
 	}
 
+	fields := customFields(fm, knownFrontmatterKeys)
 	return &Assertion{
 		ID:        id,
+		Kind:      PropertyKind(fm.get("kind")),
+		RawKind:   fm.get("kind"),
+		Anchors:   fields["anchors"],
+		Sections:  propertySections(body),
 		Parent:    parent,
 		Created:   created,
 		Priority:  priority,
@@ -675,7 +748,7 @@ func parseAssertion(relFilePath string, content string) (*Assertion, error) {
 		File:      relFilePath,
 		Title:     extractTitle(body),
 		Content:   strings.TrimSpace(body),
-		Fields:    customFields(fm, knownFrontmatterKeys),
+		Fields:    fields,
 	}, nil
 }
 
