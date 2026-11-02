@@ -4,6 +4,7 @@ parent: comment-anchors
 created: 2026-11-02T21:30:00Z
 priority: 1
 status: not_started
+branch: feat/v2-comment-anchors
 depends-on: comment-anchor-ids-exist
 ---
 
