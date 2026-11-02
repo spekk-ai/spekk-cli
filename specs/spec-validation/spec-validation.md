@@ -69,3 +69,5 @@ file that the parser would skip-with-warning is instead a hard failure.
   `ParseAssertionContent` wrappers already run the full per-file frontmatter
   validation; `validate` drives those per file to surface every error, rather
   than reimplementing frontmatter parsing.
+
+**v2:** `comment-anchors`, `evidence-markers` and `strictness-config` extend this spec with more checks on the `v2` branch.

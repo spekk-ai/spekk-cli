@@ -96,3 +96,5 @@ experience with the previous one:
 ## Assertions
 
 See `assertions/` for what must be true about the observer agent.
+
+**v2:** `property-prompts` extends the observer prompt with the truth at HEAD on the `v2` branch.
