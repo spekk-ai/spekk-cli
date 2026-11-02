@@ -3,7 +3,7 @@ id: anchors-are-indexed
 parent: comment-anchors
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/v2-comment-anchors
 depends-on: comment-anchor-ids-exist
 ---
@@ -21,3 +21,5 @@ The `anchors` table holds the comment anchors and the front-matter anchors of ea
 - An anchor with an unknown ID adds no row.
 - The index stores the HEAD commit of its build. A reader that calls `EnsureFresh` rebuilds the index when HEAD is now a different commit. Thus the anchors of a new commit show with no manual `spekk index`.
 - `spekk query "SELECT path, line FROM anchors WHERE assertion_id = 'x'"` returns every anchor of `x`.
+
+**Tests:** `internal/index/comment_anchors_test.go` checks comment and front matter rows, unknown IDs, the stored HEAD, and a rebuild after HEAD changes.

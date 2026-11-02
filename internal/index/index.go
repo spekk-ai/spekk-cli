@@ -26,6 +26,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/spekk-ai/spekk-cli/internal/anchors"
 	"github.com/spekk-ai/spekk-cli/internal/observation"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
 )
@@ -221,11 +222,14 @@ func dropAllTables(db *sql.DB) error {
 // documents.
 // 9 indexes the underspecified_spec and missing_capability types (no column changes).
 // 10 adds assertion kinds, front-matter anchors, and property sections.
+// 11 adds comment anchor rows and the HEAD freshness stamp.
 // Version 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 10
+const schemaVersion = 11
+
+const anchorHeadKey = "anchor_head"
 
 // observationRefsKey is the index_meta key holding the observation
 // RefsFingerprint the last build saw.
@@ -422,7 +426,7 @@ func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bo
 		clear = append(clear,
 			"DELETE FROM depends_on", "DELETE FROM anchors", "DELETE FROM property_sections", "DELETE FROM frontmatter_fields", "DELETE FROM assertions", "DELETE FROM specs",
 			"DELETE FROM observation_files", "DELETE FROM observations",
-			"DELETE FROM index_meta WHERE key = '"+observationRefsKey+"'")
+			"DELETE FROM index_meta WHERE key = '"+observationRefsKey+"'", "DELETE FROM index_meta WHERE key = '"+anchorHeadKey+"'")
 	}
 	for _, stmt := range clear {
 		if _, err = tx.Exec(stmt); err != nil {
@@ -437,6 +441,10 @@ func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bo
 
 	if specsPart {
 		if err = insertSpecs(tx, result); err != nil {
+			return stats, false, err
+		}
+		root := filepath.Dir(specsDir)
+		if err = insertCommentAnchors(tx, root, result); err != nil {
 			return stats, false, err
 		}
 		n, err := indexSpecDocuments(tx, result, texts, sums)
@@ -523,6 +531,33 @@ func insertSpecs(tx *sql.Tx, result *parser.ParseResult) error {
 		if err := insertFrontmatterFields(tx, "assertion", a.ID, a.Fields); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func insertCommentAnchors(tx *sql.Tx, root string, result *parser.ParseResult) error {
+	comments, _, err := anchors.Scan(root)
+	if err != nil {
+		return err
+	}
+	known := make(map[string]bool, len(result.Assertions))
+	for _, a := range result.Assertions {
+		known[a.ID] = true
+	}
+	for _, anchor := range comments {
+		if !known[anchor.ID] {
+			continue
+		}
+		if _, err := tx.Exec(`INSERT INTO anchors (assertion_id, path, line, source) VALUES (?, ?, ?, 'comment')`, anchor.ID, anchor.Path, anchor.Line); err != nil {
+			return fmt.Errorf("cannot insert comment anchor for %q: %w", anchor.ID, err)
+		}
+	}
+	head, err := anchors.Head(root)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO index_meta (key, value) VALUES (?, ?)`, anchorHeadKey, head); err != nil {
+		return fmt.Errorf("cannot record anchor HEAD: %w", err)
 	}
 	return nil
 }
@@ -733,8 +768,12 @@ func Refresh(specsDir, dbPath string, background bool) (f Freshness, err error) 
 	if err != nil {
 		return f, err
 	}
-	if specsStale || refsStale {
-		if _, f.Rebuilt, err = build(specsDir, dbPath, false, true, false, !refsStale, start); err != nil {
+	headStale, err := anchorHeadChanged(dbPath, filepath.Dir(specsDir))
+	if err != nil {
+		return f, err
+	}
+	if specsStale || refsStale || headStale {
+		if _, f.Rebuilt, err = build(specsDir, dbPath, false, true, false, !refsStale && !headStale, start); err != nil {
 			return f, err
 		}
 		checked = true
@@ -775,6 +814,27 @@ func Refresh(specsDir, dbPath string, background bool) (f Freshness, err error) 
 	}
 	f.Rebuilt = true
 	return f, nil
+}
+
+func anchorHeadChanged(dbPath, root string) (bool, error) {
+	db, err := openRead(dbPath)
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+	var stored string
+	err = db.QueryRow(`SELECT value FROM index_meta WHERE key = ?`, anchorHeadKey).Scan(&stored)
+	if err == sql.ErrNoRows {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("cannot read anchor HEAD: %w", err)
+	}
+	head, err := anchors.Head(root)
+	if err != nil {
+		return false, err
+	}
+	return stored != head, nil
 }
 
 // observationRefsChanged reports whether the observation-relevant refs

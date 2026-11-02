@@ -18,15 +18,20 @@ type Anchor struct {
 	Line int
 }
 
-var comment = regexp.MustCompile(`(?:#|//|--)[ \t]*spekk:[ \t]+([^ \t\r\n"'\\]+)[ \t]*$`)
+var comment = regexp.MustCompile(`(?:#|//|--)[ \t]*spekk:[ \t]+([^ \t\r\n"'\\]+)[ \t\r]*$`)
 var goTest = regexp.MustCompile(`^[ \t]*func[ \t]+(?:Test|Fuzz)[A-Za-z0-9_]*[ \t]*\(`)
 
-// Scan reads tracked and untracked files that git does not ignore. The bool
-// reports whether root is in a git work tree. Outside git it returns no anchors.
+// Scan reads tracked and untracked files that git does not ignore; the bool reports whether root is in a git work tree.
 func Scan(root string) ([]Anchor, bool, error) {
 	check := exec.Command("git", "-C", root, "rev-parse", "--is-inside-work-tree")
-	inside, err := check.Output()
-	if err != nil || strings.TrimSpace(string(inside)) != "true" {
+	inside, err := check.CombinedOutput()
+	if err != nil {
+		if bytes.Contains(inside, []byte("not a git repository")) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("cannot check git work tree: %w: %s", err, bytes.TrimSpace(inside))
+	}
+	if strings.TrimSpace(string(inside)) != "true" {
 		return nil, false, nil
 	}
 	cmd := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--")
@@ -80,4 +85,16 @@ func hasTestdataSegment(path string) bool {
 		}
 	}
 	return false
+}
+
+// Head returns the current commit, or an empty value before the first commit or outside a git work tree.
+func Head(root string) (string, error) {
+	out, err := exec.Command("git", "-C", root, "rev-parse", "--verify", "HEAD").CombinedOutput()
+	if err != nil {
+		if bytes.Contains(out, []byte("not a git repository")) || bytes.Contains(out, []byte("Needed a single revision")) {
+			return "", nil
+		}
+		return "", fmt.Errorf("cannot read git HEAD: %w: %s", err, bytes.TrimSpace(out))
+	}
+	return strings.TrimSpace(string(out)), nil
 }

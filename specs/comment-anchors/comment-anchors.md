@@ -31,7 +31,7 @@ CHECK (balance >= 0) -- spekk: balance-nonneg
 - An anchor goes only at an enforcement point. It does not go on each line that touches the concept. The coach and builder prompts teach this (`property-prompts`). Code cannot check it.
 - `spekk validate` fails on an anchor ID that does not exist.
 
-## Open choices
+## Resolved choices
 
 - **Only the ID.** An anchor comment holds only `spekk:` and one ID. A comment with more words after `spekk:` is not an anchor. Two properties at one point need two comments. The reason: v1 projects have prose comments such as `# spekk: the binary is installed` (this repository has one in `scripts/assisted-by`). A rule that reads the first word as an ID makes such a project fail `spekk validate`.
 - **Files that spekk scans.** Spekk scans the files that git tracks, and the untracked files that git does not ignore. It skips Markdown files (`.md`), because docs and specs show anchors as examples. It skips each path with a `testdata` directory segment, because test fixtures hold invalid anchors on purpose. It skips binary files (a NUL byte in the first 8000 bytes, the rule that git uses).
