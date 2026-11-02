@@ -95,3 +95,5 @@ See `assertions/` for what must be true.
 - Running `spekk list --long` (or `-l`) adds a file path column to any format.
 - Column widths in table output are derived from content, not fixed.
 - All format flags work with `--status`, `--assertions-only`, and `--specs-dir`.
+
+**v2:** `truth-display` extends this spec with a `TRUTH` column on the `v2` branch.

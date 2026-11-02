@@ -19,3 +19,5 @@ The scanner serves both the known keys (`id`, `parent`, `created`, `priority`, `
 ## Assertions
 
 See `assertions/` for what must be true.
+
+**v2:** `property-format` extends this spec with the `kind` and `anchors` keys on the `v2` branch.

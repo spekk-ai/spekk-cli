@@ -17,3 +17,5 @@ priority: 1
 - `watch-sees-same-tick-edit`: `spekk show --watch` reloads when a spec file gets new content, also when its mtime does not change.
 - `cli-show-json`: `spekk show --json` prints the data of the explorer to stdout, with no file and no browser, also with `--cross-branch`.
 - `watch-error-page-reloads`: the `--watch` error page for specs that do not parse reloads when the specs parse again.
+
+**v2:** `truth-display` extends this spec with the truth and the level of each assertion on the `v2` branch.

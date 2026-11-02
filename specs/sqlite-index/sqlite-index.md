@@ -107,3 +107,5 @@ See `assertions/` for what must be true.
 - `spekk query` supports `--json`, `--tsv`, `--csv` format flags.
 - `spekk next` auto-rebuilds the index when it is stale.
 - `spekk index --force` drops and rebuilds from scratch.
+
+**v2:** `property-format`, `comment-anchors`, `evidence-markers` and `verify-command` extend this spec with more tables on the `v2` branch.

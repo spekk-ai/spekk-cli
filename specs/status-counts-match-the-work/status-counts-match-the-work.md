@@ -16,3 +16,5 @@ priority: 2
 ## Solution
 
 `computeParentStatus` returns `not_started` when all counted (not draft) assertions are `not_started`. The rules for `failed`, `done` and draft stay the same. `spekk status` leaves draft assertions out of the totals and shows them as a separate count.
+
+**v2:** `truth-display` extends this spec with truth counts on the `v2` branch.
