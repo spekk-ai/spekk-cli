@@ -224,6 +224,11 @@ func Run(specsDir string) (*Result, error) {
 }
 
 func checkAnchors(a parser.Assertion, root string, result *Result) {
+	resolvedRoot, rootErr := filepath.Abs(root)
+	if rootErr == nil {
+		resolvedRoot, rootErr = filepath.EvalSymlinks(resolvedRoot)
+	}
+anchors:
 	for _, anchor := range a.Anchors {
 		if filepath.IsAbs(anchor) {
 			result.addFailure(a.File, fmt.Sprintf("anchor %q is an absolute path", anchor))
@@ -232,16 +237,78 @@ func checkAnchors(a parser.Assertion, root string, result *Result) {
 		for _, segment := range strings.Split(filepath.ToSlash(anchor), "/") {
 			if segment == ".." {
 				result.addFailure(a.File, fmt.Sprintf("anchor %q contains a .. segment", anchor))
-				goto nextAnchor
+				continue anchors
 			}
 		}
-		if info, err := os.Stat(filepath.Join(root, anchor)); err != nil {
+		if rootErr != nil {
+			result.addFailure(a.File, fmt.Sprintf("anchor %q cannot resolve the project root: %v", anchor, rootErr))
+			continue
+		}
+		info, outside, err := lstatAnchor(resolvedRoot, anchor)
+		if outside {
+			result.addFailure(a.File, fmt.Sprintf("anchor %q resolves outside the project", anchor))
+			continue
+		}
+		if err != nil {
 			result.addFailure(a.File, fmt.Sprintf("anchor %q does not name a file: %v", anchor, err))
-		} else if !info.Mode().IsRegular() {
+			continue
+		}
+		path := filepath.Join(resolvedRoot, anchor)
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			result.addFailure(a.File, fmt.Sprintf("anchor %q does not name a file: %v", anchor, err))
+			continue
+		}
+		rel, err := filepath.Rel(resolvedRoot, resolved)
+		if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			result.addFailure(a.File, fmt.Sprintf("anchor %q resolves outside the project", anchor))
+			continue
+		}
+		if !info.Mode().IsRegular() {
 			result.addFailure(a.File, fmt.Sprintf("anchor %q does not name a file", anchor))
 		}
-	nextAnchor:
 	}
+}
+
+// lstatAnchor checks each link before it can lead a file lookup outside root.
+func lstatAnchor(root, anchor string) (os.FileInfo, bool, error) {
+	parts := strings.Split(filepath.Clean(anchor), string(filepath.Separator))
+	current := root
+	links := 0
+	var info os.FileInfo
+	for len(parts) > 0 {
+		candidate := filepath.Join(current, parts[0])
+		parts = parts[1:]
+		var err error
+		info, err = os.Lstat(candidate)
+		if err != nil {
+			return nil, false, err
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			current = candidate
+			continue
+		}
+		links++
+		if links > 255 {
+			return nil, false, fmt.Errorf("too many symlinks")
+		}
+		target, err := os.Readlink(candidate)
+		if err != nil {
+			return nil, false, err
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(current, target)
+		}
+		rel, err := filepath.Rel(root, target)
+		if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return nil, true, nil
+		}
+		current = root
+		if rel != "." {
+			parts = append(strings.Split(rel, string(filepath.Separator)), parts...)
+		}
+	}
+	return info, false, nil
 }
 
 func (r *Result) addFailure(file, message string) {

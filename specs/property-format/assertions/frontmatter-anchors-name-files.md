@@ -17,7 +17,7 @@ A property with no checks can list the files that hold its code in an `anchors` 
 
 - `anchors` accepts the list spellings that `frontmatter_fields` accepts: a flow list (`[a.py, b.py]`), a comma-separated scalar, and a block list.
 - Each anchor is a path relative to the project root (the directory that holds `specs/`).
-- `spekk validate` fails, with one line that names the assertion file and the anchor, for each anchor that is an absolute path, contains a `..` segment, names a directory, or names no file in the working tree.
+- `spekk validate` fails, with one line that names the assertion file and the anchor, for each anchor that is an absolute path, contains a `..` segment, names a directory, names no file in the working tree, or resolves through a symlink to a path outside the project. A symlink to a file inside the project passes.
 - After `spekk index`, the `anchors` table has one row for each front-matter anchor: `(assertion_id, path, line, source)` with `source = 'frontmatter'` and `line` NULL. `comment-anchors` adds the rows with `source = 'comment'` to the same table.
 - An assertion with no `anchors` key has no front-matter rows, and validates as in v1.
 
