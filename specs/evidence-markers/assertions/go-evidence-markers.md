@@ -3,7 +3,8 @@ id: go-evidence-markers
 parent: evidence-markers
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: not_started
+status: done
+branch: feat/v2-evidence-markers
 ---
 
 # Spekk Finds Each Go Evidence Marker and the Test It Marks
@@ -20,4 +21,4 @@ A Go marker is a `// spekk: <id>` comment, with an optional ` evidence=<level>` 
 - A `spekk:` comment that is separated from the function by a blank line or by code is not a marker. It is an anchor and follows `comment-anchors`.
 - A marker above a function that is not a `Test` or `Fuzz` function is not a marker. It is an anchor.
 - A marker comment is never also an anchor: it adds no row to the `anchors` table.
-- **Tests:** a marker with and without `evidence=`; two markers above one test; a comment after a blank line is not a marker.
+- **Tests:** `internal/anchors/scan_test.go` and `internal/index/evidence_test.go` check levels, multiple markers, function position, anchor separation, index rows, and HEAD refresh.

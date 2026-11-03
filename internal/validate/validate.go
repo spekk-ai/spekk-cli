@@ -215,17 +215,30 @@ func Run(specsDir string) (*Result, error) {
 	checkBranchRefs(assertions, discoveredBranchNames(specsDir), result)
 	checkDocuments(filepath.Dir(specsDir), specs, assertions, result)
 	root := filepath.Dir(filepath.Clean(specsDir))
-	comments, inGit, err := anchors.Scan(root)
+	scan, inGit, err := anchors.ScanAll(root)
 	if err != nil {
 		return nil, err
 	}
 	if !inGit {
 		result.Warnings = append(result.Warnings, "outside a git work tree; comment anchors were not checked")
 	}
-	for _, anchor := range comments {
+	for _, anchor := range scan.Anchors {
 		if !parser.IsKebabCase(anchor.ID) || !assertionIDs[anchor.ID] {
 			result.Failures = append(result.Failures, Failure{File: anchor.Path, Line: anchor.Line, Message: "anchor names unknown property " + anchor.ID})
 		}
+	}
+
+	validLevels := map[string]bool{"example": true, "property": true, "contract": true, "bounded": true, "proof": true}
+	for _, marker := range scan.Evidence {
+		if !assertionIDs[marker.ID] {
+			result.Failures = append(result.Failures, Failure{File: marker.Path, Line: marker.Line, Message: "evidence marker names unknown property " + marker.ID})
+		}
+		if !validLevels[marker.Level] {
+			result.Failures = append(result.Failures, Failure{File: marker.Path, Line: marker.Line, Message: "unknown evidence level " + marker.Level})
+		}
+	}
+	for _, warning := range scan.Warnings {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("%s:%d: @spekk decorator is not on a pytest test function", warning.Path, warning.Line))
 	}
 
 	result.SpecCount = len(specs)

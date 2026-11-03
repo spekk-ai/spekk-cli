@@ -28,6 +28,17 @@ Python uses a decorator on a pytest test function:
 def test_balance_never_negative(): ...
 ```
 
+A pytest project can put this no-op definition in `conftest.py` so the decorator leaves each test callable:
+
+```python
+def spekk(property_id, *, evidence="example"):
+    def mark(test):
+        return test
+    return mark
+```
+
+The scanner reads the source text. It does not import `conftest.py` or run a test to find a marker. A test file can use `from conftest import spekk` to make the decorator available to pytest.
+
 ## Decisions
 
 - The evidence link goes from the check to the property (William, 2026-11-01).
