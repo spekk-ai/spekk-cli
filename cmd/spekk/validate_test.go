@@ -70,6 +70,19 @@ func TestExecValidate_CleanTree_ExitZero(t *testing.T) {
 	}
 }
 
+func TestExecValidate_NoGit_ExitZeroWithWarning(t *testing.T) {
+	specsDir := makeCleanValidateFixture(t)
+	t.Setenv("PATH", "")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := execValidate(nil, &stdout, &stderr, specsDir)
+
+	if code != 0 || !strings.Contains(stdout.String(), "OK") || !strings.Contains(stderr.String(), "outside a git work tree; comment anchors were not checked") {
+		t.Fatalf("exit = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+	}
+}
+
 // TestExecValidate_BrokenTree_ExitNonZero drives the same CLI path over a
 // fixture with a done assertion that still carries a lock, confirming the
 // failure surfaces on stdout with a non-zero exit code.

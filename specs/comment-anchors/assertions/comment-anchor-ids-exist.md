@@ -3,7 +3,7 @@ id: comment-anchor-ids-exist
 parent: comment-anchors
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: not_started
+status: done
 branch: feat/v2-comment-anchors
 ---
 
@@ -24,4 +24,4 @@ branch: feat/v2-comment-anchors
 - Only regular files are read. Symlinks, directory paths and gitlinks are skipped, including links to files outside the work tree and to devices.
 - If git is not installed, no files are scanned, and `spekk validate` warns and exits 0 for an otherwise valid spec tree.
 - A tree whose anchors all name existing properties validates as before: the same summary line and exit 0.
-- **Tests:** `internal/validate/comment_anchors_test.go` checks unknown and known IDs, all three comment markers, prose, and skipped files.
+- **Tests:** `internal/validate/comment_anchors_test.go` checks unknown and known IDs, all three comment markers, prose, and skipped files. `cmd/spekk/validate_test.go` checks the warning and exit code without git.

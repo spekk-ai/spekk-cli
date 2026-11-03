@@ -3,6 +3,7 @@ package anchors
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,7 +27,7 @@ func Scan(root string) ([]Anchor, bool, error) {
 	check := exec.Command("git", "-C", root, "rev-parse", "--is-inside-work-tree")
 	inside, err := check.CombinedOutput()
 	if err != nil {
-		if bytes.Contains(inside, []byte("not a git repository")) {
+		if errors.Is(err, exec.ErrNotFound) || bytes.Contains(inside, []byte("not a git repository")) {
 			return nil, false, nil
 		}
 		return nil, false, fmt.Errorf("cannot check git work tree: %w: %s", err, bytes.TrimSpace(inside))
@@ -48,7 +49,18 @@ func Scan(root string) ([]Anchor, bool, error) {
 		if strings.HasSuffix(path, ".md") || hasTestdataSegment(path) {
 			continue
 		}
-		content, err := os.ReadFile(filepath.Join(root, path))
+		fullPath := filepath.Join(root, path)
+		info, err := os.Lstat(fullPath)
+		if os.IsNotExist(err) { // A tracked file can be deleted in the work tree.
+			continue
+		}
+		if err != nil {
+			return nil, true, fmt.Errorf("cannot stat %q: %w", path, err)
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		content, err := os.ReadFile(fullPath)
 		if os.IsNotExist(err) { // A tracked file can be deleted in the work tree.
 			continue
 		}

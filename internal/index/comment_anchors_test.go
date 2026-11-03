@@ -40,6 +40,7 @@ anchors: [source.py]
 		t.Fatalf("stored HEAD = %v", got)
 	}
 	must(t, os.WriteFile(source, []byte("# spekk: known-id\n# spekk: known-id\n"), 0o644))
+	gitRun(t, root, "checkout", "-q", "-b", "feature")
 	gitRun(t, root, "add", "source.py")
 	gitRun(t, root, "commit", "-q", "-m", "Change source")
 	rebuilt, err := index.EnsureFresh(specsDir, dbPath)
