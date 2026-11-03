@@ -147,6 +147,7 @@ func Parse(content string) ([]Entry, error) {
 		if current == nil {
 			return nil
 		}
+		// spekk: dont-flag-file-schema
 		if err := validate(*current, len(entries)+1); err != nil {
 			return err
 		}
@@ -186,6 +187,7 @@ func Parse(content string) ([]Entry, error) {
 		}
 		key = strings.TrimSpace(key)
 		value = unquote(strings.TrimSpace(value))
+		// spekk: dont-flag-file-schema
 		if !knownKeys[key] {
 			return nil, fmt.Errorf("%s: entry %d: unknown field %q (known: match, reason, by, until)", FilePath, len(entries)+1, key)
 		}

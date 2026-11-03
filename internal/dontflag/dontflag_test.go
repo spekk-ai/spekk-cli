@@ -16,6 +16,7 @@ const sampleFile = `# .spekk/dont-flag.yaml
   by: "william"
 `
 
+// spekk: dont-flag-file-schema
 func TestParseValidFile(t *testing.T) {
 	entries, err := Parse(sampleFile)
 	if err != nil {
@@ -32,6 +33,7 @@ func TestParseValidFile(t *testing.T) {
 	}
 }
 
+// spekk: dont-flag-file-schema
 func TestParseRejectsMalformedEntries(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -82,6 +84,7 @@ func TestEntryMatching(t *testing.T) {
 	}
 }
 
+// spekk: dont-flag-file-schema
 func TestUntilExpiresEndOfDayUTC(t *testing.T) {
 	e := Entry{Match: "x", Reason: "r", By: "w", Until: "2026-12-31"}
 

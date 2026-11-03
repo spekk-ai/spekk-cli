@@ -824,6 +824,7 @@ func Destroy(p Provider, name string, opts DestroyOptions) error {
 
 	// Revoke first. A machine that is gone with its agent still live on the
 	// control host leaves a credential that nothing points at any more.
+	// spekk: destroy-revokes-first
 	if revoke {
 		if err := revokeRecordedAgent(sandbox.AgentID); err != nil {
 			if !opts.IgnoreRevokeFailure {

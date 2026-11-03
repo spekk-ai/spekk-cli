@@ -6,9 +6,18 @@ priority: 1
 status: done
 branch: feat/sandbox-self-register
 depends-on: control-host-client
+kind: ordering
 ---
 
 # `destroy` Revokes the Agent Before It Touches the Machine
+
+## Terms
+
+- touches the machine: `destroy` stops the agent on a manual machine, deletes a cloud machine or its key pair, or removes the local record.
+
+## Rationale
+
+A machine that is gone while its agent is still live on the control host leaves a credential that nothing points at. (Source: the comment above the revoke in `Destroy`, `internal/sandbox/commands.go`.)
 
 **Tests:** internal/sandbox/register_test.go
 

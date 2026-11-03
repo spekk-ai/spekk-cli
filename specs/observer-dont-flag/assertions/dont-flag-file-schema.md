@@ -4,6 +4,7 @@ parent: observer-dont-flag
 created: 2026-07-26T12:00:00Z
 priority: 1
 status: done
+kind: invariant
 ---
 
 # `.spekk/dont-flag.yaml` Has a Defined, Validated Entry Schema
@@ -33,16 +34,14 @@ fails loudly on malformed ones.
   treated as empty (which would cause a re-flag flood) or silently skipped.
 - An entry whose `until` date has passed no longer suppresses anything.
 
-**Note:** `reason` and `by` being required is the point of the mechanism —
-a suppression with no owner or rationale is exactly the prompt-side invisible
-state this design exists to eliminate.
+## Decisions
 
-**Decision (recorded):** `until` is a date-only value interpreted as
-end-of-day UTC — the entry suppresses through the whole named day and
-expires at the following UTC midnight. Expiry is silent in v1 (no
-warnings). An unknown entry field is an error, not ignored: a typo like
-`untill` silently dropped would turn an intended-to-expire suppression into
-a permanent one.
+- `until` is a date-only value, read as end of day UTC. The entry suppresses through the whole named day and expires at the next UTC midnight. Expiry is silent in v1 (no warnings).
+- An unknown entry field is an error. It is not ignored, because a typo such as `untill` that spekk drops with no message turns a suppression that must expire into a permanent one.
+
+## Rationale
+
+`reason` and `by` are required because they are the point of the mechanism. A suppression with no owner and no reason is the invisible prompt-side state that this design removes.
 
 **Tests:** internal/dontflag/dontflag_test.go (TestParseValidFile,
 TestParseRejectsMalformedEntries, TestUntilExpiresEndOfDayUTC),

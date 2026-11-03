@@ -5,11 +5,16 @@ created: 2026-08-16T00:00:00Z
 priority: 1
 status: done
 depends-on: hash-guard-backup
+kind: invariant
 ---
 
 # A Symlink at a Managed Path Is a Conflict spekk Reports, Not One It Settles
 
-## Description
+## Terms
+
+- managed path: a path that spekk writes or removes. That is a desired path of the current layout, or a legacy shim path that an install migrates.
+
+## Rationale
 
 Ownership by path says spekk writes the file at a managed path. A symlink breaks that. The path is a pointer to a file somewhere else, and that far end is not a path spekk owns. Writing through the link puts spekk's content into another tool's source of truth, usually a dotfiles repository.
 
