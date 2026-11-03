@@ -393,6 +393,8 @@ type FlatAssertion struct {
 	ID        string   `json:"id"`
 	Title     string   `json:"title"`
 	Status    string   `json:"status"`
+	Truth     string   `json:"truth"`
+	Level     string   `json:"level"`
 	Priority  int      `json:"priority"`
 	Branch    string   `json:"branch"`
 	File      string   `json:"file"`
@@ -433,6 +435,8 @@ func buildFlatAssertions(result *ParseResult) []FlatAssertion {
 			ID:        a.ID,
 			Title:     a.Title,
 			Status:    a.Status,
+			Truth:     a.Truth,
+			Level:     a.Level,
 			Priority:  a.Priority,
 			Branch:    a.Branch,
 			File:      a.File,

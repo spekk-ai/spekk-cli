@@ -336,6 +336,12 @@
         }
         .status-unknown::before { content: "\003F"; font-size: 10px; } /* question mark */
 
+        .truth-badge { font-size: 11px; margin-right: 8px; padding: 3px 7px; border-radius: 6px; background: #e7f3ed; color: #14532d; }
+        .truth-unchecked { background: #f1f5f9; color: #475569; border: 1px solid #94a3b8; }
+        .truth-failing { background: #fee2e2; color: #991b1b; }
+        .truth-unconfirmed { background: #fef3c7; color: #92400e; }
+        .truth-not-at-head { background: #f1f5f9; color: #475569; }
+
         @keyframes pulse-yellow {
             0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
             50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); }
@@ -1659,6 +1665,13 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             }
         }
 
+        function truthBadgeHtml(assertion) {
+            var truth = assertion.foreign ? 'not at HEAD' : assertion.truth;
+            var cls = assertion.foreign ? 'not-at-head' : truth;
+            var label = assertion.foreign ? truth : assertion.status + ' · ' + (assertion.level ? assertion.level + ' · ' : '') + truth;
+            return '<span class="truth-badge truth-' + escapeHtml(cls) + '">' + escapeHtml(label) + '</span>';
+        }
+
         // ===== Cross-branch helpers =====
 
         // Human-readable label for a cross-branch state.
@@ -1974,6 +1987,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                     html += '<div style="display: flex; align-items: center;">';
                     html += '<span class="priority-badge priority-' + assertion.priority + '">' + (assertion.priority || '–') + '</span>';
                     html += '<span class="status-badge status-' + escapeHtml(statusClass(assertion.status)) + '"></span>';
+                    html += truthBadgeHtml(assertion);
                     if (aCbState) {
                         html += cbBadgeHtml(aCbState, aCbUnconfirmed);
                     }
@@ -2026,6 +2040,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                 html += '<div class="detail-title">' + escapeHtml(assertion.title) + '</div>';
                 html += '<div class="detail-meta">';
                 html += '<span class="meta-item">Status: <span class="detail-status-badge">' + statusEmoji(assertion.status) + '</span></span>';
+                html += '<span class="meta-item">Truth: ' + truthBadgeHtml(assertion) + '</span>';
                 html += '<span class="meta-item">Priority: <span class="detail-priority-badge">' + assertion.priority + '</span></span>';
                 html += '<span class="meta-item">Parent: <strong>' + escapeHtml(assertion.parent) + '</strong></span>';
                 html += '<span class="meta-item">Branch: <strong>' + escapeHtml(assertion.branch) + '</strong></span>';
@@ -2949,6 +2964,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                     var row = '<div class="sheet-assertion-row' + (isMatch ? ' sheet-assertion-match' : '') + '" data-action="open-assertion" data-assertion-id="' + escapeHtml(a.id) + '">';
                     row += '<span class="priority-badge priority-' + a.priority + '">' + (a.priority || '–') + '</span>';
                     row += '<span class="status-badge status-' + escapeHtml(statusClass(a.status)) + '"></span>';
+                    row += truthBadgeHtml(a);
                     row += '<span>' + statusEmoji(a.status) + '</span>';
                     row += '<span class="sheet-assertion-title">' + escapeHtml(a.title) + '</span>';
                     row += '</div>';

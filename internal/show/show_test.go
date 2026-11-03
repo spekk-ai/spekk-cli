@@ -605,6 +605,9 @@ func TestForeignItemHasMetadataAndFlag(t *testing.T) {
 	if !fa.Foreign || fa.Status != "done" || fa.Priority != 3 {
 		t.Errorf("foreign assertion = {Foreign:%v Status:%q Priority:%d}, want {true done 3}", fa.Foreign, fa.Status, fa.Priority)
 	}
+	if fa.Truth != "" || fa.Level != "" {
+		t.Errorf("foreign assertion at another HEAD has truth %q and level %q", fa.Truth, fa.Level)
+	}
 }
 
 // TestSynthesizeForeignLinkage verifies a synthesized foreign spec and its

@@ -140,19 +140,9 @@ func TestFormatTSV_TabSeparated(t *testing.T) {
 		if !strings.Contains(line, "\t") {
 			t.Errorf("line %d has no tab separator: %q", i, line)
 		}
-		// Ensure no double-tab (would indicate an empty field in the wrong place).
-		if strings.Contains(line, "\t\t") {
+		// Only the last two values can be empty in a row without verify results.
+		if strings.Contains(strings.TrimSuffix(line, "\t\t"), "\t\t") {
 			t.Errorf("line %d has double-tab: %q", i, line)
-		}
-	}
-}
-
-// TestFormatTSV_NoTrailingTab verifies no line ends with a tab.
-func TestFormatTSV_NoTrailingTab(t *testing.T) {
-	out := FormatTSV(twoRows, Options{})
-	for i, line := range strings.Split(out, "\n") {
-		if strings.HasSuffix(line, "\t") {
-			t.Errorf("line %d has trailing tab: %q", i, line)
 		}
 	}
 }
@@ -169,7 +159,7 @@ func TestFormatTSV_SanitizesControlChars(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		if strings.Contains(line, "\t\t") {
+		if strings.Contains(strings.TrimSuffix(line, "\t\t"), "\t\t") {
 			t.Errorf("line %d: embedded tab produced extra column separator: %q", i, line)
 		}
 		if strings.ContainsAny(line, "\n\r") {
@@ -188,8 +178,8 @@ func TestFormatCSV_Header(t *testing.T) {
 		t.Fatal("expected at least one line")
 	}
 	hdr := lines[0]
-	if hdr != "id,status,pri,title" {
-		t.Errorf("CSV header = %q, want %q", hdr, "id,status,pri,title")
+	if hdr != "id,status,pri,title,truth,level" {
+		t.Errorf("CSV header = %q, want %q", hdr, "id,status,pri,title,truth,level")
 	}
 }
 

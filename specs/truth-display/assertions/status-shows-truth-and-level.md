@@ -3,7 +3,8 @@ id: status-shows-truth-and-level
 parent: truth-display
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: not_started
+status: done
+branch: feat/v2-truth-display
 depends-on: truth-at-head-follows-the-evidence
 ---
 
@@ -20,3 +21,5 @@ depends-on: truth-at-head-follows-the-evidence
 - "Overall Progress" has one line with all four values, also when a count is 0: `🔎 Truth: 12 verified · 1 failing · 300 unchecked · 4 unconfirmed`. The four counts add up to `Total`.
 - When the latest run for HEAD was on a dirty work tree, "Overall Progress" has one more line: `⚠️ Results are from a run with uncommitted changes`.
 - The counts are the same as a count of `verify_truth` for the latest run at HEAD (for checked properties) and the calculated value (for prose properties).
+
+**Tests:** `cmd/spekk/truth_display_test.go`

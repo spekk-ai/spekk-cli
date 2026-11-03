@@ -19,6 +19,7 @@ import (
 
 	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
+	"github.com/spekk-ai/spekk-cli/internal/verify"
 )
 
 //go:embed template.html
@@ -93,6 +94,8 @@ type showAssertion struct {
 	Parent    string `json:"parent"`
 	Title     string `json:"title"`
 	Status    string `json:"status"`
+	Truth     string `json:"truth"`
+	Level     string `json:"level"`
 	Priority  int    `json:"priority"`
 	File      string `json:"file"`
 	Content   string `json:"content"`
@@ -198,6 +201,9 @@ func parseSpecs(specsDir string) (*parser.ParseResult, error) {
 	if summary := result.WarningSummary(); summary != "" {
 		fmt.Fprintln(os.Stderr, summary)
 	}
+	if _, err := verify.FillDisplayValues(specsDir, result.Assertions); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -244,6 +250,8 @@ func buildShowData(specsDir string, result *parser.ParseResult) showData {
 			Parent:    a.Parent,
 			Title:     a.Title,
 			Status:    a.Status,
+			Truth:     a.Truth,
+			Level:     a.Level,
 			Priority:  a.Priority,
 			File:      a.File,
 			Content:   a.Content,
