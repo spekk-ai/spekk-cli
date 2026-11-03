@@ -3,7 +3,8 @@ id: strictness-leaves-display-unchanged
 parent: strictness-config
 created: 2026-11-02T21:30:00Z
 priority: 2
-status: not_started
+status: done
+branch: feat/v2-strictness-config
 depends-on: strictness-sets-the-ci-result
 ---
 
@@ -17,3 +18,5 @@ Strictness decides whether CI fails. It does not hide a value or change a value.
 
 - For the same specs and the same verify results, `spekk status`, `spekk list` (all formats), `spekk show --json` and `spekk constraints` give the same output with and without a `[strict]` table.
 - No command hides or renames `unchecked` or `unconfirmed` because of a strictness setting.
+
+**Tests:** `cmd/spekk/strictness_config_test.go`.
