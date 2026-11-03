@@ -18,7 +18,7 @@ assertion belongs to. This makes the default content consistent with
 ## Success Criteria
 
 - `spekk list` (no flags) outputs a header line and one data row per assertion.
-- The header contains `ID`, `STATUS`, `PRI`, `PARENT`, `TITLE` (in that order).
+- The header contains `ID`, `STATUS`, `TRUTH`, `PRI`, `PARENT`, `TITLE` (in that order; see `truth-display`).
 - Each column is space-padded so all values in the column start at the same
   character position.
 - There is no trailing whitespace after the last column (`TITLE`).

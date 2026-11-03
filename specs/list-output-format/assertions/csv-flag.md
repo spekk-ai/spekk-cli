@@ -18,7 +18,7 @@ escaped as `""`.
 
 ## Success Criteria
 
-- `spekk list --csv` produces a header row `id,status,pri,title`.
+- `spekk list --csv` produces a header row `id,status,pri,parent,title,truth,level` (`truth-display`).
 - Fields that contain a comma (e.g. a title like "Auth, Permissions & Roles")
   are double-quoted: `"Auth, Permissions & Roles"`.
 - Fields that contain a double quote are double-quoted and the embedded quote

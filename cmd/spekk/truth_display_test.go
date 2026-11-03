@@ -174,6 +174,43 @@ func TestTruthListFormats(t *testing.T) {
 	}
 }
 
+func TestListGitignoresRebuiltIndex(t *testing.T) {
+	root := t.TempDir()
+	specsDir := filepath.Join(root, "specs")
+	assertionDir := filepath.Join(specsDir, "demo", "assertions")
+	if err := os.MkdirAll(assertionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join(specsDir, "demo", "demo.md"): "---\nid: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\n---\n# Demo\n",
+		filepath.Join(assertionDir, "check.md"):    "---\nid: check\nparent: demo\ncreated: 2026-01-01T00:00:00Z\npriority: 1\nstatus: done\n---\n# Check\n",
+	}
+	for path, value := range files {
+		if err := os.WriteFile(path, []byte(value), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"add", "specs"}, {"-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-q", "-m", "Add specs"}} {
+		if out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf("expected no .gitignore before list, got %v", err)
+	}
+	var out, diagnostic bytes.Buffer
+	if code := execList([]string{"--tsv"}, &out, &diagnostic, specsDir); code != 0 {
+		t.Fatalf("list --tsv: exit %d: %s", code, diagnostic.String())
+	}
+	ignore, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(ignore), ".spekk/index.db") {
+		t.Fatalf("list did not gitignore the index: %q", ignore)
+	}
+}
+
 func TestTruthShowData(t *testing.T) {
 	specsDir := truthProject(t, true)
 	var out bytes.Buffer

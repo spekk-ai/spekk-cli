@@ -33,8 +33,10 @@ func DisplayValues(specsDir string, assertions []parser.Assertion) (map[string]D
 		return values, false, nil
 	}
 	dbPath := index.DBPath(root)
-	if _, err := index.EnsureFresh(specsDir, dbPath); err != nil {
+	if rebuilt, err := index.EnsureFresh(specsDir, dbPath); err != nil {
 		return nil, false, err
+	} else if rebuilt {
+		_ = index.EnsureGitignored(root)
 	}
 	quotedHead := "'" + escapeSQL(head) + "'"
 	query := `SELECT t.assertion_id, t.truth, t.level FROM verify_truth t JOIN verify_runs r ON r.id=t.run_id WHERE r.id=(SELECT MAX(id) FROM verify_runs WHERE "commit"=` + quotedHead + `)`
