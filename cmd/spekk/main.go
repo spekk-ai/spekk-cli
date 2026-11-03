@@ -63,6 +63,9 @@ func main() {
 	case "list":
 		runList(args[1:])
 
+	case "constraints":
+		runConstraints(args[1:])
+
 	case "index":
 		runIndex(args[1:])
 
@@ -2367,6 +2370,7 @@ USAGE:
 COMMANDS:
   init      Set up a project for spec-driven development (creates specs/)
   list      List specs and assertions with optional --status filter and --assertions-only flat output
+  constraints  List properties that anchor on a file
   index     Build .spekk/index.db SQLite index from specs/ (use --force to rebuild from scratch)
   query     Execute a SELECT query against .spekk/index.db (supports --json, --tsv, --csv)
   docs      Search specs, repository docs, and source documents (search, show, add, status)

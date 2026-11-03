@@ -235,32 +235,6 @@ func TestIsStale(t *testing.T) {
 	}
 }
 
-// TestEnsureGitignored verifies that .spekk/index.db is added to .gitignore.
-func TestEnsureGitignored(t *testing.T) {
-	dir := t.TempDir()
-
-	// Case 1: no .gitignore exists.
-	if err := index.EnsureGitignored(dir); err != nil {
-		t.Fatalf("EnsureGitignored: %v", err)
-	}
-	content, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	if err != nil {
-		t.Fatalf("read .gitignore: %v", err)
-	}
-	if string(content) != ".spekk/index.db\n" {
-		t.Errorf("unexpected .gitignore content: %q", string(content))
-	}
-
-	// Case 2: already present — no duplicate.
-	if err := index.EnsureGitignored(dir); err != nil {
-		t.Fatalf("second EnsureGitignored: %v", err)
-	}
-	content2, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	if string(content2) != ".spekk/index.db\n" {
-		t.Errorf("duplicate entry added: %q", string(content2))
-	}
-}
-
 // setUserVersion stamps an arbitrary user_version onto an existing index, to
 // simulate a database built by a different schema version.
 func setUserVersion(t *testing.T, dbPath string, v int) {

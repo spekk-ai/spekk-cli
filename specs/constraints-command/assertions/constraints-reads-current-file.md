@@ -3,7 +3,8 @@ id: constraints-reads-current-file
 parent: constraints-command
 created: 2026-11-02T21:30:00Z
 priority: 2
-status: not_started
+status: done
+branch: feat/v2-constraints-command
 depends-on: constraints-lists-anchored-properties
 ---
 
@@ -19,3 +20,5 @@ The index stores the anchors of its last build. An agent can add or move an anch
 - After an edit that adds `// spekk: <id>` to a file, `spekk constraints <file>` lists `<id>` with no `spekk index` and no commit.
 - After an edit that removes the last anchor of a property from the file, the property is no longer in the list, unless a front-matter anchor names the file.
 - An anchor with an unknown ID gives a warning on stderr with the line, and adds no row.
+
+**Tests:** `cmd/spekk/constraints_test.go`.

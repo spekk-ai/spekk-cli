@@ -39,11 +39,7 @@ func columns(r Row, header bool, opts Options, machine bool) []string {
 	if !machine && header {
 		cols = []string{r.ID, r.Status, "TRUTH", pri}
 	} else if !machine {
-		truth := r.Truth
-		if r.Level != "" {
-			truth = r.Level + " · " + truth
-		}
-		cols = []string{r.ID, r.Status, truth, pri}
+		cols = []string{r.ID, r.Status, TruthCell(r.Truth, r.Level), pri}
 	}
 	if opts.ShowParent {
 		cols = append(cols, r.Parent)
@@ -60,6 +56,14 @@ func columns(r Row, header bool, opts Options, machine bool) []string {
 		}
 	}
 	return cols
+}
+
+// TruthCell formats the truth and level shown in a table cell.
+func TruthCell(truth, level string) string {
+	if level != "" {
+		return level + " · " + truth
+	}
+	return truth
 }
 
 // headerRow returns a Row whose fields are the column header strings.
