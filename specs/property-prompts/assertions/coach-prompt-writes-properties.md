@@ -3,7 +3,8 @@ id: coach-prompt-writes-properties
 parent: property-prompts
 created: 2026-11-02T21:30:00Z
 priority: 2
-status: not_started
+status: done
+branch: feat/v2-property-prompts
 ---
 
 # The Coach Prompt Teaches Properties, Not Steps

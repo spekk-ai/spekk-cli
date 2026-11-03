@@ -167,3 +167,60 @@ func TestEmbeddedFS_CoachPropertyTestsSkill(t *testing.T) {
 		}
 	}
 }
+
+// checkPrompt reads one agent prompt from the embedded FS, the text that
+// `spekk prompt <role>` prints when no override exists. It fails when the
+// prompt uses "declarative" or misses a key text.
+func checkPrompt(t *testing.T, role string, wants []string) {
+	t.Helper()
+	path := "specs/" + role + "-agent/" + role + ".prompt.md"
+	data, err := fs.ReadFile(EmbeddedFS, path)
+	if err != nil {
+		t.Fatalf("expected %s in embedded FS: %v", path, err)
+	}
+	content := string(data)
+	if strings.Contains(strings.ToLower(content), "declarativ") {
+		t.Errorf("%s prompt uses \"declarative\"", role)
+	}
+	for _, want := range wants {
+		if !strings.Contains(content, want) {
+			t.Errorf("%s prompt missing %q", role, want)
+		}
+	}
+}
+
+// TestEmbeddedPrompt_CoachWritesProperties checks the key text of the
+// coach-prompt-writes-properties assertion.
+func TestEmbeddedPrompt_CoachWritesProperties(t *testing.T) {
+	checkPrompt(t, "coach", []string{
+		"steps do not compress, and they go stale first",
+		"kind: invariant",
+		"`invariant`, `ordering`, `response`, `authorization`, `example`",
+		"## Rationale",
+		"only the ledger writes `balance`",
+		"status: not_started             # not_started | in_progress | done | failed | draft",
+	})
+}
+
+// TestEmbeddedPrompt_BuilderBuildsEvidence checks the key text of the
+// builder-prompt-builds-evidence assertion.
+func TestEmbeddedPrompt_BuilderBuildsEvidence(t *testing.T) {
+	checkPrompt(t, "builder", []string{
+		"// spekk: balance-nonneg evidence=property",
+		`@spekk("balance-nonneg", evidence="property")`,
+		"spekk constraints <file>",
+		"spekk verify",
+		"enforcement point",
+		"Spekk reads markers only in Go `_test.go` files and in pytest files (`test_*.py`, `*_test.py`). For a check in another language, keep the `**Tests:**` link and add no marker.",
+	})
+}
+
+// TestEmbeddedPrompt_ObserverWatchesTruth checks the key text of the
+// observer-prompt-watches-truth assertion.
+func TestEmbeddedPrompt_ObserverWatchesTruth(t *testing.T) {
+	checkPrompt(t, "observer", []string{
+		"`failing` or `unconfirmed` is a drift candidate",
+		"weak evidence",
+		"enforcement point",
+	})
+}
