@@ -3,7 +3,8 @@ id: spekk-toml-rejects-unknown-keys
 parent: strictness-config
 created: 2026-11-02T21:30:00Z
 priority: 2
-status: not_started
+status: done
+branch: feat/v2-strictness-config
 depends-on: verify-runs-configured-commands
 ---
 
@@ -20,3 +21,5 @@ A typo such as `[strict.min-levels]` or `invarient = "property"` must fail loudl
 - `spekk validate` fails on an invalid `spekk.toml` with one line `spekk.toml: <problem>` for each problem, and exits 1.
 - `spekk verify` with an invalid `spekk.toml` prints the same problems, exits 1, and runs no command.
 - A project with no `spekk.toml` validates as before.
+
+**Tests:** `cmd/spekk/strictness_config_test.go`.

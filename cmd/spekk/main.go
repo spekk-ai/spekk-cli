@@ -106,7 +106,9 @@ func main() {
 
 	case "verify":
 		if err := verify.Run(findSpecsDir(), args[1:], os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
+			if !errors.Is(err, verify.ErrInvalidConfig) && !errors.Is(err, verify.ErrStrictFailed) {
+				fmt.Fprintln(os.Stderr, "error:", err)
+			}
 			os.Exit(1)
 		}
 
@@ -694,6 +696,13 @@ func execValidate(args []string, stdout, stderr io.Writer, specsDir string) int 
 	}
 	if specsDir == "" {
 		specsDir = findSpecsDir()
+	}
+	_, problems := verify.ReadConfig(filepath.Join(filepath.Dir(specsDir), "spekk.toml"))
+	if len(problems) != 0 {
+		for _, problem := range problems {
+			fmt.Fprintln(stderr, "spekk.toml:", problem)
+		}
+		return 1
 	}
 
 	result, err := validate.Run(specsDir)

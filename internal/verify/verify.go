@@ -2,7 +2,6 @@
 package verify
 
 import (
-	"bufio"
 	"bytes"
 	"database/sql"
 	"encoding/xml"
@@ -13,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,10 +29,9 @@ Configure one or more [[verify.run]] entries in spekk.toml at the project root.
 Each entry needs a command and a junit path or glob.
 `
 
-type runConfig struct{ command, junit string }
 type marker struct{ id, level, language, file, test string }
 type testResult struct{ class, name, outcome string }
-type property struct{ id, file string }
+type property struct{ id, file, status, kind string }
 type resultRow struct{ id, file, test, level, outcome string }
 type truthRow struct {
 	truth, level string
@@ -53,10 +50,14 @@ func Run(specsDir string, args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("use spekk verify --help for usage")
 	}
 	root := filepath.Dir(specsDir)
-	configs, err := readConfig(filepath.Join(root, "spekk.toml"))
-	if err != nil {
-		return err
+	config, problems := ReadConfig(filepath.Join(root, "spekk.toml"))
+	if len(problems) != 0 {
+		for _, problem := range problems {
+			fmt.Fprintln(stderr, "spekk.toml:", problem)
+		}
+		return ErrInvalidConfig
 	}
+	configs := config.Runs
 	if len(configs) == 0 {
 		return fmt.Errorf("configure a [[verify.run]] command and junit path in spekk.toml")
 	}
@@ -198,6 +199,30 @@ func Run(specsDir string, args []string, stdout, stderr io.Writer) error {
 	if err := record(db, head, dirty, started, time.Now(), results, truth); err != nil {
 		return err
 	}
+	strictFailed := false
+	for _, p := range properties {
+		if p.status != "done" {
+			continue
+		}
+		v := truth[p.id]
+		if v.truth == "unchecked" || v.truth == "unconfirmed" {
+			message := fmt.Sprintf("strict: %s is %s", p.id, v.truth)
+			if config.Unchecked == "error" {
+				fmt.Fprintln(stderr, message)
+				strictFailed = true
+			} else {
+				fmt.Fprintln(stderr, "warning: "+message)
+			}
+		}
+		if minimum := config.MinLevel[p.kind]; minimum != "" && strength(v.level) < strength(minimum) {
+			level := v.level
+			if level == "" {
+				level = "no level"
+			}
+			fmt.Fprintf(stderr, "strict: %s is %s, below %s for %s\n", p.id, level, minimum, p.kind)
+			strictFailed = true
+		}
+	}
 	counts := map[string]int{}
 	ids := make([]string, 0, len(truth))
 	for id := range truth {
@@ -216,6 +241,9 @@ func Run(specsDir string, args []string, stdout, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "verify: %d verified, %d failing, %d unchecked, %d unconfirmed\n", counts["verified"], counts["failing"], counts["unchecked"], counts["unconfirmed"])
 	if failed {
 		return errFailed
+	}
+	if strictFailed {
+		return ErrStrictFailed
 	}
 	return nil
 }
@@ -242,75 +270,6 @@ func fsNow(root string) (time.Time, error) {
 	return info.ModTime(), nil
 }
 
-func readConfig(path string) ([]runConfig, error) {
-	f, err := os.Open(path)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	var out []runConfig
-	active := false
-	s := bufio.NewScanner(f)
-	for s.Scan() {
-		line := strings.TrimSpace(s.Text())
-		if strings.HasPrefix(line, "[") {
-			header, _, _ := strings.Cut(line, "#")
-			active = strings.TrimSpace(header) == "[[verify.run]]"
-			if active {
-				out = append(out, runConfig{})
-			}
-			continue
-		}
-		if !active || line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
-		if key != "command" && key != "junit" {
-			continue
-		}
-		var parsed string
-		if strings.HasPrefix(value, `"`) {
-			end := strings.LastIndex(value, `"`)
-			if end <= 0 {
-				return nil, fmt.Errorf("invalid %s in %s", key, path)
-			}
-			parsed, err = strconv.Unquote(value[:end+1])
-			if err != nil {
-				return nil, fmt.Errorf("invalid %s in %s: %w", key, path, err)
-			}
-		} else if strings.HasPrefix(value, "'") {
-			end := strings.LastIndex(value, "'")
-			if end <= 0 {
-				return nil, fmt.Errorf("invalid %s in %s", key, path)
-			}
-			parsed = value[1:end]
-		} else {
-			return nil, fmt.Errorf("%s must be a string in %s", key, path)
-		}
-		if key == "command" {
-			out[len(out)-1].command = parsed
-		} else {
-			out[len(out)-1].junit = parsed
-		}
-	}
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
-	for _, c := range out {
-		if c.command == "" || c.junit == "" {
-			return nil, fmt.Errorf("each [[verify.run]] needs command and junit in %s", path)
-		}
-	}
-	return out, nil
-}
-
 func readIndex(db *sql.DB) ([]marker, []property, error) {
 	rows, err := db.Query(`SELECT assertion_id, level, language, file, test FROM evidence`)
 	if err != nil {
@@ -330,14 +289,14 @@ func readIndex(db *sql.DB) ([]marker, []property, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, err = db.Query(`SELECT id, file FROM assertions`)
+	rows, err = db.Query(`SELECT id, file, status, kind FROM assertions ORDER BY id`)
 	if err != nil {
 		return nil, nil, err
 	}
 	var properties []property
 	for rows.Next() {
 		var p property
-		if err := rows.Scan(&p.id, &p.file); err != nil {
+		if err := rows.Scan(&p.id, &p.file, &p.status, &p.kind); err != nil {
 			rows.Close()
 			return nil, nil, err
 		}
