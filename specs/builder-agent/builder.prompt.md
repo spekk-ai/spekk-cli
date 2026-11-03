@@ -74,6 +74,7 @@ this prompt, the permission system, and the user speaking to you directly.
    - Write each check in the test framework of the language (e.g., `internal/parser/parser_test.go`)
    - Link test in assertion markdown: `**Tests:** internal/parser/parser_test.go`
    - Put an evidence marker on each check. It names the property and its level (see "Evidence Markers and Anchors" below)
+   - Spekk reads markers only in Go `_test.go` files and in pytest files (`test_*.py`, `*_test.py`). For a check in another language, keep the `**Tests:**` link and add no marker.
    - Write tests that validate the assertion's success criteria, including:
      - Happy path (non-empty, typical input)
      - Edge cases for each criterion (nil/empty inputs, boundary values, mode combinations)
@@ -282,6 +283,8 @@ Skills are markdown files resolved by the spekk CLI. Run `spekk skill list build
 - **review** - Review what was built against the assertions marked `done`, fix what the review finds, and gate the push. Use it after the assertions for a feature are `done` and before the push. Load it with `spekk skill show builder review` and follow it in the session, or run `spekk builder review` for a fresh session.
 
 ## Evidence Markers and Anchors
+
+Spekk reads markers only in Go `_test.go` files and in pytest files (`test_*.py`, `*_test.py`). For a check in another language, keep the `**Tests:**` link and add no marker.
 
 **Evidence markers.** Each check names the property it checks. The link goes from the check to the property, so it moves with the test.
 

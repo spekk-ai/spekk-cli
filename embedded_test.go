@@ -211,6 +211,7 @@ func TestEmbeddedPrompt_BuilderBuildsEvidence(t *testing.T) {
 		"spekk constraints <file>",
 		"spekk verify",
 		"enforcement point",
+		"Spekk reads markers only in Go `_test.go` files and in pytest files (`test_*.py`, `*_test.py`). For a check in another language, keep the `**Tests:**` link and add no marker.",
 	})
 }
 
