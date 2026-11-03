@@ -79,7 +79,7 @@ func TestConstraintsListsAnchoredProperties(t *testing.T) {
 	if code != 0 || diagnostic != "" || json.Unmarshal([]byte(output), &rows) != nil || len(rows) != 2 {
 		t.Fatalf("JSON: code %d, stdout %q, stderr %q", code, output, diagnostic)
 	}
-	if len(rows[0]) != 6 || rows[0]["id"] != "beta" || rows[0]["status"] != "not_started" || rows[0]["truth"] != "unchecked" || rows[0]["level"] != "" || rows[0]["title"] != "beta title" || len(rows[0]["lines"].([]any)) != 1 {
+	if len(rows[0]) != 7 || rows[0]["id"] != "beta" || rows[0]["status"] != "not_started" || rows[0]["truth"] != "unchecked" || rows[0]["level"] != "" || rows[0]["dirty"] != false || rows[0]["title"] != "beta title" || len(rows[0]["lines"].([]any)) != 1 {
 		t.Fatalf("JSON beta row: %#v", rows[0])
 	}
 	if rows[1]["id"] != "alpha" || len(rows[1]["lines"].([]any)) != 2 {
@@ -158,7 +158,7 @@ func TestConstraintsShowsRecordedTruth(t *testing.T) {
 	root := filepath.Dir(specsDir)
 	writeConstraintFile(t, root, "code.go", "package fixture\n// spekk: pass\n")
 	code, table, diagnostic := constraintOutput(t, specsDir, filepath.Join(root, "code.go"))
-	if code != 0 || diagnostic != "" || !strings.Contains(table, "pass") || !strings.Contains(table, "property · verified") {
+	if code != 0 || !strings.Contains(diagnostic, "Results are from a run with uncommitted changes") || !strings.Contains(table, "pass") || !strings.Contains(table, "property · verified") {
 		t.Fatalf("recorded truth: code %d, stdout %q, stderr %q", code, table, diagnostic)
 	}
 }

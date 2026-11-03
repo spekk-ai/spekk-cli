@@ -124,6 +124,7 @@ type Spec struct {
 type ParseResult struct {
 	Specs      []Spec
 	Assertions []Assertion
+	Dirty      bool
 
 	// Warnings records every spec or assertion file the walk skipped, one
 	// entry per file, in the order the walk met them. The parser does not

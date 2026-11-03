@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -177,7 +178,9 @@ func Run(specsDir string, args []string, stdout, stderr io.Writer) error {
 		switch r.outcome {
 		case "failed", "error":
 			v.truth = "failing"
-			v.failed = append(v.failed, r.test)
+			if !slices.Contains(v.failed, r.test) {
+				v.failed = append(v.failed, r.test)
+			}
 		case "passed":
 			if v.truth != "failing" {
 				v.truth = "verified"
@@ -233,7 +236,6 @@ func Run(specsDir string, args []string, stdout, stderr io.Writer) error {
 		v := truth[id]
 		counts[v.truth]++
 		if v.truth == "failing" {
-			sort.Strings(v.failed)
 			fmt.Fprintf(stdout, "%s: failing: %s\n", id, strings.Join(v.failed, ", "))
 			failed = true
 		}
@@ -360,18 +362,25 @@ func readJUnit(path string) ([]testResult, error) {
 	var out []testResult
 	var current *testResult
 	depth := 0
+	rootSeen := false
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("not JUnit XML")
 		}
 		switch t := tok.(type) {
 		case xml.Directive:
 			return nil, fmt.Errorf("JUnit directives are not allowed")
 		case xml.StartElement:
+			if !rootSeen {
+				if t.Name.Local != "testsuite" && t.Name.Local != "testsuites" {
+					return nil, fmt.Errorf("not JUnit XML")
+				}
+				rootSeen = true
+			}
 			if t.Name.Local == "testcase" {
 				v := testResult{outcome: "passed"}
 				for _, a := range t.Attr {
@@ -406,6 +415,9 @@ func readJUnit(path string) ([]testResult, error) {
 				}
 			}
 		}
+	}
+	if !rootSeen {
+		return nil, fmt.Errorf("not JUnit XML")
 	}
 	return out, nil
 }

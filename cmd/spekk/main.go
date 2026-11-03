@@ -416,9 +416,14 @@ EXAMPLES:
 	if summary := result.WarningSummary(); summary != "" {
 		fmt.Fprintln(stderr, summary)
 	}
-	if _, err := verify.FillDisplayValues(specsDir, result.Assertions); err != nil {
+	dirty, err := verify.FillDisplayValues(specsDir, result.Assertions)
+	if err != nil {
 		fmt.Fprintf(stderr, "Error: %s\n", err)
 		return 1
+	}
+	result.Dirty = dirty
+	if dirty && !useJSON {
+		fmt.Fprintln(stderr, verify.DirtyNote)
 	}
 
 	// Apply status filter if requested.

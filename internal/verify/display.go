@@ -17,6 +17,8 @@ type DisplayValue struct {
 	Level string
 }
 
+const DirtyNote = "⚠️ Results are from a run with uncommitted changes"
+
 // DisplayValues reads the latest run at HEAD. Prose without a marker uses the
 // same anchor rule as verify, also when no run exists.
 func DisplayValues(specsDir string, assertions []parser.Assertion) (map[string]DisplayValue, bool, error) {

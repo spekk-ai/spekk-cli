@@ -22,6 +22,7 @@ type constraintRow struct {
 	Status string `json:"status"`
 	Truth  string `json:"truth"`
 	Level  string `json:"level"`
+	Dirty  bool   `json:"dirty"`
 	Lines  []int  `json:"lines"`
 	Title  string `json:"title"`
 
@@ -161,19 +162,23 @@ func execConstraints(args []string, stdout, stderr io.Writer, specsDir string) i
 		}
 		return 0
 	}
-	values, _, err := verify.DisplayValues(specsDir, result.Assertions)
+	values, dirty, err := verify.DisplayValues(specsDir, result.Assertions)
 	if err != nil {
 		return constraintError(stderr, err)
 	}
 	for i := range rows {
 		rows[i].Truth = values[rows[i].ID].Truth
 		rows[i].Level = values[rows[i].ID].Level
+		rows[i].Dirty = dirty
 	}
 	if jsonMode {
 		if err := json.NewEncoder(stdout).Encode(rows); err != nil {
 			return constraintError(stderr, err)
 		}
 		return 0
+	}
+	if dirty {
+		fmt.Fprintln(stderr, verify.DirtyNote)
 	}
 	matrix := [][]string{{"ID", "STATUS", "TRUTH", "LINES", "TITLE"}}
 	for _, row := range rows {

@@ -378,6 +378,7 @@ func filterAssertions(result *ParseResult, matches func(Assertion) bool) *ParseR
 	return &ParseResult{
 		Specs:      matchedSpecs,
 		Assertions: matchedAssertions,
+		Dirty:      result.Dirty,
 		Warnings:   result.Warnings,
 	}
 }
@@ -385,6 +386,7 @@ func filterAssertions(result *ParseResult, matches func(Assertion) bool) *ParseR
 // AssertionsFlatOutput is the JSON output for `spekk list --assertions-only`.
 type AssertionsFlatOutput struct {
 	Type       string          `json:"type"`
+	Dirty      bool            `json:"dirty"`
 	Assertions []FlatAssertion `json:"assertions"`
 }
 
@@ -412,7 +414,7 @@ func FormatAssertionsFlat(result *ParseResult) ([]byte, error) {
 		}
 		return flat[i].ID < flat[j].ID
 	})
-	return marshalJSON(AssertionsFlatOutput{Type: "assertions", Assertions: flat})
+	return marshalJSON(AssertionsFlatOutput{Type: "assertions", Dirty: result.Dirty, Assertions: flat})
 }
 
 // FormatAssertionsFlatInOrder is FormatAssertionsFlat without the default
@@ -421,7 +423,7 @@ func FormatAssertionsFlat(result *ParseResult) ([]byte, error) {
 // honours the chosen column instead of re-imposing the default ordering.
 func FormatAssertionsFlatInOrder(result *ParseResult) ([]byte, error) {
 	flat := buildFlatAssertions(result)
-	return marshalJSON(AssertionsFlatOutput{Type: "assertions", Assertions: flat})
+	return marshalJSON(AssertionsFlatOutput{Type: "assertions", Dirty: result.Dirty, Assertions: flat})
 }
 
 func buildFlatAssertions(result *ParseResult) []FlatAssertion {
@@ -474,5 +476,5 @@ func SortAssertions(result *ParseResult, column string) (*ParseResult, error) {
 	copy(sorted, result.Assertions)
 	// spekk: sort-by-flag
 	sort.SliceStable(sorted, func(i, j int) bool { return less(sorted[i], sorted[j]) })
-	return &ParseResult{Specs: result.Specs, Assertions: sorted, Warnings: result.Warnings}, nil
+	return &ParseResult{Specs: result.Specs, Assertions: sorted, Dirty: result.Dirty, Warnings: result.Warnings}, nil
 }

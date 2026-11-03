@@ -719,7 +719,7 @@ func TestWriteJSONMatchesHTML(t *testing.T) {
 	if err := WriteJSON(&out, filepath.Join(empty, "specs"), Options{}); err != nil {
 		t.Fatalf("empty tree: %v", err)
 	}
-	if want := `{"projectName":"empty","specs":[],"assertions":[]}` + "\n"; out.String() != want {
+	if want := `{"projectName":"empty","dirty":false,"specs":[],"assertions":[]}` + "\n"; out.String() != want {
 		t.Errorf("empty tree: got %q, want %q", out.String(), want)
 	}
 }

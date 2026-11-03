@@ -201,6 +201,38 @@ func TestLevelAndFailurePriority(t *testing.T) {
 	}
 }
 
+func TestFailedNamesAreUniqueInFirstSeenOrder(t *testing.T) {
+	root := project(t)
+	propertyFile(t, root, "check", "")
+	write(t, filepath.Join(root, "checks_test.go"), "// spekk: check\nfunc TestOne(t *testing.T) {}\n// spekk: check\nfunc TestTwo(t *testing.T) {}\n")
+	commit(t, root, "Add checks")
+	write(t, filepath.Join(root, "source.xml"), `<testsuite><testcase classname="example.test/acme" name="TestTwo"><failure/></testcase><testcase classname="example.test/acme" name="TestOne"><failure/></testcase><testcase classname="example.test/acme" name="TestTwo/sub"><failure/></testcase></testsuite>`)
+	config(t, root, "cp source.xml result.xml", "result.xml")
+	out, _, err := run(t, root)
+	if err == nil || !strings.Contains(out, "check: failing: TestTwo, TestOne\n") {
+		t.Fatalf("unexpected failed names: %q, %v", out, err)
+	}
+}
+
+func TestInvalidJUnitFileIsAnError(t *testing.T) {
+	root := project(t)
+	propertyFile(t, root, "check", "")
+	commit(t, root, "Add property")
+	for _, content := range []string{"", "<other><testcase name=\"TestCheck\"/></other>"} {
+		write(t, filepath.Join(root, "source.xml"), content)
+		config(t, root, "cp source.xml result.xml", "result.xml")
+		_, diagnostic, err := run(t, root)
+		if err == nil || !strings.Contains(diagnostic, "result.xml: not JUnit XML") {
+			t.Fatalf("input %q: stderr %q, error %v", content, diagnostic, err)
+		}
+	}
+	write(t, filepath.Join(root, "source.xml"), "<testsuite/>")
+	_, diagnostic, err := run(t, root)
+	if err != nil || strings.Contains(diagnostic, "not JUnit XML") {
+		t.Fatalf("valid zero-case JUnit: stderr %q, error %v", diagnostic, err)
+	}
+}
+
 func TestTruthAtHeadAndProseConfirmation(t *testing.T) {
 	root := project(t)
 	propertyFile(t, root, "checked", "")
