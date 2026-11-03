@@ -101,9 +101,11 @@ projects/
 # spekk-linux, spekk-local, spekk.exe, etc.
 bin/spekk-go
 /spekk*
+!/spekk.toml
 dist/
 
 # Generated spec-explorer artifact
 .spekk/index.html
 .spekk/index.db
 .spekk/index.db*
+.spekk/junit/

@@ -541,6 +541,7 @@ func TestInstall_PrunesStampedLegacyShim(t *testing.T) {
 // TestInstall_LeavesASymlinkedLegacyShim: the legacy migration removes a file,
 // which for a symlink would quietly undo a dotfiles setup. It leaves the link
 // and reports it instead.
+// spekk: symlinked-path-is-a-conflict
 func TestInstall_LeavesASymlinkedLegacyShim(t *testing.T) {
 	home := t.TempDir()
 	agentsDir := filepath.Join(home, ".claude", "agents")

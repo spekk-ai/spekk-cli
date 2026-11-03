@@ -194,6 +194,7 @@ func TestReconcile_UpdatesFileAtDesiredPath(t *testing.T) {
 // a second owner — a dotfiles manager, usually. The far end is not a path spekk
 // owns, and only the user can say which tool should win, so spekk writes
 // nothing, removes nothing, and says so.
+// spekk: symlinked-path-is-a-conflict
 func TestReconcile_LeavesASymlinkedPathAlone(t *testing.T) {
 	dir := t.TempDir()
 	elsewhere := filepath.Join(t.TempDir(), "dotfiles-copy.md")
@@ -327,6 +328,7 @@ func TestCheckStale_ReportsEachPathOnce(t *testing.T) {
 // TestCheckStale_ReportsASymlinkedPath: an install cannot fix a path a second
 // tool owns, so the check must not advertise one. It names the link target and
 // asks the user to choose an owner.
+// spekk: symlinked-path-is-a-conflict
 func TestCheckStale_ReportsASymlinkedPath(t *testing.T) {
 	home := t.TempDir()
 	skillFS := fakeSkillFS()
@@ -412,6 +414,7 @@ func TestReconcile_IgnoresItsOwnBackups(t *testing.T) {
 // TestScanOwned_SkipsASymlinkToStampedContent: the prune half must not follow a
 // link another tool made, even when the far end is a spekk file. Without the
 // guard the scan would claim the link and remove it.
+// spekk: symlinked-path-is-a-conflict
 func TestScanOwned_SkipsASymlinkToStampedContent(t *testing.T) {
 	dir := t.TempDir()
 	far := filepath.Join(t.TempDir(), "far.md")

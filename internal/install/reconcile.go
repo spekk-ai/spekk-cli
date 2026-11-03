@@ -244,6 +244,7 @@ func inspect(path string) (managedPath, error) {
 		}
 		return managedPath{State: pathOpaque}, fmt.Errorf("inspecting %s: %w", path, err)
 	}
+	// spekk: symlinked-path-is-a-conflict
 	if fi.Mode()&os.ModeSymlink != 0 {
 		dest, err := os.Readlink(path)
 		if err != nil {

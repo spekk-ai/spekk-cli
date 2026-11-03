@@ -280,6 +280,7 @@ func TestScanCheckSuppression(t *testing.T) {
 	gitT(t, dir, "checkout", "-q", "--", ".spekk/dont-flag.yaml")
 }
 
+// spekk: dont-flag-file-schema
 func TestScanCheckMalformedDontFlagFailsLoudly(t *testing.T) {
 	dir := newObserverRepo(t)
 	writeDontFlagOnMain(t, dir, "- match: \"x/**\"\n  by: \"w\"\n")

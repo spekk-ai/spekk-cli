@@ -465,6 +465,7 @@ func TestExecList_BranchFilterRequiresCrossBranch(t *testing.T) {
 
 // TestExecList_SortBy verifies --sort-by orders assertions by the named column
 // across formats, combines with filters, and rejects an unknown column.
+// spekk: sort-by-flag
 func TestExecList_SortBy(t *testing.T) {
 	specsDir := makeTmpSpecs(t) // seeds my-assertion (priority 1, not_started)
 	// Add assertions whose id/title/status/priority orderings all differ from

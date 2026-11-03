@@ -74,6 +74,7 @@ func TestReportStale_NamesTheFileAndTheFix(t *testing.T) {
 
 // TestReportStale_SymlinkAsksForAnOwnerAndShowsNoCommand: an install cannot
 // settle a path a second tool owns, so the report must not suggest one.
+// spekk: symlinked-path-is-a-conflict
 func TestReportStale_SymlinkAsksForAnOwnerAndShowsNoCommand(t *testing.T) {
 	home := t.TempDir()
 	installInto(t, home)

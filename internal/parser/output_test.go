@@ -510,6 +510,7 @@ func TestMarshalJSON_NoHTMLEscape(t *testing.T) {
 	}
 }
 
+// spekk: sort-by-flag
 func TestSortAssertions(t *testing.T) {
 	// Original (parser) order: b, a, c — priorities and titles chosen so each
 	// column produces a distinct ordering and ties exercise stability.

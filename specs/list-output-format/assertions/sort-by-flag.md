@@ -5,9 +5,19 @@ created: 2026-07-13T01:00:00Z
 priority: 2
 status: done
 depends-on: default-table-format
+kind: invariant
 ---
 
-# `--sort-by` Flag Sorts Output by Named Column
+# `spekk list --sort-by <column>` Prints Its Rows in Stable Ascending Order of the Column
+
+## Terms
+
+- ascending: priority compares as a number (priority 1 first). Title compares with no case (`apple` before `Zebra`). ID and status compare their string values byte by byte.
+- stable: two rows with equal keys keep their parser order.
+
+## Decisions
+
+- `--sort-by` with `--cross-branch` is an error, not a sort of the cross-branch rows (`cmd/spekk/main.go`).
 
 ## Description
 

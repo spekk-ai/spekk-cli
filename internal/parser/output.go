@@ -472,6 +472,7 @@ func SortAssertions(result *ParseResult, column string) (*ParseResult, error) {
 	}
 	sorted := make([]Assertion, len(result.Assertions))
 	copy(sorted, result.Assertions)
+	// spekk: sort-by-flag
 	sort.SliceStable(sorted, func(i, j int) bool { return less(sorted[i], sorted[j]) })
 	return &ParseResult{Specs: result.Specs, Assertions: sorted, Warnings: result.Warnings}, nil
 }

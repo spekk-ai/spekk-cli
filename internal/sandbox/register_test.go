@@ -561,6 +561,7 @@ func TestProvisionNamesTheAgentWhenTheSaveFails(t *testing.T) {
 	}
 }
 
+// spekk: destroy-revokes-first
 func TestDestroyRevokesFirst(t *testing.T) {
 	setup := func(t *testing.T) (*fakeControlHost, string) {
 		isolateConfig(t)
