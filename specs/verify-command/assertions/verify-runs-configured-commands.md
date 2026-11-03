@@ -3,7 +3,7 @@ id: verify-runs-configured-commands
 parent: verify-command
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: done
+status: not_started
 branch: feat/v2-verify-command
 ---
 
@@ -16,7 +16,7 @@ branch: feat/v2-verify-command
 ## Success criteria
 
 - Each command runs once, in file order. A command that exits non-zero does not stop the run: spekk still reads its JUnit files, and runs the next command.
-- A JUnit file is read only if its modification time is at or after the start of the run. A file from an earlier run is not read. Verify prints `<path>: not written by this run` to stderr and exits 1.
+- A JUnit file written by a command in the current run is read, including a file written in the same file system clock tick as the run start. A file with an old modification time is not read. Verify prints `<path>: not written by this run` to stderr and exits 1.
 - A `junit` value that matches no file is an error of the same kind: a message on stderr and exit 1.
 - A command that exits non-zero makes `spekk verify` exit 1 after the run. Its results are still recorded.
 - With no `spekk.toml`, or with no `[[verify.run]]` entry, `spekk verify` prints an error that tells how to configure a run, and exits 1. It runs nothing.
