@@ -3,8 +3,7 @@ id: verify-runs-configured-commands
 parent: verify-command
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: in_progress
-locked-by: builder-spekk-tmp-swt1-552995-1793672445
+status: done
 branch: feat/v2-verify-command
 ---
 

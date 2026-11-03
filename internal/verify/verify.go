@@ -92,6 +92,10 @@ func Run(specsDir string, args []string, stdout, stderr io.Writer) error {
 	}
 	module := goModule(root)
 	started := time.Now()
+	freshSince, err := fsNow(root)
+	if err != nil {
+		return err
+	}
 	var results []resultRow
 	seen := map[int]bool{}
 	failed := false
@@ -116,7 +120,7 @@ func Run(specsDir string, args []string, stdout, stderr io.Writer) error {
 				return err
 			}
 			info, err := os.Stat(path)
-			if err != nil || !info.Mode().IsRegular() || info.ModTime().Before(started) {
+			if err != nil || !info.Mode().IsRegular() || info.ModTime().Before(freshSince) {
 				fmt.Fprintf(stderr, "%s: not written by this run\n", rel(root, path))
 				failed = true
 				continue
@@ -214,6 +218,28 @@ func Run(specsDir string, args []string, stdout, stderr io.Writer) error {
 		return errFailed
 	}
 	return nil
+}
+
+func fsNow(root string) (time.Time, error) {
+	dir := filepath.Join(root, ".spekk")
+	f, err := os.CreateTemp(dir, "verify-clock-")
+	if err != nil {
+		return time.Time{}, fmt.Errorf("create clock file in %s: %w", dir, err)
+	}
+	path := f.Name()
+	info, statErr := f.Stat()
+	closeErr := f.Close()
+	removeErr := os.Remove(path)
+	if statErr != nil {
+		return time.Time{}, fmt.Errorf("stat %s: %w", path, statErr)
+	}
+	if closeErr != nil {
+		return time.Time{}, fmt.Errorf("close %s: %w", path, closeErr)
+	}
+	if removeErr != nil {
+		return time.Time{}, fmt.Errorf("remove %s: %w", path, removeErr)
+	}
+	return info.ModTime(), nil
 }
 
 func readConfig(path string) ([]runConfig, error) {

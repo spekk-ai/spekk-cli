@@ -130,6 +130,21 @@ func TestVerifyRunsConfiguredCommandsAndRejectsStaleFiles(t *testing.T) {
 	}
 }
 
+func TestVerifyAcceptsFreshJUnitFromShellBuiltin(t *testing.T) {
+	root := project(t)
+	propertyFile(t, root, "check", "")
+	write(t, filepath.Join(root, "check_test.go"), "// spekk: check\nfunc TestCheck(t *testing.T) {}\n")
+	commit(t, root, "Add check")
+	write(t, filepath.Join(root, "source.xml"), `<testsuite><testcase classname="example.test/acme" name="TestCheck"/></testsuite>`)
+	config(t, root, `read -r line < source.xml; echo "$line" > result.xml`, "result.xml")
+	for i := 0; i < 50; i++ {
+		out, diagnostic, err := run(t, root)
+		if err != nil || !strings.Contains(out, "1 verified") {
+			t.Fatalf("run %d: stdout=%q stderr=%q err=%v", i+1, out, diagnostic, err)
+		}
+	}
+}
+
 func TestResultsMapByPackageAndModule(t *testing.T) {
 	root := project(t)
 	for _, id := range []string{"one", "two", "py-one", "py-two"} {
