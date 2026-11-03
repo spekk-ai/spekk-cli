@@ -1,16 +1,11 @@
 // Package index builds and queries a SQLite index of the spec tree and of
 // the cross-branch observation set.
 // The index is stored at .spekk/index.db at the repo root (adjacent to specs/).
-// It is a derived artifact — the Markdown files remain the source of truth.
-//
-// The invariant: every table in .spekk/index.db is either rebuildable from
-// plaintext in the repo/branch set, or safe to lose. SQLite is strictly a
-// derived, ephemeral layer — deleting .spekk/index.db loses nothing, and a
-// rebuild reproduces it from the working tree and the visible git refs. No
-// lifecycle state exists only here. Prompts and agents get SELECT-only
-// access via `spekk query` (read-only connection); all writes happen through
-// Go code paths in this package. The index may cache, accelerate, and join;
-// it may never remember.
+// The Markdown files remain the source of truth for specs. Most index rows
+// can be rebuilt from project files and visible git refs. Verify run history
+// is diagnostic evidence that a force rebuild can discard. No lifecycle
+// state exists only here. Prompts and agents get SELECT-only access through
+// spekk query. Go code writes the index.
 package index
 
 import (
@@ -57,6 +52,27 @@ CREATE TABLE IF NOT EXISTS evidence (
   file TEXT,
   line INTEGER,
   test TEXT
+);
+CREATE TABLE IF NOT EXISTS verify_runs (
+  id INTEGER PRIMARY KEY,
+  "commit" TEXT,
+  dirty INTEGER,
+  started TEXT,
+  finished TEXT
+);
+CREATE TABLE IF NOT EXISTS verify_results (
+  run_id INTEGER,
+  assertion_id TEXT,
+  file TEXT,
+  test TEXT,
+  level TEXT,
+  outcome TEXT
+);
+CREATE TABLE IF NOT EXISTS verify_truth (
+  run_id INTEGER,
+  assertion_id TEXT,
+  truth TEXT,
+  level TEXT
 );
 CREATE TABLE IF NOT EXISTS anchors (
   assertion_id TEXT,
@@ -231,12 +247,12 @@ func dropAllTables(db *sql.DB) error {
 // 9 indexes the underspecified_spec and missing_capability types (no column changes).
 // 10 adds assertion kinds, front-matter anchors, and property sections.
 // 11 adds comment anchor rows and the HEAD freshness stamp.
-// 12 adds evidence marker rows.
+// 12 adds evidence marker rows. 13 adds verify history.
 // Version 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 12
+const schemaVersion = 13
 
 const anchorHeadKey = "anchor_head"
 

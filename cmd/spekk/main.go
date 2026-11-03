@@ -28,6 +28,7 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/status"
 	"github.com/spekk-ai/spekk-cli/internal/update"
 	"github.com/spekk-ai/spekk-cli/internal/validate"
+	"github.com/spekk-ai/spekk-cli/internal/verify"
 	pkgversion "github.com/spekk-ai/spekk-cli/internal/version"
 )
 
@@ -99,6 +100,12 @@ func main() {
 
 	case "validate":
 		runValidate(args[1:])
+
+	case "verify":
+		if err := verify.Run(findSpecsDir(), args[1:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
 
 	case "show":
 		showSpekk(args[1:])
@@ -2360,6 +2367,7 @@ COMMANDS:
   show      Generate and display spec explorer web interface (-w to watch, --json for data)
   status    Show comprehensive overview of all specs and assertions
   validate  Check specs/ against a fixed set of invariants; exit non-zero on any violation
+  verify    Run configured checks and record truth at HEAD from JUnit results
   serve     Start WebSocket server for browser extension (--port, --host)
   coach     Launch the Coach Agent to create and refine specs
   builder   Launch the Builder Agent to implement specs
