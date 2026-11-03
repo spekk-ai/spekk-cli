@@ -2,7 +2,7 @@
 slug: observer-prompt-suppression-says-both-types
 type: outdated_specs
 severity: low
-status: open
+status: resolved
 created: 2026-11-02T12:00:00Z
 affected:
   - specs/observer-agent/observer.prompt.md
