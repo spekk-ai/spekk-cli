@@ -14,6 +14,7 @@ import (
 
 func TestV1TreeDefaults(t *testing.T) {
 	specsDir := makeSpecs(t)
+	gitRun(t, filepath.Dir(specsDir), "init", "-q")
 	result, err := validate.Run(specsDir)
 	must(t, err)
 	if !result.Passed() || len(result.Warnings) != 0 || result.SpecCount != 1 || result.AssertionCount != 2 {

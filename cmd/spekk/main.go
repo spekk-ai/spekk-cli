@@ -642,7 +642,8 @@ parent resolution, depends-on validity (kebab-case, exists, no self-reference,
 no cycles), no duplicate spec or assertion ids, lock state (only in_progress
 may carry a locked-by, and it need not carry one), and parent specs carrying
 no rolled-up status field (absent, or the literal value "draft"). Each
-front-matter anchor must name a file in the project.
+front-matter anchor must name a file in the project. A comment anchor in a
+Git source file must name an assertion ID.
 
 Exit 0 and a one-line summary on stdout when everything is valid. Exit 1 and
 one plain-text failure line per violation (file + problem), sorted by file
@@ -652,7 +653,8 @@ Warnings go to stderr and never change the exit code: a branch value that
 matches no branch on an assertion that is not done, a builder lock that is
 stale, a "sources" id that names no document, and each source document in
 raw/ that is stale, has no summary, has no file, or has no stub. An unknown
-property kind also warns and reads as example.
+property kind also warns and reads as example. Outside a git work tree,
+comment anchors are not checked and a warning is printed.
 `
 
 // execValidate is the testable core of runValidate. It writes the report to

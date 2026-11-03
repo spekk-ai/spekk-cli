@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/spekk-ai/spekk-cli/internal/anchors"
 	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/docs"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
@@ -30,12 +31,16 @@ import (
 // Failure is a single validation violation, tied to the file it was found in.
 type Failure struct {
 	File    string
+	Line    int
 	Message string
 }
 
 // String renders a failure as a single plain-text line:
 // "<file>: <message>".
 func (f Failure) String() string {
+	if f.Line > 0 {
+		return fmt.Sprintf("%s:%d: %s", f.File, f.Line, f.Message)
+	}
 	return fmt.Sprintf("%s: %s", f.File, f.Message)
 }
 
@@ -209,6 +214,19 @@ func Run(specsDir string) (*Result, error) {
 	checkCycles(assertions, result)
 	checkBranchRefs(assertions, discoveredBranchNames(specsDir), result)
 	checkDocuments(filepath.Dir(specsDir), specs, assertions, result)
+	root := filepath.Dir(filepath.Clean(specsDir))
+	comments, inGit, err := anchors.Scan(root)
+	if err != nil {
+		return nil, err
+	}
+	if !inGit {
+		result.Warnings = append(result.Warnings, "outside a git work tree; comment anchors were not checked")
+	}
+	for _, anchor := range comments {
+		if !parser.IsKebabCase(anchor.ID) || !assertionIDs[anchor.ID] {
+			result.Failures = append(result.Failures, Failure{File: anchor.Path, Line: anchor.Line, Message: "anchor names unknown property " + anchor.ID})
+		}
+	}
 
 	result.SpecCount = len(specs)
 	result.AssertionCount = len(assertions)
@@ -216,6 +234,9 @@ func Run(specsDir string) (*Result, error) {
 	sort.Slice(result.Failures, func(i, j int) bool {
 		if result.Failures[i].File != result.Failures[j].File {
 			return result.Failures[i].File < result.Failures[j].File
+		}
+		if result.Failures[i].Line != result.Failures[j].Line {
+			return result.Failures[i].Line < result.Failures[j].Line
 		}
 		return result.Failures[i].Message < result.Failures[j].Message
 	})

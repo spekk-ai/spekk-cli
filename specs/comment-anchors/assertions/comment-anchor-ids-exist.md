@@ -3,7 +3,8 @@ id: comment-anchor-ids-exist
 parent: comment-anchors
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: not_started
+status: done
+branch: feat/v2-comment-anchors
 ---
 
 # Every Comment Anchor Names a Property That Exists
@@ -20,5 +21,7 @@ status: not_started
 - An anchor whose ID is not kebab-case (`# spekk: Balance`) is a failure of the same form. It is not ignored.
 - The spec tree and the source of this repository at `main` 299283b have no anchor, so they validate with exit 0.
 - Anchors in `.md` files, in a `testdata` directory, in binary files and in files that git ignores are not read.
+- Only regular files are read. Symlinks, directory paths and gitlinks are skipped, including links to files outside the work tree and to devices.
+- If git is not installed, no files are scanned, and `spekk validate` warns and exits 0 for an otherwise valid spec tree.
 - A tree whose anchors all name existing properties validates as before: the same summary line and exit 0.
-- **Tests:** an unknown ID fails with path and line; a known ID passes; each of the three comment markers; a prose comment after `spekk:` is not an anchor; an anchor in a `.md` file and one under `testdata/` are not read.
+- **Tests:** `internal/validate/comment_anchors_test.go` checks unknown and known IDs, all three comment markers, prose, and skipped files. `cmd/spekk/validate_test.go` checks the warning and exit code without git.

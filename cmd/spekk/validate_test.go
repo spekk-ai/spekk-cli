@@ -52,14 +52,34 @@ status: not_started
 func TestExecValidate_CleanTree_ExitZero(t *testing.T) {
 	specsDir := makeCleanValidateFixture(t)
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := os.WriteFile(filepath.Join(specsDir, "source.py"), []byte("# spekk: missing-id\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	code := execValidate(nil, &stdout, io.Discard, specsDir)
+	code := execValidate(nil, &stdout, &stderr, specsDir)
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d; stdout: %q", code, stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "OK") {
 		t.Errorf("expected a success summary on stdout, got: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "outside a git work tree; comment anchors were not checked") {
+		t.Errorf("expected an anchor warning on stderr, got: %q", stderr.String())
+	}
+}
+
+func TestExecValidate_NoGit_ExitZeroWithWarning(t *testing.T) {
+	specsDir := makeCleanValidateFixture(t)
+	t.Setenv("PATH", "")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := execValidate(nil, &stdout, &stderr, specsDir)
+
+	if code != 0 || !strings.Contains(stdout.String(), "OK") || !strings.Contains(stderr.String(), "outside a git work tree; comment anchors were not checked") {
+		t.Fatalf("exit = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
 	}
 }
 
