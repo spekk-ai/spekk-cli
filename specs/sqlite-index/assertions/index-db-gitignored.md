@@ -7,22 +7,15 @@ status: done
 depends-on: index-command-builds-db
 ---
 
-# `.spekk/index.db` Is Added to `.gitignore`
+# Index Database Files Are Added to `.gitignore`
 
 ## Description
 
-The SQLite index is a local build artifact derived from the Markdown source
-files. It must not be committed to the repo. `spekk index` ensures
-`.spekk/index.db` (or the entire `.spekk/` directory) is gitignored.
+The SQLite index is a local build artifact derived from the Markdown source files. Its files must not be committed to the repo. `spekk index` ensures `.spekk/index.db`, `.spekk/index.db-wal`, and `.spekk/index.db-shm` are gitignored.
 
 ## Success Criteria
 
-- After running `spekk index` in a repo whose `.gitignore` does not yet
-  mention `.spekk/`, the repo root `.gitignore` contains a line for
-  `.spekk/index.db` or `.spekk/`.
-- If `.gitignore` already contains the entry, `spekk index` does not add a
-  duplicate.
-- `git status` in the test repo after `spekk index` does not show
-  `.spekk/index.db` as an untracked file (confirming gitignore works).
-- If no `.gitignore` exists at the repo root, `spekk index` creates one
-  containing the entry.
+- After running `spekk index` in a repo whose `.gitignore` does not yet mention `.spekk/`, the repo root `.gitignore` contains a line for `.spekk/index.db*` or `.spekk/`.
+- If `.gitignore` already contains `.spekk/index.db`, `spekk index` adds the new pattern once and does not add a duplicate on later runs.
+- `git status` in the test repo after an index rebuild does not show any `.spekk/` file as untracked.
+- If no `.gitignore` exists at the repo root, `spekk index` creates one containing the new pattern.

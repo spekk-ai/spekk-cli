@@ -935,11 +935,11 @@ func specsNewer(specsDir, dbPath string) (bool, error) {
 	return newest.After(dbInfo.ModTime()), nil
 }
 
-// EnsureGitignored adds .spekk/index.db (or .spekk/) to .gitignore at repoRoot
+// EnsureGitignored adds .spekk/index.db* (or .spekk/) to .gitignore at repoRoot
 // if not already present. Creates .gitignore if it doesn't exist.
 func EnsureGitignored(repoRoot string) error {
 	gitignorePath := filepath.Join(repoRoot, ".gitignore")
-	entry := ".spekk/index.db"
+	entry := ".spekk/index.db*"
 
 	// Read existing .gitignore if present.
 	var existing string
@@ -949,7 +949,7 @@ func EnsureGitignored(repoRoot string) error {
 	}
 	existing = string(raw)
 
-	// Check if already covered (handles .spekk/ or .spekk/index.db).
+	// Check if the database and its journal files are already covered.
 	for _, line := range strings.Split(existing, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == ".spekk/" || trimmed == ".spekk" || trimmed == entry {

@@ -33,8 +33,7 @@ Builds or updates `.spekk/index.db` at the repo root (adjacent to `specs/`).
 - Is idempotent: running twice produces the same result.
 - `--force` drops and recreates all tables before inserting.
 
-The database file is gitignored. `spekk index` adds `.spekk/index.db` to
-`.gitignore` if not already present (repo root `.gitignore`).
+The database files are gitignored. `spekk index` adds `.spekk/index.db*` to `.gitignore` if not already present (repo root `.gitignore`).
 
 ### Schema
 

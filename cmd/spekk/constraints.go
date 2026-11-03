@@ -67,13 +67,27 @@ func execConstraints(args []string, stdout, stderr io.Writer, specsDir string) i
 	if err != nil {
 		return constraintError(stderr, err)
 	}
-	rel, err := filepath.Rel(root, absPath)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return constraintError(stderr, fmt.Errorf("file is outside project root: %s", path))
-	}
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return constraintError(stderr, err)
+	}
+	dir := filepath.Dir(absPath)
+	remainder := filepath.Base(absPath)
+	var resolvedDir string
+	for {
+		resolvedDir, err = filepath.EvalSymlinks(dir)
+		if err == nil {
+			break
+		}
+		if !os.IsNotExist(err) {
+			return constraintError(stderr, err)
+		}
+		remainder = filepath.Join(filepath.Base(dir), remainder)
+		dir = filepath.Dir(dir)
+	}
+	rel, err := filepath.Rel(resolvedRoot, filepath.Join(resolvedDir, remainder))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return constraintError(stderr, fmt.Errorf("file is outside project root: %s", path))
 	}
 	for candidate := absPath; ; candidate = filepath.Dir(candidate) {
 		resolved, resolveErr := filepath.EvalSymlinks(candidate)
