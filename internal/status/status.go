@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/spekk-ai/spekk-cli/internal/parser"
+	"github.com/spekk-ai/spekk-cli/internal/verify"
 )
 
 var statusIcons = map[string]string{
@@ -33,6 +34,10 @@ func Show(specsDir string) error {
 	}
 	if summary := result.WarningSummary(); summary != "" {
 		fmt.Fprintln(os.Stderr, summary)
+	}
+	dirty, err := verify.FillDisplayValues(specsDir, result.Assertions)
+	if err != nil {
+		return err
 	}
 
 	if len(result.Specs) == 0 && len(result.Assertions) == 0 {
@@ -92,10 +97,26 @@ func Show(specsDir string) error {
 		if drafts > 0 {
 			draftNote = fmt.Sprintf(" · %d draft", drafts)
 		}
-		fmt.Printf("%d %s %s (%d/%d assertions complete%s)\n", spec.Priority, icon(spec.Status), spec.Title, done, len(specAssertions)-drafts, draftNote)
+		truthCounts := map[string]int{}
+		for _, a := range specAssertions {
+			if a.Status != "draft" {
+				truthCounts[a.Truth]++
+			}
+		}
+		truthNote := ""
+		for _, name := range []string{"verified", "failing", "unchecked", "unconfirmed"} {
+			if truthCounts[name] > 0 {
+				truthNote += fmt.Sprintf(" · %d %s", truthCounts[name], name)
+			}
+		}
+		fmt.Printf("%d %s %s (%d/%d assertions complete%s%s)\n", spec.Priority, icon(spec.Status), spec.Title, done, len(specAssertions)-drafts, draftNote, truthNote)
 
 		for _, a := range specAssertions {
-			fmt.Printf("  %d %s %s\n", a.Priority, icon(a.Status), a.Title)
+			if a.Level == "" {
+				fmt.Printf("  %d %s %s · %s\n", a.Priority, icon(a.Status), a.Title, a.Truth)
+			} else {
+				fmt.Printf("  %d %s %s · %s · %s\n", a.Priority, icon(a.Status), a.Title, a.Level, a.Truth)
+			}
 		}
 		fmt.Println()
 	}
@@ -117,6 +138,12 @@ func Show(specsDir string) error {
 		}
 	}
 	total := len(result.Assertions) - draftCount
+	truthTotals := map[string]int{}
+	for _, a := range result.Assertions {
+		if a.Status != "draft" {
+			truthTotals[a.Truth]++
+		}
+	}
 
 	fmt.Println("📈 Overall Progress")
 	fmt.Println("-------------------")
@@ -129,6 +156,10 @@ func Show(specsDir string) error {
 	}
 	if draftCount > 0 {
 		fmt.Printf("📝 Draft: %d\n", draftCount)
+	}
+	fmt.Printf("🔎 Truth: %d verified · %d failing · %d unchecked · %d unconfirmed\n", truthTotals["verified"], truthTotals["failing"], truthTotals["unchecked"], truthTotals["unconfirmed"])
+	if dirty {
+		fmt.Println("⚠️ Results are from a run with uncommitted changes")
 	}
 
 	pct := 0

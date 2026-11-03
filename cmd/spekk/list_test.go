@@ -126,8 +126,8 @@ func TestExecList_PriorityFilter(t *testing.T) {
 		{"combined-empty-table", []string{"--priority", "2", "--status", "not_started"}, nil, "No assertions match status 'not_started' and priority 2.\n"},
 		{"empty-status-json", []string{"--status", "draft", "--json"}, nil, ""},
 		{"combined-empty-json", []string{"--priority", "2", "--status", "not_started", "--json"}, nil, ""},
-		{"outside-range-tsv", []string{"--priority", "4", "--tsv"}, nil, "id\tstatus\tpri\tparent\ttitle\n"},
-		{"combined-empty-csv", []string{"--priority", "2", "--status", "not_started", "--csv"}, nil, "id,status,pri,parent,title\r\n"},
+		{"outside-range-tsv", []string{"--priority", "4", "--tsv"}, nil, "id\tstatus\tpri\tparent\ttitle\ttruth\tlevel\n"},
+		{"combined-empty-csv", []string{"--priority", "2", "--status", "not_started", "--csv"}, nil, "id,status,pri,parent,title,truth,level\r\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer

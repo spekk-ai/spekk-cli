@@ -3,7 +3,8 @@ id: list-shows-truth-and-level
 parent: truth-display
 created: 2026-11-02T21:30:00Z
 priority: 1
-status: not_started
+status: done
+branch: feat/v2-truth-display
 depends-on: truth-at-head-follows-the-evidence
 ---
 
@@ -20,3 +21,5 @@ depends-on: truth-at-head-follows-the-evidence
 - `--json` adds the keys `truth` and `level` to each assertion. `level` is `""` when there is no level. No v1 key changes.
 - `--long`, `--status`, `--assertions-only`, `--limit` and `--sort-by` work as before with the new column.
 - Column widths, the header case and the no-trailing-whitespace rule of `list-output-format` stay true.
+
+**Tests:** `cmd/spekk/truth_display_test.go`

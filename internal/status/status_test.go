@@ -89,7 +89,7 @@ status: not_started
 	})
 
 	// Spec header with completion ratio.
-	if !strings.Contains(output, "My Feature (1/2 assertions complete)") {
+	if !strings.Contains(output, "My Feature (1/2 assertions complete · 2 unchecked)") {
 		t.Errorf("expected completion ratio, got: %s", output)
 	}
 	// Status icons present.

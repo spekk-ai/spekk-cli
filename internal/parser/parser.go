@@ -24,6 +24,8 @@ type Assertion struct {
 	Created   string
 	Priority  int
 	Status    string
+	Truth     string
+	Level     string
 	Branch    string
 	DependsOn string
 	LockedBy  string

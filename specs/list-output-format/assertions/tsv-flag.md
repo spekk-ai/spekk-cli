@@ -19,9 +19,8 @@ Reliable for shell pipelines (`cut -f2`, `awk '{print $3}'`, `sort -k3`).
 
 - `spekk list --tsv` produces output where fields are separated by exactly one
   tab character (`\t`), not spaces.
-- The header row is `id\tstatus\tpri\ttitle` (lowercase, same column order as
-  the table format).
-- No trailing tab on any line.
+- The header row is lowercase. The v1 columns (`id`, `status`, `pri`, `parent`, `title`, and `file` with `--long`) are in table order, and `truth` and `level` are the last two columns (`truth-display`).
+- No line ends with a tab, except a row whose last field (`level`) is empty.
 - Values are not quoted or escaped (TSV is not CSV — commas in titles are fine
   as-is; only tabs in values would need escaping, which spekk field values
   never contain).

@@ -14,6 +14,8 @@ import (
 type Row struct {
 	ID       string
 	Status   string
+	Truth    string
+	Level    string
 	Priority int
 	Title    string
 	Parent   string // set when --assertions-only
@@ -28,18 +30,34 @@ type Options struct {
 
 // columns returns the ordered list of column values for a row plus the header.
 // header must be true only for the synthetic header row.
-func columns(r Row, header bool, opts Options) []string {
+func columns(r Row, header bool, opts Options, machine bool) []string {
 	pri := strconv.Itoa(r.Priority)
 	if header {
 		pri = "PRI"
 	}
 	cols := []string{r.ID, r.Status, pri}
+	if !machine && header {
+		cols = []string{r.ID, r.Status, "TRUTH", pri}
+	} else if !machine {
+		truth := r.Truth
+		if r.Level != "" {
+			truth = r.Level + " · " + truth
+		}
+		cols = []string{r.ID, r.Status, truth, pri}
+	}
 	if opts.ShowParent {
 		cols = append(cols, r.Parent)
 	}
 	cols = append(cols, r.Title)
 	if opts.ShowFile {
 		cols = append(cols, r.File)
+	}
+	if machine {
+		if header {
+			cols = append(cols, "TRUTH", "LEVEL")
+		} else {
+			cols = append(cols, r.Truth, r.Level)
+		}
 	}
 	return cols
 }
@@ -68,9 +86,9 @@ func FormatTable(rows []Row, opts Options) string {
 
 	// Build all rows (header + data) as string slices, then render.
 	all := make([][]string, 0, len(rows)+1)
-	all = append(all, columns(hdr, true, opts))
+	all = append(all, columns(hdr, true, opts, false))
 	for _, r := range rows {
-		all = append(all, columns(r, false, opts))
+		all = append(all, columns(r, false, opts, false))
 	}
 
 	return RenderTable(all)
@@ -125,7 +143,7 @@ func RenderTable(matrix [][]string) string {
 // expect a well-formed header.
 func FormatTSVHeader(opts Options) string {
 	hdr := headerRow()
-	cells := columns(hdr, true, opts)
+	cells := columns(hdr, true, opts, true)
 	var sb strings.Builder
 	for i, c := range cells {
 		if i > 0 {
@@ -142,7 +160,7 @@ func FormatTSVHeader(opts Options) string {
 // expect a well-formed header.
 func FormatCSVHeader(opts Options) string {
 	hdr := headerRow()
-	cells := columns(hdr, true, opts)
+	cells := columns(hdr, true, opts, true)
 	var sb strings.Builder
 	for i, c := range cells {
 		if i > 0 {
@@ -165,9 +183,9 @@ func FormatTSV(rows []Row, opts Options) string {
 	hdr := headerRow()
 	data := make([][]string, len(rows))
 	for i, r := range rows {
-		data[i] = columns(r, false, opts)
+		data[i] = columns(r, false, opts, true)
 	}
-	return RenderTSV(columns(hdr, true, opts), data)
+	return RenderTSV(columns(hdr, true, opts, true), data)
 }
 
 // RenderTSV renders headers + rows as tab-separated values. The header row is
@@ -211,9 +229,9 @@ func FormatCSV(rows []Row, opts Options) string {
 	hdr := headerRow()
 	data := make([][]string, len(rows))
 	for i, r := range rows {
-		data[i] = columns(r, false, opts)
+		data[i] = columns(r, false, opts, true)
 	}
-	return RenderCSV(columns(hdr, true, opts), data)
+	return RenderCSV(columns(hdr, true, opts, true), data)
 }
 
 // RenderCSV renders headers + rows as RFC 4180 CSV. The header row is

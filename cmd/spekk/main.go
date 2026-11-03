@@ -411,6 +411,10 @@ EXAMPLES:
 	if summary := result.WarningSummary(); summary != "" {
 		fmt.Fprintln(stderr, summary)
 	}
+	if _, err := verify.FillDisplayValues(specsDir, result.Assertions); err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", err)
+		return 1
+	}
 
 	// Apply status filter if requested.
 	if statusVal != "" {
@@ -594,6 +598,8 @@ func listRowsOrdered(result *parser.ParseResult, assertionsOnly, keepOrder bool)
 			rows = append(rows, formatter.Row{
 				ID:       a.ID,
 				Status:   a.Status,
+				Truth:    a.Truth,
+				Level:    a.Level,
 				Priority: a.Priority,
 				Title:    a.Title,
 				Parent:   a.Parent,

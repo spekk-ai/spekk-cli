@@ -19,6 +19,7 @@ import (
 
 	"github.com/spekk-ai/spekk-cli/internal/crossbranch"
 	"github.com/spekk-ai/spekk-cli/internal/parser"
+	"github.com/spekk-ai/spekk-cli/internal/verify"
 )
 
 // sseClient script injected before </body> in watch mode.
@@ -203,6 +204,9 @@ func RunWatch(specsDir string, opts Options) error {
 		}
 		if len(result.Specs) == 0 {
 			return "", fmt.Errorf("no specifications found in %s", specsDir)
+		}
+		if _, err := verify.FillDisplayValues(specsDir, result.Assertions); err != nil {
+			return "", err
 		}
 
 		data := buildShowData(specsDir, result)
