@@ -83,3 +83,19 @@ def test_skip(): pass
 		t.Fatalf("warnings = %#v", got.Warnings)
 	}
 }
+
+func TestGoTestNamesFollowGoRule(t *testing.T) {
+	root := t.TempDir()
+	path := "names_test.go"
+	content := "// spekk: exact\nfunc Test(t *testing.T) {}\n// spekk: underscore\nfunc Test_x(t *testing.T) {}\n// spekk: unicode\nfunc Test名(t *testing.T) {}\n// spekk: lower\nfunc Testbad(t *testing.T) {}\n// spekk: unicode-lower\nfunc Testä(t *testing.T) {}\n"
+	if err := os.WriteFile(filepath.Join(root, path), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ScanFile(root, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Evidence) != 3 || got.Evidence[0].Test != "Test" || got.Evidence[1].Test != "Test_x" || got.Evidence[2].Test != "Test名" || len(got.Anchors) != 2 || got.Anchors[0].ID != "lower" || got.Anchors[1].ID != "unicode-lower" {
+		t.Fatalf("evidence %#v, anchors %#v", got.Evidence, got.Anchors)
+	}
+}

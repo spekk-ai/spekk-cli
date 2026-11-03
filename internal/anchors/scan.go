@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Anchor names a property at a source line.
@@ -20,7 +22,7 @@ type Anchor struct {
 }
 
 var comment = regexp.MustCompile(`(?:#|//|--)[ \t]*spekk:[ \t]+([^ \t\r\n"'\\]+)[ \t\r]*$`)
-var goTest = regexp.MustCompile(`^[ \t]*func[ \t]+(Test[A-Z][A-Za-z0-9_]*)[ \t]*\([ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*\*[ \t]*testing\.T[ \t]*\)`)
+var goTest = regexp.MustCompile(`^[ \t]*func[ \t]+(Test[\pL\pN_]*)[ \t]*\([ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*\*[ \t]*testing\.T[ \t]*\)`)
 var goFuzz = regexp.MustCompile(`^[ \t]*func[ \t]+(Fuzz[A-Z][A-Za-z0-9_]*)[ \t]*\([ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*\*[ \t]*testing\.F[ \t]*\)`)
 var goMarker = regexp.MustCompile(`^[ \t]*//[ \t]*spekk:[ \t]+([^ \t\r\n]+)(?:[ \t]+evidence=([^ \t\r\n]+))?[ \t\r]*$`)
 var pythonMarker = regexp.MustCompile(`^[ \t]*@spekk\([ \t]*(['"])([^'"]+)['"](.*)\)[ \t\r]*$`)
@@ -162,7 +164,14 @@ func goMarkerFunction(lines []string, marker int) string {
 			continue
 		}
 		if match := goTest.FindStringSubmatch(lines[i]); match != nil {
-			return match[1]
+			rest := strings.TrimPrefix(match[1], "Test")
+			if rest == "" {
+				return match[1]
+			}
+			first, _ := utf8.DecodeRuneInString(rest)
+			if !unicode.IsLower(first) {
+				return match[1]
+			}
 		}
 		if match := goFuzz.FindStringSubmatch(lines[i]); match != nil {
 			return match[1]

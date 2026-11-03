@@ -28,6 +28,7 @@ var templateHTML string
 // showData is the top-level data structure injected into the template.
 type showData struct {
 	ProjectName string          `json:"projectName"`
+	Dirty       bool            `json:"dirty"`
 	Specs       []showSpec      `json:"specs"`
 	Assertions  []showAssertion `json:"assertions"`
 
@@ -201,9 +202,11 @@ func parseSpecs(specsDir string) (*parser.ParseResult, error) {
 	if summary := result.WarningSummary(); summary != "" {
 		fmt.Fprintln(os.Stderr, summary)
 	}
-	if _, err := verify.FillDisplayValues(specsDir, result.Assertions); err != nil {
+	dirty, err := verify.FillDisplayValues(specsDir, result.Assertions)
+	if err != nil {
 		return nil, err
 	}
+	result.Dirty = dirty
 	return result, nil
 }
 
@@ -263,6 +266,7 @@ func buildShowData(specsDir string, result *parser.ParseResult) showData {
 
 	data := showData{
 		ProjectName: projectName,
+		Dirty:       result.Dirty,
 		Specs:       showSpecs,
 		Assertions:  showAssertions,
 	}

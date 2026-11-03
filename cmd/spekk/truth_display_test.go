@@ -174,6 +174,77 @@ func TestTruthListFormats(t *testing.T) {
 	}
 }
 
+func TestDirtyTruthIsLabeledInReaders(t *testing.T) {
+	specsDir := truthProject(t, true)
+	root := filepath.Dir(specsDir)
+	var listOut, listErr bytes.Buffer
+	if code := execList(nil, &listOut, &listErr, specsDir); code != 0 || !strings.Contains(listErr.String(), "Results are from a run with uncommitted changes") {
+		t.Fatalf("list: exit %d, stderr %q", code, listErr.String())
+	}
+	listOut.Reset()
+	listErr.Reset()
+	if code := execList([]string{"--json"}, &listOut, &listErr, specsDir); code != 0 {
+		t.Fatalf("list JSON: exit %d, stderr %q", code, listErr.String())
+	}
+	var listData struct {
+		Dirty bool `json:"dirty"`
+	}
+	if err := json.Unmarshal(listOut.Bytes(), &listData); err != nil || !listData.Dirty {
+		t.Fatalf("list JSON dirty: %s, %v", listOut.String(), err)
+	}
+	listOut.Reset()
+	if code := execList([]string{"--json", "--status", "done", "--sort-by", "title"}, &listOut, &listErr, specsDir); code != 0 || json.Unmarshal(listOut.Bytes(), &listData) != nil || !listData.Dirty {
+		t.Fatalf("filtered list JSON dirty: exit %d, output %q, stderr %q", code, listOut.String(), listErr.String())
+	}
+	var showOut bytes.Buffer
+	if err := show.WriteJSON(&showOut, specsDir, show.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	var showData struct {
+		Dirty bool `json:"dirty"`
+	}
+	if err := json.Unmarshal(showOut.Bytes(), &showData); err != nil || !showData.Dirty {
+		t.Fatalf("show JSON dirty: %s, %v", showOut.String(), err)
+	}
+	codeFile := filepath.Join(root, "code.go")
+	if err := os.WriteFile(codeFile, []byte("package fixture\n// spekk: pass\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var constraintsOut, constraintsErr bytes.Buffer
+	if code := execConstraints([]string{codeFile}, &constraintsOut, &constraintsErr, specsDir); code != 0 || !strings.Contains(constraintsErr.String(), "Results are from a run with uncommitted changes") {
+		t.Fatalf("constraints: exit %d, stderr %q", code, constraintsErr.String())
+	}
+	constraintsOut.Reset()
+	constraintsErr.Reset()
+	if code := execConstraints([]string{codeFile, "--json"}, &constraintsOut, &constraintsErr, specsDir); code != 0 {
+		t.Fatalf("constraints JSON: exit %d, stderr %q", code, constraintsErr.String())
+	}
+	var rows []struct {
+		Dirty bool `json:"dirty"`
+	}
+	if err := json.Unmarshal(constraintsOut.Bytes(), &rows); err != nil || len(rows) != 1 || !rows[0].Dirty {
+		t.Fatalf("constraints JSON dirty: %s, %v", constraintsOut.String(), err)
+	}
+	for _, args := range [][]string{{"add", "."}, {"commit", "-q", "-m", "Commit fixture"}} {
+		if output, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatal(err, string(output))
+		}
+	}
+	var verifyOut, verifyErr bytes.Buffer
+	if err := verify.Run(specsDir, nil, &verifyOut, &verifyErr); err == nil || !strings.Contains(verifyOut.String(), "1 failing") {
+		t.Fatalf("clean verify: output %q, stderr %q, error %v", verifyOut.String(), verifyErr.String(), err)
+	}
+	listOut.Reset()
+	listErr.Reset()
+	if code := execList([]string{"--json"}, &listOut, &listErr, specsDir); code != 0 || json.Unmarshal(listOut.Bytes(), &listData) != nil || listData.Dirty {
+		t.Fatalf("clean list JSON: exit %d, output %q, stderr %q", code, listOut.String(), listErr.String())
+	}
+	listOut.Reset()
+	if code := execList(nil, &listOut, &listErr, specsDir); code != 0 || strings.Contains(listErr.String(), "Results are from a run with uncommitted changes") {
+		t.Fatalf("clean list: exit %d, stderr %q", code, listErr.String())
+	}
+}
+
 func TestListGitignoresRebuiltIndex(t *testing.T) {
 	root := t.TempDir()
 	specsDir := filepath.Join(root, "specs")
