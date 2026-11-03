@@ -3,7 +3,8 @@ id: constraints-lists-anchored-properties
 parent: constraints-command
 created: 2026-11-02T21:30:00Z
 priority: 2
-status: not_started
+status: done
+branch: feat/v2-constraints-command
 depends-on: anchors-are-indexed
 ---
 
@@ -22,3 +23,5 @@ The list is complete, because a property that is not in it is a rule that the ag
 - The file can be given relative to the current directory or as an absolute path. Spekk matches it as a path relative to the project root. A path outside the project root exits 1 with an error.
 - A file with no anchors prints nothing on stdout and `no properties anchor on <path>` on stderr, and exits 0.
 - `spekk constraints` is listed in `spekk help`, and `spekk constraints --help` exits 0.
+
+**Tests:** `cmd/spekk/constraints_test.go`.

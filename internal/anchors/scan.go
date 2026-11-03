@@ -71,53 +71,67 @@ func ScanAll(root string) (Result, bool, error) {
 			continue
 		}
 		path := string(raw)
-		if strings.HasSuffix(path, ".md") || hasTestdataSegment(path) {
-			continue
-		}
-		fullPath := filepath.Join(root, path)
-		info, err := os.Lstat(fullPath)
-		if os.IsNotExist(err) { // A tracked file can be deleted in the work tree.
-			continue
-		}
+		scan, err := ScanFile(root, path)
 		if err != nil {
-			return Result{}, true, fmt.Errorf("cannot stat %q: %w", path, err)
+			return Result{}, true, err
 		}
-		if !info.Mode().IsRegular() {
-			continue
-		}
-		content, err := os.ReadFile(fullPath)
-		if os.IsNotExist(err) { // A tracked file can be deleted in the work tree.
-			continue
-		}
-		if err != nil {
-			return Result{}, true, fmt.Errorf("cannot read %q: %w", path, err)
-		}
-		limit := len(content)
-		if limit > 8000 {
-			limit = 8000
-		}
-		if bytes.IndexByte(content[:limit], 0) >= 0 {
-			continue
-		}
-		lines := strings.Split(string(content), "\n")
-		if strings.HasSuffix(path, "_test.go") {
-			scanGoMarkers(&found, path, lines)
-		}
-		if isPythonTestFile(path) {
-			scanPythonMarkers(&found, path, lines)
-		}
-		for i, line := range lines {
-			match := comment.FindStringSubmatch(line)
-			if match == nil {
-				continue
-			}
-			if strings.HasSuffix(path, "_test.go") && goMarker.MatchString(line) && goMarkerFunction(lines, i) != "" {
-				continue
-			}
-			found.Anchors = append(found.Anchors, Anchor{ID: match[1], Path: filepath.ToSlash(path), Line: i + 1})
-		}
+		found.Anchors = append(found.Anchors, scan.Anchors...)
+		found.Evidence = append(found.Evidence, scan.Evidence...)
+		found.Warnings = append(found.Warnings, scan.Warnings...)
 	}
 	return found, true, nil
+}
+
+// ScanFile reads one project-relative file with the same rules as ScanAll.
+// A missing or nonregular file has no annotations.
+func ScanFile(root, path string) (Result, error) {
+	if strings.HasSuffix(path, ".md") || hasTestdataSegment(path) {
+		return Result{}, nil
+	}
+	fullPath := filepath.Join(root, path)
+	info, err := os.Lstat(fullPath)
+	if os.IsNotExist(err) {
+		return Result{}, nil
+	}
+	if err != nil {
+		return Result{}, fmt.Errorf("cannot stat %q: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return Result{}, nil
+	}
+	content, err := os.ReadFile(fullPath)
+	if os.IsNotExist(err) {
+		return Result{}, nil
+	}
+	if err != nil {
+		return Result{}, fmt.Errorf("cannot read %q: %w", path, err)
+	}
+	limit := len(content)
+	if limit > 8000 {
+		limit = 8000
+	}
+	if bytes.IndexByte(content[:limit], 0) >= 0 {
+		return Result{}, nil
+	}
+	lines := strings.Split(string(content), "\n")
+	var found Result
+	if strings.HasSuffix(path, "_test.go") {
+		scanGoMarkers(&found, path, lines)
+	}
+	if isPythonTestFile(path) {
+		scanPythonMarkers(&found, path, lines)
+	}
+	for i, line := range lines {
+		match := comment.FindStringSubmatch(line)
+		if match == nil {
+			continue
+		}
+		if strings.HasSuffix(path, "_test.go") && goMarker.MatchString(line) && goMarkerFunction(lines, i) != "" {
+			continue
+		}
+		found.Anchors = append(found.Anchors, Anchor{ID: match[1], Path: filepath.ToSlash(path), Line: i + 1})
+	}
+	return found, nil
 }
 
 func hasTestdataSegment(path string) bool {
