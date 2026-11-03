@@ -27,7 +27,7 @@ func TestEvidenceValidation(t *testing.T) {
 		}
 	}
 	write("checks_test.go", "// spekk: missing-id evidence=property\nfunc TestOne(t *testing.T) {}\n// spekk: known-id evidence=magic\nfunc TestTwo(t *testing.T) {}\n")
-	write("test_rules.py", "@spekk('missing-python', evidence='proof')\ndef test_rule(): pass\n@spekk('known-id', evidence='invalid')\ndef test_other(): pass\n@spekk('known-id')\ndef helper(): pass\n")
+	write("test_rules.py", "@spekk('missing-python', evidence='proof')\ndef test_rule(): pass\n@spekk('known-id', evidence='invalid')\ndef test_other(): pass\n@spekk('known-id')\ndef helper(): pass\n@spekk('missing-async')\nasync def test_async(): pass\n")
 	write("testdata/skipped_test.go", "// spekk: skipped-id evidence=invalid\nfunc TestSkip(t *testing.T) {}\n")
 	write(".gitignore", "ignored_test.go\n")
 	write("ignored_test.go", "// spekk: ignored-id\nfunc TestSkip(t *testing.T) {}\n")
@@ -44,6 +44,7 @@ func TestEvidenceValidation(t *testing.T) {
 		"checks_test.go:3: unknown evidence level magic",
 		"test_rules.py:1: evidence marker names unknown property missing-python",
 		"test_rules.py:3: unknown evidence level invalid",
+		"test_rules.py:7: evidence marker names unknown property missing-async",
 	}
 	if !reflect.DeepEqual(failures, want) {
 		t.Fatalf("failures = %v, want %v", failures, want)
@@ -52,7 +53,7 @@ func TestEvidenceValidation(t *testing.T) {
 		t.Fatalf("warnings = %v", result.Warnings)
 	}
 	write("checks_test.go", "// spekk: known-id evidence=property\nfunc TestOne(t *testing.T) {}\n")
-	write("test_rules.py", "@spekk('known-id')\ndef test_rule(): pass\n")
+	write("test_rules.py", "@spekk('known-id')\nasync def test_rule(): pass\n")
 	result, err = Run(specsDir)
 	if err != nil || !result.Passed() || len(result.Warnings) != 0 {
 		t.Fatalf("valid markers: %#v, %v", result, err)

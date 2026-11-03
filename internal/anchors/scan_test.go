@@ -45,7 +45,12 @@ func TestScanEvidenceAndAnchors(t *testing.T) {
 		"    def test_method(self): pass\n"+
 		"\n"+
 		"@spekk(\"first-id\")\n"+
-		"def helper(): pass\n")
+		"def helper(): pass\n"+
+		"@spekk(\"second-id\")\n"+
+		"async def test_async(): pass\n"+
+		"\n"+
+		"@spekk(\"first-id\")\n"+
+		"async def helper(): pass\n")
 	write("testdata/test_skip.py", `@spekk("missing-id")
 def test_skip(): pass
 `)
@@ -60,10 +65,13 @@ def test_skip(): pass
 	var evidence []string
 	for _, e := range got.Evidence {
 		evidence = append(evidence, e.ID+":"+e.Level+":"+e.Language+":"+e.Path+":"+e.Test)
+		if e.Test == "test_async" && e.Line != 13 {
+			t.Fatalf("async evidence line = %d, want 13", e.Line)
+		}
 	}
 	wantEvidence := []string{
 		"first-id:property:go:checks_test.go:TestRule", "second-id:example:go:checks_test.go:TestRule", "fuzz-id:bounded:go:checks_test.go:FuzzRule",
-		"first-id:contract:python:test_rules.py:test_rule", "second-id:example:python:test_rules.py:test_rule", "first-id:proof:python:test_rules.py:TestRules.test_method",
+		"first-id:contract:python:test_rules.py:test_rule", "second-id:example:python:test_rules.py:test_rule", "first-id:proof:python:test_rules.py:TestRules.test_method", "second-id:example:python:test_rules.py:test_async",
 	}
 	if !reflect.DeepEqual(evidence, wantEvidence) {
 		t.Fatalf("evidence = %v, want %v", evidence, wantEvidence)
@@ -71,7 +79,7 @@ def test_skip(): pass
 	if len(got.Anchors) != 2 || got.Anchors[0].Line != 7 || got.Anchors[1].Line != 10 {
 		t.Fatalf("anchors = %#v", got.Anchors)
 	}
-	if len(got.Warnings) != 1 || got.Warnings[0].Path != "test_rules.py" || got.Warnings[0].Line != 11 {
+	if !reflect.DeepEqual(got.Warnings, []Warning{{Path: "test_rules.py", Line: 11}, {Path: "test_rules.py", Line: 16}}) {
 		t.Fatalf("warnings = %#v", got.Warnings)
 	}
 }

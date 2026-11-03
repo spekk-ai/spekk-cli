@@ -25,7 +25,7 @@ var goFuzz = regexp.MustCompile(`^[ \t]*func[ \t]+(Fuzz[A-Z][A-Za-z0-9_]*)[ \t]*
 var goMarker = regexp.MustCompile(`^[ \t]*//[ \t]*spekk:[ \t]+([^ \t\r\n]+)(?:[ \t]+evidence=([^ \t\r\n]+))?[ \t\r]*$`)
 var pythonMarker = regexp.MustCompile(`^[ \t]*@spekk\([ \t]*(['"])([^'"]+)['"](.*)\)[ \t\r]*$`)
 var pythonEvidence = regexp.MustCompile(`(?:^|,)[ \t]*evidence[ \t]*=[ \t]*['"]([^'"]+)['"]`)
-var pythonDef = regexp.MustCompile(`^[ \t]*def[ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]*\(`)
+var pythonDef = regexp.MustCompile(`^[ \t]*(?:async[ \t]+)?def[ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]*\(`)
 var pythonClass = regexp.MustCompile(`^[ \t]*class[ \t]+(Test[A-Za-z0-9_]*)\b`)
 
 // Evidence links one test to one property.
