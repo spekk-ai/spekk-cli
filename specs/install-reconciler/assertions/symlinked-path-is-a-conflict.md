@@ -12,7 +12,7 @@ kind: invariant
 
 ## Terms
 
-- managed path: a path that spekk writes or removes. That is a desired path of the current layout, or a legacy shim path that an install migrates.
+- managed path: a path that spekk writes or removes. That is a desired path of the current layout, a stamped spekk file that the prune removes, or a legacy shim path that an install migrates.
 
 ## Rationale
 
