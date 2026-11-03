@@ -99,7 +99,7 @@ func TestCommentAnchorsValidateGitSources(t *testing.T) {
 		t.Fatalf("git add: %v: %s", err, out)
 	}
 	write("source.py", []byte("x = 1 # spekk: known-id\n// spekk: known-id\n-- spekk: known-id\n# spekk: the binary is installed\n# spekk:managed hash=abc\n// spekk: known-id evidence=property\n# spekk: missing-id\r\n// spekk: Balance\n"))
-	write("checks_test.go", []byte("// spekk: missing-marker\nfunc TestRule(t *testing.T) {}\n"))
+	write("checks_test.go", []byte("// spekk: known-id\nfunc TestRule(t *testing.T) {}\n"))
 	write("guide.md", []byte("# spekk: missing-doc\n"))
 	write("testdata/sample.py", []byte("# spekk: missing-fixture\n"))
 	write("binary.py", []byte("\x00# spekk: missing-binary\n"))

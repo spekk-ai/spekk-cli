@@ -50,6 +50,14 @@ CREATE TABLE IF NOT EXISTS assertions (
   branch    TEXT,
   file      TEXT
 );
+CREATE TABLE IF NOT EXISTS evidence (
+  assertion_id TEXT,
+  level TEXT,
+  language TEXT,
+  file TEXT,
+  line INTEGER,
+  test TEXT
+);
 CREATE TABLE IF NOT EXISTS anchors (
   assertion_id TEXT,
   path         TEXT,
@@ -223,11 +231,12 @@ func dropAllTables(db *sql.DB) error {
 // 9 indexes the underspecified_spec and missing_capability types (no column changes).
 // 10 adds assertion kinds, front-matter anchors, and property sections.
 // 11 adds comment anchor rows and the HEAD freshness stamp.
+// 12 adds evidence marker rows.
 // Version 4 changes no column — the bump is what makes an index that version 3 built
 // rebuild, instead of answering a custom-key query from rows that predate
 // the change. Bump on a change to the rows a build writes, not only on a
 // change to the shape it writes them into.
-const schemaVersion = 11
+const schemaVersion = 12
 
 const anchorHeadKey = "anchor_head"
 
@@ -424,7 +433,7 @@ func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bo
 	var clear []string
 	if specsPart {
 		clear = append(clear,
-			"DELETE FROM depends_on", "DELETE FROM anchors", "DELETE FROM property_sections", "DELETE FROM frontmatter_fields", "DELETE FROM assertions", "DELETE FROM specs",
+			"DELETE FROM depends_on", "DELETE FROM evidence", "DELETE FROM anchors", "DELETE FROM property_sections", "DELETE FROM frontmatter_fields", "DELETE FROM assertions", "DELETE FROM specs",
 			"DELETE FROM observation_files", "DELETE FROM observations",
 			"DELETE FROM index_meta WHERE key = '"+observationRefsKey+"'", "DELETE FROM index_meta WHERE key = '"+anchorHeadKey+"'")
 	}
@@ -444,7 +453,7 @@ func build(specsDir, dbPath string, force, specsPart, docsPart, skipUnchanged bo
 			return stats, false, err
 		}
 		root := filepath.Dir(specsDir)
-		if err = insertCommentAnchors(tx, root, result); err != nil {
+		if err = insertSourceAnnotations(tx, root, result); err != nil {
 			return stats, false, err
 		}
 		n, err := indexSpecDocuments(tx, result, texts, sums)
@@ -535,8 +544,8 @@ func insertSpecs(tx *sql.Tx, result *parser.ParseResult) error {
 	return nil
 }
 
-func insertCommentAnchors(tx *sql.Tx, root string, result *parser.ParseResult) error {
-	comments, _, err := anchors.Scan(root)
+func insertSourceAnnotations(tx *sql.Tx, root string, result *parser.ParseResult) error {
+	scan, _, err := anchors.ScanAll(root)
 	if err != nil {
 		return err
 	}
@@ -544,12 +553,17 @@ func insertCommentAnchors(tx *sql.Tx, root string, result *parser.ParseResult) e
 	for _, a := range result.Assertions {
 		known[a.ID] = true
 	}
-	for _, anchor := range comments {
+	for _, anchor := range scan.Anchors {
 		if !known[anchor.ID] {
 			continue
 		}
 		if _, err := tx.Exec(`INSERT INTO anchors (assertion_id, path, line, source) VALUES (?, ?, ?, 'comment')`, anchor.ID, anchor.Path, anchor.Line); err != nil {
 			return fmt.Errorf("cannot insert comment anchor for %q: %w", anchor.ID, err)
+		}
+	}
+	for _, marker := range scan.Evidence {
+		if _, err := tx.Exec(`INSERT INTO evidence (assertion_id, level, language, file, line, test) VALUES (?, ?, ?, ?, ?, ?)`, marker.ID, marker.Level, marker.Language, marker.Path, marker.Line, marker.Test); err != nil {
+			return fmt.Errorf("cannot insert evidence for %q: %w", marker.ID, err)
 		}
 	}
 	head, err := anchors.Head(root)
