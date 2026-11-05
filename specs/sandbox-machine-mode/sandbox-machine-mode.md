@@ -35,7 +35,7 @@ The CLI also has a defect in both modes: `injectCredentials`, `configureGitCrede
 The caller sends the launch input to the CLI through this contract.
 
 ```
-spekk sandbox create <name> --machine --size <size> --region <region> [--one-off [--expires <when>]] [--label <key>=<value> ...] [--release <tag>]
+spekk sandbox create <name> --machine --size <size> --region <region> [--one-off [--expires <when>]] [--label <key>=<value> ...] [--release <tag>] [--provision-timeout <duration>]
 spekk sandbox destroy <name> --machine --force
 ```
 
