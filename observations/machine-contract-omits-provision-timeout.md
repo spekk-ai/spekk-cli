@@ -2,7 +2,7 @@
 slug: machine-contract-omits-provision-timeout
 type: outdated_specs
 severity: low
-status: open
+status: resolved
 created: 2026-11-05T00:00:00Z
 affected:
   - specs/sandbox-machine-mode/sandbox-machine-mode.md
