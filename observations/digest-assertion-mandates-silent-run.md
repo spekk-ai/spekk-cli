@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-11-06T20:02:05Z
+announced: 2026-11-06T20:03:38Z
 affected:
   - specs/observer-agent/assertions/digest-as-default-surface.md
   - specs/observer-agent/assertions/one-observation-per-run.md
