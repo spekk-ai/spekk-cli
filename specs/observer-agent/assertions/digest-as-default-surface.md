@@ -17,16 +17,15 @@ is now a rendered view — a query over open observations across the visible
 branch union, severity-ranked, capped at 5 — surfaced by
 `spekk observer digest`, never a committed file. The part of this assertion
 that survives is the surface discipline: the observer's console output stays
-a brief digest summary, never the raw observation stream.
+one brief line about what the run did, never the raw observation stream.
 
 ## Success Criteria
 
 - `specs/observer-agent/observer.prompt.md` contains no instruction to write
   or maintain `observations/DIGEST.md` (or any committed digest artifact)
-- The prompt directs reporting through the rendered view: run
-  `spekk observer digest` and print at most a one-line summary of its output
-- Silent suppression: when the rendered digest is empty, the agent says
-  nothing to the user for that cycle
+- The prompt names `spekk observer digest` as the wider view of open
+  observations, and not as the run's report: a scan prints the one line that
+  `one-observation-per-run` requires, also when the digest is empty
 - Console output never prints raw observation text
 - The `consolidate` skill remains separately invocable via
   `spekk observer consolidate`; its curation is expressed as observation
