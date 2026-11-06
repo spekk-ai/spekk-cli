@@ -2,7 +2,7 @@
 slug: digest-assertion-mandates-silent-run
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-11-06T20:02:05Z
 announced: 2026-11-06T20:03:38Z
 affected:
