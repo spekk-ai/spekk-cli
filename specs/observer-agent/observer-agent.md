@@ -46,8 +46,11 @@ long-running memory:
 
 Principles carried over from agent heartbeat systems:
 
-- **Silent suppression.** A scan with nothing worth saying produces nothing
-  user-facing. The observer earns attention by speaking rarely.
+- **Speak rarely in chat.** The observer earns attention by speaking rarely:
+  only `high` and `medium` findings are announced to chat. A scan still
+  prints one line about what it did, also when it found nothing, because a
+  silent run cannot be told apart from a run that never happened (see
+  `assertions/one-observation-per-run.md`).
 - **Progressive disclosure.** The curated surface holds only a few items at a
   time. New items enter as old ones are resolved or archived — users are
   never handed twenty findings at once.
