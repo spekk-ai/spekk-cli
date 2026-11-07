@@ -3,7 +3,7 @@ id: one-observation-per-run
 parent: observer-agent
 created: 2026-08-08T00:00:00Z
 priority: 1
-status: failed
+status: done
 ---
 
 # A Scan Run Files One Observation and Ends

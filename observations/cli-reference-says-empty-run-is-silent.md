@@ -2,7 +2,7 @@
 slug: cli-reference-says-empty-run-is-silent
 type: code_spec_misalignment
 severity: medium
-status: open
+status: resolved
 created: 2026-11-07T12:00:00Z
 announced: 2026-11-07T20:01:36Z
 affected:
