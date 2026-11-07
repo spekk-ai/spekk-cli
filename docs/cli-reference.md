@@ -598,7 +598,7 @@ spekk observer uninstall-cron     # Remove the crontab entries
 
 The observer detects a change to the code that the specs do not record, and a change to the specs that the code does not implement. A run files one observation. It searches until it finds drift, files it on an `observer/<slug>` branch, and stops. The drift it did not reach is still there tomorrow, so the second finding is the next run's first. Run it again to continue. A run says which areas it did not reach, so a short run does not read as a clean result.
 
-A run reports a short summary from the rendered digest (`spekk observer digest`). There is no committed digest file. When the digest is empty, the observer says nothing.
+A scan prints exactly one line that says what the run did: it filed a finding, which it names with its severity; it found nothing in the areas that it covered; or it had nothing to scan. It prints this line also when the digest is empty, because a run that prints nothing looks the same as a run that did not occur. `spekk observer digest` is the separate, wider view of the open observations. It is not the report of a run. There is no committed digest file.
 
 How many observations you receive depends on how often you run it, not on how long a run goes on. Set that with `install-cron`, or with the scheduler you already use.
 
