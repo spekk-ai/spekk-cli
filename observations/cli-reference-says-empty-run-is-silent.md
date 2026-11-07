@@ -4,6 +4,7 @@ type: code_spec_misalignment
 severity: medium
 status: open
 created: 2026-11-07T12:00:00Z
+announced: 2026-11-07T20:01:36Z
 affected:
   - docs/cli-reference.md
   - specs/observer-agent/assertions/one-observation-per-run.md
