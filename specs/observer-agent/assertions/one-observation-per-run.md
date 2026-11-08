@@ -43,8 +43,10 @@ tomorrow.
   longer than the interval on purpose: a run files one observation, so a
   second finding in the same commits stays in scope for later runs. The
   choice is bounded at both ends — never the whole repository, never so
-  little that the run cannot fail — and it skips areas that carry an open
-  observation or a suppression, because those cannot produce a filing.
+  little that the run cannot fail. It skips findings that are already filed,
+  never the files they name: dedup matches the type and the slug of a live
+  claim, so a second, different finding in a file that an open observation
+  names is still filed. A suppression closes only the paths it matches.
 - A repository with no recent commits ends the run without scanning. An idle
   repository costs nothing to observe.
 - The prompt states plainly that the observer watches change and does not
