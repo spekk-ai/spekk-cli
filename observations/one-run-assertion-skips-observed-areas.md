@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-11-08T12:00:00Z
+announced: 2026-11-08T20:03:40Z
 affected:
   - specs/observer-agent/assertions/one-observation-per-run.md
   - specs/observer-agent/observer.prompt.md
