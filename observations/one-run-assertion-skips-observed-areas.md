@@ -2,7 +2,7 @@
 slug: one-run-assertion-skips-observed-areas
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-11-08T12:00:00Z
 announced: 2026-11-08T20:03:40Z
 affected:
