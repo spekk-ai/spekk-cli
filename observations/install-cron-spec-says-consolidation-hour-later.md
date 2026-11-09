@@ -2,7 +2,7 @@
 slug: install-cron-spec-says-consolidation-hour-later
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-11-09T00:00:00Z
 announced: 2026-11-09T20:02:42Z
 affected:

@@ -33,9 +33,11 @@ requires Go changes to add the subcommand.
   than running several times over a set that changes once. For any interval
   of an hour or longer the consolidation entry is rendered at minute 30
   instead of minute 0 — the daily default becomes `30 0 * * *`, six hours
-  becomes `30 */6 * * *`, one hour becomes `30 * * * *` — so the two runs do
-  not start together: they hold different locks, so an identical schedule
-  would launch two headless sessions in one working tree. Half past, not an
+  becomes `30 */6 * * *`, one hour becomes `30 * * * *` — so that, when the
+  scan interval is also an hour or longer, the two runs do not start
+  together: they hold different locks, so an identical schedule would launch
+  two headless sessions in one working tree. A sub-hourly scan that fires at
+  minute 30 can still start together with consolidation. Half past, not an
   hour later, because every hourly-form scan fires at minute 0, so an hour's
   offset would still collide with an hourly scan. Sub-hourly intervals keep
   their `*/N` form with no offset.
