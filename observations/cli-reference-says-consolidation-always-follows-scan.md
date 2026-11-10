@@ -4,6 +4,7 @@ type: code_spec_misalignment
 severity: medium
 status: open
 created: 2026-11-10T12:00:00Z
+announced: 2026-11-10T20:02:39Z
 affected:
   - docs/cli-reference.md
   - internal/agent/observer_cron.go
