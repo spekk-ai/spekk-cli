@@ -2,7 +2,7 @@
 slug: cli-reference-says-consolidation-always-follows-scan
 type: code_spec_misalignment
 severity: medium
-status: open
+status: resolved
 created: 2026-11-10T12:00:00Z
 announced: 2026-11-10T20:02:39Z
 affected:

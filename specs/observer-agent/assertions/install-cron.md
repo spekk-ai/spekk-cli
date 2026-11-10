@@ -3,7 +3,7 @@ id: install-cron
 parent: observer-agent
 created: 2026-07-11T15:00:00Z
 priority: 2
-status: failed
+status: done
 depends-on: digest-as-default-surface
 ---
 

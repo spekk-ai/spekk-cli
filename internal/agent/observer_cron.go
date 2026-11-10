@@ -174,21 +174,25 @@ func writeCrontab(content string) error {
 	return nil
 }
 
-// consolidateCron renders the consolidation schedule. It is the scan's
-// schedule moved later, so consolidation curates what the scan just filed
-// instead of starting at the same instant.
+// consolidateCron renders the consolidation schedule. For an interval of an
+// hour or longer, it is the minutesToCron schedule moved from minute 0 to
+// minute 30: a day becomes `30 0 * * *`, one hour becomes `30 * * * *`, and H
+// hours become `30 */H * * *`. A sub-hourly interval keeps the `*/N * * * *`
+// form of minutesToCron with no offset.
 //
-// Both default to a day, and both would otherwise render `0 0 * * *`. The two
-// runs take different lock files by design, so nothing would serialize them:
-// two headless Claude sessions would start together in one working tree, both
-// running git, and consolidation would never see the day's scan until the
-// next day. Half an hour is enough — the cap is one observation, so a scan
-// does not run for hours any more — and half past misses every scan schedule
-// of an hour or longer, because those all fire at minute 0. An hour later at
-// minute 0 would not: an hourly scan (`0 * * * *`) fires at 01:00 too.
+// Both intervals default to a day, and both would otherwise render
+// `0 0 * * *`. The two runs take different lock files by design, so nothing
+// would serialize them: two headless Claude sessions would start together in
+// one working tree, both running git, and consolidation would not see the
+// day's scan until the next day. Half an hour is enough, because the cap is
+// one observation, so a scan does not run for hours. Minute 30 misses every
+// scan schedule of an hour or longer, because those all fire at minute 0. An
+// hour later at minute 0 would not: an hourly scan (`0 * * * *`) fires at
+// 01:00 too.
 //
-// Below a day the schedules are intervals rather than times, so there is no
-// hour to move; the pre-existing overlap there is unchanged.
+// A sub-hourly schedule has no single minute to move, so when one of the
+// intervals is shorter than an hour, the scan and consolidation can still
+// start together.
 func consolidateCron(minutes int) string {
 	if minutes == maxCronInterval {
 		return "30 0 * * *"
