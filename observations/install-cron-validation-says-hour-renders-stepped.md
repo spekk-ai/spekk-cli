@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-11-11T00:00:00Z
+announced: 2026-11-11T20:02:40Z
 affected:
   - specs/observer-agent/assertions/install-cron.md
   - internal/agent/observer_cron.go
