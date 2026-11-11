@@ -122,17 +122,11 @@ non-functional. Each installed line must satisfy all of:
   the prepend, those calls fail with "command not found" while the outer
   absolute-path invocation works, and the scheduled run dies silently.
 
-### Interval validation rejects non-cron-expressible values
+### Interval validation and rendering
 
-`ParseInstallCronFlags` rejects intervals that cron cannot express exactly,
-returning a clear error instead of emitting a silently-wrong schedule (an
-unchecked 90 would render as `*/90 * * * *`, which strict crons reject and lax
-crons misinterpret). An interval is accepted only if it is below 60, exactly
-60, or an exact multiple of 60 up to 1440. Below 60 renders as the sub-hourly
-`*/N * * * *`. An hour renders as `0 * * * *` and a day as `0 0 * * *`, never
-as the stepped `*/60` or `*/24` forms. Every other multiple of 60 renders as
-`0 */H * * *`. Values such as 90, or anything above 1440, are rejected at
-parse time for both `--loop-interval` and `--consolidate-interval`.
+`ParseInstallCronFlags` accepts positive values from 1 through 60 and exact multiples of 60 through 1440 for both `--loop-interval` and `--consolidate-interval`. It rejects values above 1440 and values above 60 that are not multiples of 60, such as 90.
+
+For the loop, `minutesToCron` renders values from 1 through 59 as `*/N * * * *`, 60 as `0 * * * *`, multiples from 120 through 1380 as `0 */H * * *`, and 1440 as `0 0 * * *`. For consolidation, values below 60 keep the same schedule, and values of 60 or more use minute 30 in place of minute 0. An hour never uses `*/60 * * * *`, and a day never uses `0 */24 * * *`.
 
 ### Cron line robustness
 

@@ -2,7 +2,7 @@
 slug: install-cron-validation-says-hour-renders-stepped
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-11-11T00:00:00Z
 announced: 2026-11-11T20:02:40Z
 affected:
