@@ -125,12 +125,14 @@ non-functional. Each installed line must satisfy all of:
 ### Interval validation rejects non-cron-expressible values
 
 `ParseInstallCronFlags` rejects intervals that cron cannot express exactly,
-returning a clear error instead of emitting a silently-wrong schedule
-(today `minutesToCron(90)` yields `*/90 * * * *`, which strict crons reject
-and lax crons misinterpret). An interval is accepted only if it is either
-`<= 60` (rendered as a sub-hourly `*/N * * * *`) or an exact multiple of 60
-(rendered as an hourly `0 */H * * *`). Values such as 90 or 45-when->60 are
-rejected at parse time for both `--loop-interval` and `--consolidate-interval`.
+returning a clear error instead of emitting a silently-wrong schedule (an
+unchecked 90 would render as `*/90 * * * *`, which strict crons reject and lax
+crons misinterpret). An interval is accepted only if it is below 60, exactly
+60, or an exact multiple of 60 up to 1440. Below 60 renders as the sub-hourly
+`*/N * * * *`. An hour renders as `0 * * * *` and a day as `0 0 * * *`, never
+as the stepped `*/60` or `*/24` forms. Every other multiple of 60 renders as
+`0 */H * * *`. Values such as 90, or anything above 1440, are rejected at
+parse time for both `--loop-interval` and `--consolidate-interval`.
 
 ### Cron line robustness
 
