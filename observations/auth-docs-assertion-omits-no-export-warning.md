@@ -2,7 +2,7 @@
 slug: auth-docs-assertion-omits-no-export-warning
 type: outdated_specs
 severity: low
-status: open
+status: resolved
 created: 2026-11-12T00:00:00Z
 affected:
   - specs/sandbox-auth-mode/assertions/auth-modes-are-documented.md
