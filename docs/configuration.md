@@ -255,12 +255,15 @@ CLAUDE_CODE_OAUTH_TOKEN="$(cat path/to/token)" claude -p 'reply with OK'
 
 A token that authenticates on your machine authenticates on the sandbox. One that does not was captured wrong, and no inspection of it shows that.
 
-Keep the token off command lines and out of shell history. Write it to a file only you can read, and let the environment pick it up from there:
+Keep the token off command lines and out of shell history. Write it to a file only you can read, and give it to the one `spekk` command that needs it:
 
 ```bash
 umask 077 && printf '%s' 'TOKEN' > ~/.config/spekk/oauth-token
-export CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/spekk/oauth-token)"
+CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/spekk/oauth-token)" \
+  spekk sandbox create --name my-sandbox --auth subscription
 ```
+
+**Do not export the token from your shell profile.** Claude Code uses `CLAUDE_CODE_OAUTH_TOKEN` before the account you signed in with through `/login`. With the variable exported, every interactive `claude` session on your machine runs on the token instead of your login: it reports API-key authentication, and features that need the signed-in account, such as Claude in Chrome (`/chrome`), are not available. An assignment in front of one command, as above, reaches only that command.
 
 An assignment on the local side of an `ssh` command is not forwarded, and a secret written inline is visible in both machines' process lists. To credential a remote sandbox unattended, put the value in a root-only file on that machine and source it there. `infrastructure/sandbox/setup-credentials.sh` documents the form.
 
