@@ -833,7 +833,7 @@ export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_DEFAULT_REGION=us-eas
 spekk sandbox create --name my-box --ip 203.0.113.10 --ssh-key ~/.ssh/my-box --ssh-user ubuntu
 ```
 
-`--ip` implies `--provider none`, so no DigitalOcean token is needed. For a subscription machine, swap in `--auth subscription` and export `CLAUDE_CODE_OAUTH_TOKEN` in place of the AWS keys. To change any of these after the sandbox exists, see [Updating sandbox variables](configuration.md#updating-sandbox-variables).
+`--ip` implies `--provider none`, so no DigitalOcean token is needed. For a subscription machine, swap in `--auth subscription` and, in place of the AWS keys, put `CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/spekk/oauth-token)"` in front of the `spekk sandbox create` command, as in the subscription recipe above. To change any of these after the sandbox exists, see [Updating sandbox variables](configuration.md#updating-sandbox-variables).
 
 ### `spekk sandbox provision <name>`
 
