@@ -2,7 +2,7 @@
 slug: cli-reference-byo-recipe-exports-oauth-token
 type: code_spec_misalignment
 severity: medium
-status: open
+status: resolved
 created: 2026-11-13T00:00:00Z
 announced: 2026-11-13T20:02:44Z
 affected:
