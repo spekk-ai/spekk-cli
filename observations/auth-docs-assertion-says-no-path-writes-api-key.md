@@ -2,7 +2,7 @@
 slug: auth-docs-assertion-says-no-path-writes-api-key
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-11-14T00:00:00Z
 announced: 2026-11-14T20:01:44Z
 affected:
