@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-11-14T00:00:00Z
+announced: 2026-11-14T20:01:44Z
 affected:
   - specs/sandbox-auth-mode/assertions/auth-modes-are-documented.md
   - internal/sandbox/machine.go
