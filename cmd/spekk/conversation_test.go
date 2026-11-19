@@ -81,6 +81,64 @@ func TestConversationDirectDeliveryAndPartialFailure(t *testing.T) {
 	}
 }
 
+func TestConversationReplyCapabilityAndRequest(t *testing.T) {
+	resumeFile := filepath.Join(t.TempDir(), "claude-session-id")
+	if err := os.WriteFile(resumeFile, []byte("claude-example"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(file, []byte("report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	posts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		if r.URL.Path != "/api/agents/conversations/" || r.Header.Get("Authorization") != "Bearer test-agent-token" {
+			t.Errorf("wrong request path or authorization")
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatal(err)
+		}
+		if r.FormValue("session_id") != "test-session" || r.FormValue("turn_id") != "test-turn" || r.FormValue("claude_session_id") != "claude-example" || r.FormValue("delivery") != "current_thread" || r.FormValue("body") != "Ready" {
+			t.Errorf("wrong reply fields: %v", r.Form)
+		}
+		if r.FormValue("channel") != "" || r.FormValue("thread_ts") != "" || r.FormValue("title") != "" {
+			t.Errorf("reply supplied a destination or title: %v", r.Form)
+		}
+		if got := len(r.MultipartForm.File["file"]); got != 1 {
+			t.Errorf("files = %d, want 1", got)
+		}
+		if posts == 2 {
+			w.WriteHeader(502)
+			fmt.Fprint(w, `{"detail":"The Slack bot needs files:write.","message_url":"https://app.slack.com/archives/C_THREAD/p123999","text_posted":true}`)
+			return
+		}
+		fmt.Fprint(w, `{"message_url":"https://app.slack.com/archives/C_THREAD/p123999","file_ids":["F_REPORT"]}`)
+	}))
+	defer server.Close()
+	values := map[string]string{"SPEKK_HOST": server.URL, "SPEKK_AGENT_TOKEN": "test-agent-token", "SPEKK_AGENT_SESSION_ID": "test-session", "SPEKK_AGENT_TURN_ID": "test-turn", conversation.SessionFileEnvVar: resumeFile}
+	env := fakeEnv(values)
+	var out, errOut bytes.Buffer
+	if code := execConversationReply([]string{"--body", "Ready", "--attach", file}, &out, &errOut, env); code == 0 || !strings.Contains(errOut.String(), "does not support current Slack thread delivery") || posts != 0 {
+		t.Fatalf("capability gate: code %d, error %q, posts %d", code, errOut.String(), posts)
+	}
+	values[currentThreadDeliveryEnvVar] = "1"
+	delete(values, "SPEKK_AGENT_TURN_ID")
+	errOut.Reset()
+	if code := execConversationReply([]string{"--body", "Ready", "--attach", file}, &out, &errOut, env); code == 0 || !strings.Contains(errOut.String(), "turn ID is not ready") || posts != 0 {
+		t.Fatalf("missing turn: code %d, error %q, posts %d", code, errOut.String(), posts)
+	}
+	values["SPEKK_AGENT_TURN_ID"] = "test-turn"
+	errOut.Reset()
+	if code := execConversationReply([]string{"--body", "Ready", "--attach", file}, &out, &errOut, env); code != 0 || !strings.Contains(out.String(), "File: F_REPORT") {
+		t.Fatalf("reply: code %d, output %q, error %q", code, out.String(), errOut.String())
+	}
+	errOut.Reset()
+	if code := execConversationReply([]string{"--body", "Ready", "--attach", file}, &out, &errOut, env); code == 0 || !strings.Contains(errOut.String(), "text posted at") || posts != 2 {
+		t.Fatalf("partial reply: code %d, error %q, posts %d", code, errOut.String(), posts)
+	}
+}
+
 func TestConversationCurrentSessionWithoutDeliveryCapability(t *testing.T) {
 	spoolDir := t.TempDir()
 	resumeFile := filepath.Join(t.TempDir(), "claude-session-id")
