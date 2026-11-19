@@ -10,5 +10,5 @@ import (
 // TestMain fails the run when a test changed the developer's real spekk
 // config directory.
 func TestMain(m *testing.M) {
-	os.Exit(testenv.RunGuarded(m.Run))
+	os.Exit(testenv.Main(m))
 }

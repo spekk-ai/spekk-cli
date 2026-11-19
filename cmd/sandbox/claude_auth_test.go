@@ -7,13 +7,15 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/spekk-ai/spekk-cli/internal/testenv"
 )
 
 // TestMain gives each test a model credential, as a sandbox that can run a
 // turn has. A test of the sign-in state takes it away with t.Setenv.
 func TestMain(m *testing.M) {
 	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	os.Exit(m.Run())
+	os.Exit(testenv.Main(m))
 }
 
 // noClaudeCredential clears each source of a model credential.
