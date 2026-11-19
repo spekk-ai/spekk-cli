@@ -3,7 +3,7 @@ id: ci-runs-tests-on-macos
 parent: tests-pass-on-any-machine
 created: 2026-11-19T15:58:31Z
 priority: 3
-status: in_progress
+status: done
 branch: feature/tests-pass-on-any-machine
 ---
 
