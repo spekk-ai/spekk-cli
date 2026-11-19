@@ -5,7 +5,8 @@
 // worker). It declares only the contract itself — the spool
 // environment-variable name, the request-file shape, and the set of allowed
 // severities — so both sides can depend on it without pulling in each
-// other's concerns.
+// other's concerns. It also names the private file where the worker writes
+// the active Claude session ID for direct delivery.
 package conversation
 
 import (
@@ -21,6 +22,10 @@ import (
 // variable name, which is why it lives here instead of being declared
 // independently in each.
 const SpoolEnvVar = "SPEKK_CONVERSATION_SPOOL"
+
+// SessionFileEnvVar names the private file that the worker fills with the
+// active Claude resume ID after the initial stream event.
+const SessionFileEnvVar = "SPEKK_CLAUDE_SESSION_FILE"
 
 // Severity is the urgency of a conversation-open request.
 type Severity string

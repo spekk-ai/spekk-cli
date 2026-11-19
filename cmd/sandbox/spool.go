@@ -28,6 +28,14 @@ func provisionSpool() (dir string, cleanup func(), err error) {
 	return dir, func() { os.RemoveAll(dir) }, nil
 }
 
+func writeClaudeSessionID(spoolDir, sessionID string) error {
+	staged := filepath.Join(spoolDir, "claude-session-id.tmp")
+	if err := os.WriteFile(staged, []byte(sessionID), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(staged, filepath.Join(spoolDir, "claude-session-id"))
+}
+
 // drainSpool reads every request file currently sitting in spoolDir and, for
 // each one, sends at most one conversation_open frame stamped with
 // sessionID. Every file it considers is removed before drainSpool returns —

@@ -85,10 +85,12 @@ func TestDrainSpoolChecksWelcomeCapability(t *testing.T) {
 	for _, tc := range []struct {
 		name, welcome, request string
 		wantSend               bool
+		wantDelivery           bool
 	}{
-		{"old server channel", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T","channel":"CPROJECT"}`, false},
-		{"new server channel", `{"type":"welcome","protocol":"1.1","capabilities":["conversation_open_channel"]}`, `{"title":"T","channel":"CPROJECT"}`, true},
-		{"old server home", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T"}`, true},
+		{"old server channel", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T","channel":"CPROJECT"}`, false, false},
+		{"channel only", `{"type":"welcome","protocol":"1.1","capabilities":["conversation_open_channel"]}`, `{"title":"T","channel":"CPROJECT"}`, true, false},
+		{"delivery server", `{"type":"welcome","protocol":"1.1","capabilities":["conversation_open_channel","agent_conversation_delivery"]}`, `{"title":"T","channel":"CPROJECT"}`, true, true},
+		{"old server home", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T"}`, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var welcome Message
@@ -97,6 +99,9 @@ func TestDrainSpoolChecksWelcomeCapability(t *testing.T) {
 			}
 			client := &AgentClient{conns: newConnHolder()}
 			client.handleWelcome(t.Context(), welcome)
+			if got := client.conns.supportsDelivery(); got != tc.wantDelivery {
+				t.Fatalf("delivery supported = %t, want %t", got, tc.wantDelivery)
+			}
 			dir := t.TempDir()
 			writeRequestFile(t, dir, "req.json", tc.request)
 			buf := captureLog(t)

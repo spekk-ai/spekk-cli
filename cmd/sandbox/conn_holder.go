@@ -55,10 +55,11 @@ var errNoConnection = errors.New("no live connection to the control host")
 // began. A worker that held its own *websocket.Conn would still be holding the
 // closed one after a reconnect, and its result would go nowhere.
 type connHolder struct {
-	mu               sync.Mutex
-	conn             *websocket.Conn
-	channelSupported bool
-	changed          chan struct{}
+	mu                sync.Mutex
+	conn              *websocket.Conn
+	channelSupported  bool
+	deliverySupported bool
+	changed           chan struct{}
 }
 
 func newConnHolder() *connHolder {
@@ -71,6 +72,7 @@ func (h *connHolder) set(conn *websocket.Conn) {
 	defer h.mu.Unlock()
 	h.conn = conn
 	h.channelSupported = false
+	h.deliverySupported = false
 	close(h.changed)
 	h.changed = make(chan struct{})
 }
@@ -82,17 +84,26 @@ func (h *connHolder) clear() {
 	defer h.mu.Unlock()
 	h.conn = nil
 	h.channelSupported = false
+	h.deliverySupported = false
 }
 
 func (h *connHolder) setCapabilities(capabilities []string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, capability := range capabilities {
-		if capability == "conversation_open_channel" {
+		switch capability {
+		case "conversation_open_channel":
 			h.channelSupported = true
-			return
+		case "agent_conversation_delivery":
+			h.deliverySupported = true
 		}
 	}
+}
+
+func (h *connHolder) supportsDelivery() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.deliverySupported
 }
 
 func (h *connHolder) supportsChannel() bool {

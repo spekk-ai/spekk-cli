@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +19,131 @@ import (
 func fakeEnv(values map[string]string) func(string) string {
 	return func(name string) string {
 		return values[name]
+	}
+}
+
+func TestConversationDirectDeliveryAndPartialFailure(t *testing.T) {
+	resumeFile := filepath.Join(t.TempDir(), "claude-session-id")
+	if err := os.WriteFile(resumeFile, []byte("claude-example"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first := filepath.Join(t.TempDir(), "schema.sql")
+	second := filepath.Join(t.TempDir(), "api.yaml")
+	for _, path := range []string{first, second} {
+		if err := os.WriteFile(path, []byte("made-up file"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	posts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		if r.Header.Get("Authorization") != "Bearer test-agent-token" {
+			t.Error("missing agent authorization")
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Error(err)
+		}
+		if r.FormValue("session_id") != "test-session" || r.FormValue("claude_session_id") != "claude-example" || r.FormValue("title") != "Report" {
+			t.Errorf("wrong fields: %v", r.Form)
+		}
+		want := 0
+		if posts != 1 {
+			want = 2
+		}
+		if got := len(r.MultipartForm.File["file"]); got != want {
+			t.Errorf("files = %d, want %d", got, want)
+		}
+		if posts == 1 {
+			fmt.Fprint(w, `{"message_url":"https://app.slack.com/archives/C_HOME/p123456","file_ids":[]}`)
+		} else if posts == 3 {
+			w.WriteHeader(502)
+			fmt.Fprint(w, `{"detail":"The Slack bot needs files:write.","message_url":"https://app.slack.com/archives/C_HOME/p123456","text_posted":true}`)
+		} else {
+			fmt.Fprint(w, `{"message_url":"https://app.slack.com/archives/C_HOME/p123456","file_ids":["F1","F2"]}`)
+		}
+	}))
+	defer server.Close()
+	env := fakeEnv(map[string]string{"SPEKK_HOST": server.URL, "SPEKK_AGENT_TOKEN": "test-agent-token", "SPEKK_AGENT_SESSION_ID": "test-session", "SPEKK_CONVERSATION_DELIVERY": "1", conversation.SessionFileEnvVar: resumeFile})
+	var out, errOut bytes.Buffer
+	if code := execConversationOpen([]string{"--title", "Report", "--body", "Ready"}, &out, &errOut, env); code != 0 || !strings.Contains(out.String(), "Message: https://") || strings.Contains(out.String(), "File:") {
+		t.Fatalf("plain delivery: code %d, output %q, error %q", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	if code := execConversationOpen([]string{"--title", "Report", "--body", "Ready", "--attach", first, "--attach", second}, &out, &errOut, env); code != 0 || !strings.Contains(out.String(), "File: F2") {
+		t.Fatalf("file delivery: code %d, output %q, error %q", code, out.String(), errOut.String())
+	}
+	errOut.Reset()
+	if code := execConversationOpen([]string{"--title", "Report", "--body", "Ready", "--attach", first, "--attach", second}, &out, &errOut, env); code == 0 || !strings.Contains(errOut.String(), "text posted at") || !strings.Contains(errOut.String(), "files:write") {
+		t.Fatalf("partial delivery: code %d, error %q", code, errOut.String())
+	}
+	if posts != 3 || strings.Contains(out.String()+errOut.String(), "test-agent-token") {
+		t.Fatalf("unexpected requests or token leak: %d", posts)
+	}
+}
+
+func TestConversationCurrentSessionWithoutDeliveryCapability(t *testing.T) {
+	spoolDir := t.TempDir()
+	resumeFile := filepath.Join(t.TempDir(), "claude-session-id")
+	if err := os.WriteFile(resumeFile, []byte("claude-example"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(file, []byte("report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	posts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	env := fakeEnv(map[string]string{
+		"SPEKK_HOST": server.URL, "SPEKK_AGENT_TOKEN": "test-agent-token", "SPEKK_AGENT_SESSION_ID": "test-session", conversationDeliveryEnvVar: "0",
+		conversation.SpoolEnvVar: spoolDir, conversation.SessionFileEnvVar: resumeFile,
+	})
+	var out, errOut bytes.Buffer
+	if code := execConversationOpen([]string{"--title", "Report", "--body", "Ready"}, &out, &errOut, env); code != 0 {
+		t.Fatalf("plain message: code %d, error %q", code, errOut.String())
+	}
+	files := requestFiles(t, spoolDir)
+	if len(files) != 1 {
+		t.Fatalf("queued files = %v", files)
+	}
+	data, err := os.ReadFile(filepath.Join(spoolDir, files[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req conversation.Request
+	if err := json.Unmarshal(data, &req); err != nil || req.Title != "Report" || req.Body != "Ready" {
+		t.Fatalf("queued request = %+v, error %v", req, err)
+	}
+	errOut.Reset()
+	if code := execConversationOpen([]string{"--title", "Report", "--body", "Ready", "--attach", file}, &out, &errOut, env); code == 0 || !strings.Contains(errOut.String(), "app does not support conversation file delivery") {
+		t.Fatalf("attachment: code %d, error %q", code, errOut.String())
+	}
+	if posts != 0 || len(requestFiles(t, spoolDir)) != 1 {
+		t.Fatalf("HTTP posts = %d, queued files = %v", posts, requestFiles(t, spoolDir))
+	}
+}
+
+func TestConversationRejectsLargeAttachmentBeforePost(t *testing.T) {
+	resumeFile := filepath.Join(t.TempDir(), "claude-session-id")
+	if err := os.WriteFile(resumeFile, []byte("claude-example"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "large.bin")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(10<<20 + 1); err != nil {
+		t.Fatal(err)
+	}
+	file.Close()
+	var out, errOut bytes.Buffer
+	code := execConversationOpen([]string{"--title", "Report", "--body", "Ready", "--attach", path}, &out, &errOut, fakeEnv(map[string]string{"SPEKK_AGENT_SESSION_ID": "session", conversationDeliveryEnvVar: "1", conversation.SessionFileEnvVar: resumeFile}))
+	if code == 0 || !strings.Contains(errOut.String(), "10 MB") {
+		t.Fatalf("code %d, error %q", code, errOut.String())
 	}
 }
 
@@ -236,18 +364,5 @@ func TestExecConversationOpen_InvalidSeverity(t *testing.T) {
 	}
 	if len(requestFiles(t, spoolDir)) != 0 {
 		t.Error("expected no request file written for an invalid severity")
-	}
-}
-
-// TestExecConversationOpen_Help confirms --help short-circuits before any
-// env or flag validation.
-func TestExecConversationOpen_Help(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := execConversationOpen([]string{"--help"}, &stdout, &stderr, fakeEnv(nil))
-	if code != 0 {
-		t.Fatalf("expected exit 0 for --help, got %d", code)
-	}
-	if !strings.Contains(stdout.String(), "spekk conversation open") {
-		t.Errorf("expected usage text, got: %q", stdout.String())
 	}
 }

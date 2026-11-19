@@ -121,6 +121,9 @@ func main() {
 	case "conversation":
 		runConversation(args[1:])
 
+	case "artifact":
+		runArtifact(args[1:])
+
 	case "prompt":
 		runPrompt(args[1:])
 
@@ -2364,6 +2367,7 @@ COMMANDS:
   app       Use app-managed sandboxes with a personal API key
   schedule  Manage the scheduled tasks of a sandbox agent (list, create, update, delete, run)
   conversation  Request a conversation on the connected chat surface (open)
+  artifact      Upload a file to the app as an agent
   install   Install a skill for an agent (coach/builder/observer)
   uninstall Remove an installed skill from local or global scope
   skills    Inspect skills available to an agent (list)
