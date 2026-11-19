@@ -3,7 +3,7 @@ id: artifact-upload-command
 parent: agent-file-delivery
 created: 2026-11-19T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/agent-file-delivery
 ---
 
