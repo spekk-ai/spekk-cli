@@ -802,7 +802,7 @@ The agent owns `/opt/spekk/workspace`, so on a machine you also use interactivel
 
 The agent binary spekk deploys matches the machine's CPU architecture, so an arm64 host (a Raspberry Pi, an arm64 droplet) is served an arm64 build. spekk pulls that build from the release of this spekk by default (the latest release for a dev build); a release only carries the architectures it published. To use a build that only exists in a prerelease, pin it with `--release <tag>` (e.g. `--release exp-arm64`).
 
-**Setup recipes.** Each recipe pairs a provider with an auth mode. Export the variables the mode needs first ([Sandbox provisioning](configuration.md#sandbox-provisioning) lists them all), then run one command.
+**Setup recipes.** Each recipe pairs a provider with an auth mode. Set the variables as each recipe shows ([Sandbox provisioning](configuration.md#sandbox-provisioning) lists the variables for each mode), then run one command.
 
 DigitalOcean droplet, Bedrock (both defaults):
 
