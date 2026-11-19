@@ -498,18 +498,14 @@ func insertSpecs(tx *sql.Tx, result *parser.ParseResult) error {
 // multi-value spelling into items; a repeated value (`workflows: w1, w1`)
 // inserts once, so COUNT-style report queries stay accurate.
 func insertFrontmatterFields(tx *sql.Tx, ownerType, ownerID string, fields map[string][]string) error {
+	fields = parser.DistinctFields(fields)
 	keys := make([]string, 0, len(fields))
 	for key := range fields {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		seen := make(map[string]bool)
 		for _, value := range fields[key] {
-			if seen[value] {
-				continue
-			}
-			seen[value] = true
 			if _, err := tx.Exec(
 				`INSERT INTO frontmatter_fields (owner_type, owner_id, key, value) VALUES (?, ?, ?, ?)`,
 				ownerType, ownerID, key, value,

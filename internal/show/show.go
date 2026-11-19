@@ -66,6 +66,10 @@ type showSpec struct {
 	Content  string `json:"content"`
 	Branch   string `json:"branch"`
 
+	// CustomFields maps each custom frontmatter key to its values, split by the
+	// rule the index uses for frontmatter_fields. Omitted when there are none.
+	CustomFields map[string][]string `json:"customFields,omitempty"`
+
 	// Foreign is true when this spec exists only on other branches (an incoming
 	// addition with no local working-tree file) and was synthesized from metadata
 	// parsed out of a ref. The client uses it to hide the item when all of its
@@ -100,6 +104,10 @@ type showAssertion struct {
 	DependsOn string `json:"dependsOn,omitempty"`
 	Created   string `json:"created"`
 
+	// CustomFields maps each custom frontmatter key to its values, split by the
+	// rule the index uses for frontmatter_fields. Omitted when there are none.
+	CustomFields map[string][]string `json:"customFields,omitempty"`
+
 	// Foreign is true when this assertion exists only on other branches (an
 	// incoming addition with no local working-tree file) and was synthesized from
 	// metadata parsed out of a ref.
@@ -129,20 +137,38 @@ type Options struct {
 // classifies spec/assertion state across all branches (via applyCrossBranch) and
 // folds the contributions into the rendered data.
 func Run(specsDir string, opts Options) error {
-	// 1. Parse specs
-	result, err := parseSpecs(specsDir)
+	outputPath, err := writeExplorer(specsDir, opts)
 	if err != nil {
 		return err
 	}
 
+	// Open in browser
+	if err := openBrowser(outputPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open browser: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Open the file manually: %s\n", outputPath)
+	}
+
+	return nil
+}
+
+// writeExplorer parses specsDir and writes the explorer HTML to
+// .spekk/index.html under the project root, returning that path. It does not
+// open a browser.
+func writeExplorer(specsDir string, opts Options) (string, error) {
+	// 1. Parse specs
+	result, err := parseSpecs(specsDir)
+	if err != nil {
+		return "", err
+	}
+
 	if len(result.Specs) == 0 {
-		return fmt.Errorf("no specifications found in %s", specsDir)
+		return "", fmt.Errorf("no specifications found in %s", specsDir)
 	}
 
 	// 2. Build the data and marshal it to JSON
 	jsonBytes, err := marshalData(specsDir, result, opts)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// 3. Replace placeholder in template
@@ -153,23 +179,16 @@ func Run(specsDir string, opts Options) error {
 	spekkDir := filepath.Join(projectRoot, ".spekk")
 
 	if err := os.MkdirAll(spekkDir, 0o755); err != nil {
-		return fmt.Errorf("creating .spekk directory: %w", err)
+		return "", fmt.Errorf("creating .spekk directory: %w", err)
 	}
 
 	outputPath := filepath.Join(spekkDir, "index.html")
 	if err := os.WriteFile(outputPath, []byte(html), 0o644); err != nil {
-		return fmt.Errorf("writing %s: %w", outputPath, err)
+		return "", fmt.Errorf("writing %s: %w", outputPath, err)
 	}
 
 	fmt.Fprintf(os.Stderr, "Spec Explorer written to %s\n", outputPath)
-
-	// 5. Open in browser
-	if err := openBrowser(outputPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open browser: %s\n", err)
-		fmt.Fprintf(os.Stderr, "Open the file manually: %s\n", outputPath)
-	}
-
-	return nil
+	return outputPath, nil
 }
 
 // WriteJSON writes the data that Run puts into the explorer HTML to w, as one
@@ -234,6 +253,8 @@ func buildShowData(specsDir string, result *parser.ParseResult) showData {
 			File:     s.File,
 			Content:  s.Content,
 			Branch:   s.Branch,
+
+			CustomFields: parser.DistinctFields(s.Fields),
 		}
 	}
 
@@ -250,6 +271,8 @@ func buildShowData(specsDir string, result *parser.ParseResult) showData {
 			Branch:    a.Branch,
 			DependsOn: a.DependsOn,
 			Created:   a.Created,
+
+			CustomFields: parser.DistinctFields(a.Fields),
 		}
 	}
 
@@ -549,6 +572,7 @@ func synthesizeSpec(path string, meta *crossbranch.FileMeta) showSpec {
 		s.Priority = meta.Priority
 		s.Content = meta.Content
 		s.Branch = meta.Branch
+		s.CustomFields = parser.DistinctFields(meta.Fields)
 	}
 	return s
 }
@@ -574,6 +598,7 @@ func synthesizeAssertion(path string, meta *crossbranch.FileMeta) showAssertion 
 		a.Priority = meta.Priority
 		a.Content = meta.Content
 		a.Branch = meta.Branch
+		a.CustomFields = parser.DistinctFields(meta.Fields)
 		// Prefer the frontmatter parent over the path-derived one: an assertion
 		// may live under a spec directory whose name differs from the frontmatter
 		// parent id, and the explicit frontmatter value is authoritative.

@@ -92,6 +92,8 @@ type FileMeta struct {
 	// an assertion that lives under one spec directory but declares a different
 	// parent in its frontmatter is linked correctly.
 	Parent string
+	// Fields holds the custom frontmatter fields, as parser.Spec.Fields does.
+	Fields map[string][]string
 }
 
 // Classify discovers the comparison branches (via DiscoverBranches with the
@@ -427,7 +429,7 @@ func foreignMeta(rev, path string) *FileMeta {
 		if err != nil {
 			return nil
 		}
-		return &FileMeta{Title: a.Title, Status: a.Status, Branch: a.Branch, Priority: a.Priority, Content: a.Content, Parent: a.Parent}
+		return &FileMeta{Title: a.Title, Status: a.Status, Branch: a.Branch, Priority: a.Priority, Content: a.Content, Parent: a.Parent, Fields: a.Fields}
 	}
 	if isSpecParentFile(path) {
 		s, err := SpecAtRef(rev, path)
@@ -436,7 +438,7 @@ func foreignMeta(rev, path string) *FileMeta {
 		}
 		// Spec status is derived from assertions, not stored on the parent; leave
 		// it empty for the caller to compute from the foreign assertions.
-		return &FileMeta{Title: s.Title, Branch: s.Branch, Priority: s.Priority, Content: s.Content}
+		return &FileMeta{Title: s.Title, Branch: s.Branch, Priority: s.Priority, Content: s.Content, Fields: s.Fields}
 	}
 	return nil
 }
