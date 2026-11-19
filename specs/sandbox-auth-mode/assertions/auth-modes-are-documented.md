@@ -3,7 +3,7 @@ id: auth-modes-are-documented
 parent: sandbox-auth-mode
 created: 2026-08-27T00:00:00Z
 priority: 2
-status: done
+status: failed
 branch: feat/sandbox-subscription-auth
 depends-on: env-file-matches-auth-mode
 ---
