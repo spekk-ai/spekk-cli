@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.51.0 -- Agent File Delivery and Builder Loop Control](RELEASE-NOTES-1.51.0.md)
+
+`spekk conversation open --attach` sends up to three files with a new Slack message, and `spekk artifact upload` sends a file to the app. The CLI enforces the file limits. A plain conversation request still works when the app lacks direct delivery, but an attachment needs the `agent_conversation_delivery` capability. This release also adds `spekk list --sort-by`, builder loop `--exit-when-done`, two observation types, and a Ctrl+C wait for an active loop builder child. Update the CLI; Slack file delivery also needs the app release and a bot token with `files:write`. The protocol stays `1.6`, with major `1`.
+
 ## [1.50.0 -- A Default Model Pin for New Sandboxes](RELEASE-NOTES-1.50.0.md)
 
 `spekk sandbox create` now writes `ANTHROPIC_MODEL` to the sandbox env file from `--model`, or from the auth mode's default: `us.anthropic.claude-opus-5-5` for `bedrock` and `claude-opus-5-5` for `subscription`. `--model ""` writes no pin. The caller's `ANTHROPIC_MODEL` does not set it. Existing sandboxes keep their env file on CLI update or `deploy`; `provision --force` rewrites it with the mode's default. Update the CLI to use the new flag. The protocol stays `1.6`, and the major stays `1`.
