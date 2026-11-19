@@ -261,6 +261,30 @@ func CustomFields(content string, known map[string]bool) (map[string][]string, e
 	return customFields(fm, known), nil
 }
 
+// DistinctFields returns fields with each key's repeated values removed,
+// keeping first-seen order, and nil when nothing is left. The index and the
+// show data both store one entry per distinct value, so both go through here.
+func DistinctFields(fields map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(fields))
+	for key, values := range fields {
+		seen := make(map[string]bool, len(values))
+		var distinct []string
+		for _, v := range values {
+			if !seen[v] {
+				seen[v] = true
+				distinct = append(distinct, v)
+			}
+		}
+		if len(distinct) > 0 {
+			out[key] = distinct
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // baseIndent returns the column the frontmatter's own keys sit at: the
 // smallest indentation among the lines that carry data. Reading column zero
 // as the only top level would reject a whole block that is indented

@@ -3,7 +3,7 @@ id: show-data-carries-custom-fields
 parent: show-custom-fields
 created: 2026-11-19T14:55:40Z
 priority: 2
-status: not_started
+status: done
 branch: feature/show-custom-fields
 ---
 
@@ -20,3 +20,5 @@ branch: feature/show-custom-fields
 - In `--cross-branch` mode, an item that exists only on another branch (`foreign: true`) carries the custom fields read from that branch's file.
 
 **Note:** The split must come from the parser's existing custom-field rule, not a second copy of it. A value that indexes as two rows shows as two array items.
+
+**Tests:** `internal/show/custom_fields_test.go`
