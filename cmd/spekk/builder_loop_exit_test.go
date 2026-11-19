@@ -142,6 +142,95 @@ func TestBuilderLoopExitWhenDone(t *testing.T) {
 	})
 }
 
+func TestLoopBuilderWaitsForInterruptedChild(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "spekk")
+	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", bin, "./cmd/spekk")
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build CLI: %v\n%s", err, out)
+	}
+
+	dir := builderLoopFixture(t, true)
+	fakeDir := t.TempDir()
+	fake := `#!/bin/sh
+if [ -f "$CHILD_DONE" ]; then
+  sed -i 's/status: not_started/status: done/' "$ASSERTION_FILE"
+  printf 'SECOND_BUILD\n'
+  exit 0
+fi
+trap 'sleep 0.3; printf done > "$CHILD_DONE"; printf result > "$RESULT_FILE"; exit 130' INT
+printf 'CHILD_READY\n'
+i=0
+while [ "$i" -lt 40 ]; do
+  sleep 0.1
+  i=$((i + 1))
+done
+exit 1
+`
+	if err := os.WriteFile(filepath.Join(fakeDir, "claude"), []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	childDone := filepath.Join(fakeDir, "child_done")
+	resultFile := filepath.Join(dir, "result.txt")
+	assertionFile := filepath.Join(dir, "specs", "sample", "assertions", "work.md")
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, "loop", "builder")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PATH="+fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"), "CHILD_DONE="+childDone, "RESULT_FILE="+resultFile, "ASSERTION_FILE="+assertionFile)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	interrupted := false
+	stopped := false
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		output.WriteString(line + "\n")
+		if !interrupted && strings.Contains(line, "CHILD_READY") {
+			interrupted = true
+			if err := cmd.Process.Signal(os.Interrupt); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if !stopped && strings.Contains(line, "Waiting for new work") {
+			stopped = true
+			if err := cmd.Process.Signal(os.Interrupt); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("loop exited with error: %v\n%s", err, output.String())
+	}
+	if !interrupted || !stopped || !strings.Contains(output.String(), "SECOND_BUILD") {
+		t.Fatalf("loop did not continue after the interrupted child:\n%s", output.String())
+	}
+	if _, err := os.Stat(childDone); err != nil {
+		t.Fatalf("child did not receive SIGINT: %v\n%s", err, output.String())
+	}
+	if !strings.Contains(output.String(), "Builder loop complete. 1 assertion completed.") {
+		t.Fatalf("completion count is wrong:\n%s", output.String())
+	}
+	show := exec.Command("git", "show", "HEAD~1:result.txt")
+	show.Dir = dir
+	if out, err := show.CombinedOutput(); err != nil || string(out) != "result" {
+		t.Fatalf("commit step did not run after the child exited: %v\n%s\n%s", err, out, output.String())
+	}
+}
+
 func interruptWaitingBuilderLoop(bin, dir string, args []string, waitText, path string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

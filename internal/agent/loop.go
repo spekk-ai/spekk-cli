@@ -80,12 +80,19 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
+	active := &processHolder{}
 	var completed atomic.Int64
 	go func() {
-		sig := <-sigCh
-		colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
-		colorLog(colorGreen, formatLoopComplete(completed.Load()))
-		os.Exit(0)
+		for sig := range sigCh {
+			if sig == syscall.SIGINT && active.isSet() {
+				colorLog(colorYellow, "\nInterrupting current build...")
+				active.signal(sig)
+			} else {
+				colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
+				colorLog(colorGreen, formatLoopComplete(completed.Load()))
+				os.Exit(0)
+			}
+		}
 	}()
 
 	spekkBin := findSpekkBin()
@@ -151,7 +158,7 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 
 		success, launchErr := launchClaude(
 			[]string{"--dangerously-skip-permissions", message},
-			nil,
+			active,
 		)
 
 		if launchErr != nil {
