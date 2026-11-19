@@ -2,12 +2,16 @@ package testenv
 
 import (
 	"io/fs"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A developer config that sets an identity, in all three places git reads:
@@ -93,5 +97,33 @@ func TestTestScriptsAvoidFlagsThatDifferBetweenBSDAndGNU(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A test that reaches a host outside loopback fails at once and names the
+// opt-in variable, and a loopback server still works.
+func TestBlockRemoteHostsRefusesAnythingOutsideLoopback(t *testing.T) {
+	t.Setenv(OnlineEnv, "")
+	origTransport, origResolver := http.DefaultTransport, net.DefaultResolver
+	t.Cleanup(func() { http.DefaultTransport, net.DefaultResolver = origTransport, origResolver })
+	BlockRemoteHosts()
+
+	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer local.Close()
+	if resp, err := http.Get(local.URL); err != nil {
+		t.Fatalf("loopback request failed: %v", err)
+	} else {
+		resp.Body.Close()
+	}
+
+	start := time.Now()
+	for _, url := range []string{"http://192.0.2.1/", "https://github.com/"} {
+		_, err := http.Get(url)
+		if err == nil || !strings.Contains(err.Error(), OnlineEnv) {
+			t.Errorf("GET %s: error = %v, want a refusal that names %s", url, err, OnlineEnv)
+		}
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Errorf("refusal took %v, want it immediate", time.Since(start))
 	}
 }

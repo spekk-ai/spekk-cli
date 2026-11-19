@@ -4,10 +4,17 @@
 package testenv
 
 import (
+	"context"
+	"fmt"
 	"io/fs"
+	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -73,6 +80,11 @@ var gitIdentityVars = []string{
 	"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_AUTHOR_DATE",
 	"GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "GIT_COMMITTER_DATE",
 	"EMAIL", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
+	// An editor that hosts the terminal points git at a prompt program. A
+	// test that makes git ask for a password would then wait for a person
+	// to answer a dialog instead of failing.
+	"GIT_ASKPASS", "SSH_ASKPASS", "VSCODE_GIT_ASKPASS_NODE", "VSCODE_GIT_ASKPASS_MAIN",
+	"VSCODE_GIT_ASKPASS_EXTRA_ARGS", "VSCODE_GIT_IPC_HANDLE",
 }
 
 // IsolateGit makes every git subprocess of this test ignore the developer's
@@ -91,6 +103,56 @@ func IsolateGit(t testing.TB) {
 	for _, k := range gitIdentityVars {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
+	}
+}
+
+// OnlineEnv names the variable that lets a test reach a real remote service.
+// A test that can only run against one skips unless it is set to 1.
+const OnlineEnv = "SPEKK_TEST_ONLINE"
+
+// RequireOnline skips the test unless OnlineEnv is set.
+func RequireOnline(t testing.TB) {
+	t.Helper()
+	if os.Getenv(OnlineEnv) != "1" {
+		t.Skip("needs a real remote service; set " + OnlineEnv + "=1 to run it")
+	}
+}
+
+// BlockRemoteHosts makes the default HTTP transport and the default resolver
+// refuse anything outside loopback, at once and with a message that names the
+// host, instead of waiting for DNS or a connect timeout. Hostnames other than
+// localhost fail to resolve, and a dial to a non-loopback address fails.
+// Tests that build their own client with their own transport are not covered.
+func BlockRemoteHosts() {
+	if os.Getenv(OnlineEnv) == "1" {
+		return
+	}
+	refuse := func(addr string) error {
+		return fmt.Errorf("test tried to reach %s; tests may only use loopback (set %s=1 for a test that needs the real service)", addr, OnlineEnv)
+	}
+	net.DefaultResolver = &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			return nil, refuse("a DNS server")
+		},
+	}
+	guard := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		if host != "localhost" {
+			if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+				return nil, refuse(addr)
+			}
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		t = t.Clone()
+		t.DialContext = guard
+		t.Proxy = nil
+		http.DefaultTransport = t
 	}
 }
 
@@ -118,6 +180,7 @@ func Main(m *testing.M) int {
 	// GIT_CONFIG_GLOBAL, because tests that give themselves a HOME write
 	// their own global config there, and GIT_CONFIG_GLOBAL would override it.
 	// A test that sets its own HOME still wins.
+	keepGoEnv()
 	os.Setenv("HOME", dir)
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg"))
 	for k, v := range gitIsolation(empty) {
@@ -126,6 +189,8 @@ func Main(m *testing.M) int {
 	for _, k := range append([]string{"GIT_CONFIG_GLOBAL", "GIT_CONFIG_PARAMETERS"}, gitIdentityVars...) {
 		os.Unsetenv(k)
 	}
+	os.Setenv("GIT_TERMINAL_PROMPT", "0")
+	BlockRemoteHosts()
 	code := m.Run()
 	if diff := changed(); len(diff) > 0 {
 		os.Stderr.WriteString("tests changed files under the real user config directory:\n")
@@ -135,4 +200,21 @@ func Main(m *testing.M) int {
 		return 1
 	}
 	return code
+}
+
+// keepGoEnv pins where the go command keeps its caches before HOME moves. A
+// test that runs `go build` would otherwise start from an empty module cache
+// and fetch every dependency from the network.
+func keepGoEnv() {
+	goBin := filepath.Join(runtime.GOROOT(), "bin", "go")
+	out, err := exec.Command(goBin, "env", "GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS").Output()
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(out), "\n")
+	for i, name := range []string{"GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS"} {
+		if i < len(lines) && lines[i] != "" && os.Getenv(name) == "" {
+			os.Setenv(name, lines[i])
+		}
+	}
 }
