@@ -733,6 +733,33 @@
             flex-wrap: wrap;
         }
 
+        .detail-properties {
+            margin-bottom: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            font-size: 13px;
+            color: #475569;
+        }
+
+        .detail-properties h4 {
+            margin: 0 0 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .detail-properties .property-line {
+            margin: 4px 0;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .detail-properties .property-key {
+            font-weight: 600;
+            color: #1e293b;
+        }
+
         .meta-item {
             font-size: 13px;
             color: #475569;
@@ -1647,6 +1674,30 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
             return div.innerHTML;
         }
 
+        // Custom frontmatter fields as a "Properties" block under the meta row.
+        // Keys are sorted by code point (the byte order of their UTF-8 form), not
+        // left to object order, which puts integer-like keys first. An item with
+        // no custom fields gets no block and no heading.
+        function propertiesHtml(item) {
+            var fields = item.customFields;
+            var keys = fields ? Object.keys(fields) : [];
+            if (keys.length === 0) return '';
+            keys.sort(function (a, b) {
+                var ca = Array.from(a), cb = Array.from(b);
+                for (var i = 0; i < ca.length && i < cb.length; i++) {
+                    var d = ca[i].codePointAt(0) - cb[i].codePointAt(0);
+                    if (d !== 0) return d;
+                }
+                return ca.length - cb.length;
+            });
+            var h = '<div class="detail-properties"><h4>Properties</h4>';
+            for (var i = 0; i < keys.length; i++) {
+                h += '<div class="property-line"><span class="property-key">' + escapeHtml(keys[i]) + '</span>: '
+                    + escapeHtml(fields[keys[i]].join(', ')) + '</div>';
+            }
+            return h + '</div>';
+        }
+
         // Status emoji for detail badges
         function statusEmoji(status) {
             switch (status) {
@@ -2011,6 +2062,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                         + ' <span class="cb-contrib-label">' + escapeHtml(cbStateLabelFull(specDetailSummary, specSummaryUnconfirmed)) + '</span></span>';
                 }
                 html += '</div>';
+                html += propertiesHtml(spec);
                 html += '</div>';
                 html += cbContributionsHtml(cbFilteredContribs(spec));
                 try { html += '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(spec.content || '')) + '</div>'; } catch(e) { html += '<div class="detail-body markdown-body">' + escapeHtml(spec.content || '') + '</div>'; }
@@ -2034,6 +2086,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));</scri
                     html += '<span class="meta-item">Depends On: <strong>' + escapeHtml(assertion.dependsOn) + '</strong></span>';
                 }
                 html += '</div>';
+                html += propertiesHtml(assertion);
                 html += '</div>';
                 html += cbContributionsHtml(cbFilteredContribs(assertion));
                 try { html += '<div class="detail-body markdown-body">' + DOMPurify.sanitize(marked.parse(assertion.content || '')) + '</div>'; } catch(e) { html += '<div class="detail-body markdown-body">' + escapeHtml(assertion.content || '') + '</div>'; }
