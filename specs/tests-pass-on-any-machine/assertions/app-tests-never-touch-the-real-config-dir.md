@@ -3,7 +3,7 @@ id: app-tests-never-touch-the-real-config-dir
 parent: tests-pass-on-any-machine
 created: 2026-11-19T15:58:31Z
 priority: 1
-status: not_started
+status: done
 branch: feature/tests-pass-on-any-machine
 ---
 
@@ -20,3 +20,5 @@ On macOS, `os.UserConfigDir()` ignores `XDG_CONFIG_HOME`. The app tests set that
 - Outside tests, `spekk` still keeps its request store in the user config directory, at the same path as today, so existing stores are still found.
 
 **Note:** The test fix must not depend on `XDG_CONFIG_HOME`, because `os.UserConfigDir()` honors it only on Unix other than macOS. The store location needs a seam that works the same on every OS, for example a path the client takes as input or an environment variable spekk itself reads.
+
+**Tests:** cmd/spekk/app_test.go (every test sets `SPEKK_APP_DIR` to `t.TempDir()`), cmd/spekk/main_test.go and internal/appclient/main_test.go (`TestMain` fails the run if any file under the real `<UserConfigDir>/spekk` changed), internal/appclient/client_test.go (`TestCredentialFileIsPrivateInASharedConfigDirectory`)

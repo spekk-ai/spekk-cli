@@ -16,6 +16,9 @@ import (
 	"time"
 )
 
+// EnvAppDir names the environment variable that moves the app store.
+const EnvAppDir = "SPEKK_APP_DIR"
+
 type Config struct {
 	Host string `json:"host"`
 	Key  string `json:"key"`
@@ -64,7 +67,15 @@ func ValidateHost(raw string) (string, error) {
 // appDir holds the key and the operation records. It is a private directory
 // of its own, because other spekk commands make the parent spekk directory
 // with mode 0755.
+//
+// EnvAppDir overrides the location. It exists so tests can keep the store in
+// a temporary directory on every OS: os.UserConfigDir honors XDG_CONFIG_HOME
+// only on Unix other than macOS. When it is unset the store stays in the user
+// config directory, at the same path as before.
 func appDir() (string, error) {
+	if dir := os.Getenv(EnvAppDir); dir != "" {
+		return dir, nil
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err

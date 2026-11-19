@@ -64,11 +64,12 @@ func TestClientReportsStatusWithoutKey(t *testing.T) {
 
 func TestCredentialFileIsPrivateInASharedConfigDirectory(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", home)
-	// Other spekk commands make this directory with mode 0755.
-	if err := os.Mkdir(filepath.Join(home, "spekk"), 0755); err != nil {
+	// Other spekk commands make the parent directory with mode 0755.
+	parent := filepath.Join(home, "spekk")
+	if err := os.Mkdir(parent, 0755); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv(EnvAppDir, filepath.Join(parent, "app"))
 	if err := SaveConfig("https://app.example.test", "private-key\n"); err != nil {
 		t.Fatal(err)
 	}
