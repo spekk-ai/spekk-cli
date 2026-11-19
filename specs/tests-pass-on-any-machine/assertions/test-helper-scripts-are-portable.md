@@ -3,7 +3,7 @@ id: test-helper-scripts-are-portable
 parent: tests-pass-on-any-machine
 created: 2026-11-19T15:58:31Z
 priority: 2
-status: not_started
+status: done
 branch: feature/tests-pass-on-any-machine
 ---
 
@@ -16,3 +16,5 @@ branch: feature/tests-pass-on-any-machine
 - A fake binary that is meant to succeed exits 0 on both platforms. When it fails, the test reports the script's own stderr, not only the loop's timeout (`signal: killed`).
 
 **Note:** "Portable" here means POSIX `sh` plus tool flags that BSD and GNU both accept. A script may avoid the tool altogether, for example by rewriting the file with a test-built helper binary.
+
+**Tests:** cmd/spekk/builder_loop_exit_test.go (`TestBuilderLoopExitWhenDone`), internal/testenv/testenv_test.go (`TestTestScriptsAvoidFlagsThatDifferBetweenBSDAndGNU`)

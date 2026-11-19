@@ -1,9 +1,11 @@
 package testenv
 
 import (
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -56,5 +58,40 @@ func TestIsolateGitHidesDeveloperIdentity(t *testing.T) {
 	}
 	if out, err := git(repo, "var", "GIT_AUTHOR_IDENT"); err == nil {
 		t.Errorf("git still names an author: %s", out)
+	}
+}
+
+// Scripts that tests write run under BSD (macOS) and GNU (Linux) userland.
+// These flags mean different things there, or exist on only one side.
+func TestTestScriptsAvoidFlagsThatDifferBetweenBSDAndGNU(t *testing.T) {
+	banned := regexp.MustCompile(`\b(sed -i|readlink -f|date -d|grep -P|stat -c|sed -r)\b`)
+	root := filepath.Join("..", "..")
+	self, _ := filepath.Abs("testenv_test.go")
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && (d.Name() == ".git" || d.Name() == "node_modules") {
+			return filepath.SkipDir
+		}
+		if d.IsDir() || !strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		if abs, _ := filepath.Abs(path); abs == self {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for i, line := range strings.Split(string(data), "\n") {
+			if m := banned.FindString(line); m != "" {
+				t.Errorf("%s:%d uses %q, which differs between BSD and GNU", path, i+1, m)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
