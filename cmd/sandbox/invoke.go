@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -74,6 +75,12 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 		return
 	}
 	defer cleanupSpool()
+	if msg.SessionID != "" {
+		if err := writeClaudeSessionID(spoolDir, msg.SessionID); err != nil {
+			sendError(ctx, conns, msg.AgentSessionID, fmt.Sprintf("save Claude session ID: %v", err))
+			return
+		}
+	}
 
 	// Keep attachments outside a selected checkout so later turns can prepare it.
 	attachmentPaths, err := downloadAttachments(ctx, cfg, msg.Attachments)
@@ -86,7 +93,7 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	cmd.Dir = workspace
 	// Per-process env, not os.Setenv: os.Setenv is process-global and would
 	// make concurrent sessions share (and clobber) one spool directory.
-	cmd.Env = append(os.Environ(), conversation.SpoolEnvVar+"="+spoolDir)
+	cmd.Env = append(os.Environ(), conversation.SpoolEnvVar+"="+spoolDir, conversation.SessionFileEnvVar+"="+filepath.Join(spoolDir, "claude-session-id"), "SPEKK_AGENT_SESSION_ID="+msg.AgentSessionID)
 
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
@@ -197,6 +204,9 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 			if sessionID == "" {
 				if sid, ok := event["session_id"].(string); ok && sid != "" {
 					sessionID = sid
+					if err := writeClaudeSessionID(spoolDir, sid); err != nil {
+						log.Printf("save Claude session ID: %v", err)
+					}
 				}
 			}
 			if event["type"] == "result" {

@@ -21,7 +21,7 @@ func runArtifact(args []string) {
 }
 
 func execArtifact(args []string, stdout io.Writer, getenv func(string) string) error {
-	if len(args) == 0 || args[0] == "--help" || args[0] == "help" {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "help" || (len(args) > 1 && args[0] == "upload" && args[1] == "--help") {
 		_, _ = io.WriteString(stdout, artifactUsage)
 		return nil
 	}

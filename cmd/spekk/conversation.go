@@ -32,22 +32,22 @@ spekk conversation open - Request that a conversation be opened on the
 connected chat surface
 
 USAGE:
-  spekk conversation open --title <text> --body <text> [--severity <level>] [--channel <name|id>]
+  spekk conversation open --title <text> --body <text> [--severity <level>] [--channel <name|id>] [--attach <file> ...]
 
 OPTIONS:
   --title <text>       Short summary of the request (required)
   --body <text>        Full details of the request (required)
   --severity <level>   One of: info, warning, critical (default: info)
   --channel <name|id>  Slack channel for the agent's bot (default: home channel)
+  --attach <file>      Send a file in the same thread (repeat up to three times)
   --help, -h           Show this help message
 
-This command only works while running inside a sandbox session: it reads
-the session's spool directory from the ` + conversation.SpoolEnvVar + `
-environment variable, which the session sets up automatically. Running it
-outside a sandbox session (spool var unset) fails with a clear error.
-
-The command writes one request file into the spool directory and exits; it
-does not open a connection itself and does not wait for a response.
+This command works inside a sandbox session. A current session sets
+SPEKK_AGENT_SESSION_ID, SPEKK_HOST, and SPEKK_AGENT_TOKEN, and the command
+returns the Slack message link and file IDs after delivery. An older session
+with only ` + conversation.SpoolEnvVar + ` queues a plain message and cannot
+return a result or attach files. Each file must be at most 10 MB, and all
+files together must be at most 20 MB. Slack workspace file type rules apply.
 `
 
 // runConversation handles `spekk conversation <subcommand>`.
@@ -86,7 +86,25 @@ func runConversationOpen(args []string) {
 // getenv is injected so tests can simulate the spool env var without
 // mutating real process environment.
 func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
-	flags := cli.ParseFlags(args, cli.FlagSet{
+	var paths []string
+	filtered := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] != "--attach" {
+			filtered = append(filtered, args[i])
+			continue
+		}
+		if i+1 == len(args) || args[i+1] == "" || strings.HasPrefix(args[i+1], "--") {
+			fmt.Fprintln(stderr, "Error: --attach requires a file")
+			return 1
+		}
+		i++
+		paths = append(paths, args[i])
+	}
+	if len(paths) > 3 {
+		fmt.Fprintln(stderr, "Error: at most three files are allowed")
+		return 1
+	}
+	flags := cli.ParseFlags(filtered, cli.FlagSet{
 		"title":    {Names: []string{"--title"}, Type: cli.StringFlag},
 		"body":     {Names: []string{"--body"}, Type: cli.StringFlag},
 		"severity": {Names: []string{"--severity"}, Type: cli.StringFlag},
@@ -132,6 +150,62 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 		return 1
 	}
 
+	if sessionID := getenv("SPEKK_AGENT_SESSION_ID"); sessionID != "" {
+		resumeFile := getenv(conversation.SessionFileEnvVar)
+		resumeID, err := os.ReadFile(resumeFile)
+		if resumeFile == "" || err != nil || strings.TrimSpace(string(resumeID)) == "" {
+			fmt.Fprintln(stderr, "Error: the active Claude session ID is not ready; try again")
+			return 1
+		}
+		files := make([]uploadFile, 0, len(paths))
+		var total int64
+		for _, path := range paths {
+			file, err := regularUpload(path, 10<<20)
+			if err != nil {
+				fmt.Fprintf(stderr, "Error: %s\n", err)
+				return 1
+			}
+			total += file.size
+			files = append(files, file)
+		}
+		if total > 20<<20 {
+			fmt.Fprintln(stderr, "Error: all files together must be at most 20 MB")
+			return 1
+		}
+		fields := map[string]string{"session_id": sessionID, "claude_session_id": strings.TrimSpace(string(resumeID)), "title": title, "body": body, "severity": severity}
+		if channel != "" {
+			fields["channel"] = channel
+		}
+		status, result, err := postAgentFiles(getenv, "/api/agents/conversations/", fields, files)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: %s\n", err)
+			return 1
+		}
+		link, _ := result["message_url"].(string)
+		if status != 200 {
+			if link != "" {
+				fmt.Fprintf(stderr, "Error: text posted at %s; %s\n", link, responseText(result))
+			} else {
+				fmt.Fprintf(stderr, "Error: %s\n", responseText(result))
+			}
+			return 1
+		}
+		if link == "" {
+			fmt.Fprintln(stderr, "Error: the app returned no message link")
+			return 1
+		}
+		fmt.Fprintf(stdout, "Message: %s\n", link)
+		if ids, ok := result["file_ids"].([]any); ok {
+			for _, id := range ids {
+				fmt.Fprintf(stdout, "File: %s\n", id)
+			}
+		}
+		return 0
+	}
+	if len(paths) != 0 {
+		fmt.Fprintln(stderr, "Error: SPEKK_AGENT_SESSION_ID is not set; attachments need a current sandbox session")
+		return 1
+	}
 	spoolDir := getenv(conversation.SpoolEnvVar)
 	if spoolDir == "" {
 		fmt.Fprintf(stderr, "Error: %s is not set; \"spekk conversation open\" only works inside a sandbox session\n", conversation.SpoolEnvVar)

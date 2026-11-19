@@ -17,6 +17,7 @@ import (
 type uploadFile struct {
 	path string
 	name string
+	size int64
 }
 
 func agentBase(getenv func(string) string) (string, string, error) {
@@ -28,7 +29,7 @@ func agentBase(getenv func(string) string) (string, string, error) {
 		host = "https://" + host
 	}
 	u, err := url.Parse(host)
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))) {
+	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))) {
 		return "", "", errors.New("SPEKK_HOST must be an HTTPS host or a loopback HTTP host")
 	}
 	return strings.TrimRight(u.String(), "/"), token, nil
@@ -102,7 +103,7 @@ func regularUpload(path string, limit int64) (uploadFile, error) {
 	if info.Size() > limit {
 		return uploadFile{}, fmt.Errorf("%s is over the %d MB limit", path, limit/(1024*1024))
 	}
-	return uploadFile{path: path, name: filepath.Base(path)}, nil
+	return uploadFile{path: path, name: filepath.Base(path), size: info.Size()}, nil
 }
 
 func responseText(result map[string]any) string {
