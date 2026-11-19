@@ -22,7 +22,7 @@ func dropResponse(w http.ResponseWriter) {
 }
 
 func TestLaunchRecoversLostResponseWithoutSecondPost(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(appclient.EnvAppDir, t.TempDir())
 	posts := 0
 	var requestID string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +87,7 @@ func TestDestroyUsesStatusAfterLostResponseAndKeepsCostWarning(t *testing.T) {
 }
 
 func TestChangedRequestBodyKeepsConflict(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(appclient.EnvAppDir, t.TempDir())
 	lookups := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -111,7 +111,7 @@ func TestChangedRequestBodyKeepsConflict(t *testing.T) {
 }
 
 func TestSendRecoversLostResponseWithoutSecondPost(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(appclient.EnvAppDir, t.TempDir())
 	posts := 0
 	var requestID string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +151,7 @@ func TestSendRecoversLostResponseWithoutSecondPost(t *testing.T) {
 }
 
 func TestUnconfirmedSendShowsSavedStatusWithoutSecondPost(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(appclient.EnvAppDir, t.TempDir())
 	posts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -178,7 +178,7 @@ func TestUnconfirmedSendShowsSavedStatusWithoutSecondPost(t *testing.T) {
 }
 
 func TestGrantedMemberCanSendByManagedAgent(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(appclient.EnvAppDir, t.TempDir())
 	launchReads := 0
 	posts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
