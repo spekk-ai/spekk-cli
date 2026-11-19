@@ -4,6 +4,7 @@ type: code_spec_misalignment
 severity: medium
 status: open
 created: 2026-11-19T00:00:00Z
+announced: 2026-11-19T20:02:42Z
 affected:
   - docs/cli-reference.md
   - specs/sandbox-auth-mode/assertions/auth-modes-are-documented.md
