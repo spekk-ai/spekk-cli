@@ -10,6 +10,8 @@ import (
 	"github.com/spekk-ai/spekk-cli/internal/conversation"
 )
 
+const conversationDeliveryEnvVar = "SPEKK_CONVERSATION_DELIVERY"
+
 // conversationUsage is the help text for `spekk conversation --help`.
 const conversationUsage = `
 spekk conversation - Request a conversation on the connected chat surface
@@ -42,12 +44,11 @@ OPTIONS:
   --attach <file>      Send a file in the same thread (repeat up to three times)
   --help, -h           Show this help message
 
-This command works inside a sandbox session. A current session sets
-SPEKK_AGENT_SESSION_ID, SPEKK_HOST, and SPEKK_AGENT_TOKEN, and the command
-returns the Slack message link and file IDs after delivery. An older session
-with only ` + conversation.SpoolEnvVar + ` queues a plain message and cannot
-return a result or attach files. Each file must be at most 10 MB, and all
-files together must be at most 20 MB. Slack workspace file type rules apply.
+This command works inside a sandbox session. If the app supports direct
+delivery, the command returns the Slack message link and file IDs. An app
+without direct delivery queues a plain message and cannot return a result or
+attach files. Each file must be at most 10 MB, and all files together must
+be at most 20 MB. Slack workspace file type rules apply.
 `
 
 // runConversation handles `spekk conversation <subcommand>`.
@@ -150,7 +151,8 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 		return 1
 	}
 
-	if sessionID := getenv("SPEKK_AGENT_SESSION_ID"); sessionID != "" {
+	sessionID := getenv("SPEKK_AGENT_SESSION_ID")
+	if sessionID != "" && getenv(conversationDeliveryEnvVar) == "1" {
 		resumeFile := getenv(conversation.SessionFileEnvVar)
 		resumeID, err := os.ReadFile(resumeFile)
 		if resumeFile == "" || err != nil || strings.TrimSpace(string(resumeID)) == "" {
@@ -203,6 +205,10 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 		return 0
 	}
 	if len(paths) != 0 {
+		if sessionID != "" {
+			fmt.Fprintln(stderr, "Error: the app does not support conversation file delivery; update the app before using --attach")
+			return 1
+		}
 		fmt.Fprintln(stderr, "Error: SPEKK_AGENT_SESSION_ID is not set; attachments need a current sandbox session")
 		return 1
 	}

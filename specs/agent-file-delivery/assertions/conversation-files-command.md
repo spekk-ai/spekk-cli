@@ -14,4 +14,6 @@ depends-on: artifact-upload-command
 
 The sandbox worker writes the active Claude resume ID to a private session file before the CLI sends the request. The CLI refuses a direct post when that ID is not ready, so a quick human reply uses the initiating Claude session.
 
-**Tests:** A local HTTP server checks a plain message, multiple files, and a partial delivery response. Invalid file inputs make no request.
+The app advertises direct conversation delivery in its welcome frame. A current session with an app that does not advertise it queues a plain message through the spool. In that case, an attachment gets a clear error that names the missing app support.
+
+**Tests:** `cmd/spekk/conversation_test.go` checks direct and spool delivery, file inputs, and partial results. `cmd/sandbox/spool_test.go` checks the app capability in the welcome frame.

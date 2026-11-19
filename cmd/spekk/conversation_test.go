@@ -63,7 +63,7 @@ func TestConversationDirectDeliveryAndPartialFailure(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	env := fakeEnv(map[string]string{"SPEKK_HOST": server.URL, "SPEKK_AGENT_TOKEN": "test-agent-token", "SPEKK_AGENT_SESSION_ID": "test-session", conversation.SessionFileEnvVar: resumeFile})
+	env := fakeEnv(map[string]string{"SPEKK_HOST": server.URL, "SPEKK_AGENT_TOKEN": "test-agent-token", "SPEKK_AGENT_SESSION_ID": "test-session", "SPEKK_CONVERSATION_DELIVERY": "1", conversation.SessionFileEnvVar: resumeFile})
 	var out, errOut bytes.Buffer
 	if code := execConversationOpen([]string{"--title", "Report", "--body", "Ready"}, &out, &errOut, env); code != 0 || !strings.Contains(out.String(), "Message: https://") || strings.Contains(out.String(), "File:") {
 		t.Fatalf("plain delivery: code %d, output %q, error %q", code, out.String(), errOut.String())
@@ -78,6 +78,51 @@ func TestConversationDirectDeliveryAndPartialFailure(t *testing.T) {
 	}
 	if posts != 3 || strings.Contains(out.String()+errOut.String(), "test-agent-token") {
 		t.Fatalf("unexpected requests or token leak: %d", posts)
+	}
+}
+
+func TestConversationCurrentSessionWithoutDeliveryCapability(t *testing.T) {
+	spoolDir := t.TempDir()
+	resumeFile := filepath.Join(t.TempDir(), "claude-session-id")
+	if err := os.WriteFile(resumeFile, []byte("claude-example"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(file, []byte("report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	posts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	env := fakeEnv(map[string]string{
+		"SPEKK_HOST": server.URL, "SPEKK_AGENT_TOKEN": "test-agent-token", "SPEKK_AGENT_SESSION_ID": "test-session", conversationDeliveryEnvVar: "0",
+		conversation.SpoolEnvVar: spoolDir, conversation.SessionFileEnvVar: resumeFile,
+	})
+	var out, errOut bytes.Buffer
+	if code := execConversationOpen([]string{"--title", "Report", "--body", "Ready"}, &out, &errOut, env); code != 0 {
+		t.Fatalf("plain message: code %d, error %q", code, errOut.String())
+	}
+	files := requestFiles(t, spoolDir)
+	if len(files) != 1 {
+		t.Fatalf("queued files = %v", files)
+	}
+	data, err := os.ReadFile(filepath.Join(spoolDir, files[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req conversation.Request
+	if err := json.Unmarshal(data, &req); err != nil || req.Title != "Report" || req.Body != "Ready" {
+		t.Fatalf("queued request = %+v, error %v", req, err)
+	}
+	errOut.Reset()
+	if code := execConversationOpen([]string{"--title", "Report", "--body", "Ready", "--attach", file}, &out, &errOut, env); code == 0 || !strings.Contains(errOut.String(), "app does not support conversation file delivery") {
+		t.Fatalf("attachment: code %d, error %q", code, errOut.String())
+	}
+	if posts != 0 || len(requestFiles(t, spoolDir)) != 1 {
+		t.Fatalf("HTTP posts = %d, queued files = %v", posts, requestFiles(t, spoolDir))
 	}
 }
 
@@ -96,7 +141,7 @@ func TestConversationRejectsLargeAttachmentBeforePost(t *testing.T) {
 	}
 	file.Close()
 	var out, errOut bytes.Buffer
-	code := execConversationOpen([]string{"--title", "Report", "--body", "Ready", "--attach", path}, &out, &errOut, fakeEnv(map[string]string{"SPEKK_AGENT_SESSION_ID": "session", conversation.SessionFileEnvVar: resumeFile}))
+	code := execConversationOpen([]string{"--title", "Report", "--body", "Ready", "--attach", path}, &out, &errOut, fakeEnv(map[string]string{"SPEKK_AGENT_SESSION_ID": "session", conversationDeliveryEnvVar: "1", conversation.SessionFileEnvVar: resumeFile}))
 	if code == 0 || !strings.Contains(errOut.String(), "10 MB") {
 		t.Fatalf("code %d, error %q", code, errOut.String())
 	}

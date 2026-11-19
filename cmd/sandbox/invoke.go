@@ -93,7 +93,11 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	cmd.Dir = workspace
 	// Per-process env, not os.Setenv: os.Setenv is process-global and would
 	// make concurrent sessions share (and clobber) one spool directory.
-	cmd.Env = append(os.Environ(), conversation.SpoolEnvVar+"="+spoolDir, conversation.SessionFileEnvVar+"="+filepath.Join(spoolDir, "claude-session-id"), "SPEKK_AGENT_SESSION_ID="+msg.AgentSessionID)
+	delivery := "0"
+	if conns.supportsDelivery() {
+		delivery = "1"
+	}
+	cmd.Env = append(os.Environ(), conversation.SpoolEnvVar+"="+spoolDir, conversation.SessionFileEnvVar+"="+filepath.Join(spoolDir, "claude-session-id"), "SPEKK_AGENT_SESSION_ID="+msg.AgentSessionID, "SPEKK_CONVERSATION_DELIVERY="+delivery)
 
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
