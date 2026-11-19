@@ -127,3 +127,36 @@ func TestBlockRemoteHostsRefusesAnythingOutsideLoopback(t *testing.T) {
 		t.Errorf("refusal took %v, want it immediate", time.Since(start))
 	}
 }
+
+// CI runs the suite on Linux and macOS with one Go version and one command,
+// the macOS job has a global git identity, and a release still needs passing
+// tests.
+func TestCIRunsTheSuiteOnLinuxAndMacOS(t *testing.T) {
+	read := func(name string) string {
+		data, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	test := read("test.yml")
+	for _, want := range []string{
+		"ubuntu-24.04", "macos-",
+		"runs-on: ${{ matrix.os }}",
+		"go-version-file: go.mod",
+		"go test ./... -count=1",
+		"if: runner.os == 'macOS'",
+		"git config --global user.name",
+		"git config --global user.email",
+	} {
+		if !strings.Contains(test, want) {
+			t.Errorf("test.yml lacks %q", want)
+		}
+	}
+	if strings.Count(test, "go test ./...") != 1 || strings.Contains(test, "continue-on-error") {
+		t.Error("test.yml must run one test command, and a failure on either OS must fail the workflow")
+	}
+	if !strings.Contains(read("publish.yml"), "go test ./... -count=1") {
+		t.Error("publish.yml no longer runs the tests before a release")
+	}
+}

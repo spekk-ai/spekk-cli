@@ -6,7 +6,12 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
 
@@ -14,6 +19,15 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+
+      # A developer machine has a global git identity. The macOS job sets one
+      # so a test that reads the developer's git config fails here too. The
+      # Linux job stays clean, so a test that needs one fails there.
+      - name: Configure a global git identity
+        if: runner.os == 'macOS'
+        run: |
+          git config --global user.name "CI Test User"
+          git config --global user.email "ci-test@example.com"
 
       - name: Check formatting
         run: |

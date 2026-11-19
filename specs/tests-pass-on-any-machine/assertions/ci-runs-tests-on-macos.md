@@ -3,7 +3,7 @@ id: ci-runs-tests-on-macos
 parent: tests-pass-on-any-machine
 created: 2026-11-19T15:58:31Z
 priority: 3
-status: not_started
+status: in_progress
 branch: feature/tests-pass-on-any-machine
 ---
 
@@ -15,3 +15,5 @@ branch: feature/tests-pass-on-any-machine
 - The macOS job runs with a global git identity configured, so a test that leaks the developer's git config fails in CI.
 - Both jobs use the same Go version and the same test command.
 - `publish.yml` still gates the release on passing tests.
+
+**Tests:** internal/testenv/testenv_test.go (`TestCIRunsTheSuiteOnLinuxAndMacOS`); the macOS and Linux jobs of `.github/workflows/test.yml` on the PR
