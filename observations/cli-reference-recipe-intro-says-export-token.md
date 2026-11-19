@@ -2,7 +2,7 @@
 slug: cli-reference-recipe-intro-says-export-token
 type: code_spec_misalignment
 severity: medium
-status: open
+status: resolved
 created: 2026-11-19T00:00:00Z
 announced: 2026-11-19T20:02:42Z
 affected:
@@ -36,11 +36,7 @@ intro unchanged, so the page still contradicts itself.
   `/login` session in every `claude` process on the machine."
 - `docs/configuration.md` line 266: "**Do not export the token from your
   shell profile.**"
-- `specs/sandbox-auth-mode/assertions/auth-modes-are-documented.md`
-  (`status: done`): "The configuration reference and the subscription setup
-  recipe in `docs/cli-reference.md` give the token to the one `spekk` command
-  that needs it, as an assignment in front of that command, not as an
-  `export`."
+- `specs/sandbox-auth-mode/assertions/auth-modes-are-documented.md` (`status: done` on main before this observation): "The configuration reference and the subscription setup recipe in `docs/cli-reference.md` give the token to the one `spekk` command that needs it, as an assignment in front of that command, not as an `export`."
 
 ## Impact
 
