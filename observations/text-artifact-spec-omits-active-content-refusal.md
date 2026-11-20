@@ -2,7 +2,7 @@
 slug: text-artifact-spec-omits-active-content-refusal
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-11-20T12:00:00Z
 announced: 2026-11-20T20:01:40Z
 affected:
