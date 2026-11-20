@@ -19,6 +19,7 @@ The app must advertise `agent_conversation_delivery` to use direct conversation 
 - `spekk list --sort-by <column>` sorts by `id`, `priority`, `status`, or `title` in ascending order. It works with the table, JSON, TSV, and CSV formats and with `--status` and `--priority` filters. It does not apply to `--cross-branch`. The default order stays priority, then ID.
 - `spekk builder --exit-when-done` and `spekk loop builder --exit-when-done` exit with status 0 and report the successful build count when no open assertion remains. Without the flag, the loops wait for more work. Open assertions that are not eligible still make the loops wait.
 - Observations now accept `underspecified_spec` when a spec permits more than one implementation and `missing_capability` when the specs do not give users a needed capability.
+- A host on 1.50.0 rejects these types in `spekk observer scan-check` and skips existing files of these types with a validation warning. Upgrade every host that runs observers to 1.51.0 before you rely on the new types.
 - On Ctrl+C during an active `spekk loop builder` build, the loop sends the interrupt to its child and waits for the child to finish. A later Ctrl+C when no child is active exits the loop.
 
 ## What you must do

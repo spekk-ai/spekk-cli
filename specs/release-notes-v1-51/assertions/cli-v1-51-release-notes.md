@@ -15,6 +15,7 @@ The release notes describe each behavior change after 1.50.0 and give the action
 
 - The release note, release notes index, and site navigation include 1.51.0.
 - The note describes `spekk list --sort-by`, builder loop `--exit-when-done`, the two new observation types, and the Ctrl+C child wait in `spekk loop builder`.
+- The note states that a 1.50.0 host rejects the new types in `spekk observer scan-check`, skips existing files of those types with a validation warning, and must be upgraded before operators rely on the new types.
 - The note gives the exact `spekk conversation open --attach` and `spekk artifact upload` forms, the file limits, and the result when the app lacks `agent_conversation_delivery`.
 - The note states the Spekk app and Slack bot requirements, distinguishes a new message from a reply in the current turn, and does not claim that spekk-app #715 is deployed.
 - The note gives the exact `spekk conversation reply --body <text> [--attach <file> ...]` form, the capability refusal text, and the result of retrying a partial delivery.
