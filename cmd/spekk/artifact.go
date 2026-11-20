@@ -112,8 +112,15 @@ func execArtifact(args []string, stdout io.Writer, getenv func(string) string) e
 }
 
 func isUTF8File(path string) (bool, error) {
-	if _, err := regularUpload(path, 1<<20); err != nil {
+	info, err := os.Stat(path)
+	if err != nil {
 		return false, err
+	}
+	if !info.Mode().IsRegular() {
+		return false, fmt.Errorf("%s is not a regular file", path)
+	}
+	if info.Size() > 1<<20 {
+		return false, nil
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
