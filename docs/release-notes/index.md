@@ -8,9 +8,9 @@ What's new in each version of Spekk CLI.
 
 ---
 
-## [1.51.0 -- Agent File Delivery and Builder Loop Control](RELEASE-NOTES-1.51.0.md)
+## [1.51.0 -- Agent Delivery and Builder Loop Control](RELEASE-NOTES-1.51.0.md)
 
-`spekk conversation open --attach` sends up to three files with a new Slack message, and `spekk artifact upload` sends a file to the app. The CLI enforces the file limits. A plain conversation request still works when the app lacks direct delivery, but an attachment needs the `agent_conversation_delivery` capability. This release also adds `spekk list --sort-by`, builder loop `--exit-when-done`, two observation types, and a Ctrl+C wait for an active loop builder child. Update the CLI; Slack file delivery also needs the app release and a bot token with `files:write`. The protocol stays `1.6`, with major `1`.
+`spekk conversation open --attach` sends up to three files with a new Slack message, `spekk conversation reply --body` sends text and optional files to the current turn thread, and `spekk artifact upload` sends a file to the app. The CLI enforces the file limits. A plain conversation request still works when the app lacks direct delivery, but an attachment needs the `agent_conversation_delivery` capability. This release also adds `spekk list --sort-by`, builder loop `--exit-when-done`, two observation types, and a Ctrl+C wait for an active loop builder child. Update the CLI; Slack file delivery needs the app release and a bot token with `files:write`. Current thread replies also need spekk-app #715 with `agent_current_thread_delivery`; confirm its deployment before use. The protocol stays `1.6`, with major `1`.
 
 ## [1.50.0 -- A Default Model Pin for New Sandboxes](RELEASE-NOTES-1.50.0.md)
 

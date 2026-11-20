@@ -6,4 +6,4 @@ priority: 2
 
 # Document Spekk CLI 1.51.0
 
-Publish release notes for the CLI changes after 1.50.0. Base each claim on the source at 9a620750.
+Publish release notes for the CLI changes after 1.50.0. Base each claim on the source at 9a620750 and the current thread reply change at d403cc04.
