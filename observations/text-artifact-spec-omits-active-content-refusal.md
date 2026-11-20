@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-11-20T12:00:00Z
+announced: 2026-11-20T20:01:40Z
 affected:
   - specs/agent-file-delivery/assertions/text-artifact-command.md
   - cmd/spekk/artifact.go
