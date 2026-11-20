@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket/wsjson"
 )
 
 func TestSandboxSessionReceivesAgentDeliveryVariables(t *testing.T) {
@@ -23,7 +25,7 @@ for i in $(seq 1 50); do
   sleep 0.1
 done
 resume_id=$(cat "$SPEKK_CLAUDE_SESSION_FILE")
-echo "{\"type\":\"result\",\"session_id\":\"claude-session\",\"result\":\"$SPEKK_AGENT_SESSION_ID:$token_state:$resume_id\"}"
+echo "{\"type\":\"result\",\"session_id\":\"claude-session\",\"result\":\"$SPEKK_AGENT_SESSION_ID:$SPEKK_AGENT_TURN_ID:$token_state:$resume_id\"}"
 `
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -34,9 +36,13 @@ echo "{\"type\":\"result\",\"session_id\":\"claude-session\",\"result\":\"$SPEKK
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go client.Run(ctx)
-	dispatchTurn(t, host.nextConn(t))
+	if err := wsjson.Write(t.Context(), host.nextConn(t), Message{
+		Type: MessageTypeMessage, Text: "Make a file", AgentSessionID: "agent-session-1", AgentTurnID: "agent-turn-1",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	frame := host.awaitFrame(t, MessageTypeResult, 20*time.Second).frame
-	if frame["output"] != "agent-session-1:present:claude-session" {
+	if frame["output"] != "agent-session-1:agent-turn-1:present:claude-session" {
 		t.Fatalf("session delivery variables = %v", frame["output"])
 	}
 }

@@ -6,6 +6,7 @@ type Message struct {
 	SystemPrompt   string             `json:"system_prompt"`
 	SessionID      string             `json:"session_id"`
 	AgentSessionID string             `json:"agent_session_id"`
+	AgentTurnID    string             `json:"agent_turn_id,omitempty"`
 	Attachments    []Attachment       `json:"attachments"`
 	Error          string             `json:"error"`
 	Detail         string             `json:"detail"`

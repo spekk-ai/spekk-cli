@@ -86,11 +86,13 @@ func TestDrainSpoolChecksWelcomeCapability(t *testing.T) {
 		name, welcome, request string
 		wantSend               bool
 		wantDelivery           bool
+		wantThread             bool
 	}{
-		{"old server channel", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T","channel":"CPROJECT"}`, false, false},
-		{"channel only", `{"type":"welcome","protocol":"1.1","capabilities":["conversation_open_channel"]}`, `{"title":"T","channel":"CPROJECT"}`, true, false},
-		{"delivery server", `{"type":"welcome","protocol":"1.1","capabilities":["conversation_open_channel","agent_conversation_delivery"]}`, `{"title":"T","channel":"CPROJECT"}`, true, true},
-		{"old server home", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T"}`, true, false},
+		{"old server channel", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T","channel":"CPROJECT"}`, false, false, false},
+		{"channel only", `{"type":"welcome","protocol":"1.1","capabilities":["conversation_open_channel"]}`, `{"title":"T","channel":"CPROJECT"}`, true, false, false},
+		{"delivery server", `{"type":"welcome","protocol":"1.1","capabilities":["conversation_open_channel","agent_conversation_delivery"]}`, `{"title":"T","channel":"CPROJECT"}`, true, true, false},
+		{"thread server", `{"type":"welcome","protocol":"1.1","capabilities":["conversation_open_channel","agent_conversation_delivery","agent_current_thread_delivery"]}`, `{"title":"T","channel":"CPROJECT"}`, true, true, true},
+		{"old server home", `{"type":"welcome","protocol":"1.0"}`, `{"title":"T"}`, true, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var welcome Message
@@ -101,6 +103,9 @@ func TestDrainSpoolChecksWelcomeCapability(t *testing.T) {
 			client.handleWelcome(t.Context(), welcome)
 			if got := client.conns.supportsDelivery(); got != tc.wantDelivery {
 				t.Fatalf("delivery supported = %t, want %t", got, tc.wantDelivery)
+			}
+			if got := client.conns.supportsCurrentThread(); got != tc.wantThread {
+				t.Fatalf("current thread supported = %t, want %t", got, tc.wantThread)
 			}
 			dir := t.TempDir()
 			writeRequestFile(t, dir, "req.json", tc.request)
