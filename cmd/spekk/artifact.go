@@ -1,14 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
-const artifactUsage = `spekk artifact upload <file> [--title <text>] [--kind <markdown|image|video>]
+const artifactUsage = `spekk artifact upload <file> [--title <text>] [--kind <markdown|text|image|video>]
 
 Upload a file with the sandbox session's agent token. The artifact starts with organization access.
 The first line is the direct link to share. The second line is the app page, where a person changes the access.
@@ -42,21 +44,36 @@ func execArtifact(args []string, stdout io.Writer, getenv func(string) string) e
 		}
 	}
 	if kind == "" {
-		switch strings.ToLower(filepath.Ext(path)) {
+		switch ext := strings.ToLower(filepath.Ext(path)); ext {
 		case ".md", ".markdown":
 			kind = "markdown"
 		case ".png", ".jpg", ".jpeg", ".gif", ".webp":
 			kind = "image"
 		case ".mp4":
 			kind = "video"
+		case ".txt", ".log", ".csv", ".tsv", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".ini", ".sql", ".py", ".go", ".js", ".ts", ".tsx", ".jsx", ".sh", ".rb", ".java", ".kt", ".rs", ".c", ".h", ".cpp", ".css", ".graphql", ".proto", ".diff", ".patch":
+			kind = "text"
 		default:
-			return fmt.Errorf("cannot infer the artifact kind; use --kind")
+			if strings.HasSuffix(strings.ToLower(path), ".env.example") {
+				kind = "text"
+			} else if ext == ".html" || ext == ".htm" || ext == ".svg" || ext == ".xhtml" {
+				return fmt.Errorf("cannot infer the artifact kind; active content is not a text artifact")
+			} else {
+				valid, err := isUTF8File(path)
+				if err != nil {
+					return err
+				}
+				if !valid {
+					return fmt.Errorf("cannot infer the artifact kind; use --kind")
+				}
+				kind = "text"
+			}
 		}
 	}
-	limits := map[string]int64{"markdown": 1 << 20, "image": 10 << 20, "video": 90 << 20}
+	limits := map[string]int64{"markdown": 1 << 20, "text": 1 << 20, "image": 10 << 20, "video": 90 << 20}
 	limit, ok := limits[kind]
 	if !ok {
-		return fmt.Errorf("kind must be markdown, image, or video")
+		return fmt.Errorf("kind must be markdown, text, image, or video")
 	}
 	file, err := regularUpload(path, limit)
 	if err != nil {
@@ -73,6 +90,9 @@ func execArtifact(args []string, stdout io.Writer, getenv func(string) string) e
 		return fmt.Errorf("artifacts are off on this app")
 	}
 	if status != 201 {
+		if kind == "text" && status == 400 && (strings.Contains(responseText(result), "Choose the kind") || strings.Contains(responseText(result), "Unknown kind")) {
+			return fmt.Errorf("this app does not support text artifacts yet: %s", responseText(result))
+		}
 		return fmt.Errorf("artifact upload failed: %s", responseText(result))
 	}
 	view, _ := result["view_url"].(string)
@@ -89,4 +109,15 @@ func execArtifact(args []string, stdout io.Writer, getenv func(string) string) e
 		_, _ = fmt.Fprintf(stdout, "App page: %s\n", app)
 	}
 	return nil
+}
+
+func isUTF8File(path string) (bool, error) {
+	if _, err := regularUpload(path, 1<<20); err != nil {
+		return false, err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	return utf8.Valid(content) && !bytes.Contains(content, []byte{0}), nil
 }

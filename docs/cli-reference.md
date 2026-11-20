@@ -1191,10 +1191,10 @@ Upload a file as an agent and print its links. The artifact starts with organiza
 
 ```bash
 spekk artifact upload report.md
-spekk artifact upload schema.sql --kind markdown --title "Example schema"
+spekk artifact upload schema.sql --title "Example schema"
 ```
 
-The command uses `SPEKK_HOST` and `SPEKK_AGENT_TOKEN` from the sandbox session. It infers `markdown`, `image`, or `video` from a known extension; use `--kind` for another extension. The app accepts UTF-8 text as markdown, PNG, JPEG, GIF, or WebP as an image, and MP4 as a video. If artifacts are off, the command says so.
+The command uses `SPEKK_HOST` and `SPEKK_AGENT_TOKEN` from the sandbox session. It infers `markdown`, `text`, `image`, or `video` from known extensions. An unknown extension infers `text` when its file is valid UTF-8 with no NUL bytes. Use `--kind text` to select text explicitly. The app accepts UTF-8 text with no NUL bytes as text, PNG, JPEG, GIF, or WebP as an image, and MP4 as a video. Text artifacts refuse `.html`, `.htm`, `.svg`, and `.xhtml` files. If artifacts are off, the command says so; an older app that refuses the text kind gives a compatibility error.
 
 The first line is the direct link to the content (`https://<artifact host>/a/<id>/`). Share this link. A person who is not signed in signs in to the app first, and a person with no access cannot open it. The second line, `App page: <URL>`, is the artifact page in the app, where a person changes the access. An app that does not return the direct link gives one line, the app page, with no label.
 
@@ -1203,7 +1203,7 @@ https://content.example.test/a/0f6c2c1e-0000-4000-8000-000000000001/
 App page: https://app.example.test/artifacts/0f6c2c1e-0000-4000-8000-000000000001
 ```
 
-The CLI accepts one regular file of at most 1 MiB for markdown, 10 MiB for an image, or 90 MiB for a video.
+The CLI accepts one regular file of at most 1 MiB for markdown or text, 10 MiB for an image, or 90 MiB for a video.
 
 ## `spekk prompt <agent>`
 
