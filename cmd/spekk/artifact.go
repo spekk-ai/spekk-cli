@@ -11,6 +11,7 @@ import (
 const artifactUsage = `spekk artifact upload <file> [--title <text>] [--kind <markdown|image|video>]
 
 Upload a file with the sandbox session's agent token. The artifact starts with organization access.
+The first line is the direct link to share. The second line is the app page, where a person changes the access.
 `
 
 func runArtifact(args []string) {
@@ -74,10 +75,18 @@ func execArtifact(args []string, stdout io.Writer, getenv func(string) string) e
 	if status != 201 {
 		return fmt.Errorf("artifact upload failed: %s", responseText(result))
 	}
-	link, _ := result["app_url"].(string)
-	if link == "" {
+	view, _ := result["view_url"].(string)
+	app, _ := result["app_url"].(string)
+	if view == "" {
+		// An older app returns no view_url: print app_url alone, as before.
+		view, app = app, ""
+	}
+	if view == "" {
 		return fmt.Errorf("the app returned no artifact link")
 	}
-	_, _ = fmt.Fprintln(stdout, link)
+	_, _ = fmt.Fprintln(stdout, view)
+	if app != "" {
+		_, _ = fmt.Fprintf(stdout, "App page: %s\n", app)
+	}
 	return nil
 }
