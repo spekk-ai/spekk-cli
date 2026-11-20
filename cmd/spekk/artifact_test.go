@@ -97,7 +97,11 @@ func TestTextArtifactInferenceAndOlderApp(t *testing.T) {
 	textNames := []string{"file.txt", "file.log", "file.csv", "file.tsv", "file.json", "file.jsonl", "file.yaml", "file.yml", "file.toml", "file.ini", "file.sql", "file.py", "file.go", "file.js", "file.ts", "file.tsx", "file.jsx", "file.sh", "file.rb", "file.java", "file.kt", "file.rs", "file.c", "file.h", "file.cpp", "file.css", "file.graphql", "file.proto", "file.env.example", "file.diff", "file.patch", "file.custom"}
 	for _, name := range append(textNames, "file.md", "file.png", "file.mp4") {
 		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte("key: value\n"), 0o600); err != nil {
+		content := []byte("key: value\n")
+		if name != "file.custom" && name != "file.md" && name != "file.png" && name != "file.mp4" {
+			content = []byte{'a', 0, 'b'}
+		}
+		if err := os.WriteFile(path, content, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		var out bytes.Buffer
@@ -147,5 +151,23 @@ func TestTextArtifactInferenceAndOlderApp(t *testing.T) {
 	}
 	if err := execArtifact([]string{"upload", active}, &out, getenv); err == nil || !strings.Contains(err.Error(), "active content") {
 		t.Fatalf("active content inference: %v", err)
+	}
+}
+
+func TestArtifactUnknownLargeFileNeedsKind(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "video.mov")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(5 << 20); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	err = execArtifact([]string{"upload", path}, &bytes.Buffer{}, os.Getenv)
+	if err == nil || err.Error() != "cannot infer the artifact kind; use --kind" {
+		t.Fatalf("large unknown file: %v", err)
 	}
 }
