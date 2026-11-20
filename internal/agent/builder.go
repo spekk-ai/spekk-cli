@@ -216,8 +216,9 @@ func findSpekkBin() string {
 }
 
 type processHolder struct {
-	mu      sync.Mutex
-	process *os.Process
+	mu         sync.Mutex
+	process    *os.Process
+	afterStart func()
 }
 
 func (ph *processHolder) set(p *os.Process) {
@@ -249,7 +250,13 @@ func launchClaude(claudeArgs []string, holder *processHolder) (bool, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	if holder != nil {
+		holder.mu.Lock()
+	}
 	if err := cmd.Start(); err != nil {
+		if holder != nil {
+			holder.mu.Unlock()
+		}
 		if isNotFound(err) {
 			colorLog(colorRed, "Error: Claude Code CLI not found. Please install Claude Code first.")
 			colorLog(colorBlue, "Visit: https://claude.ai/code for installation instructions.")
@@ -259,7 +266,11 @@ func launchClaude(claudeArgs []string, holder *processHolder) (bool, error) {
 	}
 
 	if holder != nil {
-		holder.set(cmd.Process)
+		if holder.afterStart != nil {
+			holder.afterStart()
+		}
+		holder.process = cmd.Process
+		holder.mu.Unlock()
 	}
 
 	err := cmd.Wait()
