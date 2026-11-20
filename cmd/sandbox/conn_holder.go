@@ -59,6 +59,7 @@ type connHolder struct {
 	conn              *websocket.Conn
 	channelSupported  bool
 	deliverySupported bool
+	threadSupported   bool
 	changed           chan struct{}
 }
 
@@ -73,6 +74,7 @@ func (h *connHolder) set(conn *websocket.Conn) {
 	h.conn = conn
 	h.channelSupported = false
 	h.deliverySupported = false
+	h.threadSupported = false
 	close(h.changed)
 	h.changed = make(chan struct{})
 }
@@ -85,6 +87,7 @@ func (h *connHolder) clear() {
 	h.conn = nil
 	h.channelSupported = false
 	h.deliverySupported = false
+	h.threadSupported = false
 }
 
 func (h *connHolder) setCapabilities(capabilities []string) {
@@ -96,6 +99,8 @@ func (h *connHolder) setCapabilities(capabilities []string) {
 			h.channelSupported = true
 		case "agent_conversation_delivery":
 			h.deliverySupported = true
+		case "agent_current_thread_delivery":
+			h.threadSupported = true
 		}
 	}
 }
@@ -104,6 +109,12 @@ func (h *connHolder) supportsDelivery() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.deliverySupported
+}
+
+func (h *connHolder) supportsCurrentThread() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.threadSupported
 }
 
 func (h *connHolder) supportsChannel() bool {

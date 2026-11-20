@@ -11,6 +11,7 @@ import (
 )
 
 const conversationDeliveryEnvVar = "SPEKK_CONVERSATION_DELIVERY"
+const currentThreadDeliveryEnvVar = "SPEKK_CURRENT_THREAD_DELIVERY"
 
 // conversationUsage is the help text for `spekk conversation --help`.
 const conversationUsage = `
@@ -21,11 +22,12 @@ USAGE:
 
 SUBCOMMANDS:
   open   Queue a request to open a conversation
+  reply  Send text and files to the current Slack thread
 
 OPTIONS:
   --help, -h  Show this help message
 
-Use "spekk conversation open --help" for more information.
+Use "spekk conversation open --help" or "spekk conversation reply --help" for more information.
 `
 
 // conversationOpenUsage is the help text for `spekk conversation open --help`.
@@ -51,6 +53,22 @@ attach files. Each file must be at most 10 MB, and all files together must
 be at most 20 MB. Slack workspace file type rules apply.
 `
 
+const conversationReplyUsage = `
+spekk conversation reply - Send text and files to the current Slack thread
+
+USAGE:
+  spekk conversation reply --body <text> [--attach <file> ...]
+
+OPTIONS:
+  --body <text>    Message text (required)
+  --attach <file>  Send a file in this thread (repeat up to three times)
+  --help, -h       Show this help message
+
+This command works only in a sandbox turn that came from Slack. The app
+chooses the thread from that turn. Each file must be at most 10 MB, and all
+files together must be at most 20 MB.
+`
+
 // runConversation handles `spekk conversation <subcommand>`.
 func runConversation(args []string) {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
@@ -67,6 +85,10 @@ func runConversation(args []string) {
 	switch subcommand {
 	case "open":
 		runConversationOpen(subArgs)
+	case "reply":
+		if code := execConversationReply(subArgs, os.Stdout, os.Stderr, os.Getenv); code != 0 {
+			os.Exit(code)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown conversation command: %s\n", subcommand)
 		fmt.Fprintln(os.Stderr, `Run "spekk conversation --help" for available subcommands.`)
@@ -153,56 +175,11 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 
 	sessionID := getenv("SPEKK_AGENT_SESSION_ID")
 	if sessionID != "" && getenv(conversationDeliveryEnvVar) == "1" {
-		resumeFile := getenv(conversation.SessionFileEnvVar)
-		resumeID, err := os.ReadFile(resumeFile)
-		if resumeFile == "" || err != nil || strings.TrimSpace(string(resumeID)) == "" {
-			fmt.Fprintln(stderr, "Error: the active Claude session ID is not ready; try again")
-			return 1
-		}
-		files := make([]uploadFile, 0, len(paths))
-		var total int64
-		for _, path := range paths {
-			file, err := regularUpload(path, 10<<20)
-			if err != nil {
-				fmt.Fprintf(stderr, "Error: %s\n", err)
-				return 1
-			}
-			total += file.size
-			files = append(files, file)
-		}
-		if total > 20<<20 {
-			fmt.Fprintln(stderr, "Error: all files together must be at most 20 MB")
-			return 1
-		}
-		fields := map[string]string{"session_id": sessionID, "claude_session_id": strings.TrimSpace(string(resumeID)), "title": title, "body": body, "severity": severity}
+		fields := map[string]string{"session_id": sessionID, "title": title, "body": body, "severity": severity}
 		if channel != "" {
 			fields["channel"] = channel
 		}
-		status, result, err := postAgentFiles(getenv, "/api/agents/conversations/", fields, files)
-		if err != nil {
-			fmt.Fprintf(stderr, "Error: %s\n", err)
-			return 1
-		}
-		link, _ := result["message_url"].(string)
-		if status != 200 {
-			if link != "" {
-				fmt.Fprintf(stderr, "Error: text posted at %s; %s\n", link, responseText(result))
-			} else {
-				fmt.Fprintf(stderr, "Error: %s\n", responseText(result))
-			}
-			return 1
-		}
-		if link == "" {
-			fmt.Fprintln(stderr, "Error: the app returned no message link")
-			return 1
-		}
-		fmt.Fprintf(stdout, "Message: %s\n", link)
-		if ids, ok := result["file_ids"].([]any); ok {
-			for _, id := range ids {
-				fmt.Fprintf(stdout, "File: %s\n", id)
-			}
-		}
-		return 0
+		return deliverConversation(getenv, stdout, stderr, fields, paths)
 	}
 	if len(paths) != 0 {
 		if sessionID != "" {
@@ -230,5 +207,106 @@ func execConversationOpen(args []string, stdout, stderr io.Writer, getenv func(s
 	}
 
 	fmt.Fprintln(stdout, "conversation request queued")
+	return 0
+}
+
+func execConversationReply(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
+	var paths []string
+	filtered := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] != "--attach" {
+			filtered = append(filtered, args[i])
+			continue
+		}
+		if i+1 == len(args) || args[i+1] == "" || strings.HasPrefix(args[i+1], "--") {
+			fmt.Fprintln(stderr, "Error: --attach requires a file")
+			return 1
+		}
+		i++
+		paths = append(paths, args[i])
+	}
+	if len(paths) > 3 {
+		fmt.Fprintln(stderr, "Error: at most three files are allowed")
+		return 1
+	}
+	flags := cli.ParseFlags(filtered, cli.FlagSet{
+		"body": {Names: []string{"--body"}, Type: cli.StringFlag},
+		"help": {Names: []string{"--help", "-h"}, Type: cli.BoolFlag},
+	})
+	if flags.Bool("help") {
+		fmt.Fprint(stdout, conversationReplyUsage)
+		return 0
+	}
+	if flags.Err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", flags.Err)
+		return 1
+	}
+	if flags.String("body") == "" {
+		fmt.Fprintln(stderr, "Error: missing required flag: --body")
+		return 1
+	}
+	if getenv("SPEKK_AGENT_SESSION_ID") == "" {
+		fmt.Fprintln(stderr, "Error: SPEKK_AGENT_SESSION_ID is not set; reply needs a current sandbox session")
+		return 1
+	}
+	if getenv(currentThreadDeliveryEnvVar) != "1" {
+		fmt.Fprintln(stderr, "Error: the app does not support current Slack thread delivery; update the app before using reply")
+		return 1
+	}
+	if getenv("SPEKK_AGENT_TURN_ID") == "" {
+		fmt.Fprintln(stderr, "Error: the current agent turn ID is not ready; try again")
+		return 1
+	}
+	fields := map[string]string{"session_id": getenv("SPEKK_AGENT_SESSION_ID"), "turn_id": getenv("SPEKK_AGENT_TURN_ID"), "delivery": "current_thread", "body": flags.String("body")}
+	return deliverConversation(getenv, stdout, stderr, fields, paths)
+}
+
+func deliverConversation(getenv func(string) string, stdout, stderr io.Writer, fields map[string]string, paths []string) int {
+	resumeFile := getenv(conversation.SessionFileEnvVar)
+	resumeID, err := os.ReadFile(resumeFile)
+	if resumeFile == "" || err != nil || strings.TrimSpace(string(resumeID)) == "" {
+		fmt.Fprintln(stderr, "Error: the active Claude session ID is not ready; try again")
+		return 1
+	}
+	fields["claude_session_id"] = strings.TrimSpace(string(resumeID))
+	files := make([]uploadFile, 0, len(paths))
+	var total int64
+	for _, path := range paths {
+		file, err := regularUpload(path, 10<<20)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: %s\n", err)
+			return 1
+		}
+		total += file.size
+		files = append(files, file)
+	}
+	if total > 20<<20 {
+		fmt.Fprintln(stderr, "Error: all files together must be at most 20 MB")
+		return 1
+	}
+	status, result, err := postAgentFiles(getenv, "/api/agents/conversations/", fields, files)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %s\n", err)
+		return 1
+	}
+	link, _ := result["message_url"].(string)
+	if status != 200 {
+		if link != "" {
+			fmt.Fprintf(stderr, "Error: text posted at %s; %s\n", link, responseText(result))
+		} else {
+			fmt.Fprintf(stderr, "Error: %s\n", responseText(result))
+		}
+		return 1
+	}
+	if link == "" {
+		fmt.Fprintln(stderr, "Error: the app returned no message link")
+		return 1
+	}
+	fmt.Fprintf(stdout, "Message: %s\n", link)
+	if ids, ok := result["file_ids"].([]any); ok {
+		for _, id := range ids {
+			fmt.Fprintf(stdout, "File: %s\n", id)
+		}
+	}
 	return 0
 }

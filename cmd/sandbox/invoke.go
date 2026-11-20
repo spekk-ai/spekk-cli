@@ -97,7 +97,11 @@ func (w *Worker) invoke(ctx context.Context, cfg Config, conns *connHolder, msg 
 	if conns.supportsDelivery() {
 		delivery = "1"
 	}
-	cmd.Env = append(os.Environ(), conversation.SpoolEnvVar+"="+spoolDir, conversation.SessionFileEnvVar+"="+filepath.Join(spoolDir, "claude-session-id"), "SPEKK_AGENT_SESSION_ID="+msg.AgentSessionID, "SPEKK_CONVERSATION_DELIVERY="+delivery)
+	currentThread := "0"
+	if conns.supportsCurrentThread() {
+		currentThread = "1"
+	}
+	cmd.Env = append(os.Environ(), conversation.SpoolEnvVar+"="+spoolDir, conversation.SessionFileEnvVar+"="+filepath.Join(spoolDir, "claude-session-id"), "SPEKK_AGENT_SESSION_ID="+msg.AgentSessionID, "SPEKK_AGENT_TURN_ID="+msg.AgentTurnID, "SPEKK_CONVERSATION_DELIVERY="+delivery, "SPEKK_CURRENT_THREAD_DELIVERY="+currentThread)
 
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
