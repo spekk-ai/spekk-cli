@@ -8,6 +8,10 @@ What's new in each version of Spekk CLI.
 
 ---
 
+## [1.51.2 -- Text Artifact Uploads](RELEASE-NOTES-1.51.2.md)
+
+`spekk artifact upload` infers kind `text` for known text and code extensions and for small, valid UTF-8 files with unknown extensions. `--kind text` selects it explicitly. HTML, SVG, unknown binary files, and unknown files over 1 MiB fail inference with a clear error. An app that rejects kind `text` gives a compatibility error. Kind `text` needs the Spekk app release with spekk-app #720, deployed 2026-11-20. The protocol stays `1.6`, with major `1`.
+
 ## [1.51.1 -- Direct Artifact Link First](RELEASE-NOTES-1.51.1.md)
 
 `spekk artifact upload` prints the direct artifact link from `view_url` first and `App page: <app_url>` second. An app without `view_url` gives the old one-line app URL. The direct link needs the Spekk app release with spekk-app #718, deployed 2026-11-20. The protocol stays `1.6`, with major `1`.
