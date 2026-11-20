@@ -1163,9 +1163,27 @@ spekk conversation open --title "Review these files" --body "The example files a
 | `--body <text>` | Full details (required) |
 | `--severity <level>` | `info` (default), `warning`, or `critical` |
 | `--channel <name\|id>` | Slack channel joined by the agent's bot; accepts a name, `#name`, or ID. Omit to use the home channel |
-| `--attach <file>` | File to send in the same Slack thread; repeat up to three times |
+| `--attach <file>` | File to send with a new Slack message; repeat up to three times |
 
-In a current sandbox session, the command waits for the app response and prints the Slack message link and delivered file IDs. A plain message also returns a link. Each file is at most 10 MB, and all files together are at most 20 MB. All file types can be sent unless the Slack workspace blocks a type. If the bot has no `files:write` scope, the command reports that the text posted and shows its link. Older sandbox sessions without `SPEKK_AGENT_SESSION_ID` keep the request-file path for plain messages; they cannot attach files or return a delivery result. A person must add `files:write` to an existing Slack app and reinstall it before attachments work.
+In a current sandbox session, when the app advertises `agent_conversation_delivery`, the command waits for the app response and prints the new Slack message link and delivered file IDs. A plain message also returns a link. Each file is at most 10 MiB, and all files together are at most 20 MiB. The CLI accepts up to three regular files. All file types can be sent unless the Slack workspace blocks a type. If the bot has no `files:write` scope, the command reports that the text posted and shows its link. When the app lacks the capability, a plain message uses the request-file path, and `--attach` fails with a message that says to update the app. Older sandbox sessions without `SPEKK_AGENT_SESSION_ID` also keep the request-file path for plain messages; they cannot attach files or return a delivery result. Use `spekk conversation reply` to post in the current turn thread. A person must add `files:write` to an existing Slack app and reinstall it before attachments work.
+
+## `spekk conversation reply`
+
+Send text and optional files to the Slack thread of the current sandbox turn. The app chooses the thread from the current turn; the caller cannot choose a channel or thread. This command works only in a sandbox turn that came from Slack.
+
+```bash
+spekk conversation reply --body "The report is ready."
+spekk conversation reply --body "The report is ready." --attach report.md --attach chart.png
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--body <text>` | Message text (required) |
+| `--attach <file>` | File to send in the current turn thread; repeat up to three times |
+
+Each file must be regular and at most 10 MiB; all files together must be at most 20 MiB. Slack workspace file type rules apply. On success, the command prints the Slack message link and each delivered file ID. It needs an app that advertises `agent_current_thread_delivery` in the welcome frame. Without that capability, the command sends no request and fails with `Error: the app does not support current Slack thread delivery; update the app before using reply`. If text posts but a file fails, the error gives the posted message link when the app provides it. A second `reply` call posts the text again, so inspect the first link before retrying. Current thread delivery needs spekk-app #715; confirm that deployment before using this command.
 
 ## `spekk artifact upload`
 
@@ -1177,6 +1195,8 @@ spekk artifact upload schema.sql --kind markdown --title "Example schema"
 ```
 
 The command uses `SPEKK_HOST` and `SPEKK_AGENT_TOKEN` from the sandbox session. It infers `markdown`, `image`, or `video` from a known extension; use `--kind` for another extension. The app accepts UTF-8 text as markdown, PNG, JPEG, GIF, or WebP as an image, and MP4 as a video. If artifacts are off, the command says so.
+
+The CLI accepts one regular file of at most 1 MiB for markdown, 10 MiB for an image, or 90 MiB for a video.
 
 ## `spekk prompt <agent>`
 
