@@ -3,7 +3,7 @@ id: artifact-direct-link
 parent: agent-file-delivery
 created: 2026-11-20T00:00:00Z
 priority: 1
-status: not_started
+status: done
 branch: feature/artifact-direct-link
 depends-on: artifact-upload-command
 ---

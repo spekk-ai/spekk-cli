@@ -28,10 +28,15 @@ func TestArtifactUploadAndDisabled(t *testing.T) {
 		if r.FormValue("kind") != "markdown" || r.FormValue("title") != "report.md" || r.FormValue("access") != "" {
 			t.Errorf("unexpected artifact fields: %v", r.Form)
 		}
-		if posts == 1 {
+		switch posts {
+		case 1:
+			w.WriteHeader(201)
+			fmt.Fprint(w, `{"app_url":"https://app.example.test/artifacts/one","view_url":"https://content.example.test/a/one/"}`)
+		case 2:
+			// An older app has no view_url.
 			w.WriteHeader(201)
 			fmt.Fprint(w, `{"app_url":"https://app.example.test/artifacts/one"}`)
-		} else {
+		default:
 			w.WriteHeader(404)
 			fmt.Fprint(w, `{"detail":"Not found."}`)
 		}
@@ -47,14 +52,18 @@ func TestArtifactUploadAndDisabled(t *testing.T) {
 		return ""
 	}
 	var out bytes.Buffer
-	if err := execArtifact([]string{"upload", file}, &out, getenv); err != nil || strings.TrimSpace(out.String()) != "https://app.example.test/artifacts/one" {
+	if err := execArtifact([]string{"upload", file}, &out, getenv); err != nil || out.String() != "https://content.example.test/a/one/\nApp page: https://app.example.test/artifacts/one\n" {
 		t.Fatalf("upload: output %q, error %v", out.String(), err)
+	}
+	out.Reset()
+	if err := execArtifact([]string{"upload", file}, &out, getenv); err != nil || out.String() != "https://app.example.test/artifacts/one\n" {
+		t.Fatalf("older app: output %q, error %v", out.String(), err)
 	}
 	out.Reset()
 	if err := execArtifact([]string{"upload", file}, &out, getenv); err == nil || !strings.Contains(err.Error(), "artifacts are off") {
 		t.Fatalf("off response: %v", err)
 	}
-	if strings.Contains(out.String(), "test-agent-token") || posts != 2 {
+	if strings.Contains(out.String(), "test-agent-token") || posts != 3 {
 		t.Fatalf("token leaked or wrong post count: %d, %q", posts, out.String())
 	}
 }
