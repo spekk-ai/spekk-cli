@@ -258,7 +258,7 @@ A token that authenticates on your machine authenticates on the sandbox. One tha
 Keep the token off command lines and out of shell history. Write it to a file only you can read, and give it to the one `spekk` command that needs it. The first command waits for input: paste the token, press Enter, and then press Ctrl+D:
 
 ```bash
-umask 077 && cat > ~/.config/spekk/oauth-token
+(umask 077 && mkdir -p ~/.config/spekk && cat > ~/.config/spekk/oauth-token)
 CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/spekk/oauth-token)" \
   spekk sandbox create --name my-sandbox --auth subscription
 ```
