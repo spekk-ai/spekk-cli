@@ -16,7 +16,7 @@ The existing DigitalOcean code in `doapi.go` is wrapped in a struct that impleme
 
 - A `DOProvider` struct implements `Provider`, and `doapi.go` and its types stay intact — the provider calls them rather than replacing them.
 - `DOProvider.Create` resolves the project, generates and uploads an SSH key, renders cloud-init with the generated public key, creates the droplet, waits for its IP, and assigns the project.
-- `DOProvider.Create` records what it resolved, not what the flags said: omitting `--region` and `--size` still leaves `nyc3` and `s-2vcpu-4gb` in metadata. A project given by UUID is still recorded as that UUID, because `resolveProject` returns its input in that case; naming it would need a second lookup that nothing yet asks for.
+- `DOProvider.Create` records what it resolved, not what the flags said: omitting `--region` and `--size` still leaves `nyc1` and `s-2vcpu-4gb` in metadata. A project given by UUID is still recorded as that UUID, because `resolveProject` returns its input in that case; naming it would need a second lookup that nothing yet asks for.
 - `DOProvider.Create` records the droplet id and SSH key id on `meta` as soon as the droplet exists, and `Create` saves that record whether the provider then succeeds or fails. A droplet that outlives a failed create is therefore still named in `sandboxes.json`, and `spekk sandbox destroy` can reach it.
 - `DOProvider.Destroy` deletes the droplet and the SSH key, treating a 404 from either as already done rather than as an error.
 - `DOProvider.Destroy` refuses, with an error naming the risk, when no droplet id is recorded. Deleting the metadata of a droplet that may still be running and billing is worse than stopping.
