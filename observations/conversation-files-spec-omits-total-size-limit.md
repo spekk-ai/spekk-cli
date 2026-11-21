@@ -2,7 +2,7 @@
 slug: conversation-files-spec-omits-total-size-limit
 type: outdated_specs
 severity: medium
-status: open
+status: resolved
 created: 2026-11-21T12:00:00Z
 announced: 2026-11-21T20:02:34Z
 affected:
