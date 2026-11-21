@@ -1632,7 +1632,7 @@ OPTIONS:
                          you already have (inferred from --ip / --ssh-key)
 
   DigitalOcean options:
-  --region <region>      DigitalOcean region (default: nyc1)
+  --region <region>      DigitalOcean region (default: nyc3)
   --size <size>          Droplet size slug (default: s-2vcpu-4gb)
   --project <project>    Assign to a DigitalOcean project (name or UUID)
   --vpc <uuid>           Place droplet in a specific DigitalOcean VPC

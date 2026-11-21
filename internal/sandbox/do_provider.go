@@ -17,7 +17,7 @@ var (
 )
 
 // doDefaultRegion is the region of a droplet when --region does not say.
-const doDefaultRegion = "nyc1"
+const doDefaultRegion = "nyc3"
 
 // DOProvider implements Provider using the DigitalOcean API.
 type DOProvider struct {
