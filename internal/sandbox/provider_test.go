@@ -451,7 +451,7 @@ func TestDOProviderCreateFillsMetaWithResolvedValues(t *testing.T) {
 		case r.Method == "POST" && r.URL.Path == "/v2/droplets":
 			var req map[string]any
 			json.NewDecoder(r.Body).Decode(&req)
-			if req["region"] != "nyc1" || req["size"] != "s-2vcpu-4gb" {
+			if req["region"] != "nyc3" || req["size"] != "s-2vcpu-4gb" {
 				t.Errorf("defaults not sent to the API: %v", req)
 			}
 			// Only the generated key: every other key on the account
@@ -491,7 +491,7 @@ func TestDOProviderCreateFillsMetaWithResolvedValues(t *testing.T) {
 		os.Remove(meta.SSHKeyPath + ".pub")
 	}()
 
-	if meta.Region != "nyc1" || meta.Size != "s-2vcpu-4gb" {
+	if meta.Region != "nyc3" || meta.Size != "s-2vcpu-4gb" {
 		t.Errorf("resolved defaults not recorded: region=%q size=%q", meta.Region, meta.Size)
 	}
 	if meta.DropletID != 42 || meta.SSHKeyID != 10 {

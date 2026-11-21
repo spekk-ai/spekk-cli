@@ -764,7 +764,7 @@ spekk sandbox create --name my-sandbox --image base
 | `--provider <provider>` | `digitalocean` (default), `gcp` for a Google Cloud VM, or `none` for a machine you already have. `--ip`, `--ssh-key`, or `--ssh-user` implies `none` |
 | `--auth <mode>` | How the agent authenticates Claude: `bedrock` (default) or `subscription` |
 | `--model <name>` | The model pin, `ANTHROPIC_MODEL` in the env file. Default: Opus 5.5 in the form of the mode: `us.anthropic.claude-opus-5-5` for `bedrock`, `claude-opus-5-5` for `subscription`. `--model ""` writes no pin. See [A model pin belongs to its mode](configuration.md#the-control-host-sees-one-credential-of-yours) |
-| `--region <region>` | DigitalOcean region (default: `nyc1`). For `gcp`, the zone |
+| `--region <region>` | DigitalOcean region (default: `nyc3`). For `gcp`, the zone |
 | `--size <size>` | Droplet size slug (default: `s-2vcpu-4gb`). For `gcp`, the machine type |
 | `--project <project>` | Assign the droplet to a DigitalOcean project, by name or UUID. For `gcp`, the project ID |
 | `--vpc <uuid>` | Place the droplet in a DigitalOcean VPC. For `gcp`, the network name |
