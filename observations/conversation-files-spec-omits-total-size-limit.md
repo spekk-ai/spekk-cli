@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-11-21T12:00:00Z
+announced: 2026-11-21T20:02:34Z
 affected:
   - specs/agent-file-delivery/assertions/conversation-files-command.md
   - specs/agent-file-delivery/assertions/agent-current-thread-reply.md
