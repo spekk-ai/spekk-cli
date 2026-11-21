@@ -63,9 +63,7 @@ tomorrow.
   observed: `.spekk/skills/observer/` shadows the packaged skills, so a
   clause granting a skill authority over the rules would let an observed
   repository rewrite them.
-- Consolidation is scheduled after the scan, not at the same moment. The two
-  runs hold different locks, so an identical schedule would start two
-  headless sessions together in one working tree.
+- When the consolidation interval is one hour or longer, consolidation is scheduled at minute 30, half an hour after the scan's minute 0, so the two runs do not start at the same moment. A consolidation interval shorter than one hour keeps the plain `*/N` schedule with no offset, and when either interval is shorter than one hour the two runs can still start together. The two runs hold different locks, so an identical schedule would start two headless sessions together in one working tree.
 - A run names, in its report, the areas it planned to cover but did not, so a
   short run is not mistaken for a clean audit.
 - Nothing in the prompt, the CLI, or the docs offers a per-run cadence, and
