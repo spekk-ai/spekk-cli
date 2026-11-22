@@ -2,7 +2,7 @@
 slug: protocol-additions-without-minor-bump
 type: underspecified_spec
 severity: medium
-status: open
+status: resolved
 created: 2026-11-22T00:00:00Z
 announced: 2026-11-22T20:03:44Z
 affected:
@@ -40,9 +40,7 @@ exist at all.
 
 ## Evidence
 
-- `specs/sandbox-protocol-version/sandbox-protocol-version.md:17`: "An
-  additive change bumps the minor." Line 22 rejects "Feature-flag
-  negotiation per capability."
+- `specs/sandbox-protocol-version/sandbox-protocol-version.md:17`: "An additive change bumps the minor." Before the remedy commit, line 22 rejected "Feature-flag negotiation per capability." The remedy moves that item to line 24 and rewords it.
 - `cmd/sandbox/protocol.go:17`: `const ProtocolVersion = "1.6"`; the comment
   above it repeats the bump rule.
 - `cmd/sandbox/message.go:9`: `AgentTurnID string \`json:"agent_turn_id,omitempty"\``,
@@ -53,6 +51,7 @@ exist at all.
 - `docs/advanced/sandbox-architecture.md:63-67` lists versions up to `1.6`
   and names only `conversation_open_channel`. The `message` frame example and
   the inbound frame table (line 95) do not list `agent_turn_id`.
+- #310 (07e3dd0, 2026-10-23) added the outbound `secrets_hello` frame (`public_key`, `held`) and reads the `welcome` field `agent_id`, and kept `ProtocolVersion` at `1.5`. The frame tables in `docs/advanced/sandbox-architecture.md` (lines 94 and 104-114) list neither.
 - `docs/release-notes/RELEASE-NOTES-1.51.0.md:31`: "The WebSocket protocol
   version stays `1.6`, and its major stays `1`."
 
