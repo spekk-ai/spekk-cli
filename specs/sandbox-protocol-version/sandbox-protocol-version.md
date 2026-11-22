@@ -16,8 +16,10 @@ The contract gets one version number, declared on both sides and exchanged at co
 
 Bump rules: a breaking change to message types, frame fields, or close codes bumps the major. An additive change bumps the minor. A PR that bumps the major names the companion PR in the other repository — this pairing is the one rule that stays human.
 
+Every addition bumps the minor: a new message type, a new optional frame field, and a new `welcome` capability. A capability tells one side that the other supports a feature, so it may gate the use of that feature, but it never replaces the bump. `docs/advanced/sandbox-architecture.md` records each minor version with what it added, and lists every frame field and every capability.
+
 ## Rejected
 
 - Automatic cross-repo version sync. No mechanism can force two repositories to bump together; the handshake makes a missed bump loud instead.
-- Feature-flag negotiation per capability. One number is enough at this scale.
+- Feature-flag negotiation per capability instead of a version. One number names the contract; a capability only gates a feature that a version bump also records.
 - Client-side hard refusal on mismatch. The server owns enforcement; a client that refused to connect could never be told to update.
