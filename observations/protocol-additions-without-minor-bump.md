@@ -4,6 +4,7 @@ type: underspecified_spec
 severity: medium
 status: open
 created: 2026-11-22T00:00:00Z
+announced: 2026-11-22T20:03:44Z
 affected:
   - specs/sandbox-protocol-version/sandbox-protocol-version.md
   - cmd/sandbox/protocol.go
