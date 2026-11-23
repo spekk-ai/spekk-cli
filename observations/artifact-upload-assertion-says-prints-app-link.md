@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-11-23T00:00:00Z
+announced: 2026-11-23T20:01:44Z
 affected:
   - specs/agent-file-delivery/assertions/artifact-upload-command.md
   - specs/agent-file-delivery/assertions/artifact-direct-link.md
