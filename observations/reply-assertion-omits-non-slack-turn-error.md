@@ -4,6 +4,7 @@ type: underspecified_spec
 severity: medium
 status: open
 created: 2026-11-24T12:00:00Z
+announced: 2026-11-24T20:02:46Z
 affected:
   - specs/agent-file-delivery/assertions/agent-current-thread-reply.md
   - cmd/spekk/conversation.go
