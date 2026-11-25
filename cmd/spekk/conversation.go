@@ -254,7 +254,7 @@ func execConversationReply(args []string, stdout, stderr io.Writer, getenv func(
 		return 1
 	}
 	if getenv("SPEKK_AGENT_TURN_ID") == "" {
-		fmt.Fprintln(stderr, "Error: the current agent turn ID is not ready; try again")
+		fmt.Fprintln(stderr, "Error: this turn has no current Slack thread to reply to; use \"spekk conversation open\" to start a new conversation")
 		return 1
 	}
 	fields := map[string]string{"session_id": getenv("SPEKK_AGENT_SESSION_ID"), "turn_id": getenv("SPEKK_AGENT_TURN_ID"), "delivery": "current_thread", "body": flags.String("body")}

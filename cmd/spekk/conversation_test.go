@@ -125,7 +125,7 @@ func TestConversationReplyCapabilityAndRequest(t *testing.T) {
 	values[currentThreadDeliveryEnvVar] = "1"
 	delete(values, "SPEKK_AGENT_TURN_ID")
 	errOut.Reset()
-	if code := execConversationReply([]string{"--body", "Ready", "--attach", file}, &out, &errOut, env); code == 0 || !strings.Contains(errOut.String(), "turn ID is not ready") || posts != 0 {
+	if code := execConversationReply([]string{"--body", "Ready", "--attach", file}, &out, &errOut, env); code != 1 || !strings.Contains(errOut.String(), "no current Slack thread") || !strings.Contains(errOut.String(), `"spekk conversation open"`) || strings.Contains(errOut.String(), "try again") || posts != 0 {
 		t.Fatalf("missing turn: code %d, error %q, posts %d", code, errOut.String(), posts)
 	}
 	values["SPEKK_AGENT_TURN_ID"] = "test-turn"
