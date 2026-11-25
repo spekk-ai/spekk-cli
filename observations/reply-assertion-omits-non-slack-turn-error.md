@@ -2,7 +2,7 @@
 slug: reply-assertion-omits-non-slack-turn-error
 type: underspecified_spec
 severity: medium
-status: open
+status: resolved
 created: 2026-11-24T12:00:00Z
 announced: 2026-11-24T20:02:46Z
 affected:

@@ -3,7 +3,7 @@ id: agent-current-thread-reply
 parent: agent-file-delivery
 created: 2026-11-19T23:32:00Z
 priority: 1
-status: failed
+status: done
 branch: feature/agent-thread-reply
 ---
 
