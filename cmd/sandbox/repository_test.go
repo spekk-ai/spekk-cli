@@ -19,6 +19,19 @@ import (
 
 const testRepositoryID = "11111111-1111-4111-8111-111111111111"
 
+// samePath compares a directory the fixture script reported (`pwd` prints the
+// physical path) with one the test built. On macOS the temp directory sits
+// behind the /var -> /private/var symlink, so the two spellings differ.
+func samePath(got any, want string) bool {
+	text, ok := got.(string)
+	if !ok {
+		return false
+	}
+	a, errA := filepath.EvalSymlinks(text)
+	b, errB := filepath.EvalSymlinks(want)
+	return errA == nil && errB == nil && a == b
+}
+
 func gitForRepositoryTest(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -361,7 +374,7 @@ func TestRepositoryTurnsKeepCheckoutUntilClaudeEnds(t *testing.T) {
 	}
 	for i := 0; i < 2; i++ {
 		frame := host.awaitFrame(t, MessageTypeResult, 10*time.Second)
-		if frame.frame["output"] != selected {
+		if !samePath(frame.frame["output"], selected) {
 			t.Fatalf("Claude used %v, want %s", frame.frame["output"], selected)
 		}
 	}
@@ -444,7 +457,7 @@ func TestRepositoryChatStartsClaudeInSelectedCheckout(t *testing.T) {
 				t.Fatalf("chat turn failed: %v", frame["error"])
 			}
 			if frame["type"] == MessageTypeResult {
-				if frame["output"] != want {
+				if !samePath(frame["output"], want) {
 					t.Fatalf("Claude started in %v, want %s", frame["output"], want)
 				}
 				if err := wsjson.Write(ctx, conn, Message{Type: MessageTypeMessage, Text: "Inspect the workspace", AgentSessionID: "session-2"}); err != nil {
@@ -457,7 +470,7 @@ func TestRepositoryChatStartsClaudeInSelectedCheckout(t *testing.T) {
 							t.Fatalf("generic chat turn failed: %v", frame["error"])
 						}
 						if frame["type"] == MessageTypeResult {
-							if frame["output"] != workspace {
+							if !samePath(frame["output"], workspace) {
 								t.Fatalf("generic chat used %v, want %s", frame["output"], workspace)
 							}
 							return

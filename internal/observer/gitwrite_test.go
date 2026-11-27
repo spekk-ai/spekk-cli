@@ -1,10 +1,10 @@
 package observer
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spekk-ai/spekk-cli/internal/testenv"
 )
 
 // envOf turns the slice commitIdentityEnv returns into a map, so a test can
@@ -28,21 +28,7 @@ func envOf(entries []string) map[string]string {
 // not have.
 func detachFromAmbientGitIdentity(t *testing.T) {
 	t.Helper()
-
-	empty := filepath.Join(t.TempDir(), "gitconfig")
-	if err := os.WriteFile(empty, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("GIT_CONFIG_GLOBAL", empty)
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-
-	for _, key := range []string{
-		"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL",
-		"GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL",
-	} {
-		t.Setenv(key, "")
-		os.Unsetenv(key)
-	}
+	testenv.IsolateGit(t)
 }
 
 // A sandbox carries no git identity, so commit-tree has nothing to author

@@ -242,6 +242,9 @@ func machineOptions() CreateOptions {
 }
 
 func TestPrepareMachineWorkspaceRefusesGit(t *testing.T) {
+	if err := exec.Command("realpath", "-m", "/").Run(); err != nil {
+		t.Skip("the workspace script runs on Linux machines; this realpath lacks -m (GNU coreutils)")
+	}
 	cases := []struct {
 		name, entry, kind, workspaceTarget string
 	}{

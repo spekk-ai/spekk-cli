@@ -18,6 +18,16 @@ import (
 
 const installProbeEnv = "SPEKK_TEST_INSTALL_PROBE"
 
+// requireGNUSha256sum skips a test of a script that runs on Linux machines and
+// calls `sha256sum --status`, which the BSD and macOS builds of sha256sum lack.
+func requireGNUSha256sum(t *testing.T) {
+	t.Helper()
+	out, err := exec.Command("sha256sum", "--version").Output()
+	if err != nil || !strings.Contains(string(out), "GNU") {
+		t.Skip("the remote script runs on Linux machines and needs GNU sha256sum (--status)")
+	}
+}
+
 func TestInstallProbeProcess(t *testing.T) {
 	if os.Getenv(installProbeEnv) != "1" {
 		return
@@ -28,6 +38,7 @@ func TestInstallProbeProcess(t *testing.T) {
 }
 
 func TestInstallCommandReplacesRunningExecutable(t *testing.T) {
+	requireGNUSha256sum(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("the remote installation script requires a Unix shell")
 	}
@@ -209,6 +220,7 @@ func assertNoTemporaryBinaries(t *testing.T, target string) {
 // The CLI lands beside the agent, linked from the PATH, and an old copy in
 // the owner's ~/.local/bin becomes a link to it.
 func TestInstallCommandInstallsBothIntoMissingDirectories(t *testing.T) {
+	requireGNUSha256sum(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("the remote installation script requires a Unix shell")
 	}
@@ -243,6 +255,7 @@ func TestInstallCommandInstallsBothIntoMissingDirectories(t *testing.T) {
 // script writes as root. The script does not write through a link at the
 // CLI directory or at ~/.local/bin, and it says what it skipped.
 func TestInstallCommandDoesNotFollowLinksThatAgentOwns(t *testing.T) {
+	requireGNUSha256sum(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("the remote installation script requires a Unix shell")
 	}
@@ -285,6 +298,7 @@ func TestInstallCommandDoesNotFollowLinksThatAgentOwns(t *testing.T) {
 // agent, not the CLI, and the service setup does not run. Each upload has
 // its own check, so each one gets a wrong digest.
 func TestInstallCommandRefusesAWrongSHA256(t *testing.T) {
+	requireGNUSha256sum(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("the remote installation script requires a Unix shell")
 	}
@@ -334,12 +348,7 @@ func TestInstallCommandRefusesAWrongSHA256(t *testing.T) {
 // The machine downloads both builds and keeps them only when each matches
 // the release sha256, so the install sees two checked files or none.
 func TestFetchCommandChecksTheDownloads(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("the remote fetch script runs on Linux machines; other sha256sum builds lack --status")
-	}
-	if _, err := exec.LookPath("sha256sum"); err != nil {
-		t.Skip("the remote fetch script requires sha256sum, which is not on PATH")
-	}
+	requireGNUSha256sum(t)
 	bin := t.TempDir()
 	// A stub curl that writes "bytes of <asset>" to the -o path.
 	curl := "#!/bin/sh\nwhile [ $# -gt 1 ]; do [ \"$1\" = -o ] && out=$2; shift; done\nprintf 'bytes of %s' \"${1##*/}\" > \"$out\"\n"

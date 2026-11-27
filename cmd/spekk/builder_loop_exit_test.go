@@ -36,7 +36,10 @@ func TestBuilderLoopExitWhenDone(t *testing.T) {
 
 			ready := builderLoopFixture(t, true)
 			fakeBin := filepath.Join(t.TempDir(), "claude")
-			fake := "#!/bin/sh\nsed -i 's/status: not_started/status: done/' specs/sample/assertions/work.md\n"
+			// POSIX sh and a sed that BSD and GNU read the same way: no -i,
+			// whose argument differs between them. set -e makes a failing
+			// step fail the script, and its stderr reaches the test output.
+			fake := "#!/bin/sh\nset -e\nf=specs/sample/assertions/work.md\nsed 's/status: not_started/status: done/' \"$f\" > \"$f.tmp\"\nmv \"$f.tmp\" \"$f\"\n"
 			if err := os.WriteFile(fakeBin, []byte(fake), 0o755); err != nil {
 				t.Fatal(err)
 			}
