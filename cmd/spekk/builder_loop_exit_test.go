@@ -158,7 +158,7 @@ func TestLoopBuilderWaitsForInterruptedChild(t *testing.T) {
 	fakeDir := t.TempDir()
 	fake := `#!/bin/sh
 if [ -f "$CHILD_DONE" ]; then
-  sed -i 's/status: not_started/status: done/' "$ASSERTION_FILE"
+  sed 's/status: not_started/status: done/' "$ASSERTION_FILE" > "$ASSERTION_FILE.tmp" && mv "$ASSERTION_FILE.tmp" "$ASSERTION_FILE"
   printf 'SECOND_BUILD\n'
   exit 0
 fi
