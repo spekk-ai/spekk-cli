@@ -13,16 +13,7 @@ import (
 )
 
 func TestBuilderLoopExitWhenDone(t *testing.T) {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bin := filepath.Join(t.TempDir(), "spekk")
-	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", bin, "./cmd/spekk")
-	build.Dir = root
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, out)
-	}
+	bin := buildBuilderLoopCLI(t)
 
 	for _, command := range [][]string{{"builder"}, {"loop", "builder"}} {
 		name := strings.Join(command, " ")
@@ -146,16 +137,7 @@ func TestBuilderLoopExitWhenDone(t *testing.T) {
 }
 
 func TestLoopBuilderWaitsForInterruptedChild(t *testing.T) {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bin := filepath.Join(t.TempDir(), "spekk")
-	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", bin, "./cmd/spekk")
-	build.Dir = root
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, out)
-	}
+	bin := buildBuilderLoopCLI(t)
 
 	dir := builderLoopFixture(t, true)
 	fakeDir := t.TempDir()
@@ -232,6 +214,96 @@ exit 1
 	if out, err := show.CombinedOutput(); err != nil || string(out) != "result" {
 		t.Fatalf("commit step did not run after the child exited: %v\n%s\n%s", err, out, output.String())
 	}
+}
+
+// A Ctrl+C that reaches the loop during the commit step must not leave git
+// running: the loop waits for the step, then exits. Before the fix the loop
+// exited at once, and the orphan git wrote to .git while t.TempDir removed
+// it (main CI, 2026-11-27: "unlinkat .../.git: directory not empty").
+func TestLoopBuilderInterruptWaitsForCommitStep(t *testing.T) {
+	bin := buildBuilderLoopCLI(t)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := builderLoopFixture(t, true)
+	fakeDir := t.TempDir()
+	gitDone := filepath.Join(fakeDir, "git_done")
+	// The fake builder leaves a change and fails. The git wrapper makes the
+	// commit step slow, and records when the last git command of the step
+	// exits.
+	files := map[string]string{
+		"claude": "#!/bin/sh\nprintf partial > partial.txt\nexit 1\n",
+		"git": `#!/bin/sh
+[ "$1" = status ] && sleep 0.5
+"$REAL_GIT" "$@"
+rc=$?
+[ "$1" = commit ] && printf done > "$GIT_DONE"
+exit $rc
+`,
+	}
+	for name, script := range files {
+		if err := os.WriteFile(filepath.Join(fakeDir, name), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, "loop", "builder")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PATH="+fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"), "REAL_GIT="+realGit, "GIT_DONE="+gitDone)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	interrupted := false
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		output.WriteString(line + "\n")
+		if !interrupted && strings.Contains(line, "Committing changes...") {
+			interrupted = true
+			if err := cmd.Process.Signal(os.Interrupt); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil || !interrupted {
+		t.Fatalf("loop must exit 0 after Ctrl+C: %v\n%s", err, output.String())
+	}
+	if _, err := os.Stat(gitDone); err != nil {
+		t.Fatalf("loop exited before the commit step finished: %v\n%s", err, output.String())
+	}
+	show := exec.Command("git", "show", "HEAD:partial.txt")
+	show.Dir = dir
+	if out, err := show.CombinedOutput(); err != nil || string(out) != "partial" {
+		t.Fatalf("commit step did not complete: %v\n%s\n%s", err, out, output.String())
+	}
+	if !strings.Contains(output.String(), "Builder loop complete. 0 assertions completed.") {
+		t.Fatalf("completion count is wrong:\n%s", output.String())
+	}
+}
+
+func buildBuilderLoopCLI(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "spekk")
+	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", bin, "./cmd/spekk")
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build CLI: %v\n%s", err, out)
+	}
+	return bin
 }
 
 func interruptWaitingBuilderLoop(bin, dir string, args []string, waitText, path string) (string, error) {

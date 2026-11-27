@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -81,6 +82,11 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 	active := &processHolder{}
+	// steps is locked while the loop runs a child other than the builder
+	// agent: spekk next, or the git commands of the commit step. The signal
+	// handler locks it before it exits, so the process does not exit while
+	// such a child still writes to the repository, and no new step starts.
+	var steps sync.Mutex
 	var completed atomic.Int64
 	go func() {
 		for sig := range sigCh {
@@ -89,6 +95,7 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 				active.signal(sig)
 			} else {
 				colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
+				steps.Lock()
 				colorLog(colorGreen, formatLoopComplete(completed.Load()))
 				os.Exit(0)
 			}
@@ -105,7 +112,9 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 		// Get next assertion
 		colorLog(colorBlue, "Getting next priority assertion...")
 
+		steps.Lock()
 		result, err := getNextAssertionForLoop(spekkBin)
+		steps.Unlock()
 		if err != nil {
 			colorLog(colorYellow, "Parser error (transient). Retrying in 5s...")
 			colorLog(colorYellow, "   "+err.Error())
@@ -173,10 +182,13 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 			colorLog(colorRed, "Builder agent exited with error")
 		}
 
-		// Commit changes
+		// Commit changes. The log line comes after the lock, so a caller
+		// that sees it knows that an interrupt waits for the commit step.
+		steps.Lock()
 		colorLog(colorBlue, "Committing changes...")
 		commitMsg := fmt.Sprintf("Complete %s\n\n%s", result.ID, result.Title)
 		committed, commitErr := gitStageAndCommit(commitMsg)
+		steps.Unlock()
 		if commitErr != nil {
 			colorLog(colorRed, "Git operations failed: "+commitErr.Error())
 		} else if committed {
