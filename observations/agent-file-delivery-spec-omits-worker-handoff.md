@@ -4,6 +4,7 @@ type: outdated_specs
 severity: medium
 status: open
 created: 2026-11-27T12:00:00Z
+announced: 2026-11-27T20:03:41Z
 affected:
   - specs/agent-file-delivery/agent-file-delivery.md
   - cmd/sandbox/invoke.go
