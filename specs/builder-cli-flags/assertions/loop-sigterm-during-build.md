@@ -6,9 +6,9 @@ priority: 1
 status: done
 ---
 
-# The loop builder does not leave a builder agent running when SIGTERM stops it
+# The loop builder does not leave a builder agent running when one SIGTERM stops it
 
-When `spekk loop builder` receives SIGTERM while a builder agent runs, the loop does not exit until that agent exits. No builder agent keeps running after the loop has exited.
+When `spekk loop builder` receives SIGTERM while a builder agent runs, the loop does not exit until that agent exits. No builder agent keeps running after the loop has exited. A second SIGINT or SIGTERM while the loop waits makes it exit at once, and the agent can then keep running.
 
 ## Success Criteria
 
