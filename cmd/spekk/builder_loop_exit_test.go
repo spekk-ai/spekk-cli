@@ -304,32 +304,35 @@ func TestLoopBuilderSignalDuringNextStartsNoAgent(t *testing.T) {
 	}
 	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
 		t.Run(sig.String(), func(t *testing.T) {
-			// One run loses the race in about half of the runs on the
-			// defective code, so several runs make the test fail reliably.
+			// The defective code loses the race in about half of the runs,
+			// so several runs make the test fail reliably.
 			for run := 0; run < 3; run++ {
 				dir := builderLoopFixture(t, true)
 				fakeDir := t.TempDir()
 				slow := filepath.Join(fakeDir, "slow_started")
+				release := filepath.Join(fakeDir, "release")
 				agent := filepath.Join(fakeDir, "agent_started")
 				// The first git command is the first one of spekk next. The
-				// wrapper records its start, then makes it slow.
+				// wrapper records its start, then waits until the test lets
+				// it continue (5 s at most).
 				files := map[string]string{
 					"claude": "#!/bin/sh\n: > \"$AGENT_STARTED\"\nexit 1\n",
-					"git":    "#!/bin/sh\nif mkdir \"$SLOW_STARTED.lock\" 2>/dev/null; then : > \"$SLOW_STARTED\"; sleep 0.4; fi\nexec \"$REAL_GIT\" \"$@\"\n",
+					"git":    "#!/bin/sh\nif mkdir \"$SLOW_STARTED.lock\" 2>/dev/null; then\n  : > \"$SLOW_STARTED\"\n  i=0\n  while [ ! -e \"$RELEASE\" ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done\nfi\nexec \"$REAL_GIT\" \"$@\"\n",
 				}
 				for name, script := range files {
 					if err := os.WriteFile(filepath.Join(fakeDir, name), []byte(script), 0o755); err != nil {
 						t.Fatal(err)
 					}
 				}
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 				defer cancel()
 				cmd := exec.CommandContext(ctx, bin, "loop", "builder")
 				cmd.Dir = dir
-				cmd.Env = append(os.Environ(), "PATH="+fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"), "REAL_GIT="+realGit, "SLOW_STARTED="+slow, "AGENT_STARTED="+agent)
-				var output strings.Builder
-				cmd.Stdout = &output
-				cmd.Stderr = &output
+				cmd.Env = append(os.Environ(), "PATH="+fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"), "REAL_GIT="+realGit, "SLOW_STARTED="+slow, "RELEASE="+release, "AGENT_STARTED="+agent)
+				stdout, err := cmd.StdoutPipe()
+				if err != nil {
+					t.Fatal(err)
+				}
 				if err := cmd.Start(); err != nil {
 					t.Fatal(err)
 				}
@@ -345,7 +348,23 @@ func TestLoopBuilderSignalDuringNextStartsNoAgent(t *testing.T) {
 				if err := cmd.Process.Signal(sig); err != nil {
 					t.Fatal(err)
 				}
-				err := cmd.Wait()
+				// Let spekk next continue only after the loop reports that it
+				// handles the signal.
+				var output strings.Builder
+				scanner := bufio.NewScanner(stdout)
+				for scanner.Scan() {
+					line := scanner.Text()
+					output.WriteString(line + "\n")
+					if strings.Contains(line, "Exiting gracefully") {
+						if err := os.WriteFile(release, nil, 0o644); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				if err := scanner.Err(); err != nil {
+					t.Fatal(err)
+				}
+				err = cmd.Wait()
 				// An agent that the loop started just before it exited
 				// needs a moment to write its marker.
 				time.Sleep(300 * time.Millisecond)
