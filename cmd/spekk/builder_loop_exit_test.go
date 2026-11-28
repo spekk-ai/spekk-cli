@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -374,6 +375,182 @@ func TestLoopBuilderSignalDuringNextStartsNoAgent(t *testing.T) {
 				if err != nil || !strings.Contains(output.String(), "Builder loop complete. 0 assertions completed.") {
 					t.Fatalf("run %d: loop must exit 0 with the count line: %v\n%s", run, err, output.String())
 				}
+			}
+		})
+	}
+}
+
+// SIGTERM that reaches only the loop during a build must stop the builder
+// agent before the loop exits. Before the fix the loop exited at once with
+// status 0, and the agent kept running and writing to the repository. The
+// fake agent exits 0, so a count of 1 would show that the loop counted the
+// interrupted build.
+func TestLoopBuilderSigtermDuringBuildWaitsForAgent(t *testing.T) {
+	bin := buildBuilderLoopCLI(t)
+	// second is the signal that the test sends while the loop waits for the
+	// agent. nil sends none: the agent exits and the loop exits 0.
+	for _, second := range []os.Signal{nil, os.Interrupt, syscall.SIGTERM} {
+		name := "agent exits"
+		if second != nil {
+			name = "second " + second.String()
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := builderLoopFixture(t, true)
+			fakeDir := t.TempDir()
+			pidFile := filepath.Join(fakeDir, "agent_pid")
+			termFile := filepath.Join(fakeDir, "agent_term")
+			release := filepath.Join(fakeDir, "release")
+			doneFile := filepath.Join(fakeDir, "agent_done")
+			// The fake agent leaves a change, then waits. On SIGTERM it
+			// records the signal and waits until the test releases it (5 s
+			// at most), so the loop must wait for it. It prints AGENT_DONE
+			// just before it exits, so the output order shows whether the
+			// loop waited.
+			fake := `#!/bin/sh
+trap 'printf term > "$AGENT_TERM"; i=0; while [ ! -e "$RELEASE" ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done; printf done > "$AGENT_DONE"; printf "AGENT_DONE\n"; exit 0' TERM
+printf '%s' "$$" > "$AGENT_PID"
+printf partial > partial.txt
+printf 'AGENT_READY\n'
+i=0
+while [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done
+exit 1
+`
+			if err := os.WriteFile(filepath.Join(fakeDir, "claude"), []byte(fake), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			// agentGone is true when the test saw that the agent PID no
+			// longer exists. The PID can then belong to another process, so
+			// the cleanup must not kill it.
+			agentGone := false
+			t.Cleanup(func() {
+				// Release an agent that a defective loop left behind, so it
+				// does not write to dir while t.TempDir removes it.
+				_ = os.WriteFile(release, nil, 0o644)
+				if agentGone {
+					return
+				}
+				if data, err := os.ReadFile(pidFile); err == nil {
+					if pid, err := strconv.Atoi(string(data)); err == nil {
+						_ = syscall.Kill(pid, syscall.SIGKILL)
+					}
+				}
+			})
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, bin, "loop", "builder")
+			cmd.Dir = dir
+			cmd.Env = append(os.Environ(), "PATH="+fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"), "AGENT_PID="+pidFile, "AGENT_TERM="+termFile, "RELEASE="+release, "AGENT_DONE="+doneFile)
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			lines := make(chan string)
+			go func() {
+				scanner := bufio.NewScanner(stdout)
+				for scanner.Scan() {
+					lines <- scanner.Text()
+				}
+				close(lines)
+			}()
+			var output strings.Builder
+			// next returns the next output line; ok is false at the end.
+			next := func() (string, bool) {
+				select {
+				case line, ok := <-lines:
+					output.WriteString(line + "\n")
+					return line, ok
+				case <-ctx.Done():
+					t.Fatalf("loop timed out:\n%s", output.String())
+					return "", false
+				}
+			}
+			for {
+				line, ok := next()
+				if !ok {
+					t.Fatalf("loop exited before the agent started:\n%s", output.String())
+				}
+				if strings.Contains(line, "AGENT_READY") {
+					break
+				}
+			}
+			if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+				t.Fatal(err)
+			}
+			for {
+				if _, err := os.Stat(termFile); err == nil {
+					break
+				}
+				if ctx.Err() != nil {
+					t.Fatalf("builder agent did not receive SIGTERM:\n%s", output.String())
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if second != nil {
+				if err := cmd.Process.Signal(second); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.WriteFile(release, nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if second != nil {
+				// The agent still holds the stdout pipe, so the test waits
+				// for the loop process and not for the end of its output.
+				err = cmd.Wait()
+				for range lines {
+				}
+				out := output.String()
+				want := 128 + int(second.(syscall.Signal))
+				if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != want {
+					t.Fatalf("second %s must exit %d at once: %v\n%s", second, want, err, out)
+				}
+				if _, statErr := os.Stat(doneFile); statErr == nil {
+					t.Fatalf("loop waited for the agent after the second signal:\n%s", out)
+				}
+				return
+			}
+			for {
+				if _, ok := next(); !ok {
+					break
+				}
+			}
+			err = cmd.Wait()
+			out := output.String()
+			if err != nil {
+				t.Fatalf("loop must exit 0 after the agent exits: %v\n%s", err, out)
+			}
+			// The agent holds the stdout pipe until it exits, so the test
+			// reads its AGENT_DONE line also when the loop exited first. Only
+			// the order shows that the loop waited for the agent.
+			agentDone := strings.Index(out, "AGENT_DONE")
+			complete := strings.Index(out, "Builder loop complete.")
+			if agentDone < 0 || complete < agentDone {
+				t.Fatalf("loop exited before the agent exited:\n%s", out)
+			}
+			data, err := os.ReadFile(pidFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pid, err := strconv.Atoi(string(data))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := syscall.Kill(pid, 0); err != syscall.ESRCH {
+				t.Fatalf("builder agent %d still runs after the loop exited: %v", pid, err)
+			}
+			agentGone = true
+			if strings.Contains(out, "Committing changes...") || strings.Count(out, "Launching Builder Agent...") != 1 {
+				t.Fatalf("loop must not commit or start another agent after SIGTERM:\n%s", out)
+			}
+			log := exec.Command("git", "rev-list", "--count", "HEAD")
+			log.Dir = dir
+			if count, err := log.Output(); err != nil || strings.TrimSpace(string(count)) != "1" {
+				t.Fatalf("loop committed the interrupted build: %v %s", err, count)
+			}
+			if !strings.Contains(out, "Builder loop complete. 0 assertions completed.") {
+				t.Fatalf("count must not include the interrupted build:\n%s", out)
 			}
 		})
 	}
