@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -288,6 +289,74 @@ exit $rc
 	}
 	if !strings.Contains(output.String(), "Builder loop complete. 0 assertions completed.") {
 		t.Fatalf("completion count is wrong:\n%s", output.String())
+	}
+}
+
+// A signal that reaches the loop while spekk next runs must not let the loop
+// start a builder agent: the loop exits after spekk next and leaves no agent
+// behind. Before the fix the handler exited while the loop started claude, so
+// an orphan builder agent wrote to the repository after the exit.
+func TestLoopBuilderSignalDuringNextStartsNoAgent(t *testing.T) {
+	bin := buildBuilderLoopCLI(t)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
+		t.Run(sig.String(), func(t *testing.T) {
+			// One run loses the race in about half of the runs on the
+			// defective code, so several runs make the test fail reliably.
+			for run := 0; run < 3; run++ {
+				dir := builderLoopFixture(t, true)
+				fakeDir := t.TempDir()
+				slow := filepath.Join(fakeDir, "slow_started")
+				agent := filepath.Join(fakeDir, "agent_started")
+				// The first git command is the first one of spekk next. The
+				// wrapper records its start, then makes it slow.
+				files := map[string]string{
+					"claude": "#!/bin/sh\n: > \"$AGENT_STARTED\"\nexit 1\n",
+					"git":    "#!/bin/sh\nif mkdir \"$SLOW_STARTED.lock\" 2>/dev/null; then : > \"$SLOW_STARTED\"; sleep 0.4; fi\nexec \"$REAL_GIT\" \"$@\"\n",
+				}
+				for name, script := range files {
+					if err := os.WriteFile(filepath.Join(fakeDir, name), []byte(script), 0o755); err != nil {
+						t.Fatal(err)
+					}
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctx, bin, "loop", "builder")
+				cmd.Dir = dir
+				cmd.Env = append(os.Environ(), "PATH="+fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"), "REAL_GIT="+realGit, "SLOW_STARTED="+slow, "AGENT_STARTED="+agent)
+				var output strings.Builder
+				cmd.Stdout = &output
+				cmd.Stderr = &output
+				if err := cmd.Start(); err != nil {
+					t.Fatal(err)
+				}
+				for {
+					if _, err := os.Stat(slow); err == nil {
+						break
+					}
+					if ctx.Err() != nil {
+						t.Fatal("spekk next did not start git")
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				if err := cmd.Process.Signal(sig); err != nil {
+					t.Fatal(err)
+				}
+				err := cmd.Wait()
+				// An agent that the loop started just before it exited
+				// needs a moment to write its marker.
+				time.Sleep(300 * time.Millisecond)
+				if _, statErr := os.Stat(agent); statErr == nil {
+					t.Fatalf("run %d: builder agent started after %s:\n%s", run, sig, output.String())
+				}
+				if err != nil || !strings.Contains(output.String(), "Builder loop complete. 0 assertions completed.") {
+					t.Fatalf("run %d: loop must exit 0 with the count line: %v\n%s", run, err, output.String())
+				}
+			}
+		})
 	}
 }
 
