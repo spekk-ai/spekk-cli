@@ -2,7 +2,7 @@
 slug: loop-builder-sigterm-during-build-unspecified
 type: underspecified_spec
 severity: medium
-status: open
+status: resolved
 created: 2026-11-28T12:00:00Z
 announced: 2026-11-28T20:08:44Z
 affected:

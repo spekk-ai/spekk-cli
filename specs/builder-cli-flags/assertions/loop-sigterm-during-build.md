@@ -1,9 +1,9 @@
 ---
 id: loop-sigterm-during-build
 parent: builder-cli-flags
-created: 2026-11-28T12:00:00Z
+created: 2026-11-28T20:07:41Z
 priority: 1
-status: not_started
+status: done
 ---
 
 # The loop builder does not leave a builder agent running when SIGTERM stops it
@@ -17,4 +17,4 @@ When `spekk loop builder` receives SIGTERM while a builder agent runs, the loop 
 - A second SIGINT or SIGTERM while the loop waits for the agent exits the loop at once with status 128 plus the signal number, as `loop-interrupt-waits-for-git` says.
 - Ctrl+C (SIGINT) during an active build behaves as before: it goes to the agent, and the loop keeps running after the agent exits (`exit-when-done-flag`).
 
-**Tests:** cmd/spekk/builder_loop_exit_test.go
+**Tests:** cmd/spekk/builder_loop_exit_test.go (TestLoopBuilderSigtermDuringBuildWaitsForAgent)

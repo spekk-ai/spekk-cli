@@ -700,7 +700,7 @@ spekk loop builder --exit-when-done  # Exit after the last assertion
 spekk loop coach      # Coach session, commit specs, repeat
 ```
 
-`spekk loop builder` runs `spekk next`, launches the builder agent on the result, stages every change with `git add .`, commits it as `Complete <id>`, and repeats. When nothing is ready it waits five seconds and asks again. `spekk loop coach` launches the coach agent, and when the session ends it commits any change under `specs/` and starts a new session. Press Ctrl+C to stop either loop.
+`spekk loop builder` runs `spekk next`, launches the builder agent on the result, stages every change with `git add .`, commits it as `Complete <id>`, and repeats. When nothing is ready it waits five seconds and asks again. `spekk loop coach` launches the coach agent, and when the session ends it commits any change under `specs/` and starts a new session. Press Ctrl+C to stop either loop. When `spekk loop builder` gets SIGTERM during a build, it sends SIGTERM to the builder agent, waits for the agent to exit, does not commit its work, and exits with status 0.
 
 With `--exit-when-done`, either builder loop exits with status 0 when no open assertion remains and reports the number of successful builds in the run. Without the flag, both loops continue to wait for new assertions. Assertions that are open but not eligible still make the loops wait.
 

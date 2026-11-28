@@ -112,9 +112,18 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 				continue
 			}
 			exiting = true
-			launch.Unlock()
-			colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
-			go exitAfterSteps()
+			if active.isSet() {
+				// SIGTERM during a build: the agent stops first. The loop
+				// sees exiting when launchClaude returns, and exits there
+				// without the commit step.
+				launch.Unlock()
+				colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Stopping the builder agent and waiting for it to exit...", sig))
+				active.signal(sig)
+			} else {
+				launch.Unlock()
+				colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
+				go exitAfterSteps()
+			}
 			again := <-sigCh
 			colorLog(colorYellow, fmt.Sprintf("\nReceived %s again. Exiting now.", again))
 			code := 1
@@ -204,6 +213,16 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 		if launchErr != nil {
 			colorLog(colorRed, "Builder agent failed: "+launchErr.Error())
 			os.Exit(1)
+		}
+
+		// A SIGTERM during the build sets exiting before the agent exits.
+		// The interrupted build is not counted and not committed.
+		launch.Lock()
+		stop := exiting
+		launch.Unlock()
+		if stop {
+			colorLog(colorYellow, "Builder agent stopped")
+			exitAfterSteps()
 		}
 
 		if success {
