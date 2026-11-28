@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -80,18 +81,47 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
-	active := &processHolder{}
+	// launch serializes the two decisions that race: the signal handler
+	// decides to exit, and the loop decides to start a builder agent. The
+	// loop holds launch from its check of exiting until the agent is
+	// registered in active (afterStart), and never while the agent runs.
+	// Thus a handler that sets exiting stops every later launch, and a
+	// handler that takes launch after a start sees the agent in active.
+	var launch sync.Mutex
+	var exiting bool
+	active := &processHolder{afterStart: launch.Unlock}
+	// steps is locked while the loop runs a child other than the builder
+	// agent: spekk next, or the git commands of the commit step. When the
+	// loop exits on a signal, it locks steps first, so it does not exit
+	// while such a child still writes to the repository. A second signal
+	// during this wait exits at once with status 128 + the signal number.
+	var steps sync.Mutex
 	var completed atomic.Int64
+	exitAfterSteps := func() {
+		steps.Lock()
+		colorLog(colorGreen, formatLoopComplete(completed.Load()))
+		os.Exit(0)
+	}
 	go func() {
 		for sig := range sigCh {
+			launch.Lock()
 			if sig == syscall.SIGINT && active.isSet() {
+				launch.Unlock()
 				colorLog(colorYellow, "\nInterrupting current build...")
 				active.signal(sig)
-			} else {
-				colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
-				colorLog(colorGreen, formatLoopComplete(completed.Load()))
-				os.Exit(0)
+				continue
 			}
+			exiting = true
+			launch.Unlock()
+			colorLog(colorYellow, fmt.Sprintf("\nReceived %s. Exiting gracefully...", sig))
+			go exitAfterSteps()
+			again := <-sigCh
+			colorLog(colorYellow, fmt.Sprintf("\nReceived %s again. Exiting now.", again))
+			code := 1
+			if n, ok := again.(syscall.Signal); ok {
+				code = 128 + int(n)
+			}
+			os.Exit(code)
 		}
 	}()
 
@@ -105,7 +135,9 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 		// Get next assertion
 		colorLog(colorBlue, "Getting next priority assertion...")
 
+		steps.Lock()
 		result, err := getNextAssertionForLoop(spekkBin)
+		steps.Unlock()
 		if err != nil {
 			colorLog(colorYellow, "Parser error (transient). Retrying in 5s...")
 			colorLog(colorYellow, "   "+err.Error())
@@ -156,6 +188,14 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 			os.Exit(1)
 		}
 
+		// launchClaude calls active.afterStart, which unlocks launch, when
+		// the agent is registered. If the start fails, launch stays locked
+		// and the loop exits below.
+		launch.Lock()
+		if exiting {
+			launch.Unlock()
+			exitAfterSteps()
+		}
 		success, launchErr := launchClaude(
 			[]string{"--dangerously-skip-permissions", message},
 			active,
@@ -173,10 +213,13 @@ func RunBuilderLoop(installDir string, exitWhenDone bool) {
 			colorLog(colorRed, "Builder agent exited with error")
 		}
 
-		// Commit changes
+		// Commit changes. The log line comes after the lock, so a caller
+		// that sees it knows that an interrupt waits for the commit step.
+		steps.Lock()
 		colorLog(colorBlue, "Committing changes...")
 		commitMsg := fmt.Sprintf("Complete %s\n\n%s", result.ID, result.Title)
 		committed, commitErr := gitStageAndCommit(commitMsg)
+		steps.Unlock()
 		if commitErr != nil {
 			colorLog(colorRed, "Git operations failed: "+commitErr.Error())
 		} else if committed {

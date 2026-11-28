@@ -8,21 +8,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
 
 func TestBuilderLoopExitWhenDone(t *testing.T) {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bin := filepath.Join(t.TempDir(), "spekk")
-	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", bin, "./cmd/spekk")
-	build.Dir = root
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, out)
-	}
+	bin := buildBuilderLoopCLI(t)
 
 	for _, command := range [][]string{{"builder"}, {"loop", "builder"}} {
 		name := strings.Join(command, " ")
@@ -146,16 +138,7 @@ func TestBuilderLoopExitWhenDone(t *testing.T) {
 }
 
 func TestLoopBuilderWaitsForInterruptedChild(t *testing.T) {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bin := filepath.Join(t.TempDir(), "spekk")
-	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", bin, "./cmd/spekk")
-	build.Dir = root
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, out)
-	}
+	bin := buildBuilderLoopCLI(t)
 
 	dir := builderLoopFixture(t, true)
 	fakeDir := t.TempDir()
@@ -232,6 +215,183 @@ exit 1
 	if out, err := show.CombinedOutput(); err != nil || string(out) != "result" {
 		t.Fatalf("commit step did not run after the child exited: %v\n%s\n%s", err, out, output.String())
 	}
+}
+
+// A Ctrl+C that reaches the loop during the commit step must not leave git
+// running: the loop waits for the step, then exits. Before the fix the loop
+// exited at once, and the orphan git wrote to .git while t.TempDir removed
+// it (main CI, 2026-11-27: "unlinkat .../.git: directory not empty").
+func TestLoopBuilderInterruptWaitsForCommitStep(t *testing.T) {
+	bin := buildBuilderLoopCLI(t)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := builderLoopFixture(t, true)
+	fakeDir := t.TempDir()
+	gitDone := filepath.Join(fakeDir, "git_done")
+	// The fake builder leaves a change and fails. The git wrapper makes the
+	// commit step slow, and records when the last git command of the step
+	// exits.
+	files := map[string]string{
+		"claude": "#!/bin/sh\nprintf partial > partial.txt\nexit 1\n",
+		"git": `#!/bin/sh
+[ "$1" = status ] && sleep 0.5
+"$REAL_GIT" "$@"
+rc=$?
+[ "$1" = commit ] && printf done > "$GIT_DONE"
+exit $rc
+`,
+	}
+	for name, script := range files {
+		if err := os.WriteFile(filepath.Join(fakeDir, name), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, "loop", "builder")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PATH="+fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"), "REAL_GIT="+realGit, "GIT_DONE="+gitDone)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	interrupted := false
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		output.WriteString(line + "\n")
+		if !interrupted && strings.Contains(line, "Committing changes...") {
+			interrupted = true
+			if err := cmd.Process.Signal(os.Interrupt); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil || !interrupted {
+		t.Fatalf("loop must exit 0 after Ctrl+C: %v\n%s", err, output.String())
+	}
+	if _, err := os.Stat(gitDone); err != nil {
+		t.Fatalf("loop exited before the commit step finished: %v\n%s", err, output.String())
+	}
+	show := exec.Command("git", "show", "HEAD:partial.txt")
+	show.Dir = dir
+	if out, err := show.CombinedOutput(); err != nil || string(out) != "partial" {
+		t.Fatalf("commit step did not complete: %v\n%s\n%s", err, out, output.String())
+	}
+	if !strings.Contains(output.String(), "Builder loop complete. 0 assertions completed.") {
+		t.Fatalf("completion count is wrong:\n%s", output.String())
+	}
+}
+
+// A signal that reaches the loop while spekk next runs must not let the loop
+// start a builder agent: the loop exits after spekk next and leaves no agent
+// behind. Before the fix the handler exited while the loop started claude, so
+// an orphan builder agent wrote to the repository after the exit.
+func TestLoopBuilderSignalDuringNextStartsNoAgent(t *testing.T) {
+	bin := buildBuilderLoopCLI(t)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
+		t.Run(sig.String(), func(t *testing.T) {
+			// The defective code loses the race in about half of the runs,
+			// so several runs make the test fail reliably.
+			for run := 0; run < 3; run++ {
+				dir := builderLoopFixture(t, true)
+				fakeDir := t.TempDir()
+				slow := filepath.Join(fakeDir, "slow_started")
+				release := filepath.Join(fakeDir, "release")
+				agent := filepath.Join(fakeDir, "agent_started")
+				// The first git command is the first one of spekk next. The
+				// wrapper records its start, then waits until the test lets
+				// it continue (5 s at most).
+				files := map[string]string{
+					"claude": "#!/bin/sh\n: > \"$AGENT_STARTED\"\nexit 1\n",
+					"git":    "#!/bin/sh\nif mkdir \"$SLOW_STARTED.lock\" 2>/dev/null; then\n  : > \"$SLOW_STARTED\"\n  i=0\n  while [ ! -e \"$RELEASE\" ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done\nfi\nexec \"$REAL_GIT\" \"$@\"\n",
+				}
+				for name, script := range files {
+					if err := os.WriteFile(filepath.Join(fakeDir, name), []byte(script), 0o755); err != nil {
+						t.Fatal(err)
+					}
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctx, bin, "loop", "builder")
+				cmd.Dir = dir
+				cmd.Env = append(os.Environ(), "PATH="+fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"), "REAL_GIT="+realGit, "SLOW_STARTED="+slow, "RELEASE="+release, "AGENT_STARTED="+agent)
+				stdout, err := cmd.StdoutPipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := cmd.Start(); err != nil {
+					t.Fatal(err)
+				}
+				for {
+					if _, err := os.Stat(slow); err == nil {
+						break
+					}
+					if ctx.Err() != nil {
+						t.Fatal("spekk next did not start git")
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				if err := cmd.Process.Signal(sig); err != nil {
+					t.Fatal(err)
+				}
+				// Let spekk next continue only after the loop reports that it
+				// handles the signal.
+				var output strings.Builder
+				scanner := bufio.NewScanner(stdout)
+				for scanner.Scan() {
+					line := scanner.Text()
+					output.WriteString(line + "\n")
+					if strings.Contains(line, "Exiting gracefully") {
+						if err := os.WriteFile(release, nil, 0o644); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				if err := scanner.Err(); err != nil {
+					t.Fatal(err)
+				}
+				err = cmd.Wait()
+				// An agent that the loop started just before it exited
+				// needs a moment to write its marker.
+				time.Sleep(300 * time.Millisecond)
+				if _, statErr := os.Stat(agent); statErr == nil {
+					t.Fatalf("run %d: builder agent started after %s:\n%s", run, sig, output.String())
+				}
+				if err != nil || !strings.Contains(output.String(), "Builder loop complete. 0 assertions completed.") {
+					t.Fatalf("run %d: loop must exit 0 with the count line: %v\n%s", run, err, output.String())
+				}
+			}
+		})
+	}
+}
+
+func buildBuilderLoopCLI(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "spekk")
+	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", bin, "./cmd/spekk")
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build CLI: %v\n%s", err, out)
+	}
+	return bin
 }
 
 func interruptWaitingBuilderLoop(bin, dir string, args []string, waitText, path string) (string, error) {
